@@ -1,0 +1,444 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "P00",
+      "title": "Package and validate the handoff",
+      "tier": "core",
+      "status": "done",
+      "owner": "planner",
+      "dependsOn": [],
+      "skills": [
+        "opensquad-build",
+        "skill-creator",
+        "convex-hackathon-skill"
+      ],
+      "files": [
+        "plan/",
+        "scripts/plan.mjs",
+        "AGENTS.md",
+        ".agents/skills/opensquad-build/"
+      ],
+      "evidence": [
+        "plan/evidence/P00.md: reviewed requirements, provider documentation, skill and executable task validation.",
+        "pnpm lint and pnpm build passed; existing hook/chunk warnings documented. No product integration marked implemented.",
+        "Review: aligned unmatched-inbox association, cross-revision send uncertainty and company-name search contracts with task cards/manual gates; product tasks remain pending."
+      ]
+    },
+    {
+      "id": "P01",
+      "title": "Access, environment and pinned versions",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P00"
+      ],
+      "skills": [
+        "opensquad-build",
+        "openai-docs",
+        "convex:env"
+      ],
+      "files": [
+        ".env.example",
+        "plan/evidence/P01.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P02",
+      "title": "App authentication and workspace schema",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P01"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-expert",
+        "hexclave-convex"
+      ],
+      "files": [
+        "convex/schema.ts",
+        "convex/lib/auth.ts",
+        "convex/workspaces.ts",
+        "convex/employees.ts",
+        "convex/campaigns.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P03",
+      "title": "ASCII sandbox and Codex auth proof",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P01"
+      ],
+      "skills": [
+        "opensquad-build",
+        "openai-docs"
+      ],
+      "files": [
+        "worker/",
+        "plan/evidence/P03.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P04",
+      "title": "Apollo and Firecrawl integration proof",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P03"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex-http-actions",
+        "convex-file-storage"
+      ],
+      "files": [
+        "convex/integrations/firecrawl.ts",
+        "worker/",
+        "plan/evidence/P04.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P05",
+      "title": "AgentMail transport and webhook proof",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P01"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex-http-actions"
+      ],
+      "files": [
+        "convex/integrations/agentmail.ts",
+        "convex/http.ts",
+        "plan/evidence/P05.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P06",
+      "title": "Durable missions, runs and decisions",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P02"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-expert",
+        "convex:workflow"
+      ],
+      "files": [
+        "convex/missions.ts",
+        "convex/decisions.ts",
+        "convex/runs.ts",
+        "convex/workflows/"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P07",
+      "title": "Scoped worker bridge and runtime lifecycle",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P03",
+        "P06"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex-http-actions",
+        "convex:workflow",
+        "openai-docs"
+      ],
+      "files": [
+        "worker/",
+        "convex/workerBridge.ts",
+        "convex/runtimeConnections.ts",
+        "convex/workerOperations.ts",
+        "convex/runtimeControlRequests.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P08",
+      "title": "Onboarding, employees and settings",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P02"
+      ],
+      "skills": [
+        "opensquad-build",
+        "shadcn"
+      ],
+      "files": [
+        "src/routes/_dashboard/",
+        "src/components/onboarding/",
+        "src/components/employees/",
+        "src/components/settings/"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P09",
+      "title": "Five-prospect sales pipeline",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P04",
+        "P07",
+        "P08"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:workflow",
+        "convex:convex-expert",
+        "convex-file-storage"
+      ],
+      "files": [
+        "convex/campaigns.ts",
+        "convex/prospects.ts",
+        "convex/evidence.ts",
+        "convex/workflows/sales.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P10",
+      "title": "Exact drafts, approval and sending",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P05",
+        "P06"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-expert",
+        "convex-http-actions",
+        "convex:workflow"
+      ],
+      "files": [
+        "convex/drafts.ts",
+        "convex/approvals.ts",
+        "convex/sendAttempts.ts",
+        "convex/suppressions.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P11",
+      "title": "Shared inbox and reply workflows",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P07",
+        "P10"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex-http-actions",
+        "convex:workflow"
+      ],
+      "files": [
+        "convex/conversations.ts",
+        "convex/inbox.ts",
+        "convex/webhooks.ts",
+        "convex/workflows/reply.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P12",
+      "title": "Mission Control board and detail",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P06",
+        "P08"
+      ],
+      "skills": [
+        "opensquad-build",
+        "shadcn"
+      ],
+      "files": [
+        "src/components/missions/",
+        "src/components/decisions/",
+        "src/components/activity/",
+        "src/routes/_dashboard/"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P19",
+      "title": "Lead CRM and booking backend",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P02",
+        "P11"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-expert"
+      ],
+      "files": [
+        "convex/prospects.ts",
+        "convex/leadEvents.ts",
+        "convex/bookings.ts",
+        "convex/schema.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P13",
+      "title": "Connected lead CRM, booking, decisions and inbox UI",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P09",
+        "P11",
+        "P12",
+        "P19"
+      ],
+      "skills": [
+        "opensquad-build",
+        "shadcn"
+      ],
+      "files": [
+        "src/components/prospects/",
+        "src/components/inbox/",
+        "src/components/decisions/",
+        "src/components/settings/",
+        "src/routes/_dashboard/leads.tsx",
+        "src/components/bookings/",
+        "src/hexclave/client.ts"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P14",
+      "title": "Recovery, budgets and full acceptance",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P13"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-reviewer",
+        "convex-http-actions",
+        "openai-docs"
+      ],
+      "files": [
+        "plan/evidence/P14.md",
+        "plan/verification.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P15",
+      "title": "One optional schedule or follow-up",
+      "tier": "stretch",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P14"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:crons",
+        "convex:workflow"
+      ],
+      "files": [
+        "convex/schedules.ts",
+        "convex/crons.ts",
+        "src/components/schedules/"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P16",
+      "title": "Constrained public deployment",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P14"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-expert",
+        "convex-http-actions"
+      ],
+      "files": [
+        "convex/convex.config.ts",
+        "convex/http.ts",
+        "plan/evidence/P16.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P17",
+      "title": "Agency trial, fixes and video",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P16"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex-hackathon-skill"
+      ],
+      "files": [
+        "plan/evidence/P17.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P18",
+      "title": "Final submission and operations handoff",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P17"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex-hackathon-skill"
+      ],
+      "files": [
+        "plan/evidence/submission.md",
+        "hackathon.md",
+        "README.md"
+      ],
+      "evidence": []
+    }
+  ]
+}
