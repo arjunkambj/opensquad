@@ -29,7 +29,7 @@
       "id": "P01",
       "title": "Access, environment and pinned versions",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P01",
       "branch": "opensquad/P01",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P01",
@@ -51,7 +51,11 @@
         ".env.example",
         "plan/evidence/P01.md"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P01.md: integrated at 39305d3; .env.example + worker/.env.example added, lint/build pass on merged main, zero env values in committed files.",
+        "G1 unavailable: ASCII_API_KEY absent locally and on deployment; P03 blocked until owner supplies a Box API key. Codex CLI 0.154.0 confirmed on builder machine only.",
+        "G2 partial: Firecrawl key valid (1000 credits), webhook secret missing; Apollo OAuth needs human grant inside runtime. G3 partial: AgentMail key is inbox-scoped; P05 blocked on inbox ID, webhook secret, controlled recipient. Live Hexclave sign-in/JWT claims still need a human browser check (V01/V02 limitation)."
+      ]
     },
     {
       "id": "P02",
