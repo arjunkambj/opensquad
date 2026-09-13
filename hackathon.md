@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T16:56:05Z
+- **Last updated:** 2026-09-13T17:25:04Z
 
 ## Log
 
@@ -60,3 +60,17 @@ missing dependency declarations. Plan checks, lint and build pass with existing
 warnings; CRM, ASCII/Codex and provider integrations remain planned work.
 Corrected frontend hosting to not deployed based on the inspected source and
 linked the configured repository. Verification: `plan/evidence/P00.md`.
+
+### 2026-09-13 - 39305d3
+P01 integrated: added the tracked `.env.example` contract covering every
+planned configuration name with per-destination sourcing comments, plus a
+worker env example under `worker/`; verified no real values were committed
+(`.env.example`, `worker/.env.example`). Inventoried provider access for the
+dev deployment `dev:flexible-grasshopper-949`: Convex and Hexclave are usable
+(JWKS live, customJwt providers configured), Firecrawl quota confirmed, and
+concrete blockers recorded for the ASCII API key, the scoped AgentMail key and
+webhook secrets. Pinned component versions match the plan
+(`@openai/codex@0.154.0`, `@asciidev/box-sdk@0.0.34`, `@convex-dev/workflow@0.4.7`,
+`@agentmail/convex@0.1.0`, `@firecrawl/firecrawl-convex@0.1.1`). Lint and build
+pass on the merged branch. No provider integration is claimed working.
+Verification: `plan/evidence/P01.md`.
