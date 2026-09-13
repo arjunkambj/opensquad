@@ -13,6 +13,7 @@ import type * as campaigns from "../campaigns.js";
 import type * as employees from "../employees.js";
 import type * as http from "../http.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
+import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as workspaces from "../workspaces.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   employees: typeof employees;
   http: typeof http;
   "integrations/agentmail": typeof integrations_agentmail;
+  "integrations/firecrawl": typeof integrations_firecrawl;
   "lib/auth": typeof lib_auth;
   "lib/validators": typeof lib_validators;
   workspaces: typeof workspaces;
@@ -62,4 +64,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
+  firecrawl: import("@firecrawl/firecrawl-convex/_generated/component.js").ComponentApi<"firecrawl">;
 };
