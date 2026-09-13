@@ -1,0 +1,6 @@
+# Deliberately its own workspace root: the worker package is NOT part of the
+# browser app's dependency graph and must not be added to the root
+# pnpm-workspace.yaml. See plan/integrations.md G1 and plan/evidence/P03.md.
+packages: []
+allowBuilds:
+  esbuild: true
