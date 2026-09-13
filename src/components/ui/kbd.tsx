@@ -1,3 +1,4 @@
+import * as React from "react"
 import { cn } from "cn"
 
 function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
@@ -23,4 +24,29 @@ function KbdGroup({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-export { Kbd, KbdGroup }
+function getMetaKeyLabel() {
+  return typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad/.test(navigator.platform)
+    ? "⌘"
+    : "Ctrl"
+}
+
+function formatMetaShortcut(metaKey: string, shortcut: string) {
+  const key = shortcut.toUpperCase()
+  return metaKey === "⌘" ? `${metaKey}${key}` : `${metaKey}+${key}`
+}
+
+function MetaKbd({
+  shortcut,
+  className,
+  ...props
+}: React.ComponentProps<"kbd"> & { shortcut: string }) {
+  const metaKey = getMetaKeyLabel()
+  return (
+    <Kbd className={className} {...props}>
+      {formatMetaShortcut(metaKey, shortcut)}
+    </Kbd>
+  )
+}
+
+export { Kbd, KbdGroup, MetaKbd }
