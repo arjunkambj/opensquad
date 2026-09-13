@@ -111,11 +111,17 @@ type EnsureWorkspaceArgs = {
  * active membership and the three employee templates in one transaction.
  *
  * Idempotency is keyed on the verified identity: a second call — including a
- * retried request — returns the existing workspace. Concurrent first calls
- * conflict on the `by_identityKey_and_status` index range and Convex retries
- * the losing transaction, which then observes the committed membership.
- * `requestId` is accepted for forward-compatible retries; identity-keyed
- * dedup already subsumes it, so it is intentionally not persisted.
+ * retried request — returns the workspace the caller owns. Concurrent first
+ * calls conflict on the `by_identityKey_and_status` index range and Convex
+ * retries the losing transaction, which then observes the committed
+ * membership. `requestId` is accepted for forward-compatible retries;
+ * identity-keyed dedup already subsumes it, so it is intentionally not
+ * persisted.
+ *
+ * A caller holding only NON-owner memberships (e.g. invited into someone
+ * else's workspace) still gets their own workspace here — membership in
+ * another workspace is not a substitute for ownership, and onboarding would
+ * otherwise be a dead end for invited users.
  */
 async function ensureWorkspaceImpl(
   ctx: MutationCtx,
@@ -129,9 +135,8 @@ async function ensureWorkspaceImpl(
       q.eq("identityKey", identityKey).eq("status", "active"),
     )
     .collect();
-  if (existing.length > 0) {
-    const owned =
-      existing.find((membership) => membership.role === "owner") ?? existing[0];
+  const owned = existing.find((membership) => membership.role === "owner");
+  if (owned !== undefined) {
     return { workspaceId: owned.workspaceId, created: false };
   }
 
