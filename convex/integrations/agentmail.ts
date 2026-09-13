@@ -154,12 +154,11 @@ async function performSingleSendRequest(args: {
   const baseUrl = (
     process.env.AGENTMAIL_BASE_URL ?? AGENTMAIL_DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
-  // Same path construction the component uses (lib.ts sendPath): plain
-  // inbox_id interpolation. Inbox IDs come from saved provider records, not
-  // from client input.
-  const url = `${baseUrl}/inboxes/${args.inboxId}/messages/send`;
+  // Provider IDs are opaque path segments, including email-address inbox IDs.
+  const url = `${baseUrl}/inboxes/${encodeURIComponent(args.inboxId)}/messages/send`;
 
-  let response: Response;
+  let response: Response | undefined;
+  let responseText: string;
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(new Error(SEND_TIMEOUT_MARKER)),
@@ -178,15 +177,17 @@ async function performSingleSendRequest(args: {
       body: JSON.stringify(stripUndefined(args.payload)),
       signal: controller.signal,
     });
+    // fetch resolves at the headers. Keep the deadline and uncertainty
+    // handling active until the acknowledgement body has also arrived.
+    responseText = await response.text();
   } catch (error) {
     // Aborted/timed-out or network-failed request: it may or may not have
     // reached AgentMail. Never resend from here.
-    const isTimeout =
-      error instanceof Error &&
-      (error.message === SEND_TIMEOUT_MARKER || error.name === "AbortError");
+    const isTimeout = controller.signal.aborted;
     return {
       outcome: "uncertain",
       reason: isTimeout ? "timeout" : "transport_error",
+      httpStatus: response?.status,
       detail:
         error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     };
@@ -204,7 +205,7 @@ async function performSingleSendRequest(args: {
       outcome: "uncertain",
       reason: "idempotency_conflict",
       httpStatus: response.status,
-      detail: await readResponseBody(response),
+      detail: truncateResponseBody(responseText),
     };
   }
 
@@ -216,7 +217,7 @@ async function performSingleSendRequest(args: {
       outcome: "uncertain",
       reason: "http_5xx",
       httpStatus: response.status,
-      detail: await readResponseBody(response),
+      detail: truncateResponseBody(responseText),
     };
   }
 
@@ -225,16 +226,15 @@ async function performSingleSendRequest(args: {
     return {
       outcome: "rejected",
       httpStatus: response.status,
-      providerError: await readResponseBody(response),
+      providerError: truncateResponseBody(responseText),
     };
   }
 
   // 2xx: only meaningful if it carries the provider's immutable IDs. An empty
   // or malformed success body is treated like a lost acknowledgement.
-  const text = await response.text();
   let body: unknown;
   try {
-    body = text.length > 0 ? JSON.parse(text) : null;
+    body = responseText.length > 0 ? JSON.parse(responseText) : null;
   } catch {
     return {
       outcome: "uncertain",
@@ -272,8 +272,7 @@ function isSendAcceptedBody(
   );
 }
 
-async function readResponseBody(response: Response): Promise<string> {
-  const text = await response.text();
+function truncateResponseBody(text: string): string {
   return text.length > PROVIDER_ERROR_BODY_LIMIT
     ? `${text.slice(0, PROVIDER_ERROR_BODY_LIMIT)}…[truncated]`
     : text;
