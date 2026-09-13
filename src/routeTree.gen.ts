@@ -9,68 +9,200 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AboutRouteImport } from './routes/about'
+import { Route as DashboardRouteImport } from './routes/_dashboard'
+import { Route as MarketingRouteImport } from './routes/_marketing'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as DashboardOverviewRouteImport } from './routes/_dashboard/overview'
+import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
+import { Route as DashboardSquadsRouteImport } from './routes/_dashboard/squads'
+import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
+import { Route as HandlerSplatRouteImport } from './routes/handler.$'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/_dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
+const MarketingRoute = MarketingRouteImport.update({
+  id: '/_marketing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardOverviewRoute = DashboardOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSquadsRoute = DashboardSquadsRouteImport.update({
+  id: '/squads',
+  path: '/squads',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const MarketingIndexRoute = MarketingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MarketingRoute,
+} as any)
+const HandlerSplatRoute = HandlerSplatRouteImport.update({
+  id: '/handler/$',
+  path: '/handler/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/': typeof MarketingIndexRoute
+  '/sign-in': typeof SignInRoute
+  '/overview': typeof DashboardOverviewRoute
+  '/settings': typeof DashboardSettingsRoute
+  '/squads': typeof DashboardSquadsRoute
+  '/handler/$': typeof HandlerSplatRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/': typeof MarketingIndexRoute
+  '/sign-in': typeof SignInRoute
+  '/overview': typeof DashboardOverviewRoute
+  '/settings': typeof DashboardSettingsRoute
+  '/squads': typeof DashboardSquadsRoute
+  '/handler/$': typeof HandlerSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/_dashboard': typeof DashboardRouteWithChildren
+  '/_marketing': typeof MarketingRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/_dashboard/overview': typeof DashboardOverviewRoute
+  '/_dashboard/settings': typeof DashboardSettingsRoute
+  '/_dashboard/squads': typeof DashboardSquadsRoute
+  '/handler/$': typeof HandlerSplatRoute
+  '/_marketing/': typeof MarketingIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about'
+  fullPaths:
+    '/' | '/sign-in' | '/overview' | '/settings' | '/squads' | '/handler/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about'
-  id: '__root__' | '/' | '/about'
+  to: '/' | '/sign-in' | '/overview' | '/settings' | '/squads' | '/handler/$'
+  id:
+    | '__root__'
+    | '/_dashboard'
+    | '/_marketing'
+    | '/sign-in'
+    | '/_dashboard/overview'
+    | '/_dashboard/settings'
+    | '/_dashboard/squads'
+    | '/handler/$'
+    | '/_marketing/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AboutRoute: typeof AboutRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
+  MarketingRoute: typeof MarketingRouteWithChildren
+  SignInRoute: typeof SignInRoute
+  HandlerSplatRoute: typeof HandlerSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
+    '/_dashboard': {
+      id: '/_dashboard'
+      path: ''
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
+    '/_marketing': {
+      id: '/_marketing'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof MarketingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_dashboard/overview': {
+      id: '/_dashboard/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof DashboardOverviewRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/_dashboard/settings': {
+      id: '/_dashboard/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof DashboardSettingsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/_dashboard/squads': {
+      id: '/_dashboard/squads'
+      path: '/squads'
+      fullPath: '/squads'
+      preLoaderRoute: typeof DashboardSquadsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/_marketing/': {
+      id: '/_marketing/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof MarketingIndexRouteImport
+      parentRoute: typeof MarketingRoute
+    }
+    '/handler/$': {
+      id: '/handler/$'
+      path: '/handler/$'
+      fullPath: '/handler/$'
+      preLoaderRoute: typeof HandlerSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
+interface DashboardRouteChildren {
+  DashboardOverviewRoute: typeof DashboardOverviewRoute
+  DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardSquadsRoute: typeof DashboardSquadsRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardOverviewRoute: DashboardOverviewRoute,
+  DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardSquadsRoute: DashboardSquadsRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
+
+interface MarketingRouteChildren {
+  MarketingIndexRoute: typeof MarketingIndexRoute
+}
+
+const MarketingRouteChildren: MarketingRouteChildren = {
+  MarketingIndexRoute: MarketingIndexRoute,
+}
+
+const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
+  MarketingRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
+  DashboardRoute: DashboardRouteWithChildren,
+  MarketingRoute: MarketingRouteWithChildren,
+  SignInRoute: SignInRoute,
+  HandlerSplatRoute: HandlerSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
