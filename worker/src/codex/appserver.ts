@@ -111,10 +111,20 @@ export class CodexAppServer {
   #closeReason = "not started";
   readonly #requestTimeoutMs: number;
   #onStderr?: (line: string) => void;
+  #onClose?: (reason: string) => void;
 
-  constructor(options?: { requestTimeoutMs?: number; onStderr?: (line: string) => void }) {
+  constructor(options?: {
+    requestTimeoutMs?: number;
+    onStderr?: (line: string) => void;
+    /** Fires once when the server transitions to closed (exit, stdout close,
+     * spawn error or an explicit `close()`). Lets the supervisor treat an
+     * unexpected child death as a restartable failure instead of a clean
+     * exit — systemd `Restart=on-failure` never fires on exit code 0. */
+    onClose?: (reason: string) => void;
+  }) {
     this.#requestTimeoutMs = options?.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
     if (options?.onStderr !== undefined) this.#onStderr = options.onStderr;
+    if (options?.onClose !== undefined) this.#onClose = options.onClose;
   }
 
   get closed(): boolean {
@@ -336,6 +346,11 @@ export class CodexAppServer {
       pending.reject(err);
     }
     this.#pending.clear();
+    try {
+      this.#onClose?.(err.message);
+    } catch {
+      // A broken close hook must not interrupt cleanup.
+    }
   }
 
   /** Ask the child to exit; force-kill after a short grace period. */

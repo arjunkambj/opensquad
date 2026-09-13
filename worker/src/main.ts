@@ -65,9 +65,18 @@ async function main(): Promise<void> {
     process.exit(78);
   }
 
+  let shuttingDown = false;
   const server = new CodexAppServer({
     onStderr: (l) =>
       process.stderr.write(`codex stderr: ${l.slice(0, 300)}\n`),
+    onClose: (reason) => {
+      if (shuttingDown) return;
+      // Unexpected app-server death: exit non-zero so systemd's
+      // `Restart=on-failure` actually restarts the worker — a clean exit(0)
+      // would leave the Box silently unsupervised.
+      process.stderr.write(`app-server closed unexpectedly: ${reason}\n`);
+      process.exit(1);
+    },
   });
   server.setServerRequestHandler(decliningServerRequestHandler());
   await server.start({
@@ -97,6 +106,7 @@ async function main(): Promise<void> {
   // Keep the process alive as a supervised idle worker: systemd restarts it on
   // failure; the P07 claim loop turns this into a poll-driven daemon.
   const shutdown = async () => {
+    shuttingDown = true;
     clearInterval(heartbeat);
     await server.close();
     process.exit(0);
