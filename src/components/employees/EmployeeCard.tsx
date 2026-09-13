@@ -16,6 +16,7 @@ import {
   EMPLOYEE_STATUS_STYLES,
   deriveEmployeeStatus,
 } from "@/components/employees/employee-status"
+import type { RuntimeAvailability } from "@/components/employees/employee-status"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
@@ -79,11 +80,14 @@ export function EmployeeCard({
   workspaceId,
   employee,
   canEdit,
+  runtime,
 }: {
   workspaceId: Id<"workspaces">
   employee: Doc<"employees">
   /** owner/operator only — viewers read but never write. */
   canEdit: boolean
+  /** Live runtime availability from `runtimeConnections.getStatus`. */
+  runtime: RuntimeAvailability
 }) {
   const updateEmployee = useMutation(api.employees.update)
 
@@ -101,8 +105,8 @@ export function EmployeeCard({
     setForm(toForm(employee))
   }
 
-  // No runtime endpoint exists yet (P07); status is honestly "disconnected".
-  const status = deriveEmployeeStatus(employee, "disconnected")
+  // Real backend signal only — the P07 runtime reports live/disconnected.
+  const status = deriveEmployeeStatus(employee, runtime)
   const meta = TEMPLATE_META[employee.template]
 
   const update = (patch: Partial<EmployeeForm>) => {

@@ -3,11 +3,12 @@ import type { Doc } from "../../../convex/_generated/dataModel"
 /**
  * Employee status is derived ONLY from real backend state — never simulated.
  *
- * Today the honest inputs are `employee.enabled` and runtime availability.
- * `idle`/`busy`/`blocked` require a connected runtime and live run state;
- * those land with the P07 worker bridge (`convex/runtimeConnections.ts`) and
- * P06 `runs`. Until then every enabled employee is truthfully "disconnected"
- * — the squad cannot execute without a runtime.
+ * The honest inputs are `employee.enabled` and the P07 runtime's live signal
+ * (`runtimeConnections.getStatus` → `live`: state `ready` with a fresh
+ * heartbeat). A connected runtime with no live run information shows `idle`;
+ * `busy`/`blocked` become reachable once run state is surfaced (P12 reads
+ * P06 `runs`). With no live runtime every enabled employee is truthfully
+ * "disconnected" — the squad cannot execute without one.
  */
 export type EmployeeStatus =
   | "idle"
@@ -18,8 +19,7 @@ export type EmployeeStatus =
 
 /**
  * Whether the workspace runtime (Codex App Server in its ASCII Box) reports a
- * live connection. P07 will expose this via `runtimeConnections.getStatus`;
- * there is no such endpoint yet, so callers pass "disconnected".
+ * live connection — `runtimeConnections.getStatus` `exists && live`.
  */
 export type RuntimeAvailability = "connected" | "disconnected"
 
@@ -34,7 +34,7 @@ export function deriveEmployeeStatus(
     return "disconnected"
   }
   // Connected with no live run information is idle. busy/blocked become
-  // reachable once run state exists (P06 `runs` + P07 heartbeats).
+  // reachable once run state is surfaced (P12 reads P06 `runs`).
   return "idle"
 }
 
@@ -60,6 +60,6 @@ export const EMPLOYEE_STATUS_DESCRIPTIONS: Record<EmployeeStatus, string> = {
   busy: "Running a mission step.",
   blocked: "Waiting on a required decision.",
   disconnected:
-    "No runtime connection — available when the workspace runtime bridge ships.",
+    "No live runtime connection — the owner can connect one in Settings.",
   disabled: "Turned off by a workspace editor.",
 }

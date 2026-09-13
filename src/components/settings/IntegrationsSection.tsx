@@ -1,5 +1,4 @@
 import {
-  AiChipIcon,
   Globe02Icon,
   Mail01Icon,
   PlugIcon,
@@ -27,17 +26,11 @@ type IntegrationRow = {
 }
 
 /**
- * Integrations and the Codex runtime connection.
- *
- * Every row here is an HONEST pending/unavailable state: the runtime bridge
- * (`convex/runtimeConnections.ts`, owner connect/reconnect/disconnect) ships
- * with P07, and provider extraction gates belong to P04/P05. No endpoint
- * exists today, so no row offers a fake "Connect" that could succeed — the
- * buttons are disabled and the copy says what is missing and what will land.
- *
- * Working controls vs awaiting-P07: the Workspace, Sending policy, Automation
- * and Members sections on this page are functional today; this section is the
- * explicitly pending one.
+ * Provider integrations. The Codex runtime now has its own working section
+ * (`RuntimeSection`, wired to `runtimeConnections`/`runtimeControlRequests`);
+ * the rows below remain honest pending states — Apollo awaits the P04 gate,
+ * Firecrawl is backend-managed, and the AgentMail inbox is assigned by the
+ * backend, so nothing here offers a control that could lie.
  */
 export function IntegrationsSection({
   workspace,
@@ -46,18 +39,8 @@ export function IntegrationsSection({
   workspace: Doc<"workspaces">
   isOwner: boolean
 }) {
+  void isOwner
   const rows: IntegrationRow[] = [
-    {
-      icon: AiChipIcon,
-      name: "Codex runtime",
-      description:
-        "The workspace's isolated Codex App Server inside its own ASCII Box — employees cannot run without it.",
-      status: "Awaiting runtime bridge (P07)",
-      action: { label: "Connect" },
-      note: isOwner
-        ? "Owner-only connect/reconnect/disconnect arrive with the runtime bridge. Until then this control is intentionally disabled."
-        : "Only the workspace owner manages the runtime connection once it ships.",
-    },
     {
       icon: PlugIcon,
       name: "Apollo",

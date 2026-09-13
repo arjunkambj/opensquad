@@ -14,15 +14,22 @@ const TEMPLATE_ORDER: readonly EmployeeTemplate[] = [
 ]
 
 /**
- * The three employee cards. Status comes only from real backend state
- * (enabled flag + runtime availability); with no runtime bridge yet every
- * enabled employee truthfully shows disconnected — never a simulated busy.
+ * The three employee cards. Status comes only from real backend state:
+ * `employee.enabled` plus the P07 runtime's live signal
+ * (`runtimeConnections.getStatus`). With no connected runtime every enabled
+ * employee truthfully shows disconnected — never a simulated busy.
  */
 export function EmployeesView() {
   const current = useCurrentWorkspace()
 
   const employees = useQuery(
     api.employees.list,
+    current !== undefined && current !== null
+      ? { workspaceId: current.workspace._id }
+      : "skip",
+  )
+  const runtime = useQuery(
+    api.runtimeConnections.getStatus,
     current !== undefined && current !== null
       ? { workspaceId: current.workspace._id }
       : "skip",
@@ -67,6 +74,10 @@ export function EmployeesView() {
   }
 
   const canEdit = current.role === "owner" || current.role === "operator"
+  const runtimeAvailability =
+    runtime !== undefined && runtime.exists && runtime.live
+      ? "connected"
+      : "disconnected"
   const sorted = [...employees].sort(
     (a, b) =>
       TEMPLATE_ORDER.indexOf(a.template) - TEMPLATE_ORDER.indexOf(b.template),
@@ -81,6 +92,7 @@ export function EmployeesView() {
             workspaceId={current.workspace._id}
             employee={employee}
             canEdit={canEdit}
+            runtime={runtimeAvailability}
           />
         ))}
       </div>
