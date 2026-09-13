@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T19:37:16Z
+- **Last updated:** 2026-09-14T01:30:00Z
 
 ## Log
 
@@ -122,6 +122,22 @@ duplicate/out-of-order events handled (`convex/integrations/agentmail.ts`).
 Noted deltas: ChatGPT device-code auth must be enabled in security settings;
 `thread_id` is per-inbox; `message.delivered` can precede `message.sent`.
 Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
+
+### 2026-09-14 - 9153365..1de8be6
+Post-review hardening on main plus two closed limitations. The owner completed
+a live Hexclave sign-in — the real JWT now verified end to end against
+`requireUser`'s issuer check (P01/P02 recorded limitation closed), and
+`FIRECRAWL_WEBHOOK_SECRET` is configured on the dev deployment so the
+component's HMAC gate is active (`convex env list`, names only). Fixes:
+`ensureWorkspace` no longer dead-ends callers holding only non-owner
+memberships; `campaigns.create` dedupes on (workspaceId, requestId);
+`workspaces.update`/`setAutomationState` handle no-ops and pause-reason
+updates; the scrape URL guard rejects the remaining private IPv6 ranges; and
+an unexpected Codex app-server exit now fails the worker process so systemd
+restarts it (`convex/workspaces.ts`, `convex/campaigns.ts`, `convex/schema.ts`,
+`convex/integrations/firecrawl.ts`, `worker/src/codex/appserver.ts`,
+`worker/src/main.ts`). Apollo OAuth remains deferred by owner choice — P04
+stays blocked. Lint, build, both typechecks and `pnpm plan check` pass.
 
 ### 2026-09-13 - 1a93886
 P04 integrated, Firecrawl half verified: `@firecrawl/firecrawl-convex@0.1.1` is
