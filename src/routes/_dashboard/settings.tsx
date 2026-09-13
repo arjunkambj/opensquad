@@ -30,15 +30,6 @@ function SettingsPage() {
             value={user.displayName ?? ""}
           />
         </Field>
-        <Field>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input
-            id="email"
-            type="email"
-            readOnly
-            value={user.primaryEmail ?? ""}
-          />
-        </Field>
       </FieldGroup>
     </div>
   )

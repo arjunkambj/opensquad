@@ -167,7 +167,7 @@ export function SignInForm() {
               <FieldLabel htmlFor="email" className="sr-only">
                 Email
               </FieldLabel>
-              <InputGroup>
+              <InputGroup className="h-9">
                 <InputGroupAddon>
                   <HugeiconsIcon icon={Mail01Icon} />
                 </InputGroupAddon>
@@ -219,6 +219,7 @@ export function SignInForm() {
               <Button
                 type="button"
                 variant="link"
+                size="lg"
                 disabled={isEmailLoading || resendCooldown > 0}
                 onClick={() => void handleSendMagicLink("resend")}
               >
@@ -227,6 +228,7 @@ export function SignInForm() {
               <Button
                 type="button"
                 variant="link"
+                size="lg"
                 onClick={() => {
                   setStep("email")
                   setOtp("")
