@@ -8,13 +8,19 @@
  * @module
  */
 
+import type * as http from "../http.js";
+import type * as integrations_agentmail from "../integrations/agentmail.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
 
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  http: typeof http;
+  "integrations/agentmail": typeof integrations_agentmail;
+}>;
 
 /**
  * A utility for referencing Convex functions in your app's public API.
@@ -42,4 +48,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
+};
