@@ -29,8 +29,16 @@
       "id": "P01",
       "title": "Access, environment and pinned versions",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P01",
+      "branch": "opensquad/P01",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P01",
+      "baseRef": "5e4c5a7",
+      "reservedFiles": [
+        ".env.example",
+        "plan/evidence/P01.md",
+        "worker/"
+      ],
       "dependsOn": [
         "P00"
       ],
