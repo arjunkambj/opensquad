@@ -61,8 +61,20 @@
       "id": "P02",
       "title": "App authentication and workspace schema",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P02",
+      "branch": "opensquad/P02",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P02",
+      "baseRef": "9e42528",
+      "reservedFiles": [
+        "convex/schema.ts",
+        "convex/lib/auth.ts",
+        "convex/lib/validators.ts",
+        "convex/workspaces.ts",
+        "convex/businessProfiles.ts",
+        "convex/employees.ts",
+        "convex/campaigns.ts"
+      ],
       "dependsOn": [
         "P01"
       ],
@@ -84,8 +96,15 @@
       "id": "P03",
       "title": "ASCII sandbox and Codex auth proof",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P03",
+      "branch": "opensquad/P03",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P03",
+      "baseRef": "9e42528",
+      "reservedFiles": [
+        "worker/",
+        "plan/evidence/P03.md"
+      ],
       "dependsOn": [
         "P01"
       ],
@@ -124,8 +143,18 @@
       "id": "P05",
       "title": "AgentMail transport and webhook proof",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P05",
+      "branch": "opensquad/P05",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P05",
+      "baseRef": "9e42528",
+      "reservedFiles": [
+        "convex/integrations/agentmail.ts",
+        "convex/http.ts",
+        "convex/convex.config.ts",
+        "package.json",
+        "pnpm-lock.yaml"
+      ],
       "dependsOn": [
         "P01"
       ],
