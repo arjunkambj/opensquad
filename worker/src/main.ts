@@ -1,48 +1,25 @@
 // Worker service entrypoint — runs inside the ASCII Box under systemd.
 //
-// P03 scope: env hygiene gate, app-server spawn, initialize, account read and
-// heartbeat emission to a local sink. The HTTP bridge poll loop
-// (/worker/claim, /worker/control/claim, /worker/result) is the P07 task —
-// this service proves the Box-side protocol pieces those routes will drive.
+// P07 production shape: env hygiene gate → app-server spawn → initialize →
+// account posture read → poll-driven daemon. The daemon owns three outbound
+// loops against the Convex bridge: control claim (owner commands incl.
+// device-code login), work claim (bounded scoped turns), and runtime
+// heartbeats. Exit codes:
+//   0  clean shutdown (SIGTERM/SIGINT — systemd Stop or disconnect)
+//   1  unexpected failure (incl. app-server death — restartable)
+//   78 dead credential / config — provisioning replaces, no restart loop
 
 import { mkdir } from "node:fs/promises";
 import { CodexAppServer } from "./codex/appserver.js";
 import { decliningServerRequestHandler } from "./codex/methods.js";
+import { initialize, sendInitialized } from "./codex/methods.js";
 import { loadWorkerConfig } from "./config.js";
-import { checkInheritedCredentials, FORBIDDEN_ENV_NAMES, FORBIDDEN_PATHS } from "./envcheck.js";
 import {
-  WorkerRunLoop,
-  type BridgeReporter,
-  type RuntimeHeartbeat,
-} from "./runloop.js";
-
-const HEARTBEAT_INTERVAL_MS = 15_000;
-
-/** Local sink for the spike: heartbeats/status are written to stdout as JSON
- * lines so systemd journald captures them. P07 replaces this with HTTPS POSTs
- * to the deployment's .convex.site worker routes using OPENSQUAD_WORKER_TOKEN. */
-const localReporter: BridgeReporter = {
-  runtimeHeartbeat(h: RuntimeHeartbeat): Promise<void> {
-    process.stdout.write(`${JSON.stringify({ kind: "heartbeat", ...h })}\n`);
-    return Promise.resolve();
-  },
-  reportLoginChallenge(): Promise<void> {
-    // Never log challenge material. P07 posts it to the owner-only challenge
-    // endpoint over the authenticated bridge.
-    process.stdout.write(
-      `${JSON.stringify({ kind: "login_challenge_pending" })}\n`,
-    );
-    return Promise.resolve();
-  },
-  reportStatus(status: { state: string; detail?: string }): Promise<void> {
-    process.stdout.write(`${JSON.stringify({ kind: "status", ...status })}\n`);
-    return Promise.resolve();
-  },
-  reportResult(result: unknown): Promise<void> {
-    process.stdout.write(`${JSON.stringify({ kind: "result", result })}\n`);
-    return Promise.resolve();
-  },
-};
+  checkInheritedCredentials,
+  FORBIDDEN_ENV_NAMES,
+  FORBIDDEN_PATHS,
+} from "./envcheck.js";
+import { WorkerDaemon } from "./daemon.js";
 
 async function main(): Promise<void> {
   const loaded = loadWorkerConfig();
@@ -57,10 +34,17 @@ async function main(): Promise<void> {
   // Provisioning checks Codex credential absence at Box birth. Service restarts
   // must allow the workspace owner's managed cache while still rejecting all
   // other inherited builder/provider credentials.
-  const presence = await checkInheritedCredentials({ allowManagedLoginCache: true });
+  const presence = await checkInheritedCredentials({
+    allowManagedLoginCache: true,
+  });
   if (!presence.clean) {
     const leaked = presence.checks
-      .filter((c) => c.present && (FORBIDDEN_ENV_NAMES.includes(c.name) || FORBIDDEN_PATHS.includes(c.name)))
+      .filter(
+        (c) =>
+          c.present &&
+          (FORBIDDEN_ENV_NAMES.includes(c.name) ||
+            FORBIDDEN_PATHS.includes(c.name)),
+      )
       .map((c) => c.name);
     process.stderr.write(
       `inherited credential material present (names only): ${leaked.join(", ")}\n`,
@@ -97,32 +81,36 @@ async function main(): Promise<void> {
     },
   });
 
-  const loop = new WorkerRunLoop({ config, reporter: localReporter });
-  const heartbeat = setInterval(() => {
-    void localReporter.runtimeHeartbeat(loop.heartbeatSnapshot());
-  }, HEARTBEAT_INTERVAL_MS);
-  heartbeat.unref();
+  try {
+    const identity = await initialize(server, config.workerVersion);
+    sendInitialized(server);
+    process.stdout.write(
+      `${JSON.stringify({ kind: "daemon", event: "initialized", server: identity.userAgent })}\n`,
+    );
+  } catch (error) {
+    process.stderr.write(
+      `app-server initialize failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(1);
+  }
 
-  const outcome = await loop.runOnce(server);
-  process.stdout.write(
-    `${JSON.stringify({ kind: "runOnce", outcome: summarize(outcome) })}\n`,
-  );
+  const daemon = new WorkerDaemon(config, server);
 
-  // Keep the process alive as a supervised idle worker: systemd restarts it on
-  // failure; the P07 claim loop turns this into a poll-driven daemon.
   const shutdown = async () => {
+    if (shuttingDown) return;
     shuttingDown = true;
-    clearInterval(heartbeat);
-    await server.close();
-    process.exit(0);
+    daemon.requestStop();
+    // Give in-flight bridge reports a moment, then close the child.
+    setTimeout(() => void server.close(), 2_000).unref();
+    setTimeout(() => process.exit(0), 8_000).unref();
   };
   process.on("SIGTERM", () => void shutdown());
   process.on("SIGINT", () => void shutdown());
-}
 
-function summarize(outcome: unknown): unknown {
-  // Outcomes are already sanitized by the method wrappers; pass through.
-  return outcome;
+  const exitCode = await daemon.run();
+  shuttingDown = true;
+  await server.close();
+  process.exit(exitCode);
 }
 
 await main();
