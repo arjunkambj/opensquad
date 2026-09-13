@@ -244,7 +244,7 @@
       "id": "P07",
       "title": "Scoped worker bridge and runtime lifecycle",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P07",
       "branch": "opensquad/P07",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P07",
@@ -280,7 +280,8 @@
         "plan/evidence/P07.md: \u00a74.4 runtime transport tables + P07 validators; workerBridge (credential auth, slot+lease claim, heartbeat/stop, activity dedupe+throttle, exactly-once results with canonical digest, bounded failures, runtime-heartbeat + agentSessions persistence, artifact grant/link, control claim/result + login-challenge lifecycle); workerOperations (dispatch adapter idempotent on mission+step+generation with transactional continuation event, sweep, AES-256-GCM credential sealing, dev* internal-only helpers); runtimeControlRequests (owner enqueue, exclusive start_login, cancel coexistence); runtimeConnections (owner lifecycle, durable ledger, ASCII REST create/resume/extend/stop/delete, sealed env injection); nine /worker/* routes with spec status codes; 1-minute sweep cron.",
         "curl-verified on isolated local deployment opensquad-p07 (ports 3214/3215): 401 missing/bad/retired-generation tokens; 403 scope denial; claim\u2192lease\u2192204-held; heartbeat renew/stop; activity dedupe; result digest check, exactly-once, duplicate replay, digest-conflict 409; failure idempotent; expired lease\u2192409\u2192sweep uncertain\u2192interrupt_turn terminated:true\u2192slot idle; control claim/result incl. challenge_issued\u2192challenge row\u2192completed\u2192challenge deleted + connection ready; artifact upload+dedupe+digest verify; 429 poll throttle; 413 bound; 400 malformed.",
         "Checks: convex tsc clean; convex dev push OK; worker tsc+build clean; pnpm lint 0 errors; pnpm build (tsc -b && vite build && worker build) passes; git diff --check clean.",
-        "Honest deferral: owner connect/reconnect/disconnect/getStatus compile but need a Hexclave session (not curl-able); ASCII lifecycle action implemented + ASCII_API_KEY set on the isolated deployment, but no disposable Box created this round; no live Codex turn run (no managed login on isolated workspace) \u2014 daemon turn executor composes P03-proven methods; the full daemon-in-Box loop is the P07 live gate."
+        "Honest deferral: owner connect/reconnect/disconnect/getStatus compile but need a Hexclave session (not curl-able); ASCII lifecycle action implemented + ASCII_API_KEY set on the isolated deployment, but no disposable Box created this round; no live Codex turn run (no managed login on isolated workspace) \u2014 daemon turn executor composes P03-proven methods; the full daemon-in-Box loop is the P07 live gate.",
+        "Integrated at 7dbac79 into main alongside P10 (schema/validators section conflicts resolved by union; artifacts table is P07-owned \u2014 P09 must not re-add). Combined main pushed to dev:flexible-grasshopper-949 \u2014 all \u00a74.4 tables, /worker/* routes and the 1-min lease sweep cron live; lint/build/tsc clean."
       ]
     },
     {
@@ -348,7 +349,7 @@
       "id": "P10",
       "title": "Exact drafts, approval and sending",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P10",
       "branch": "opensquad/P10",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P10",
@@ -380,7 +381,11 @@
         "convex/sendAttempts.ts",
         "convex/suppressions.ts"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P10.md: integrated alongside P07. \u00a74.3 tables (conversations, drafts, approvals, sendAttempts, suppressions, emailEventReceipts) + \u00a74.4 usage (usageBuckets, usageReservations) live on dev:flexible-grasshopper-949. Immutable draft revisions with payloadHash; approvals bind draftId+payloadHash+normalizedRecipient+contextVersion; single sendAttempts intent with durable providerIdempotencyKey reserved before any network I/O; beginDispatch is the atomic commit point; no blind retries anywhere (adapter never retries, component sender unused).",
+        "Verified on isolated local backend opensquad_p10 (synthetic --identity subjects, controlled *@agentmail.to inboxes only): V13 version/requestId dedupe + revise supersedes old ask; V15 real controlled send acknowledged with SES providerMessageRef + re-dispatch already_sent; V17 full block matrix (no_current_approval, suppressed_email/domain, human_takeover, workspace_paused, policy_changed, context_changed, outside_window parked reserved intent, send_limit_reached, uncertain/unresolved guards); V18 dead-endpoint\u2192uncertain\u2192same-key reconcile\u2192acknowledged, \u00a78.7 replacement-decision binding with acknowledgeDuplicate required, covered-attempt reconcile refused (draft_not_current), read-only provider evidence.",
+        "Deferred: demo_recipient_blocked and brief_changed code-verified only (no demo provisioning toggle exists \u2014 P02 gap); P11 owns the real conversations module + inbound-driven invalidation; approval/draft UI is P12/P13."
+      ]
     },
     {
       "id": "P11",

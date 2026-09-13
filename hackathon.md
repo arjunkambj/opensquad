@@ -216,3 +216,24 @@ retirement and throttling. Provider-gated seams stay honest: owner lifecycle
 mutations need a Hexclave session, and no disposable ASCII Box or live Codex
 turn ran this round — the daemon-in-Box live gate remains open.
 Evidence: `plan/evidence/P07.md`.
+
+### 2026-09-14 - aca0591
+P07 + P10 integrated into main. P10 lands the exact-draft send boundary:
+immutable draft revisions with a canonical payload hash; approvals bind the
+exact revision + normalized recipient + conversation context version and run
+through the single P06 decision path; the one sendAttempts intent is created
+with its durable provider idempotency key BEFORE any network I/O, and the
+`beginDispatch` commit point re-runs every gate atomically before the single
+provider call. Uncertain outcomes keep capacity, open a delivery_uncertain
+ask and can only replay the SAME key inside the provider window — blind
+retries are structurally impossible, and replacement sends exist only via
+the §8.7 recorded-decision binding. Verified on an isolated backend with a
+real controlled inbox→inbox send (SES provider ref recorded) plus the full
+V17 block matrix and V18 reconcile/replace probes. Schema/validator section
+conflicts between the P07 and P10 branches resolved by union; the §4.3
+`artifacts` table is P07-owned (P09 must not re-add it). Combined main
+pushed to dev:flexible-grasshopper-949 — §4.3/§4.4 tables, /worker/* routes,
+crons and indexes live. Deferred honestly: P07's owner lifecycle needs a
+Hexclave session, the daemon-in-Box live gate stays open, and demo-recipient
+gating is code-verified only.
+Evidence: `plan/evidence/P07.md`, `plan/evidence/P10.md`.
