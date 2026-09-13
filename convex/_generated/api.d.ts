@@ -8,14 +8,22 @@
  * @module
  */
 
+import type * as activity from "../activity.js";
 import type * as businessProfiles from "../businessProfiles.js";
 import type * as campaigns from "../campaigns.js";
+import type * as decisions from "../decisions.js";
 import type * as employees from "../employees.js";
 import type * as http from "../http.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
 import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_validators from "../lib/validators.js";
+import type * as missions from "../missions.js";
+import type * as runs from "../runs.js";
+import type * as workflows_devFixture from "../workflows/devFixture.js";
+import type * as workflows_events from "../workflows/events.js";
+import type * as workflows_manager from "../workflows/manager.js";
+import type * as workflows_steps from "../workflows/steps.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -25,14 +33,22 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activity: typeof activity;
   businessProfiles: typeof businessProfiles;
   campaigns: typeof campaigns;
+  decisions: typeof decisions;
   employees: typeof employees;
   http: typeof http;
   "integrations/agentmail": typeof integrations_agentmail;
   "integrations/firecrawl": typeof integrations_firecrawl;
   "lib/auth": typeof lib_auth;
   "lib/validators": typeof lib_validators;
+  missions: typeof missions;
+  runs: typeof runs;
+  "workflows/devFixture": typeof workflows_devFixture;
+  "workflows/events": typeof workflows_events;
+  "workflows/manager": typeof workflows_manager;
+  "workflows/steps": typeof workflows_steps;
   workspaces: typeof workspaces;
 }>;
 
@@ -65,4 +81,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
   firecrawl: import("@firecrawl/firecrawl-convex/_generated/component.js").ComponentApi<"firecrawl">;
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
 };
