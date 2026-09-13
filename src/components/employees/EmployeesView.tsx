@@ -28,7 +28,7 @@ export function EmployeesView() {
       : "skip",
   )
 
-  if (current === undefined || employees === undefined) {
+  if (current === undefined) {
     return (
       <LoadingState
         title="Loading employees"
@@ -43,6 +43,15 @@ export function EmployeesView() {
         title="No workspace yet"
         description="Complete setup to provision Scout, Researcher and Outreach."
         action={<Button render={<Link to="/onboarding" />}>Start setup</Button>}
+      />
+    )
+  }
+
+  if (employees === undefined) {
+    return (
+      <LoadingState
+        title="Loading employees"
+        description="Reading your workspace's Scout, Researcher and Outreach."
       />
     )
   }
