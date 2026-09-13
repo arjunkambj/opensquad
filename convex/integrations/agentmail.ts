@@ -372,36 +372,6 @@ export const reconcileSendAttempt = internalAction({
   handler: async (_ctx, args) => performSingleSendRequest(args),
 });
 
-/**
- * DEVELOPMENT-ONLY diagnostic for the G3 transport gate (P05).
- *
- * Lets an operator run the explicitly authorized controlled send once the
- * owner supplies the missing inputs (usable inbox ID and controlled
- * recipient — see plan/evidence/P05.md). Invoke manually via `convex run` or
- * the dashboard. `idempotencyKey` is caller-supplied so the SAME key can be
- * replayed to observe provider dedup behavior. This performs a real send —
- * only ever target controlled recipients.
- *
- * TODO(P16): remove before public release. This is the only caller that
- * bypasses the P10 approval preflight; that bypass must never ship.
- */
-export const diagnosticSendProbe = internalAction({
-  args: {
-    inboxId: v.string(),
-    idempotencyKey: v.string(),
-    to: v.string(),
-    subject: v.string(),
-    text: v.string(),
-  },
-  returns: vSendAttemptResult,
-  handler: async (_ctx, args) =>
-    performSingleSendRequest({
-      inboxId: args.inboxId,
-      idempotencyKey: args.idempotencyKey,
-      payload: { to: args.to, subject: args.subject, text: args.text },
-    }),
-});
-
 // ---------------------------------------------------------------------------
 // Inbound: component webhook callbacks (P05 stubs — P11 owns full handling)
 // ---------------------------------------------------------------------------
