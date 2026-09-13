@@ -301,14 +301,28 @@ export const update = mutation({
   returns: vWorkspaceDoc,
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
+    // Validate first so bad values still error; skip the write entirely when
+    // nothing would change so a no-op doesn't churn `updatedAt`.
+    const name =
+      args.name !== undefined
+        ? boundedString(args.name, "name", { min: 1, max: 100 })
+        : undefined;
+    const timezone =
+      args.timezone !== undefined ? assertIanaTimezone(args.timezone) : undefined;
+    if (
+      (name === undefined || name === workspace.name) &&
+      (timezone === undefined || timezone === workspace.timezone)
+    ) {
+      return workspace;
+    }
     const patch: { name?: string; timezone?: string; updatedAt: number } = {
       updatedAt: Date.now(),
     };
-    if (args.name !== undefined) {
-      patch.name = boundedString(args.name, "name", { min: 1, max: 100 });
+    if (name !== undefined && name !== workspace.name) {
+      patch.name = name;
     }
-    if (args.timezone !== undefined) {
-      patch.timezone = assertIanaTimezone(args.timezone);
+    if (timezone !== undefined && timezone !== workspace.timezone) {
+      patch.timezone = timezone;
     }
     await ctx.db.patch("workspaces", workspace._id, patch);
     const updated = await ctx.db.get("workspaces", workspace._id);
@@ -413,6 +427,25 @@ export const setAutomationState = mutation({
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
     if (workspace.automationState === args.state) {
+      // Idempotent no-op — except a still-paused workspace may update its
+      // recorded reason.
+      if (args.state === "paused" && args.reason !== undefined) {
+        const reason = boundedString(args.reason, "reason", {
+          min: 1,
+          max: 200,
+        });
+        if (reason !== workspace.pauseReason) {
+          await ctx.db.patch("workspaces", workspace._id, {
+            pauseReason: reason,
+            updatedAt: Date.now(),
+          });
+          const updated = await ctx.db.get("workspaces", workspace._id);
+          if (updated === null) {
+            throw domainError("NOT_FOUND", "workspace not found");
+          }
+          return updated;
+        }
+      }
       return workspace;
     }
     await ctx.db.patch("workspaces", workspace._id, {
