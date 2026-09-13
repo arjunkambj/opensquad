@@ -5,7 +5,7 @@ export function DashboardLoadingSkeleton() {
     <div className="flex min-h-dvh bg-background">
       <div className="hidden w-64 border-r border-border p-3 md:flex md:flex-col gap-3">
         <Skeleton className="size-9" />
-        <Skeleton className="h-8 w-full rounded-full" />
+        <Skeleton className="h-8 w-full" />
         <Skeleton className="h-8 w-full" />
         <Skeleton className="h-8 w-full" />
         <div className="mt-auto flex flex-col gap-2">

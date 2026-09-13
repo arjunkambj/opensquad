@@ -45,7 +45,13 @@ export function UserProfileMenu({ user }: { user: ProfileUser }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Open user profile"
-        render={<Button size="icon-lg" variant="ghost" />}
+        render={
+          <Button
+            size="icon-lg"
+            variant="ghost"
+            className="aria-expanded:bg-transparent!"
+          />
+        }
       >
         <Avatar className="size-8">
           {user.profileImageUrl ? (
