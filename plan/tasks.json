@@ -96,7 +96,8 @@
       "id": "P03",
       "title": "ASCII sandbox and Codex auth proof",
       "tier": "core",
-      "status": "in_progress",
+      "status": "blocked",
+      "blocker": "ASCII_API_KEY absent locally and on the dev deployment: owner must create a Box API service key (box api-key create / ASCII dashboard) and `convex env set ASCII_API_KEY` (+ local .env.local). Then re-run the in-Box probes with the integrated worker adapter. Owner question pending: which named ASCII `from` snapshot carries the pinned Node 24.21.0 + codex 0.154.0 image.",
       "owner": "subagent-P03",
       "branch": "opensquad/P03",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P03",
@@ -116,7 +117,11 @@
         "worker/",
         "plan/evidence/P03.md"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P03.md: integrated at ad05ffc; worker/ spike merged (ASCII lifecycle adapter, Codex app-server stdio client, generated protocol types from codex-cli 0.154.0, systemd unit, RUNTIME.md).",
+        "Proven locally: stdio initialize/initialized handshake, account/read logged-in and isolated logged-out states, device-code login start/cancel surface, rateLimits/read both ways, presence-only credential checks, adapter/SDK verification incl. deleteBox X-Ascii-Confirm-Delete delta. No model turn used builder credentials.",
+        "Blocked for live gate: all in-Box probes (create/idempotent replay, owner device-code login, bounded turn, pause/resume, second-workspace isolation) need ASCII_API_KEY; see blocker field."
+      ]
     },
     {
       "id": "P04",
@@ -143,7 +148,8 @@
       "id": "P05",
       "title": "AgentMail transport and webhook proof",
       "tier": "core",
-      "status": "in_progress",
+      "status": "blocked",
+      "blocker": "Owner must supply: (1) usable sender inbox ID the AGENTMAIL_API_KEY controls (or a key with inbox_read/inbox_create), (2) AGENTMAIL_WEBHOOK_SECRET via `convex env set` after registering {site}/agentmail/webhook, (3) designated controlled sender/recipient pair. Then run the live controlled send/reply/idempotent-replay/duplicate-event probe with the integrated executeSendAttempt.",
       "owner": "subagent-P05",
       "branch": "opensquad/P05",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P05",
@@ -167,7 +173,11 @@
         "convex/http.ts",
         "plan/evidence/P05.md"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P05.md: integrated at fbde8c4; @agentmail/convex@0.1.0 + convex-helpers@0.1.124 pinned, component registered in new convex/convex.config.ts, signed webhook mounted at POST /agentmail/webhook, narrow internal send adapter with HTTP Idempotency-Key and accepted/rejected/uncertain outcomes.",
+        "Verified on isolated local backend: component+workpools install, 401 on missing/bogus Svix signatures, send actions unreachable publicly, live negative probe reached api.agentmail.to and classified 404 as rejected. Temporary diagnostic probe removed before merge per task card; executeSendAttempt remains callable via `convex run` for the controlled probe.",
+        "Blocked for live gate: controlled send/receipt/reply, same-key replay and duplicate-event observation need owner inputs; see blocker field. mailEvents dedupe/replay table need recorded for P02/P10 reconciliation."
+      ]
     },
     {
       "id": "P06",
