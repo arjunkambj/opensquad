@@ -367,6 +367,9 @@ export type TurnTerminal = {
   readonly turnId: string;
   readonly status: "completed" | "interrupted" | "failed" | "timeout";
   readonly error?: string;
+  /** Raw `turn` payload from `turn/completed` (items incl. final agent
+   *  message) — present only on real terminal events, not timeouts. */
+  readonly turn?: unknown;
 };
 
 /** Wait for the `turn/completed` notification matching thread+turn, or a
@@ -421,6 +424,7 @@ export function waitForTurn(
                   ? status
                   : "failed",
               ...(err !== null ? { error: err } : {}),
+              turn,
             });
           }
           return;

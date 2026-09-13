@@ -1,8 +1,76 @@
-# OpenSquad worker — pinned runtime notes (P03)
+# OpenSquad worker — pinned runtime notes (P03, extended by P07)
 
-Scope: Box-side worker spike. The Convex-side bridge routes and Box
-provisioning flow belong to P07; this package is the code that runs *inside*
-the ASCII Box.
+Scope: Box-side worker. P07 lands the production shape: the worker daemon
+polls the Convex bridge (`/worker/*` on the deployment's `.convex.site`
+endpoint) for owner control commands and bounded model work, and posts
+heartbeats/results back. Provider credentials (ASCII, AgentMail, Firecrawl,
+OpenAI) never enter the Box or this process.
+
+## Production daemon (`src/daemon.ts` + `src/main.ts`)
+
+`dist/main.js` is the systemd service unit's `ExecStart` (see
+`deploy/opensquad-worker.service`). Boot order:
+
+1. `OPENSQUAD_*` env validation → exit 78 (`EX_CONFIG`) on missing/invalid.
+2. Inherited-credential hygiene gate → exit 78 if builder/provider material
+   leaked in (the workspace's own managed-login cache is allowed).
+3. Spawn `codex app-server --stdio`, `initialize`/`initialized` handshake.
+4. One `account/read` for posture, then three poll loops:
+
+   | Loop | Interval | Endpoint | Purpose |
+   |---|---|---|---|
+   | control | 2.5 s | `POST /worker/control/claim` | `inspect_account`, `start_login`, `cancel_login`, `logout`, `interrupt_turn` — stays responsive while a turn runs |
+   | work | 3 s | `POST /worker/claim` | at most one leased request at a time; backend `workspaceExecutionSlots` is authoritative |
+   | liveness | 15 s | `POST /worker/runtime-heartbeat` | phase/version/turn ref only — never a lease |
+
+5. A claimed request runs ONE bounded turn: rate-limit posture check →
+   scoped `thread/start` (or `thread/resume` when the dispatch carries
+   `input.session.codexThreadRef`) → `turn/start` with `outputSchema` →
+   15 s lease heartbeats that may order `stop` → terminal handling →
+   `POST /worker/result` (worker computes the canonical `sha256:` digest)
+   or `POST /worker/failure`. `activity` events are deduped by `eventId`.
+
+6. Exit codes: `0` clean stop; `1` unexpected failure incl. app-server death
+   (systemd `Restart=on-failure`); `78` dead credential (401) — provisioning
+   replaces the runtime, no restart loop.
+
+Lease expiry without a result leaves the backend slot `uncertain`; the
+sweep enqueues `interrupt_turn` (when a turn ref was reported), and only a
+`terminated:true` control result releases the slot — stale generations and
+leases can never mutate business state.
+
+`OPENSQUAD_CODEX_SANDBOX=externalSandbox` switches `turn/start` to the
+external-sandbox policy (`networkAccess:"restricted"`) for Box images where
+bubblewrap cannot initialise; the default is `readOnly` + no network.
+
+## Staging fault/replay helpers (developer-owned, `internalMutation` only)
+
+Callable exclusively via `npx convex run` — none are public mutations, none
+are reachable over HTTP, and the public demo cannot invoke them:
+
+- `workerOperations:devSeedFixture` — workspace+mission+run+connection+one
+  pending `workerRequest`+credential; returns the one-time worker token.
+- `workerOperations:devSeedWorkerRequest` — additional dispatch on a mission.
+- `workerOperations:devMintCredential` — extra scoped credential (`scopes`).
+- `workerOperations:devRotateGeneration` — retires all generation-N creds.
+- `workerOperations:devExpireLease` — force a lease past expiry for V06.
+- `workerOperations:devEnqueueControl` — owner control commands on the wire.
+- `workerOperations:devDumpBridge` — read the transport tables (no secrets).
+- `workerOperations:sweepExpiredLeases` — the production sweep (also run
+  by cron); safe to invoke manually.
+
+V05 replay: post the same `resultId`+digest twice → `duplicate:true`.
+V06 expiry: `devExpireLease` → result → 409; sweep → `uncertain`; enqueue
+`interrupt_turn` → `terminated:true` → slot released.
+V18 stop: heartbeat returns `instruction:"stop"` → worker interrupts the
+turn and reports `cancelled` (retry-safe).
+
+## Scripts
+
+Root: `pnpm worker:build`, `pnpm worker:typecheck`, `pnpm worker:dev`
+(builds then runs `worker/dist/main.js` — requires a live `OPENSQUAD_*`
+env, e.g. exported from a dev-seeded credential). The root `build` script
+includes the worker build as the typecheck gate.
 
 ## Pinned versions (verified 2026-09-13, see plan/evidence/P03.md)
 

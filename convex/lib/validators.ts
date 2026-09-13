@@ -815,3 +815,999 @@ export const vActivityKind = v.union(
   v.literal("comment_added"),
   v.literal("continuation_delivered"),
 );
+
+/* ------------------------------------------------------------------ */
+/* P07 — scoped worker bridge and runtime lifecycle (§4.4/§4.5)         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Bridge error codes. `DomainErrorCode` covers the shared meanings; the
+ * bridge additionally needs `PAYLOAD_TOO_LARGE` (413), `THROTTLED` (429) and
+ * `UNAVAILABLE` (503) for the documented status table. NOT_FOUND is mapped
+ * to the same wire shape as INVALID (400) — a foreign or unknown ID must not
+ * leak existence across scopes.
+ */
+export type BridgeErrorCode =
+  | DomainErrorCode
+  | "PAYLOAD_TOO_LARGE"
+  | "THROTTLED"
+  | "UNAVAILABLE";
+
+export function bridgeError(
+  code: BridgeErrorCode,
+  message: string,
+): ConvexError<{ code: BridgeErrorCode; message: string }> {
+  return new ConvexError({ code, message });
+}
+
+export function bridgeInvalid(
+  message: string,
+): ConvexError<{ code: BridgeErrorCode; message: string }> {
+  return bridgeError("INVALID", message);
+}
+
+/* ---- structural helpers for untrusted worker payloads ---------------- */
+
+export function asRecord(
+  value: unknown,
+  field: string,
+): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw bridgeInvalid(`${field} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+export function asArray(value: unknown, field: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw bridgeInvalid(`${field} must be an array`);
+  }
+  return value;
+}
+
+/** Serialized-UTF-8 size check; returns the byte count. */
+export function jsonBytes(
+  value: unknown,
+  field: string,
+  max: number,
+): number {
+  const bytes = new TextEncoder().encode(JSON.stringify(value)).length;
+  if (bytes > max) {
+    throw bridgeInvalid(`${field} is ${bytes} bytes; the bound is ${max}`);
+  }
+  return bytes;
+}
+
+/* ---- state machines --------------------------------------------------- */
+
+export const RUNTIME_CONNECTION_STATES = [
+  "disconnected",
+  "provisioning",
+  "connecting",
+  "ready",
+  "stopping",
+  "stopped",
+  "error",
+] as const;
+export const vRuntimeConnectionState = v.union(
+  v.literal("disconnected"),
+  v.literal("provisioning"),
+  v.literal("connecting"),
+  v.literal("ready"),
+  v.literal("stopping"),
+  v.literal("stopped"),
+  v.literal("error"),
+);
+export type RuntimeConnectionState =
+  (typeof RUNTIME_CONNECTION_STATES)[number];
+
+export const LIFECYCLE_OPERATIONS = [
+  "create",
+  "resume",
+  "extend_ttl",
+  "stop",
+  "delete",
+] as const;
+export const vLifecycleOperation = v.union(
+  v.literal("create"),
+  v.literal("resume"),
+  v.literal("extend_ttl"),
+  v.literal("stop"),
+  v.literal("delete"),
+);
+export type LifecycleOperation = (typeof LIFECYCLE_OPERATIONS)[number];
+
+export const LIFECYCLE_OPERATION_STATES = [
+  "pending",
+  "accepted",
+  "uncertain",
+  "completed",
+  "failed",
+] as const;
+export const vLifecycleOperationState = v.union(
+  v.literal("pending"),
+  v.literal("accepted"),
+  v.literal("uncertain"),
+  v.literal("completed"),
+  v.literal("failed"),
+);
+export type LifecycleOperationState =
+  (typeof LIFECYCLE_OPERATION_STATES)[number];
+
+export const PROVIDER_KINDS = [
+  "codex",
+  "apollo",
+  "firecrawl",
+  "agentmail",
+] as const;
+export const vProviderKind = v.union(
+  v.literal("codex"),
+  v.literal("apollo"),
+  v.literal("firecrawl"),
+  v.literal("agentmail"),
+);
+export type ProviderKind = (typeof PROVIDER_KINDS)[number];
+
+export const PROVIDER_CONNECTION_STATES = [
+  "disconnected",
+  "connecting",
+  "ready",
+  "expired",
+  "error",
+] as const;
+export const vProviderConnectionState = v.union(
+  v.literal("disconnected"),
+  v.literal("connecting"),
+  v.literal("ready"),
+  v.literal("expired"),
+  v.literal("error"),
+);
+export type ProviderConnectionState =
+  (typeof PROVIDER_CONNECTION_STATES)[number];
+
+/** Bearer-token capability names — checked per bridge route. */
+export const WORKER_SCOPES = [
+  "claim",
+  "control",
+  "heartbeat",
+  "activity",
+  "result",
+  "artifact",
+] as const;
+export const vWorkerScope = v.union(
+  v.literal("claim"),
+  v.literal("control"),
+  v.literal("heartbeat"),
+  v.literal("activity"),
+  v.literal("result"),
+  v.literal("artifact"),
+);
+export type WorkerScope = (typeof WORKER_SCOPES)[number];
+
+export const CONTROL_COMMANDS = [
+  "inspect_account",
+  "start_login",
+  "cancel_login",
+  "logout",
+  "interrupt_turn",
+] as const;
+export const vControlCommand = v.union(
+  v.literal("inspect_account"),
+  v.literal("start_login"),
+  v.literal("cancel_login"),
+  v.literal("logout"),
+  v.literal("interrupt_turn"),
+);
+export type ControlCommand = (typeof CONTROL_COMMANDS)[number];
+
+export const CONTROL_REQUEST_STATES = [
+  "pending",
+  "claimed",
+  "completed",
+  "failed",
+  "expired",
+] as const;
+export const vControlRequestState = v.union(
+  v.literal("pending"),
+  v.literal("claimed"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("expired"),
+);
+export type ControlRequestState = (typeof CONTROL_REQUEST_STATES)[number];
+
+export const WORKER_REQUEST_STATES = [
+  "pending",
+  "leased",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "uncertain",
+] as const;
+export const vWorkerRequestState = v.union(
+  v.literal("pending"),
+  v.literal("leased"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+  v.literal("uncertain"),
+);
+export type WorkerRequestState = (typeof WORKER_REQUEST_STATES)[number];
+
+export const SLOT_STATES = ["idle", "held", "uncertain"] as const;
+export const vSlotState = v.union(
+  v.literal("idle"),
+  v.literal("held"),
+  v.literal("uncertain"),
+);
+export type SlotState = (typeof SLOT_STATES)[number];
+
+export const WORKER_PHASES = [
+  "boot",
+  "ready",
+  "running",
+  "degraded",
+  "stopping",
+] as const;
+export const vWorkerPhase = v.union(
+  v.literal("boot"),
+  v.literal("ready"),
+  v.literal("running"),
+  v.literal("degraded"),
+  v.literal("stopping"),
+);
+export type WorkerPhase = (typeof WORKER_PHASES)[number];
+
+/** §4.5 operation discriminators — one per bounded model-work step. */
+export const WORKER_OPERATIONS = [
+  "discover",
+  "research",
+  "contact",
+  "draft",
+  "classify_reply",
+] as const;
+export const vWorkerOperation = v.union(
+  v.literal("discover"),
+  v.literal("research"),
+  v.literal("contact"),
+  v.literal("draft"),
+  v.literal("classify_reply"),
+);
+export type WorkerOperation = (typeof WORKER_OPERATIONS)[number];
+
+export const ARTIFACT_KINDS = [
+  "research_brief",
+  "crawl",
+  "audit",
+  "attachment",
+] as const;
+export const vArtifactKind = v.union(
+  v.literal("research_brief"),
+  v.literal("crawl"),
+  v.literal("audit"),
+  v.literal("attachment"),
+);
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+/* ---- bounded worker payload transport --------------------------------- */
+
+/** Worker input cap — 256 KiB serialized (§4.4 note). */
+export const WORKER_INPUT_MAX_BYTES = 256 * 1024;
+/** Structured output cap — 128 KiB serialized (§4.4 note). */
+export const WORKER_RESULT_MAX_BYTES = 128 * 1024;
+/** Artifact upload cap — 5 MiB raw bytes. */
+export const ARTIFACT_MAX_BYTES = 5 * 1024 * 1024;
+/** Generic bridge JSON body cap — results fit comfortably inside it. */
+export const BRIDGE_BODY_MAX_BYTES = 320 * 1024;
+
+export const ARTIFACT_MIME_TYPES = [
+  "text/plain",
+  "text/markdown",
+  "application/json",
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+] as const;
+export type ArtifactMimeType = (typeof ARTIFACT_MIME_TYPES)[number];
+
+/** Small inline document or a private storage reference. */
+export const vWorkerDataRef = v.union(
+  v.object({ kind: v.literal("inline"), value: v.any() }),
+  v.object({
+    kind: v.literal("storage"),
+    storageId: v.id("_storage"),
+    byteSize: v.number(),
+    digest: v.string(),
+  }),
+);
+export type WorkerDataRef = Infer<typeof vWorkerDataRef>;
+
+/* ---- §4.5 worker input envelope (claim response → worker) -------------- */
+
+export const WORKER_INPUT_SCHEMA_VERSION = 1;
+
+export const vWorkerRequestInput = v.object({
+  schemaVersion: v.literal(WORKER_INPUT_SCHEMA_VERSION),
+  operation: vWorkerOperation,
+  /** Fully-rendered bounded instructions for this turn. */
+  prompt: v.string(),
+  /** Optional bounded context blocks the model may cite. */
+  context: v.optional(
+    v.array(v.object({ label: v.string(), text: v.string() })),
+  ),
+  constraints: v.object({
+    /** Wall-clock budget for the bounded turn (ms). */
+    deadlineMs: v.number(),
+    maxToolCalls: v.optional(v.number()),
+    model: v.optional(v.string()),
+  }),
+  session: v.optional(
+    v.object({
+      scopeKey: v.string(),
+      /** Resume this saved Codex thread when present. */
+      codexThreadRef: v.optional(v.string()),
+    }),
+  ),
+  /** The structured-output JSON Schema handed to Codex verbatim. */
+  outputSchema: v.any(),
+});
+export type WorkerRequestInput = Infer<typeof vWorkerRequestInput>;
+
+/** Structural + size validation for an input envelope (untrusted at rest). */
+export function assertWorkerRequestInput(
+  value: unknown,
+): asserts value is WorkerRequestInput {
+  const input = asRecord(value, "input");
+  if (input.schemaVersion !== WORKER_INPUT_SCHEMA_VERSION) {
+    throw invalid("input.schemaVersion must be 1");
+  }
+  if (!WORKER_OPERATIONS.includes(input.operation as WorkerOperation)) {
+    throw invalid("input.operation is not a known operation");
+  }
+  boundedString(input.prompt as string, "input.prompt", {
+    min: 1,
+    max: 16000,
+  });
+  if (typeof input.prompt !== "string") {
+    throw invalid("input.prompt must be a string");
+  }
+  if (input.context !== undefined) {
+    const context = asArray(input.context, "input.context");
+    if (context.length > 16) {
+      throw invalid("input.context must be an array of at most 16 blocks");
+    }
+    context.forEach((block, index) => {
+      const b = asRecord(block, `input.context[${index}]`);
+      boundedString(b.label as string, `input.context[${index}].label`, {
+        min: 1,
+        max: 100,
+      });
+      boundedString(b.text as string, `input.context[${index}].text`, {
+        min: 0,
+        max: 8000,
+      });
+    });
+  }
+  const constraints = asRecord(input.constraints, "input.constraints");
+  const deadlineMs = constraints.deadlineMs;
+  if (
+    typeof deadlineMs !== "number" ||
+    !Number.isFinite(deadlineMs) ||
+    deadlineMs < 1000 ||
+    deadlineMs > 30 * 60 * 1000
+  ) {
+    throw invalid("input.constraints.deadlineMs must be 1s..30m");
+  }
+  if (
+    constraints.maxToolCalls !== undefined &&
+    (typeof constraints.maxToolCalls !== "number" ||
+      !Number.isSafeInteger(constraints.maxToolCalls) ||
+      constraints.maxToolCalls < 0 ||
+      constraints.maxToolCalls > 200)
+  ) {
+    throw invalid("input.constraints.maxToolCalls must be an integer 0..200");
+  }
+  if (constraints.model !== undefined) {
+    boundedString(constraints.model as string, "input.constraints.model", {
+      min: 1,
+      max: 100,
+    });
+  }
+  if (input.session !== undefined) {
+    const session = asRecord(input.session, "input.session");
+    boundedString(session.scopeKey as string, "input.session.scopeKey", {
+      min: 1,
+      max: 200,
+    });
+    if (session.codexThreadRef !== undefined) {
+      boundedString(
+        session.codexThreadRef as string,
+        "input.session.codexThreadRef",
+        { min: 1, max: 200 },
+      );
+    }
+  }
+  jsonBytes(input.outputSchema, "input.outputSchema", 64 * 1024);
+  jsonBytes(input, "input", WORKER_INPUT_MAX_BYTES);
+}
+
+/* ---- §4.5 worker result envelopes (schemaVersion 1) -------------------- */
+
+const vWorkerUsage = v.object({
+  toolCalls: v.optional(v.number()),
+  modelCalls: v.optional(v.number()),
+  tokens: v.optional(v.number()),
+});
+export type WorkerUsage = Infer<typeof vWorkerUsage>;
+
+const vEvidenceRef = v.object({
+  label: v.string(),
+  artifactId: v.optional(v.string()),
+  storageId: v.optional(v.string()),
+});
+
+export const vDiscoverResult = v.object({
+  schemaVersion: v.literal(1),
+  operation: v.literal("discover"),
+  summary: v.string(),
+  candidates: v.array(
+    v.object({
+      companyName: v.string(),
+      domain: v.optional(v.string()),
+      industry: v.optional(v.string()),
+      size: v.optional(v.string()),
+      reason: v.string(),
+      source: v.optional(v.string()),
+    }),
+  ),
+  evidenceRefs: v.optional(v.array(vEvidenceRef)),
+  usage: v.optional(vWorkerUsage),
+});
+
+export const vResearchResult = v.object({
+  schemaVersion: v.literal(1),
+  operation: v.literal("research"),
+  /** `pending` when no durable backend crawl exists (never fabricated). */
+  status: v.union(v.literal("complete"), v.literal("pending")),
+  summary: v.string(),
+  observations: v.array(
+    v.object({
+      topic: v.string(),
+      finding: v.string(),
+      sourceUrl: v.optional(v.string()),
+    }),
+  ),
+  artifactIds: v.optional(v.array(v.string())),
+  evidenceRefs: v.optional(v.array(vEvidenceRef)),
+  usage: v.optional(vWorkerUsage),
+});
+
+export const vContactResult = v.object({
+  schemaVersion: v.literal(1),
+  operation: v.literal("contact"),
+  status: v.union(
+    v.literal("found"),
+    v.literal("not_found"),
+    v.literal("ambiguous"),
+  ),
+  contacts: v.array(
+    v.object({
+      fullName: v.string(),
+      role: v.optional(v.string()),
+      email: v.optional(v.string()),
+      emailConfidence: v.optional(
+        v.union(
+          v.literal("high"),
+          v.literal("medium"),
+          v.literal("low"),
+        ),
+      ),
+      source: v.optional(v.string()),
+    }),
+  ),
+  summary: v.string(),
+  evidenceRefs: v.optional(v.array(vEvidenceRef)),
+  usage: v.optional(vWorkerUsage),
+});
+
+export const vDraftResult = v.object({
+  schemaVersion: v.literal(1),
+  operation: v.literal("draft"),
+  subject: v.string(),
+  body: v.string(),
+  tone: v.optional(v.string()),
+  callToAction: v.optional(v.string()),
+  evidenceRefs: v.optional(v.array(vEvidenceRef)),
+  usage: v.optional(vWorkerUsage),
+});
+
+export const vClassifyReplyResult = v.object({
+  schemaVersion: v.literal(1),
+  operation: v.literal("classify_reply"),
+  classification: v.union(
+    v.literal("interested"),
+    v.literal("not_interested"),
+    v.literal("out_of_office"),
+    v.literal("unsubscribe"),
+    v.literal("bounce"),
+    v.literal("question"),
+    v.literal("other"),
+  ),
+  confidence: v.number(),
+  rationale: v.string(),
+  suggestedNextStep: v.optional(v.string()),
+  evidenceRefs: v.optional(v.array(vEvidenceRef)),
+  usage: v.optional(vWorkerUsage),
+});
+
+export const vWorkerResult = v.union(
+  vDiscoverResult,
+  vResearchResult,
+  vContactResult,
+  vDraftResult,
+  vClassifyReplyResult,
+);
+export type WorkerResult = Infer<typeof vWorkerResult>;
+
+/**
+ * Runtime-check a result envelope AND enforce the documented bounds. The
+ * `v.*` validators above pin the shape for schema/`returns`; this parser is
+ * what the bridge trusts — worker output is untrusted JSON.
+ */
+export function parseWorkerResult(
+  value: unknown,
+  expectedOperation: WorkerOperation,
+): WorkerResult {
+  const result = asRecord(value, "result");
+  if (result.schemaVersion !== 1) {
+    throw bridgeInvalid("result.schemaVersion must be 1");
+  }
+  if (result.operation !== expectedOperation) {
+    throw bridgeInvalid(
+      `result.operation ${String(result.operation)} does not match request operation ${expectedOperation}`,
+    );
+  }
+  boundedString(result.summary as string, "result.summary", {
+    min: 0,
+    max: 1000,
+  });
+  if (result.evidenceRefs !== undefined) {
+    const refs = asArray(result.evidenceRefs, "result.evidenceRefs");
+    if (refs.length > 10) {
+      throw bridgeInvalid("result.evidenceRefs must be at most 10 entries");
+    }
+    refs.forEach((ref, index) => {
+      const r = asRecord(ref, `result.evidenceRefs[${index}]`);
+      boundedString(r.label as string, `result.evidenceRefs[${index}].label`, {
+        min: 1,
+        max: 200,
+      });
+      for (const key of ["artifactId", "storageId"] as const) {
+        if (r[key] !== undefined) {
+          boundedString(
+            r[key] as string,
+            `result.evidenceRefs[${index}].${key}`,
+            { min: 1, max: 100 },
+          );
+        }
+      }
+    });
+  }
+  if (result.usage !== undefined) {
+    const usage = asRecord(result.usage, "result.usage");
+    for (const key of ["toolCalls", "modelCalls", "tokens"] as const) {
+      const n = usage[key];
+      if (
+        n !== undefined &&
+        (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0)
+      ) {
+        throw bridgeInvalid(
+          `result.usage.${key} must be a non-negative integer`,
+        );
+      }
+    }
+  }
+  switch (result.operation) {
+    case "discover": {
+      const candidates = asArray(result.candidates, "result.candidates");
+      if (candidates.length > 5) {
+        throw bridgeInvalid("discover result allows at most 5 candidates");
+      }
+      candidates.forEach((candidate, index) => {
+        const c = asRecord(candidate, `result.candidates[${index}]`);
+        boundedString(c.companyName as string, `candidates[${index}].companyName`, {
+          min: 1,
+          max: 200,
+        });
+        boundedString(c.reason as string, `candidates[${index}].reason`, {
+          min: 1,
+          max: 500,
+        });
+        for (const key of ["domain", "industry", "size", "source"] as const) {
+          if (c[key] !== undefined) {
+            boundedString(c[key] as string, `candidates[${index}].${key}`, {
+              min: 1,
+              max: 200,
+            });
+          }
+        }
+      });
+      break;
+    }
+    case "research": {
+      if (result.status !== "complete" && result.status !== "pending") {
+        throw bridgeInvalid("research.status must be complete|pending");
+      }
+      const observations = asArray(result.observations, "result.observations");
+      if (observations.length > 12) {
+        throw bridgeInvalid("research result allows at most 12 observations");
+      }
+      observations.forEach((observation, index) => {
+        const o = asRecord(observation, `result.observations[${index}]`);
+        boundedString(o.topic as string, `observations[${index}].topic`, {
+          min: 1,
+          max: 200,
+        });
+        boundedString(o.finding as string, `observations[${index}].finding`, {
+          min: 1,
+          max: 1000,
+        });
+        if (o.sourceUrl !== undefined) {
+          boundedString(o.sourceUrl as string, `observations[${index}].sourceUrl`, {
+            min: 1,
+            max: 500,
+          });
+        }
+      });
+      if (result.artifactIds !== undefined) {
+        const ids = asArray(result.artifactIds, "result.artifactIds");
+        if (ids.length > 10) {
+          throw bridgeInvalid("research result allows at most 10 artifactIds");
+        }
+        ids.forEach((id, index) =>
+          boundedString(id as string, `result.artifactIds[${index}]`, {
+            min: 1,
+            max: 100,
+          }),
+        );
+      }
+      break;
+    }
+    case "contact": {
+      if (
+        result.status !== "found" &&
+        result.status !== "not_found" &&
+        result.status !== "ambiguous"
+      ) {
+        throw bridgeInvalid("contact.status must be found|not_found|ambiguous");
+      }
+      const contacts = asArray(result.contacts, "result.contacts");
+      if (contacts.length > 5) {
+        throw bridgeInvalid("contact result allows at most 5 contacts");
+      }
+      contacts.forEach((contact, index) => {
+        const c = asRecord(contact, `result.contacts[${index}]`);
+        boundedString(c.fullName as string, `contacts[${index}].fullName`, {
+          min: 1,
+          max: 200,
+        });
+        for (const key of ["role", "email", "source"] as const) {
+          if (c[key] !== undefined) {
+            boundedString(c[key] as string, `contacts[${index}].${key}`, {
+              min: 1,
+              max: 200,
+            });
+          }
+        }
+        if (
+          c.emailConfidence !== undefined &&
+          !["high", "medium", "low"].includes(c.emailConfidence as string)
+        ) {
+          throw bridgeInvalid(
+            `contacts[${index}].emailConfidence must be high|medium|low`,
+          );
+        }
+      });
+      break;
+    }
+    case "draft": {
+      boundedString(result.subject as string, "result.subject", {
+        min: 1,
+        max: 200,
+      });
+      boundedString(result.body as string, "result.body", {
+        min: 1,
+        max: 12000,
+      });
+      if (result.tone !== undefined) {
+        boundedString(result.tone as string, "result.tone", {
+          min: 1,
+          max: 100,
+        });
+      }
+      if (result.callToAction !== undefined) {
+        boundedString(result.callToAction as string, "result.callToAction", {
+          min: 1,
+          max: 500,
+        });
+      }
+      break;
+    }
+    case "classify_reply": {
+      if (
+        ![
+          "interested",
+          "not_interested",
+          "out_of_office",
+          "unsubscribe",
+          "bounce",
+          "question",
+          "other",
+        ].includes(result.classification as string)
+      ) {
+        throw bridgeInvalid("classify_reply.classification is not recognized");
+      }
+      if (
+        typeof result.confidence !== "number" ||
+        !Number.isFinite(result.confidence) ||
+        result.confidence < 0 ||
+        result.confidence > 1
+      ) {
+        throw bridgeInvalid("classify_reply.confidence must be 0..1");
+      }
+      boundedString(result.rationale as string, "result.rationale", {
+        min: 1,
+        max: 1000,
+      });
+      if (result.suggestedNextStep !== undefined) {
+        boundedString(
+          result.suggestedNextStep as string,
+          "result.suggestedNextStep",
+          { min: 1, max: 500 },
+        );
+      }
+      break;
+    }
+    default:
+      throw bridgeInvalid("result.operation is not a known operation");
+  }
+  jsonBytes(result, "result", WORKER_RESULT_MAX_BYTES);
+  return result as unknown as WorkerResult;
+}
+
+/* ---- deterministic digests + token minting ----------------------------- */
+
+/**
+ * Deterministic JSON serialization (sorted keys, undefined-elided) shared
+ * with the worker — keep `worker/src/contracts.ts`'s copy byte-identical.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+/** SHA-256 hex digest — WebCrypto (available in Convex mutations/actions). */
+export async function sha256Hex(data: string): Promise<string> {
+  const bytes = new TextEncoder().encode(data);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/** Same digest over raw bytes (artifact uploads). */
+export async function sha256HexBytes(
+  data: Uint8Array,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new Uint8Array(data),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/** `sha256:<hex>` over the canonical result serialization. */
+export async function computeResultDigest(result: unknown): Promise<string> {
+  return `sha256:${await sha256Hex(canonicalJson(result))}`;
+}
+
+function randomToken(prefix: string): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  // Fixed alphabet keeps tokens URL/header-safe (no +/= edge cases).
+  let body = "";
+  for (const byte of bytes) {
+    body += alphabet[byte % alphabet.length];
+  }
+  return `${prefix}${body}`;
+}
+
+/** `osw_…` — scoped worker bearer token (hashed at rest). */
+export function mintWorkerToken(): string {
+  return randomToken("osw_");
+}
+
+/** `osl_…` — per-claim lease token (hashed at rest). */
+export function mintLeaseToken(): string {
+  return randomToken("osl_");
+}
+
+/** `wrq_…` — bridge poll/result correlation IDs. */
+export function mintBridgeRequestId(): string {
+  return randomToken("wrq_");
+}
+
+/* ---- runtime timing constants ------------------------------------------ */
+
+export const WORKER_LEASE_TTL_MS = 60_000;
+export const CONTROL_REQUEST_TTL_MS = 10 * 60_000;
+export const LOGIN_CHALLENGE_TTL_MS = 15 * 60_000;
+export const WORKER_CREDENTIAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** §4.4: at most one routine activity update per request per 5 s. */
+export const WORKER_ACTIVITY_MIN_INTERVAL_MS = 5_000;
+/** Minimum interval between bridge polls on one credential (anti-hammer). */
+export const BRIDGE_MIN_POLL_INTERVAL_MS = 250;
+/** Minimum interval between lease heartbeats for one request. */
+export const HEARTBEAT_MIN_INTERVAL_MS = 2_000;
+/** A runtime is "live" only with a fresh heartbeat (§6.1 live indicators). */
+export const RUNTIME_LIVE_WINDOW_MS = 90_000;
+
+/* ---- lifecycle requestConfig validation --------------------------------- */
+
+/**
+ * `requestConfig` holds neutral provisioning settings and secure injection
+ * REFERENCES only — a raw credential value here is a contract violation.
+ */
+export type LifecycleRequestConfig = {
+  ttlSeconds: number;
+  image?: string;
+  /** Env names the provisioning action injects; values come from sealed
+   *  credential rows, never from this config. */
+  envNames: string[];
+  setup?: string;
+};
+
+const ALLOWED_CONFIG_KEYS = new Set([
+  "ttlSeconds",
+  "image",
+  "envNames",
+  "setup",
+]);
+
+export function assertLifecycleRequestConfig(
+  value: unknown,
+): asserts value is LifecycleRequestConfig {
+  const config = asRecord(value, "requestConfig");
+  for (const key of Object.keys(config)) {
+    if (!ALLOWED_CONFIG_KEYS.has(key)) {
+      throw invalid(`requestConfig.${key} is not an allowed neutral setting`);
+    }
+  }
+  const ttlSeconds = config.ttlSeconds;
+  if (
+    typeof ttlSeconds !== "number" ||
+    !Number.isSafeInteger(ttlSeconds) ||
+    ttlSeconds < 60 ||
+    ttlSeconds > 30 * 24 * 60 * 60
+  ) {
+    throw invalid("requestConfig.ttlSeconds must be an integer 60s..30d");
+  }
+  if (config.image !== undefined) {
+    boundedString(config.image as string, "requestConfig.image", {
+      min: 1,
+      max: 200,
+    });
+  }
+  const envNames = asArray(config.envNames, "requestConfig.envNames");
+  if (envNames.length > 16) {
+    throw invalid("requestConfig.envNames must be at most 16 names");
+  }
+  envNames.forEach((name, index) => {
+    const envName = boundedString(
+      name as string,
+      `requestConfig.envNames[${index}]`,
+      { min: 1, max: 100 },
+    );
+    if (!/^[A-Z][A-Z0-9_]*$/.test(envName)) {
+      throw invalid(`requestConfig.envNames[${index}] is not an env name`);
+    }
+  });
+  if (config.setup !== undefined) {
+    boundedString(config.setup as string, "requestConfig.setup", {
+      min: 1,
+      max: 500,
+    });
+  }
+  jsonBytes(config, "requestConfig", 8 * 1024);
+}
+
+/* ---- login challenge admission ------------------------------------------ */
+
+/** Provider-allowlisted hosts for Codex device-code verification URLs. */
+const LOGIN_VERIFICATION_HOSTS = new Set([
+  "auth.openai.com",
+  "chatgpt.com",
+  "openai.com",
+]);
+
+/** The only user-code shapes Codex device auth emits (e.g. `XXXX-XXXX`). */
+const USER_CODE_PATTERN = /^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12}){0,2}$/;
+
+export function assertLoginVerificationUrl(raw: string): string {
+  const url = boundedString(raw, "verificationUrl", { min: 8, max: 500 });
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw bridgeInvalid("verificationUrl is not a valid URL");
+  }
+  if (parsed.protocol !== "https:") {
+    throw bridgeInvalid("verificationUrl must be https");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (
+    !LOGIN_VERIFICATION_HOSTS.has(host) &&
+    ![...LOGIN_VERIFICATION_HOSTS].some((allowed) =>
+      host.endsWith(`.${allowed}`),
+    )
+  ) {
+    throw bridgeInvalid(
+      `verificationUrl host ${host} is not on the provider allowlist`,
+    );
+  }
+  return parsed.toString();
+}
+
+export function assertLoginUserCode(raw: string): string {
+  const code = boundedString(raw, "userCode", { min: 4, max: 32 });
+  if (!USER_CODE_PATTERN.test(code)) {
+    throw bridgeInvalid("userCode has an unexpected shape");
+  }
+  return code;
+}
+
+/** Allowlisted worker→activity event kinds (runtime-origin only). */
+export const WORKER_ACTIVITY_KINDS = ["worker_progress"] as const;
+export type WorkerActivityKind = (typeof WORKER_ACTIVITY_KINDS)[number];
+
+/**
+ * Durable completion payload delivered to the awaiting workflow when a
+ * worker request reaches a terminal/uncertain state. Like
+ * `vDecisionContinuation`, the workflow treats it as a hint — the
+ * continuation step re-reads the workerRequest row before applying.
+ */
+export const vWorkerRequestCompletion = v.object({
+  workerRequestId: v.id("workerRequests"),
+  missionId: v.id("missions"),
+  runId: v.id("runs"),
+  /** Attempt generation of the completed request. */
+  generation: v.number(),
+  /** Mission workflowGeneration the request was dispatched under. */
+  workflowGeneration: v.number(),
+  outcome: v.union(
+    v.literal("succeeded"),
+    v.literal("failed"),
+    v.literal("cancelled"),
+    v.literal("uncertain"),
+  ),
+  /** Bounded failure/reason detail for non-success outcomes. */
+  detail: v.optional(v.string()),
+});
+export type WorkerRequestCompletion = Infer<typeof vWorkerRequestCompletion>;

@@ -7,9 +7,12 @@
   "scripts": {
     "plan": "node scripts/plan.mjs",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && pnpm -C worker run build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "worker:build": "pnpm -C worker run build",
+    "worker:typecheck": "pnpm -C worker run typecheck",
+    "worker:dev": "pnpm -C worker run build && node worker/dist/main.js"
   },
   "dependencies": {
     "@agentmail/convex": "0.1.0",
