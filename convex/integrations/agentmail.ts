@@ -33,6 +33,7 @@ import { AgentMail } from "@agentmail/convex";
 import { v, type Infer } from "convex/values";
 import { components, internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
+import { recordReceipt } from "../sendAttempts";
 
 /**
  * Shared component client handle. Credentials are read from deployment env
@@ -141,6 +142,16 @@ async function performSingleSendRequest(args: {
   inboxId: string;
   idempotencyKey: string;
   payload: SendRequestBody;
+  /**
+   * P10: the exact REST path relative to the inbox — `messages/send` for
+   * first contact, `messages/{parent}/reply` for an in-thread reply. Both
+   * honor the same `Idempotency-Key` header semantics (the reply endpoint
+   * was verified live in the P05 probe).
+   */
+  endpointOperation: "send" | "reply";
+  /** Parent provider message id — required iff `endpointOperation` is
+   *  "reply". URL-encoded into the path. */
+  parentMessageId?: string;
 }): Promise<SendAttemptResult> {
   const apiKey = process.env.AGENTMAIL_API_KEY;
   if (!apiKey) {
@@ -154,8 +165,13 @@ async function performSingleSendRequest(args: {
   const baseUrl = (
     process.env.AGENTMAIL_BASE_URL ?? AGENTMAIL_DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
-  // Provider IDs are opaque path segments, including email-address inbox IDs.
-  const url = `${baseUrl}/inboxes/${encodeURIComponent(args.inboxId)}/messages/send`;
+  // Provider IDs are opaque path segments, including email-address inbox
+  // IDs and RFC 5322 message IDs — always URL-encode them.
+  const path =
+    args.endpointOperation === "reply"
+      ? `messages/${encodeURIComponent(args.parentMessageId ?? "")}/reply`
+      : "messages/send";
+  const url = `${baseUrl}/inboxes/${encodeURIComponent(args.inboxId)}/${path}`;
 
   let response: Response | undefined;
   let responseText: string;
@@ -303,6 +319,22 @@ function stringField(
   return typeof value === "string" ? value : undefined;
 }
 
+/** Provider timestamps arrive as numbers or ISO strings — normalize to ms. */
+function numberField(
+  record: Record<string, unknown> | null,
+  key: string,
+): number | undefined {
+  const value = record?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
+
 /**
  * THE dispatch boundary for approved outbound mail (first contact).
  *
@@ -335,7 +367,8 @@ export const executeSendAttempt = internalAction({
     payload: vSendRequestBody,
   },
   returns: vSendAttemptResult,
-  handler: async (_ctx, args) => performSingleSendRequest(args),
+  handler: async (_ctx, args) =>
+    performSingleSendRequest({ ...args, endpointOperation: "send" }),
 });
 
 /**
@@ -368,7 +401,121 @@ export const reconcileSendAttempt = internalAction({
     payload: vSendRequestBody,
   },
   returns: vSendAttemptResult,
-  handler: async (_ctx, args) => performSingleSendRequest(args),
+  handler: async (_ctx, args) =>
+    performSingleSendRequest({ ...args, endpointOperation: "send" }),
+});
+
+/**
+ * P10: the reply variant of the dispatch boundary — exactly one POST to
+ * `POST /v0/inboxes/{inbox_id}/messages/{parent_message_id}/reply` with the
+ * SAME idempotency-key contract (`endpointOperation: "reply"` on the
+ * sendAttempts row). `parentMessageId` is the draft's immutable
+ * `replyToMessageRef`; identical replay semantics apply.
+ */
+export const executeReplyAttempt = internalAction({
+  args: {
+    inboxId: v.string(),
+    idempotencyKey: v.string(),
+    parentMessageId: v.string(),
+    payload: vSendRequestBody,
+  },
+  returns: vSendAttemptResult,
+  handler: async (_ctx, args) =>
+    performSingleSendRequest({ ...args, endpointOperation: "reply" }),
+});
+
+/** P10: reconciliation replay for an `uncertain` reply attempt — same
+ *  key, same payload, same parent, audit-distinct name. */
+export const reconcileReplyAttempt = internalAction({
+  args: {
+    inboxId: v.string(),
+    idempotencyKey: v.string(),
+    parentMessageId: v.string(),
+    payload: vSendRequestBody,
+  },
+  returns: vSendAttemptResult,
+  handler: async (_ctx, args) =>
+    performSingleSendRequest({ ...args, endpointOperation: "reply" }),
+});
+
+/**
+ * P10: read-only provider evidence lookup for uncertain-attempt
+ * reconciliation (G3 step 8 — "use provider read APIs and webhook
+ * evidence"). Calls the component's own `getMessage`/`getThread` reads —
+ * never mutates provider state. Returns a bounded, sanitized projection:
+ * provider IDs and existence only, no addresses or bodies.
+ */
+export const lookupProviderMessage = internalAction({
+  args: {
+    inboxId: v.string(),
+    messageId: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+  },
+  returns: v.object({
+    message: v.union(
+      v.object({
+        messageId: v.string(),
+        threadId: v.string(),
+      }),
+      v.null(),
+    ),
+    thread: v.union(
+      v.object({
+        threadId: v.string(),
+        messageCount: v.optional(v.number()),
+      }),
+      v.null(),
+    ),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const result: {
+      message: { messageId: string; threadId: string } | null;
+      thread: { threadId: string; messageCount?: number } | null;
+      error?: string;
+    } = { message: null, thread: null };
+    if (args.messageId !== undefined) {
+      try {
+        const message = (await agentmail.getMessage(
+          ctx,
+          args.inboxId,
+          args.messageId,
+        )) as Record<string, unknown> | null;
+        if (message !== null && typeof message.message_id === "string") {
+          result.message = {
+            messageId: message.message_id,
+            threadId:
+              typeof message.thread_id === "string" ? message.thread_id : "",
+          };
+        }
+      } catch (error) {
+        // A 404 means the provider holds no such message — meaningful
+        // evidence, not a crash.
+        result.error =
+          error instanceof Error ? `getMessage: ${error.message}` : "getMessage failed";
+      }
+    }
+    if (args.threadId !== undefined) {
+      try {
+        const thread = (await agentmail.getThread(
+          ctx,
+          args.inboxId,
+          args.threadId,
+        )) as Record<string, unknown> | null;
+        if (thread !== null && typeof thread.thread_id === "string") {
+          const messages = thread.messages;
+          result.thread = {
+            threadId: thread.thread_id,
+            messageCount: Array.isArray(messages) ? messages.length : undefined,
+          };
+        }
+      } catch (error) {
+        result.error =
+          error instanceof Error ? `getThread: ${error.message}` : "getThread failed";
+      }
+    }
+    return result;
+  },
 });
 
 /**
@@ -459,36 +606,71 @@ function extractEventIndexFields(event: unknown): {
  * types beyond the installed component's union, and this receiver must stay
  * up and observable rather than wedge on a validator.
  *
- * P05 stub — logs provider IDs only, changes no state. P11 contract (see
- * architecture §8 "Incoming message processing" and G3 "OpenSquad callbacks
- * must"):
- * - Track message.sent/delivered/bounced/complained/rejected onto the app's
- *   OWN send-attempt records by provider `message_id`. The app-owned sender
- *   creates no component `outboundMessages` row, so the component's internal
- *   status projection never matches ours — delivery facts arrive only here.
- * - Store delivery events that arrive BEFORE the local send acknowledgement
- *   recorded the provider message reference, and reconcile afterwards.
- * - Apply verified unsubscribe/complaint facts to suppression.
- * - Dedupe application handling by eventId AND by (inboxId, messageId).
- * - Keep a small replay/failure record; component callback execution is not
- *   proof that sales handling completed.
+ * P10 wiring (P05's receipt contract landed): each verified event is recorded
+ * in `emailEventReceipts` — deduped by `event_id` AND by
+ * (workspaceId, applicationKey) — then folded onto the app-owned send
+ * attempt by provider `message_id`. The app-owned sender creates no
+ * component `outboundMessages` row, so the component's internal status
+ * projection never matches ours — delivery facts arrive only here, and a
+ * receipt that beats the send acknowledgement stays `pending` until
+ * `recordSendOutcome` folds it. Verified bounce/complaint facts suppress the
+ * exact email via `applyReceiptToAttempt`.
  *
- * Integrator note: that dedupe/replay record needs an app table (P02 schema),
- * e.g. `mailEvents { eventId, eventType, inboxId, threadId?, messageId?,
- * receivedAt, handledAt?, error? }` indexed `by_eventId` and
- * `by_inboxId_and_messageId` — or fold it into P02's conversation/message
- * records. Recorded in plan/evidence/P05.md.
+ * P11 remainder (not this task): conversation/context updates,
+ * unsubscribe-driven handling, and the unassigned-inbox quarantine path.
  */
 export const onEvent = internalMutation({
   args: { event: v.any() },
   returns: v.null(),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const event = asRecord(args.event);
+    const eventId = stringField(event, "event_id");
+    const eventType = stringField(event, "event_type");
+    const ids = extractEventIndexFields(args.event);
     // Provider IDs only — never log addresses or bodies.
-    console.info("agentmail.onEvent (P05 stub, no state changes)", {
-      eventId: stringField(event, "event_id"),
-      eventType: stringField(event, "event_type"),
-      ...extractEventIndexFields(args.event),
+    console.info("agentmail.onEvent", { eventId, eventType, ...ids });
+
+    // `message.received` is delivered through onMessageReceived — the
+    // component fires BOTH callbacks for it; never record twice.
+    if (
+      eventType === "message.received" ||
+      eventId === undefined ||
+      eventType === undefined ||
+      ids.inboxId === undefined ||
+      ids.messageId === undefined
+    ) {
+      return null;
+    }
+    const workspace = await ctx.db
+      .query("workspaces")
+      .withIndex("by_inboxRef", (q) => q.eq("inboxRef", ids.inboxId))
+      .unique();
+    if (workspace === null) {
+      // Unknown inbox — quarantined for P11; no workspace to own a receipt.
+      console.info("agentmail.onEvent: event for unassigned inbox", {
+        eventId,
+        inboxId: ids.inboxId,
+      });
+      return null;
+    }
+    const payloadTimestamp = numberField(event, "timestamp");
+    await recordReceipt(ctx, {
+      workspaceId: workspace._id,
+      inboxRef: ids.inboxId,
+      providerEventId: eventId,
+      // One business effect per (message, event type): provider re-delivery
+      // under a NEW event_id must not re-apply the same fact.
+      applicationKey: `outbound:${ids.messageId}:${eventType}`,
+      providerMessageRef: ids.messageId,
+      eventType,
+      ...(ids.threadId !== undefined
+        ? { providerThreadRef: ids.threadId }
+        : {}),
+      providerFacts: {
+        ...(payloadTimestamp !== undefined
+          ? { timestamp: payloadTimestamp }
+          : {}),
+      },
     });
     return null;
   },
@@ -499,32 +681,52 @@ export const onEvent = internalMutation({
  * already persisted the inbound message and deduped by `event_id` before
  * this runs.
  *
- * P05 stub — logs provider IDs only, changes no state. P11 contract:
- * - Resolve the workspace EXCLUSIVELY from a saved inbox assignment
- *   (inbox_id → workspace). Unknown inboxes are quarantined; an unmatched
- *   thread in a known inbox creates an unassigned conversation under
- *   `humanTakeover` — no reply workflow/draft/send until authorized lead
- *   association and explicit resume.
- * - Dedupe by (inboxId, messageId) as well as eventId: a provider
- *   re-delivery under a NEW event_id passes component dedupe but must not
- *   start a second response workflow.
- * - Advance conversation `contextVersion`, update latest inbound reference,
- *   supersede obsolete draft decisions, cancel pending version-bound
- *   follow-ups, and evaluate the deterministic opt-out rule before any send.
- * - Signal/start the deduplicated reply workflow keyed to this inbound
- *   message; callback execution alone is not proof that workflow ran.
+ * P10 wiring: the inbound message is recorded in `emailEventReceipts`
+ * (pending) with application-key dedupe `incoming:<inbox>:<message>` — a
+ * provider re-delivery under a NEW event_id lands as a handled duplicate and
+ * can never start a second response workflow.
+ *
+ * P11 remainder (not this task): workspace→conversation association,
+ * contextVersion advancement, draft/decision invalidation and the reply
+ * workflow signal. The pending receipt is its durable input.
  */
 export const onMessageReceived = internalMutation({
   args: { message: v.any(), thread: v.any(), eventId: v.string() },
   returns: v.null(),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const message = asRecord(args.message);
+    const inboxId = stringField(message, "inbox_id");
+    const threadId = stringField(message, "thread_id");
+    const messageId = stringField(message, "message_id");
     // Provider IDs only — never log addresses or bodies.
-    console.info("agentmail.onMessageReceived (P05 stub, no state changes)", {
+    console.info("agentmail.onMessageReceived", {
       eventId: args.eventId,
-      inboxId: stringField(message, "inbox_id"),
-      threadId: stringField(message, "thread_id"),
-      messageId: stringField(message, "message_id"),
+      inboxId,
+      threadId,
+      messageId,
+    });
+    if (inboxId === undefined || messageId === undefined) {
+      return null;
+    }
+    const workspace = await ctx.db
+      .query("workspaces")
+      .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxId))
+      .unique();
+    if (workspace === null) {
+      console.info("agentmail.onMessageReceived: unassigned inbox", {
+        eventId: args.eventId,
+        inboxId,
+      });
+      return null;
+    }
+    await recordReceipt(ctx, {
+      workspaceId: workspace._id,
+      inboxRef: inboxId,
+      providerEventId: args.eventId,
+      applicationKey: `incoming:${inboxId}:${messageId}`,
+      providerMessageRef: messageId,
+      eventType: "message.received",
+      ...(threadId !== undefined ? { providerThreadRef: threadId } : {}),
     });
     return null;
   },
