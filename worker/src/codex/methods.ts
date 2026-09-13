@@ -382,6 +382,7 @@ export function waitForTurn(
     readonly signal?: AbortSignal;
   },
 ): Promise<TurnTerminal> {
+  if (args.signal?.aborted) return Promise.reject(new Error("turn wait aborted"));
   return new Promise<TurnTerminal>((resolve, reject) => {
     const done = (value: TurnTerminal) => {
       cleanup();
@@ -441,6 +442,7 @@ export function waitForTurn(
           }
         }
       },
+      true,
     );
     const cleanup = () => {
       clearTimeout(timer);
@@ -467,6 +469,7 @@ export function waitForLoginCompleted(
     readonly signal?: AbortSignal;
   },
 ): Promise<LoginCompletion> {
+  if (args.signal?.aborted) return Promise.reject(new Error("login wait aborted"));
   return new Promise<LoginCompletion>((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup();
@@ -483,7 +486,7 @@ export function waitForLoginCompleted(
         if (!isRecord(params)) return;
         const loginId =
           typeof params["loginId"] === "string" ? params["loginId"] : null;
-        if (loginId !== null && loginId !== args.loginId) return;
+        if (loginId !== args.loginId) return;
         cleanup();
         resolve({
           loginId,
@@ -493,6 +496,7 @@ export function waitForLoginCompleted(
             : {}),
         });
       },
+      true,
     );
     const cleanup = () => {
       clearTimeout(timer);

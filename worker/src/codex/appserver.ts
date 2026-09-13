@@ -106,6 +106,7 @@ export class CodexAppServer {
   #nextId = 1;
   readonly #pending = new Map<string, PendingRequest>();
   readonly #notificationHandlers: NotificationHandler[] = [];
+  readonly #terminalNotifications: ServerNotificationEnvelope[] = [];
   #serverRequestHandler: ServerRequestHandler | null = null;
   #closed = false;
   #closeReason = "not started";
@@ -131,8 +132,19 @@ export class CodexAppServer {
     return this.#closed;
   }
 
-  onNotification(handler: NotificationHandler): () => void {
+  onNotification(handler: NotificationHandler, replayTerminal = false): () => void {
     this.#notificationHandlers.push(handler);
+    if (replayTerminal) {
+      const recent = [...this.#terminalNotifications];
+      // Waiters install cleanup before replay. A fast terminal notification can
+      // arrive in the same stdout chunk as the start/interrupt response.
+      queueMicrotask(() => {
+        for (const notification of recent) {
+          if (!this.#notificationHandlers.includes(handler)) break;
+          handler(notification);
+        }
+      });
+    }
     return () => {
       const i = this.#notificationHandlers.indexOf(handler);
       if (i >= 0) this.#notificationHandlers.splice(i, 1);
@@ -233,7 +245,12 @@ export class CodexAppServer {
         params,
         ...(emittedAtMs !== undefined ? { emittedAtMs } : {}),
       } as ServerNotificationEnvelope;
-      for (const handler of this.#notificationHandlers) {
+      if (method === "turn/completed" || method === "account/login/completed" ||
+          (method === "error" && isRecord(params) && params["willRetry"] === false)) {
+        this.#terminalNotifications.push(envelope);
+        if (this.#terminalNotifications.length > 64) this.#terminalNotifications.shift();
+      }
+      for (const handler of [...this.#notificationHandlers]) {
         try {
           handler(envelope);
         } catch {

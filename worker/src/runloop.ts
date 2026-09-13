@@ -18,6 +18,7 @@ import {
   initialize,
   sendInitialized,
   threadStart,
+  threadResume,
   turnInterrupt,
   turnStart,
   waitForLoginCompleted,
@@ -200,6 +201,10 @@ export class WorkerRunLoop {
         reason: "no codex account and server reports auth not required",
       };
     }
+    if (account.account.state !== "chatgpt") {
+      await this.#setPhase("error", "workspace requires managed ChatGPT login");
+      return { kind: "blocked", reason: "unsupported account type for managed login" };
+    }
 
     await this.#setPhase("ready", `codex ${identity.userAgent}`);
     if (turn === undefined) {
@@ -274,14 +279,14 @@ export class WorkerRunLoop {
     }
     // Only a fresh account read after a matching success may set Ready.
     const verified = await accountRead(server, { refreshToken: false });
-    if (verified.account.state === "none") {
-      await this.#setPhase("idle", "login completed but account still absent");
+    if (verified.account.state !== "chatgpt") {
+      await this.#setPhase("idle", "login completed without a managed ChatGPT account");
       return {
         kind: "login_started",
         loginId: challenge.loginId,
         challengeDelivered: true,
         completed: false,
-        error: "post-login account read returned no account",
+        error: "post-login account read returned no managed ChatGPT account",
       };
     }
     await this.#setPhase("ready", "managed login verified");
@@ -316,7 +321,9 @@ export class WorkerRunLoop {
 
     let thread: ThreadHandle;
     try {
-      thread = await threadStart(server, {
+      thread = turn.threadId !== undefined
+        ? await threadResume(server, { threadId: turn.threadId })
+        : await threadStart(server, {
         cwd: turn.cwd,
         ...(turn.model !== undefined ? { model: turn.model } : {}),
         serviceName: "opensquad",
@@ -324,7 +331,7 @@ export class WorkerRunLoop {
     } catch (err) {
       return {
         kind: "blocked",
-        reason: `thread/start failed: ${err instanceof Error ? err.message : String(err)}`,
+        reason: `thread setup failed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
 
@@ -359,7 +366,7 @@ export class WorkerRunLoop {
           timeoutMs: 30_000,
         });
         await this.#setPhase(
-          "idle",
+          confirmed.status === "timeout" ? "error" : "idle",
           confirmed.status === "timeout"
             ? "turn termination unconfirmed — needs attention"
             : `turn ${confirmed.status}`,
@@ -373,8 +380,11 @@ export class WorkerRunLoop {
       await this.#setPhase("idle", `turn ${terminal.status}`);
       return { kind: "turn", threadId: thread.threadId, turn: terminal };
     } finally {
-      this.#currentRunId = undefined;
-      this.#currentTurnRef = undefined;
+      // Keep the active references visible when termination is unconfirmed.
+      if (this.#phase === "idle") {
+        this.#currentRunId = undefined;
+        this.#currentTurnRef = undefined;
+      }
     }
   }
 }
