@@ -8,11 +8,11 @@
 - **Frontend:** not deployed
 - **Convex deployment:** not deployed
 - **Components:** @agentmail/convex
-- **Convex features:** HTTP actions, internal mutations/actions
+- **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T17:52:05Z
+- **Last updated:** 2026-09-13T17:58:24Z
 
 ## Log
 
@@ -91,3 +91,17 @@ outcomes — verified unreachable publicly, signature rejection and a live
 negative probe confirmed on an isolated local backend
 (`convex/convex.config.ts`, `convex/http.ts`, `convex/integrations/agentmail.ts`,
 `worker/`). Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
+
+### 2026-09-13 - f9f6664
+P02 integrated: the first domain schema and authorization layer now exist —
+`workspaces`, `memberships`, `businessProfiles`, `employees`, `campaigns` with
+declared indexes and transactional invariants, typed Hexclave identity guards
+(`tokenIdentifier` keys, anonymous-issuer rejection, uniform NOT_FOUND across
+workspaces), an idempotent one-transaction workspace bootstrap with the three
+employee templates, and campaign create/confirm/transition APIs with immutable
+confirmed source plans and version conflicts (`convex/schema.ts`,
+`convex/lib/`, `convex/{workspaces,businessProfiles,employees,campaigns}.ts`).
+Authorization paths were exercised live on an isolated local backend with
+synthetic identities — cross-workspace access, viewer/owner role matrix,
+lead-cap and source-gate rejections all verified; a real provider-issued JWT
+still awaits the human sign-in check. Verification: `plan/evidence/P02.md`.
