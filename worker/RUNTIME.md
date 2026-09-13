@@ -33,12 +33,12 @@ workspace root; `worker/pnpm-lock.yaml` pins its dependency set independently.
 ## Build/refresh inside the image
 
 ```sh
-# at image build time (named snapshot "from" — see open question below):
+# Build in a clean checkout, then ship dist/ with the package and lockfile:
 cd /opt/opensquad/worker
+pnpm install --frozen-lockfile
+pnpm build
+# In the runtime image, install only runtime dependencies beside prebuilt dist/:
 pnpm install --frozen-lockfile --prod
-pnpm exec tsc -p tsconfig.json        # or ship prebuilt dist/
-codex app-server generate-ts --out src/generated/codex   # regenerate on codex bump
-codex app-server generate-json-schema --out protocol
 ```
 
 Protocol types are generated from the installed binary and committed; bump the
@@ -63,13 +63,19 @@ Codex pin → regenerate → review the diff.
 - `idle`/`running` reflect only the built-in prompt harness — our systemd
   worker doesn't move them; worker heartbeat is authoritative.
 
-## Open questions for the owner (recorded in plan/evidence/P03.md)
+## Accepted probe and remaining image work
 
-1. Exact ASCII `from` snapshot/image name for the pinned worker image —
-   `from` accepts named snapshots, not Docker references.
-2. Whether the managed Codex device-code login completes end-to-end inside a
-   real Box (owner's ChatGPT account) — locally proven only to `login/start` +
-   cancel on codex-cli 0.154.0.
+P03's live evidence records owner device-code login, a bounded turn, preserved
+managed login and saved-thread resume in disposable ASCII Boxes. See the live
+gate section of `plan/evidence/P03.md`; the earlier blocked section is history.
+P07 still owns the reusable clean worker snapshot, verified sandbox support,
+protocol-generation parity and production bridge. `from` accepts named ASCII
+snapshots, not Docker references.
+
+Provisioning probes reject Codex login files at Box birth. The service's
+restart check permits its workspace-owned managed login cache while continuing
+to reject other builder/provider credentials. It creates the work directory
+before spawning Codex; configuration exit 78 requires a provisioning fix.
 
 ## P04 diagnostic drivers (NOT the employee image)
 
