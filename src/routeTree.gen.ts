@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/_dashboard'
 import { Route as MarketingRouteImport } from './routes/_marketing'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as DashboardEmployeesRouteImport } from './routes/_dashboard/employees'
+import { Route as DashboardOnboardingRouteImport } from './routes/_dashboard/onboarding'
 import { Route as DashboardOverviewRouteImport } from './routes/_dashboard/overview'
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
 import { Route as DashboardSquadsRouteImport } from './routes/_dashboard/squads'
@@ -30,6 +32,16 @@ const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardEmployeesRoute = DashboardEmployeesRouteImport.update({
+  id: '/employees',
+  path: '/employees',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardOnboardingRoute = DashboardOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardOverviewRoute = DashboardOverviewRouteImport.update({
   id: '/overview',
@@ -60,6 +72,8 @@ const HandlerSplatRoute = HandlerSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
   '/sign-in': typeof SignInRoute
+  '/employees': typeof DashboardEmployeesRoute
+  '/onboarding': typeof DashboardOnboardingRoute
   '/overview': typeof DashboardOverviewRoute
   '/settings': typeof DashboardSettingsRoute
   '/squads': typeof DashboardSquadsRoute
@@ -68,6 +82,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
   '/sign-in': typeof SignInRoute
+  '/employees': typeof DashboardEmployeesRoute
+  '/onboarding': typeof DashboardOnboardingRoute
   '/overview': typeof DashboardOverviewRoute
   '/settings': typeof DashboardSettingsRoute
   '/squads': typeof DashboardSquadsRoute
@@ -78,6 +94,8 @@ export interface FileRoutesById {
   '/_dashboard': typeof DashboardRouteWithChildren
   '/_marketing': typeof MarketingRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/_dashboard/employees': typeof DashboardEmployeesRoute
+  '/_dashboard/onboarding': typeof DashboardOnboardingRoute
   '/_dashboard/overview': typeof DashboardOverviewRoute
   '/_dashboard/settings': typeof DashboardSettingsRoute
   '/_dashboard/squads': typeof DashboardSquadsRoute
@@ -87,14 +105,31 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/sign-in' | '/overview' | '/settings' | '/squads' | '/handler/$'
+    | '/'
+    | '/sign-in'
+    | '/employees'
+    | '/onboarding'
+    | '/overview'
+    | '/settings'
+    | '/squads'
+    | '/handler/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sign-in' | '/overview' | '/settings' | '/squads' | '/handler/$'
+  to:
+    | '/'
+    | '/sign-in'
+    | '/employees'
+    | '/onboarding'
+    | '/overview'
+    | '/settings'
+    | '/squads'
+    | '/handler/$'
   id:
     | '__root__'
     | '/_dashboard'
     | '/_marketing'
     | '/sign-in'
+    | '/_dashboard/employees'
+    | '/_dashboard/onboarding'
     | '/_dashboard/overview'
     | '/_dashboard/settings'
     | '/_dashboard/squads'
@@ -131,6 +166,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_dashboard/employees': {
+      id: '/_dashboard/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof DashboardEmployeesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/_dashboard/onboarding': {
+      id: '/_dashboard/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof DashboardOnboardingRouteImport
+      parentRoute: typeof DashboardRoute
     }
     '/_dashboard/overview': {
       id: '/_dashboard/overview'
@@ -171,12 +220,16 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardRouteChildren {
+  DashboardEmployeesRoute: typeof DashboardEmployeesRoute
+  DashboardOnboardingRoute: typeof DashboardOnboardingRoute
   DashboardOverviewRoute: typeof DashboardOverviewRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardSquadsRoute: typeof DashboardSquadsRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardEmployeesRoute: DashboardEmployeesRoute,
+  DashboardOnboardingRoute: DashboardOnboardingRoute,
   DashboardOverviewRoute: DashboardOverviewRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardSquadsRoute: DashboardSquadsRoute,
