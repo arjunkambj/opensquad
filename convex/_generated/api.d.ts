@@ -11,6 +11,7 @@
 import type * as activity from "../activity.js";
 import type * as businessProfiles from "../businessProfiles.js";
 import type * as campaigns from "../campaigns.js";
+import type * as crons from "../crons.js";
 import type * as decisions from "../decisions.js";
 import type * as employees from "../employees.js";
 import type * as http from "../http.js";
@@ -20,6 +21,10 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as missions from "../missions.js";
 import type * as runs from "../runs.js";
+import type * as runtimeConnections from "../runtimeConnections.js";
+import type * as runtimeControlRequests from "../runtimeControlRequests.js";
+import type * as workerBridge from "../workerBridge.js";
+import type * as workerOperations from "../workerOperations.js";
 import type * as workflows_devFixture from "../workflows/devFixture.js";
 import type * as workflows_events from "../workflows/events.js";
 import type * as workflows_manager from "../workflows/manager.js";
@@ -36,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   businessProfiles: typeof businessProfiles;
   campaigns: typeof campaigns;
+  crons: typeof crons;
   decisions: typeof decisions;
   employees: typeof employees;
   http: typeof http;
@@ -45,6 +51,10 @@ declare const fullApi: ApiFromModules<{
   "lib/validators": typeof lib_validators;
   missions: typeof missions;
   runs: typeof runs;
+  runtimeConnections: typeof runtimeConnections;
+  runtimeControlRequests: typeof runtimeControlRequests;
+  workerBridge: typeof workerBridge;
+  workerOperations: typeof workerOperations;
   "workflows/devFixture": typeof workflows_devFixture;
   "workflows/events": typeof workflows_events;
   "workflows/manager": typeof workflows_manager;
