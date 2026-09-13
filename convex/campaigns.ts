@@ -59,6 +59,11 @@ async function getCampaignInWorkspace(
  * Create a draft campaign. `sourcePlan.instruction` preserves the operator's
  * original scope text; `sources` optionally carries the interpreted typed
  * proposal pending `confirmSourcePlan`.
+ *
+ * `requestId` is a client retry key: when supplied, a second call with the
+ * same (workspaceId, requestId) returns the already-created campaign instead
+ * of inserting a duplicate. Concurrent retries conflict on the index range
+ * and Convex replays the loser, which then observes the committed row.
  */
 export const create = mutation({
   args: {
@@ -96,6 +101,23 @@ export const create = mutation({
       min: CAMPAIGN_ENRICHMENT_LIMIT_MIN,
       max: CAMPAIGN_ENRICHMENT_LIMIT_MAX,
     });
+    const requestId =
+      args.requestId !== undefined
+        ? boundedString(args.requestId, "requestId", { min: 1, max: 100 })
+        : undefined;
+    if (requestId !== undefined) {
+      const replayed = await ctx.db
+        .query("campaigns")
+        .withIndex("by_workspaceId_and_requestId", (q) =>
+          q
+            .eq("workspaceId", args.workspaceId)
+            .eq("requestId", requestId),
+        )
+        .unique();
+      if (replayed !== null) {
+        return replayed;
+      }
+    }
 
     const now = Date.now();
     const campaignId = await ctx.db.insert("campaigns", {
@@ -108,6 +130,7 @@ export const create = mutation({
       enrichmentLimit,
       status: "draft",
       createdBy: identityKey,
+      ...(requestId !== undefined ? { requestId } : {}),
       createdAt: now,
       updatedAt: now,
     });

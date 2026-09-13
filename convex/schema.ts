@@ -96,6 +96,9 @@ export const campaignFields = {
   status: vCampaignStatus,
   /** identityKey of the creator. */
   createdBy: v.string(),
+  /** Client retry key — when present, `create` dedupes on
+   * (workspaceId, requestId) transactionally instead of double-creating. */
+  requestId: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 };
@@ -118,8 +121,8 @@ export default defineSchema({
     // Exactly one employee per (workspaceId, template), enforced transactionally.
     .index("by_workspaceId_and_template", ["workspaceId", "template"]),
 
-  campaigns: defineTable(campaignFields).index("by_workspaceId_and_status", [
-    "workspaceId",
-    "status",
-  ]),
+  campaigns: defineTable(campaignFields)
+    .index("by_workspaceId_and_status", ["workspaceId", "status"])
+    // At most one campaign per (workspaceId, requestId), enforced in `create`.
+    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
 });
