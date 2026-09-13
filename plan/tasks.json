@@ -130,7 +130,7 @@
       "id": "P04",
       "title": "Apollo and Firecrawl integration proof",
       "tier": "core",
-      "status": "in_progress",
+      "status": "blocked",
       "owner": "subagent-P04",
       "dependsOn": [
         "P03"
@@ -145,10 +145,16 @@
         "worker/",
         "plan/evidence/P04.md"
       ],
-      "evidence": [],
+      "evidence": [
+        "plan/evidence/P04.md: integrated; @firecrawl/firecrawl-convex@0.1.1 pinned + registered via convex.config.ts app-env binding; component self-mounts signed webhook at /firecrawl/webhook via httpPrefix (no app route added); narrow internal wrapper in convex/integrations/firecrawl.ts with hostname/SSRF admission checks.",
+        "Verified on isolated local backend: component install + push, ONE real bounded scrape (basicagency.com, 1 credit, 1000→999 balance), 6-case URL rejection matrix (non-http/userinfo/localhost/private ranges), webhook HMAC verification with 401 on missing/bogus signatures, public-surface unreachable. Live component also installed on dev deployment via merged push (FIRECRAWL_WEBHOOK_SECRET present there, 33 chars).",
+        "IMPORTANT DELTA: component skips HMAC verification entirely when FIRECRAWL_WEBHOOK_SECRET is unset — must always be configured per deployment. poll fallback mode exists for unreachable deployments.",
+        "Apollo machinery committed and compiled (worker boxmcp.ts auth/call/list/token-inspect phases, p04gate.ts host driver, callback-url ferry for localhost-redirect OAuth) but NOT exercised — no Box provisioned, no tools/list, no search/enrichment probes. Employee image ships zero MCP servers (boundary verified by construction)."
+      ],
       "branch": "opensquad/P04",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P04",
-      "baseRef": "aead563"
+      "baseRef": "aead563",
+      "blocker": "Owner deferred the Apollo OAuth grant. To resume: run the committed probe machinery (worker/src/{boxmcp,p04gate}.ts) in a disposable Box — up → auth (relay URL to owner) → tools/list → one search → ≤1 enrichment → token-inspect → down. Firecrawl portion is verified."
     },
     {
       "id": "P05",
