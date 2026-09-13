@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-14T01:30:00Z
+- **Last updated:** 2026-09-13T20:47:46Z
 
 ## Log
 
@@ -150,3 +150,14 @@ unset — it is configured on the dev deployment. The Apollo side is deferred by
 owner choice: the in-Box MCP OAuth probe machinery is committed but unexercised
 (`worker/src/{boxmcp,p04gate}.ts`), so P04 stays `blocked` pending the owner's
 Apollo grant — no discovery or enrichment is claimed working.
+
+### 2026-09-13 - 2349f80..48c1380
+Reviewed the unpushed implementation against the plan. Fixed workspace timezone
+policy versioning, worker login persistence and operation replay, secret-free
+request fingerprints, fast completion handling, AgentMail response-body
+uncertainty and Firecrawl source-URL admission. Current evidence inbox references
+were redacted. Lint/build, Convex and worker typechecks/build, plan validation
+and offline manual checks passed; existing hook/chunk warnings remain. Apollo
+is deliberately untested. No deployment or provider call ran in this review.
+Evidence: `plan/evidence/P02.md`, `plan/evidence/review-worker.md`,
+`plan/evidence/review-providers.md`.
