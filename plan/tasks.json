@@ -264,7 +264,7 @@
       "id": "P08",
       "title": "Onboarding, employees and settings",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P08",
       "branch": "opensquad/P08",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P08",
@@ -289,7 +289,12 @@
         "src/components/employees/",
         "src/components/settings/"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P08.md: integrated at 3497402; onboarding wizard (business/workspace/campaign scope/review) persists via real P02 APIs — profile update, timezone with expectedPolicyVersion, send policy, idempotent campaign create, immutable confirmSourcePlan, then setAutomationState active. Zero convex/ changes needed.",
+        "Employees route shows honest enabled→disconnected/disabled status only (idle/busy/blocked stay unreachable until P06 runs + P07 runtime signals exist); versioned instruction edits with CONFLICT surfacing. Settings sections cover workspace, send window/limits, automation pause, members/roles — integrations/Codex rows deliberately disabled pending P07/P04 with no simulated connect.",
+        "API-level probes on isolated local deployment verified the full onboarding chain, version conflicts, idempotent replay, last-owner protection, leadLimit cap, yc-source rejection and cross-workspace NOT_FOUND. lint/tsc/build pass on merged main; dev-server smoke serves all routes.",
+        "Deferred: real browser sign-in + visual/a11y review (V10 portions) await human; working runtime controls belong to P13 after P07. deriveEmployeeStatus and IntegrationsSection are the flagged P07 wiring seams. Leads/Inbox/Decisions nav intentionally unlinked until P12/P13 routes exist; /squads is now a typed redirect to /employees; /overview remains post-sign-in home."
+      ]
     },
     {
       "id": "P09",
