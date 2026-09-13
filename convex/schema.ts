@@ -15,13 +15,17 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+  vApprovalVerdict,
   vBoardColumn,
   vCampaignStatus,
   vCapabilityId,
+  vConversationState,
   vDecisionAnswer,
   vDecisionKind,
   vDecisionState,
+  vEmailEventHandlingState,
   vEmployeeTemplate,
+  vEndpointOperation,
   vInputSnapshot,
   vMembershipStatus,
   vMissionKind,
@@ -32,7 +36,12 @@ import {
   vMissionVisibility,
   vRole,
   vRunState,
+  vSendAttemptState,
   vSourcePlan,
+  vSuppressionKind,
+  vSuppressionReason,
+  vUsageMetric,
+  vUsageReservationState,
 } from "./lib/validators";
 
 export const workspaceFields = {
@@ -294,6 +303,234 @@ export const activityEventFields = {
   artifactId: v.optional(v.string()),
 };
 
+/* ------------------------------------------------------------------ */
+/* §4.3 correspondence (P10) — conversations, immutable drafts,         */
+/* approvals, send attempts, suppressions and provider-event receipts.  */
+/* `prospects`/`leadEvents`/`bookings`/`evidence`/`artifacts` belong to */
+/* P09/P19 and are intentionally NOT declared here.                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Conversations — full §4.3 table. P11 builds the public
+ * `conversations.ts` module; P10 needs the table now because drafts,
+ * approvals and send attempts all bind `contextVersion`/`currentDraftId`
+ * here, and provides only the minimal internal helpers in `drafts.ts`.
+ */
+export const conversationFields = {
+  workspaceId: v.id("workspaces"),
+  /** AgentMail inbox reference this conversation lives on. */
+  inboxRef: v.string(),
+  employeeId: v.id("employees"),
+  state: vConversationState,
+  /** When true, automation is frozen: no sends, drafts or reply workflows. */
+  humanTakeover: v.boolean(),
+  /**
+   * Advances on inbound replies, takeover/assignment/closure and new current
+   * draft revisions — every fact that invalidates "nothing changed since the
+   * draft was written". Approvals and send preflight pin this version.
+   */
+  contextVersion: v.number(),
+  unreadCount: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  /** Forward reference — `v.id("prospects")` once P09/P19 lands it. */
+  prospectId: v.optional(v.string()),
+  /** Per-inbox provider thread id (AgentMail thread ids are per-inbox). */
+  providerThreadRef: v.optional(v.string()),
+  currentDraftId: v.optional(v.id("drafts")),
+  lastInboundMessageRef: v.optional(v.string()),
+  lastInboundAt: v.optional(v.number()),
+  lastMessageAt: v.optional(v.number()),
+};
+
+/**
+ * Drafts — immutable revisions of the exact send payload (§8). Every send
+ * field is frozen per row; `payloadHash` commits to the canonical
+ * serialization of {endpointOperation, inboxRef, normalizedRecipient,
+ * subject, body, replyToMessageRef}. A revision can never be edited in
+ * place — `drafts.revise`/`createRevision` insert a new row and move
+ * `conversations.currentDraftId`.
+ */
+export const draftFields = {
+  workspaceId: v.id("workspaces"),
+  conversationId: v.id("conversations"),
+  /** Sender inbox the payload will go out through (provider inbox id). */
+  inboxRef: v.string(),
+  missionId: v.id("missions"),
+  /** 1-based revision number within the conversation; rows are immutable. */
+  revision: v.number(),
+  /** Address as supplied; `normalizedRecipient` is the canonical form. */
+  recipient: v.string(),
+  normalizedRecipient: v.string(),
+  subject: v.string(),
+  body: v.string(),
+  payloadHash: v.string(),
+  /** `conversations.contextVersion` the content was written against. */
+  basedOnContextVersion: v.number(),
+  campaignBriefVersion: v.number(),
+  policyVersion: v.number(),
+  /** §4.3 evidence links — `v.id("evidence")` once P09 lands the table. */
+  evidenceIds: v.array(v.string()),
+  /** identityKey for human edits; `workflow` for pipeline-proposed drafts. */
+  createdBy: v.string(),
+  createdAt: v.number(),
+  /** Parent provider message id — makes the attempt a `reply` operation. */
+  replyToMessageRef: v.optional(v.string()),
+  supersededAt: v.optional(v.number()),
+  /** Client retry key — `revise`/`createRevision` dedupe on
+   *  (workspaceId, requestId) transactionally. */
+  requestId: v.optional(v.string()),
+};
+
+/**
+ * Approvals — one immutable verdict per resolution of a `draft_approval`
+ * decision, bound to the exact payloadHash + normalizedRecipient +
+ * contextVersion. A later edit supersedes applicability, not the record.
+ */
+export const approvalFields = {
+  workspaceId: v.id("workspaces"),
+  draftId: v.id("drafts"),
+  draftRevision: v.number(),
+  payloadHash: v.string(),
+  normalizedRecipient: v.string(),
+  /** `conversations.contextVersion` at resolution — preflight re-checks it
+   *  has not advanced before dispatch. */
+  contextVersion: v.number(),
+  decision: vApprovalVerdict,
+  approverIdentityKey: v.string(),
+  createdAt: v.number(),
+  /** Client retry key — (workspaceId, requestId) dedupe makes a replayed
+   *  resolve return the recorded row. */
+  requestId: v.string(),
+};
+
+/**
+ * Send attempts — the ONE logical send per draft revision (§8.3). Durable
+ * intent (`reserved`) is committed before any network I/O; `requesting`
+ * marks the dispatch boundary — no local action can retract an HTTP request
+ * already sent. `providerDeliveryFacts` carries verified webhook facts only,
+ * never a second transport-truth store.
+ */
+export const sendAttemptFields = {
+  workspaceId: v.id("workspaces"),
+  draftId: v.id("drafts"),
+  approvalId: v.id("approvals"),
+  conversationId: v.id("conversations"),
+  inboxRef: v.string(),
+  /** Stable semantic key — `send:<draftId>:<n>` assigned at reservation. */
+  operationKey: v.string(),
+  endpointOperation: vEndpointOperation,
+  /** Generated once at reservation; NEVER regenerated or rotated (G3). */
+  providerIdempotencyKey: v.string(),
+  state: vSendAttemptState,
+  payloadHash: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  providerMessageRef: v.optional(v.string()),
+  providerThreadRef: v.optional(v.string()),
+  /** Verified delivery facts folded in from `emailEventReceipts`. */
+  providerDeliveryFacts: v.optional(
+    v.object({
+      lastEventType: v.optional(v.string()),
+      lastEventAt: v.optional(v.number()),
+      deliveredAt: v.optional(v.number()),
+      bouncedAt: v.optional(v.number()),
+      complainedAt: v.optional(v.number()),
+      rejectedAt: v.optional(v.number()),
+      eventIds: v.optional(v.array(v.string())),
+    }),
+  ),
+  /** The resolved delivery_uncertain decision authorizing THIS attempt as
+   *  the single recorded replacement for a prior uncertain attempt (§8.7). */
+  replacementDecisionId: v.optional(v.id("decisions")),
+  requestStartedAt: v.optional(v.number()),
+  error: v.optional(
+    v.object({
+      message: v.string(),
+      at: v.number(),
+      httpStatus: v.optional(v.number()),
+      reason: v.optional(v.string()),
+    }),
+  ),
+  reconciledAt: v.optional(v.number()),
+};
+
+/**
+ * Suppressions — explicit email or domain blocks (§4.3). Domain suppression
+ * is always explicit, never inferred from one person's unsubscribe.
+ */
+export const suppressionFields = {
+  workspaceId: v.id("workspaces"),
+  kind: vSuppressionKind,
+  normalizedValue: v.string(),
+  reason: vSuppressionReason,
+  createdAt: v.number(),
+  sourceConversationId: v.optional(v.id("conversations")),
+};
+
+/**
+ * Provider event receipts (§4.3): the application's dedupe/replay record for
+ * verified provider events. `applicationKey` dedupes the business effect
+ * (`incoming:<inbox>:<message>` for inbound; `outbound:<messageRef>:<type>`
+ * for delivery facts); `providerEventId` dedupes delivery. Delivery events
+ * that arrive before the send attempt recorded its providerMessageRef stay
+ * `pending` and are folded in by `sending.ts` afterwards. P11 consumes the
+ * pending rows fully; `providerFacts` holds only necessary verified fields —
+ * never another copy of message bodies.
+ */
+export const emailEventReceiptFields = {
+  workspaceId: v.id("workspaces"),
+  inboxRef: v.string(),
+  providerEventId: v.string(),
+  applicationKey: v.string(),
+  providerMessageRef: v.string(),
+  eventType: v.string(),
+  receivedAt: v.number(),
+  handlingState: vEmailEventHandlingState,
+  /** Bounded projection of the verified event (≤4 KiB enforced on write). */
+  providerFacts: v.record(v.string(), v.any()),
+  providerThreadRef: v.optional(v.string()),
+  handledAt: v.optional(v.number()),
+  error: v.optional(v.string()),
+};
+
+/* ------------------------------------------------------------------ */
+/* §4.4 usage (P10) — send bucket + reservations. The §4.4 runtime      */
+/* transport tables (runtimeConnections, workerRequests, …) belong to   */
+/* P07 and are intentionally NOT declared here.                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Usage buckets — atomic capacity counters (§9). `reserved + committed +
+ * uncertain <= limit` is enforced inside the reserving transaction;
+ * `periodKey` is the workspace-local day for `sends` and the campaign
+ * lifetime for enrichment.
+ */
+export const usageBucketFields = {
+  workspaceId: v.id("workspaces"),
+  /** `workspace` for sends; `campaign:<id>` for campaign-lifetime metrics. */
+  scopeKey: v.string(),
+  metric: vUsageMetric,
+  periodKey: v.string(),
+  limit: v.number(),
+  reserved: v.number(),
+  committed: v.number(),
+  uncertain: v.number(),
+  updatedAt: v.number(),
+};
+
+/** One debit lifecycle per logical operation/bucket (§4.4). */
+export const usageReservationFields = {
+  workspaceId: v.id("workspaces"),
+  bucketId: v.id("usageBuckets"),
+  operationKey: v.string(),
+  quantity: v.number(),
+  state: vUsageReservationState,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  providerReference: v.optional(v.string()),
+};
+
 export default defineSchema({
   workspaces: defineTable(workspaceFields)
     .index("by_ownerIdentityKey", ["ownerIdentityKey"])
@@ -372,4 +609,94 @@ export default defineSchema({
     .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"])
     .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
     .index("by_workspaceId_and_dedupeKey", ["workspaceId", "dedupeKey"]),
+
+  /* §4.3 — correspondence (P10) */
+
+  conversations: defineTable(conversationFields)
+    .index("by_workspaceId_and_state_and_lastMessageAt", [
+      "workspaceId",
+      "state",
+      "lastMessageAt",
+    ])
+    .index("by_workspaceId_and_humanTakeover_and_lastMessageAt", [
+      "workspaceId",
+      "humanTakeover",
+      "lastMessageAt",
+    ])
+    // Unique (inboxRef, providerThreadRef) mapping when the thread ref is
+    // assigned — enforced transactionally (§4.3 invariant).
+    .index("by_inboxRef_and_providerThreadRef", [
+      "inboxRef",
+      "providerThreadRef",
+    ])
+    .index("by_prospectId", ["prospectId"]),
+
+  drafts: defineTable(draftFields)
+    // Unique (conversationId, revision) pair, enforced transactionally.
+    .index("by_conversationId_and_revision", ["conversationId", "revision"])
+    .index("by_missionId", ["missionId"])
+    // requestId dedupe for revise/createRevision retries.
+    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
+
+  approvals: defineTable(approvalFields)
+    .index("by_draftId", ["draftId"])
+    // One resolution per (workspaceId, requestId), enforced transactionally.
+    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
+
+  sendAttempts: defineTable(sendAttemptFields)
+    .index("by_draftId", ["draftId"])
+    // The §8.3 across-revisions guard: queries reserved|requesting|uncertain
+    // per conversation inside the reservation mutation.
+    .index("by_conversationId_and_state", ["conversationId", "state"])
+    .index("by_replacementDecisionId", ["replacementDecisionId"])
+    .index("by_workspaceId_and_state_and_updatedAt", [
+      "workspaceId",
+      "state",
+      "updatedAt",
+    ])
+    // Stable logical-send key; uniqueness enforced transactionally.
+    .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"])
+    .index("by_providerMessageRef", ["providerMessageRef"]),
+
+  suppressions: defineTable(suppressionFields)
+    // Unique (workspaceId, kind, normalizedValue), enforced transactionally.
+    .index("by_workspaceId_and_kind_and_normalizedValue", [
+      "workspaceId",
+      "kind",
+      "normalizedValue",
+    ]),
+
+  emailEventReceipts: defineTable(emailEventReceiptFields)
+    // Unique provider event delivery, enforced transactionally.
+    .index("by_providerEventId", ["providerEventId"])
+    // Unique application handling key, enforced transactionally.
+    .index("by_workspaceId_and_applicationKey", [
+      "workspaceId",
+      "applicationKey",
+    ])
+    // Delivery-fact lookup when the send attempt records its message ref.
+    .index("by_providerMessageRef", ["providerMessageRef"])
+    .index("by_handlingState_and_receivedAt", ["handlingState", "receivedAt"]),
+
+  /* §4.4 — usage (P10) */
+
+  usageBuckets: defineTable(usageBucketFields)
+    // Unique bucket per (workspaceId, scopeKey, metric, periodKey), enforced
+    // transactionally in usage.reserve.
+    .index("by_workspaceId_and_scopeKey_and_metric_and_periodKey", [
+      "workspaceId",
+      "scopeKey",
+      "metric",
+      "periodKey",
+    ]),
+
+  usageReservations: defineTable(usageReservationFields)
+    // One debit lifecycle per logical operation/bucket, enforced
+    // transactionally.
+    .index("by_workspaceId_and_operationKey_and_bucketId", [
+      "workspaceId",
+      "operationKey",
+      "bucketId",
+    ])
+    .index("by_bucketId_and_state", ["bucketId", "state"]),
 });
