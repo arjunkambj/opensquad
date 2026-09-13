@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T13:35:00Z
+- **Last updated:** 2026-09-13T13:44:06Z
 
 ## Log
 
@@ -32,9 +32,14 @@ Wired Hexclave React auth into the Vite app and Convex client, including cookie
 tokens and Convex JWT providers (`src/hexclave/client.ts`, `src/main.tsx`,
 `convex/auth.config.ts`). Auth: Other.
 
-### 2026-09-13 - working tree
+### 2026-09-13 - 7ee8f4e
 Ported the MultiFeed remake date picker, collapsible sidebar, user profile menu,
 and custom email/Google sign-in page onto OpenSquad. Routes: `/sign-in`,
 `/overview`, `/squads`, `/settings`, `/handler/$`. Added a marketing navbar only
 (`src/components/Marketing/Navbar.tsx`, `src/routes/_marketing.tsx`). Icons are
 Hugeicons; colors use shadcn tokens.
+
+### 2026-09-13 - 1bb4bed
+Removed the muted open-state background behind the profile menu avatar trigger
+so the button keeps its base radius
+(`src/components/Layout/UserProfileMenu.tsx`).
