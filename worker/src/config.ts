@@ -41,8 +41,8 @@ export function loadWorkerConfig(
   if (missing.length > 0) {
     return { ok: false, error: { missing } };
   }
-  const runtimeGeneration = Number.parseInt(generationRaw ?? "", 10);
-  if (!Number.isFinite(runtimeGeneration) || runtimeGeneration < 1) {
+  const runtimeGeneration = Number(generationRaw);
+  if (!/^\d+$/.test(generationRaw ?? "") || !Number.isSafeInteger(runtimeGeneration) || runtimeGeneration < 1) {
     return { ok: false, error: { missing: ["OPENSQUAD_RUNTIME_GENERATION (integer)"] } };
   }
   return {

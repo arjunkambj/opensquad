@@ -5,10 +5,11 @@
 // (/worker/claim, /worker/control/claim, /worker/result) is the P07 task —
 // this service proves the Box-side protocol pieces those routes will drive.
 
+import { mkdir } from "node:fs/promises";
 import { CodexAppServer } from "./codex/appserver.js";
 import { decliningServerRequestHandler } from "./codex/methods.js";
 import { loadWorkerConfig } from "./config.js";
-import { checkInheritedCredentials } from "./envcheck.js";
+import { checkInheritedCredentials, FORBIDDEN_ENV_NAMES, FORBIDDEN_PATHS } from "./envcheck.js";
 import {
   WorkerRunLoop,
   type BridgeReporter,
@@ -53,17 +54,21 @@ async function main(): Promise<void> {
   }
   const config = loaded.config;
 
-  // Credential hygiene gate: a Box created with noEnv:true must not contain
-  // inherited builder credentials. If any are present, refuse to start model
-  // work and report — the provisioning path is broken.
-  const presence = await checkInheritedCredentials();
+  // Provisioning checks Codex credential absence at Box birth. Service restarts
+  // must allow the workspace owner's managed cache while still rejecting all
+  // other inherited builder/provider credentials.
+  const presence = await checkInheritedCredentials({ allowManagedLoginCache: true });
   if (!presence.clean) {
-    const leaked = presence.checks.filter((c) => c.present).map((c) => c.name);
+    const leaked = presence.checks
+      .filter((c) => c.present && (FORBIDDEN_ENV_NAMES.includes(c.name) || FORBIDDEN_PATHS.includes(c.name)))
+      .map((c) => c.name);
     process.stderr.write(
       `inherited credential material present (names only): ${leaked.join(", ")}\n`,
     );
     process.exit(78);
   }
+
+  await mkdir(config.workDir, { recursive: true, mode: 0o700 });
 
   let shuttingDown = false;
   const server = new CodexAppServer({

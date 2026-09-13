@@ -69,6 +69,9 @@ export async function checkInheritedCredentials(options?: {
   readonly env?: NodeJS.ProcessEnv;
   readonly home?: string;
   readonly codexHome?: string;
+  /** Runtime restarts reuse the owner's login cache. Provisioning probes must
+   * leave this false so inherited Codex credentials are rejected at Box birth. */
+  readonly allowManagedLoginCache?: boolean;
 }): Promise<PresenceReport> {
   const env = options?.env ?? process.env;
   const home = options?.home ?? homedir();
@@ -83,6 +86,7 @@ export async function checkInheritedCredentials(options?: {
   }
 
   for (const rel of FORBIDDEN_PATHS) {
+    if (options?.allowManagedLoginCache && rel.startsWith(".codex/")) continue;
     const absolute = rel.startsWith(".codex/")
       ? join(codexHome, rel.slice(".codex/".length))
       : join(home, rel);
