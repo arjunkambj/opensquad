@@ -109,8 +109,9 @@ function asActionCtx(ctx: CtxWithRunners): ComponentActionCtx {
  * literal hostname. The actual fetch is performed provider-side by Firecrawl,
  * so this guard is policy enforcement, not SSRF defense-in-depth — Convex
  * actions cannot resolve DNS, so hostname-to-private-IP rebinding is a known
- * residual limitation recorded in plan/evidence/P04.md. Redirect targets are
- * validated the same way when the provider reports them in metadata.
+ * residual limitation recorded in plan/evidence/P04.md. Provider-reported
+ * source URLs are validated before returning evidence; this cannot prevent
+ * Firecrawl from following a redirect before reporting the result.
  */
 function assertPublicHttpUrl(raw: string): URL {
   let url: URL;
@@ -125,7 +126,8 @@ function assertPublicHttpUrl(raw: string): URL {
   if (url.username !== "" || url.password !== "") {
     throw new Error("credential-bearing URLs are not allowed");
   }
-  const host = url.hostname.toLowerCase();
+  // A trailing DNS root dot does not make a local hostname public.
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
   if (
     host === "localhost" ||
     host.endsWith(".local") ||
@@ -154,16 +156,16 @@ function assertPublicHttpUrl(raw: string): URL {
   if (host.startsWith("[")) {
     const v6 = host.slice(1, -1);
     if (
-      v6 === "::1" ||
-      v6 === "::" ||
+      // Unspecified, loopback and IPv4-compatible/mapped addresses.
+      v6.startsWith("::") ||
       v6.startsWith("fc") ||
       v6.startsWith("fd") ||
+      v6.startsWith("ff") || // multicast
       // fe80::/10 link-local + fec0::/10 site-local + the rest of the
       // reserved fe00::/8 space — all non-public for a fetch policy.
       v6.startsWith("fe") ||
       // NAT64 well-known prefix can embed a private IPv4 target.
-      v6.startsWith("64:ff9b") ||
-      v6.startsWith("::ffff:")
+      v6.startsWith("64:ff9b")
     ) {
       throw new Error(`private/reserved IPv6 not allowed: ${host}`);
     }
@@ -210,6 +212,9 @@ export const scrapePage = internalAction({
     });
     const markdown = typeof doc.markdown === "string" ? doc.markdown : "";
     const metadata = doc.metadata ?? {};
+    for (const reportedUrl of [metadata.url, metadata.sourceURL]) {
+      if (typeof reportedUrl === "string") assertPublicHttpUrl(reportedUrl);
+    }
     const statusCode = metadata["statusCode"];
     return {
       url: url.toString(),
