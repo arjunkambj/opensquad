@@ -130,8 +130,8 @@
       "id": "P04",
       "title": "Apollo and Firecrawl integration proof",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P04",
       "dependsOn": [
         "P03"
       ],
@@ -145,7 +145,10 @@
         "worker/",
         "plan/evidence/P04.md"
       ],
-      "evidence": []
+      "evidence": [],
+      "branch": "opensquad/P04",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P04",
+      "baseRef": "aead563"
     },
     {
       "id": "P05",
