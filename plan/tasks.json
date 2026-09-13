@@ -202,8 +202,23 @@
       "id": "P06",
       "title": "Durable missions, runs and decisions",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P06",
+      "branch": "opensquad/P06",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P06",
+      "reservedFiles": [
+        "convex/schema.ts",
+        "convex/lib/validators.ts",
+        "convex/convex.config.ts",
+        "convex/missions.ts",
+        "convex/decisions.ts",
+        "convex/runs.ts",
+        "convex/activity.ts",
+        "convex/workflows/",
+        "package.json",
+        "pnpm-lock.yaml",
+        "plan/evidence/P06.md"
+      ],
       "dependsOn": [
         "P02"
       ],
@@ -249,8 +264,18 @@
       "id": "P08",
       "title": "Onboarding, employees and settings",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P08",
+      "branch": "opensquad/P08",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P08",
+      "reservedFiles": [
+        "src/routes/_dashboard/",
+        "src/components/onboarding/",
+        "src/components/employees/",
+        "src/components/settings/",
+        "src/constants/sidebar-menu.ts",
+        "plan/evidence/P08.md"
+      ],
       "dependsOn": [
         "P02"
       ],
