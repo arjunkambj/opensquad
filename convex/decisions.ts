@@ -403,6 +403,40 @@ export async function retireAllOpenDecisions(
 }
 
 /**
+ * Repair path — re-deliver a recorded resolution's continuation signal when
+ * `continuationSentAt` is absent. `resolve` sends transactionally, so this
+ * only ever matters if a future change separates the two; it is idempotent
+ * either way (the component rejects re-sends to a delivered event).
+ */
+export const redeliverContinuation = internalMutation({
+  args: { decisionId: v.id("decisions") },
+  returns: v.object({ delivered: v.boolean() }),
+  handler: async (ctx, args) => {
+    const decision = await ctx.db.get("decisions", args.decisionId);
+    if (decision === null) {
+      throw domainError("NOT_FOUND", "decision not found");
+    }
+    if (decision.state !== "resolved" || decision.answer === undefined) {
+      return { delivered: false };
+    }
+    if (decision.continuationSentAt !== undefined) {
+      return { delivered: true };
+    }
+    await deliverDecisionContinuation(ctx, decision, {
+      decisionId: decision._id,
+      version: decision.version,
+      resolvedBy: decision.resolvedBy ?? "unknown",
+      resolvedAt: decision.resolvedAt ?? decision.updatedAt,
+      answer: decision.answer,
+    });
+    await ctx.db.patch("decisions", decision._id, {
+      continuationSentAt: Date.now(),
+    });
+    return { delivered: true };
+  },
+});
+
+/**
  * Cancel every open decision on a mission (mission cancel/fail path).
  * Counts are recomputed per decision by `retireDecision`.
  */

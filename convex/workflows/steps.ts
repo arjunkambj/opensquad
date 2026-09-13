@@ -202,7 +202,7 @@ export const devFixtureStage = internalMutation({
       missionId: mission._id,
       stage: "dev_fixture_scan",
       generation: 1,
-      inputVersion: mission.version,
+      inputVersion: mission.inputVersion,
       inputSummary: mission.inputSnapshot.requestedOutcome,
     });
     const run = await ctx.db.get("runs", runId);
@@ -380,7 +380,7 @@ export const devFixtureBranchStage = internalMutation({
       missionId: mission._id,
       stage: "dev_fixture_branch",
       generation: branch.generation,
-      inputVersion: mission.version,
+      inputVersion: mission.inputVersion,
       inputSummary: `prospect branch ${branch.prospectId}`,
     });
     const run = await ctx.db.get("runs", runId);

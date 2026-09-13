@@ -131,6 +131,10 @@ export const missionFields = {
   version: v.number(),
   /** Frozen confirmed inputs at dispatch, bound to 64 KiB (§4.2). */
   inputSnapshot: vInputSnapshot,
+  /** Version of the frozen input snapshot — the value runs record as
+   *  `inputVersion`. Bumps only when inputs are legitimately re-frozen
+   *  (a future revise path); never on state transitions. */
+  inputVersion: v.number(),
   priority: vMissionPriority,
   assignedEmployeeId: v.id("employees"),
   progressSummary: v.string(),

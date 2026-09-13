@@ -253,6 +253,7 @@ export const create = mutation({
       boardColumn: "backlog",
       version: 1,
       inputSnapshot,
+      inputVersion: 1,
       priority: args.priority ?? "normal",
       assignedEmployeeId: scout._id,
       progressSummary: "Queued — awaiting dispatch",
