@@ -1,11 +1,11 @@
 import {
   Home01Icon,
+  RoboticIcon,
   Settings02Icon,
-  UserGroupIcon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 
-export type MenuHref = "/overview" | "/squads" | "/settings"
+export type MenuHref = "/overview" | "/employees" | "/settings"
 
 export type MenuItem = {
   name: string
@@ -26,14 +26,16 @@ export const sidebarMainItems: MenuItem[] = [
   },
 ]
 
+// §10 target list also includes Leads, Inbox and Decisions — those routes do
+// not exist until P12/P13, so they are deliberately not linked here yet.
 export const sidebarCategories: MenuCategory[] = [
   {
     name: "Workspace",
     items: [
       {
-        name: "Squads",
-        href: "/squads",
-        icon: UserGroupIcon,
+        name: "Employees",
+        href: "/employees",
+        icon: RoboticIcon,
       },
     ],
   },
