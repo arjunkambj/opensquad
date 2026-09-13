@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** not deployed
 - **Convex deployment:** not deployed
-- **Components:** @agentmail/convex
+- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex
 - **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T19:04:10Z
+- **Last updated:** 2026-09-13T19:37:16Z
 
 ## Log
 
@@ -122,3 +122,15 @@ duplicate/out-of-order events handled (`convex/integrations/agentmail.ts`).
 Noted deltas: ChatGPT device-code auth must be enabled in security settings;
 `thread_id` is per-inbox; `message.delivered` can precede `message.sent`.
 Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
+
+### 2026-09-13 - 1a93886
+P04 integrated, Firecrawl half verified: `@firecrawl/firecrawl-convex@0.1.1` is
+registered with credentials bound by reference and its signed webhook
+self-mounts at `/firecrawl/webhook`; a narrow internal `scrapePage` wrapper
+admits only validated public http(s) URLs (localhost/private/userinfo rejected)
+and one real bounded scrape completed for one credit. Found caveat: the
+component skips HMAC verification entirely when `FIRECRAWL_WEBHOOK_SECRET` is
+unset — it is configured on the dev deployment. The Apollo side is deferred by
+owner choice: the in-Box MCP OAuth probe machinery is committed but unexercised
+(`worker/src/{boxmcp,p04gate}.ts`), so P04 stays `blocked` pending the owner's
+Apollo grant — no discovery or enrichment is claimed working.
