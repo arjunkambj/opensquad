@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T17:58:24Z
+- **Last updated:** 2026-09-13T19:04:10Z
 
 ## Log
 
@@ -105,3 +105,20 @@ Authorization paths were exercised live on an isolated local backend with
 synthetic identities — cross-workspace access, viewer/owner role matrix,
 lead-cap and source-gate rejections all verified; a real provider-issued JWT
 still awaits the human sign-in check. Verification: `plan/evidence/P02.md`.
+
+### 2026-09-13 - 73ff205
+P03/P05 live gates passed on real providers. G1: disposable ASCII Boxes were
+provisioned with persisted idempotency (repeat create → one box), bootstrapped
+to Node 24.21.0 + codex-cli 0.154.0, verified credential-clean at birth; the
+owner completed managed device-code login inside a Box, a bounded structured
+model turn completed (`gpt-6-astra`, `{"ok":true}`), pause→archive→resume kept
+the marker file AND the managed login (second turn ran on the resumed thread),
+a second Box proved workspace isolation, and all boxes were deleted (`worker/`
+gate drivers). G3: the AgentMail webhook is registered and signature-verified
+end-to-end — a controlled send delivered, same-key replay returned identical
+provider IDs with zero duplicates, a changed payload on the same key 409'd into
+`uncertain`, and a reply round trip landed in the component's inbound mirror;
+duplicate/out-of-order events handled (`convex/integrations/agentmail.ts`).
+Noted deltas: ChatGPT device-code auth must be enabled in security settings;
+`thread_id` is per-inbox; `message.delivered` can precede `message.sent`.
+Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
