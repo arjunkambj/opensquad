@@ -1,0 +1,515 @@
+/**
+ * OpenSquad ↔ AgentMail boundary (P05 — transport-only spike).
+ *
+ * Two narrow responsibilities (plan/integrations.md §G3):
+ *
+ * 1. INBOUND — the registered `@agentmail/convex` component owns verified,
+ *    `event_id`-deduplicated webhook ingestion and inbound message storage.
+ *    `agentmail` below is its configured client handle; `convex/http.ts`
+ *    mounts `handleWebhook` at POST /agentmail/webhook. `onEvent` and
+ *    `onMessageReceived` are the app-side internal mutations the component
+ *    dispatches through its callback pool.
+ *
+ * 2. OUTBOUND — `executeSendAttempt` is THE dispatch boundary: exactly one
+ *    `fetch` to `POST /v0/inboxes/{inbox_id}/messages/send` with the durable
+ *    idempotency key in the HTTP `Idempotency-Key` request header — never in
+ *    the body's `headers` field, which means RFC 5322 email headers.
+ *
+ *    The component's own `sendMessage`/`replyToMessage`/`forwardMessage` are
+ *    NOT used for approved sends: they enqueue into a retrying Workpool
+ *    (default 5 attempts, 30 s initial backoff, base 2) whose fetch helper
+ *    attaches no idempotency key and offers no application preflight hook,
+ *    and `cancelSend` cannot retract a request already in flight (verified
+ *    against @agentmail/convex@0.1.0: dist/component/lib.js performSend /
+ *    enqueueSend / cancelSend and dist/component/utils.js agentmailFetch).
+ *
+ * Visibility: every function here is internal — unreachable from clients and
+ * from public HTTP. Sales-side persistence (send attempts, conversations,
+ * drafts, workflow signalling) is P10/P11 on the P02 schema; this file fixes
+ * the transport contract and documents what those tasks must persist.
+ */
+
+import { AgentMail } from "@agentmail/convex";
+import { v, type Infer } from "convex/values";
+import { components, internal } from "../_generated/api";
+import { internalAction, internalMutation } from "../_generated/server";
+
+/**
+ * Shared component client handle. Credentials are read from deployment env
+ * vars inside the component's own functions — `AGENTMAIL_API_KEY`,
+ * `AGENTMAIL_WEBHOOK_SECRET`, optional `AGENTMAIL_BASE_URL` — and are never
+ * passed as function args, so they cannot appear in Convex logs.
+ * `retryAttempts`/`initialBackoffMs` stay at component defaults; they tune
+ * only the component's own sender, which OpenSquad does not use.
+ */
+export const agentmail = new AgentMail(components.agentmail, {
+  onMessageReceived: internal.integrations.agentmail.onMessageReceived,
+  onEvent: internal.integrations.agentmail.onEvent,
+});
+
+// ---------------------------------------------------------------------------
+// Outbound: the narrow send adapter
+// ---------------------------------------------------------------------------
+
+const AGENTMAIL_DEFAULT_BASE_URL = "https://api.agentmail.to/v0";
+const SEND_REQUEST_TIMEOUT_MS = 30_000;
+const PROVIDER_ERROR_BODY_LIMIT = 1024;
+const SEND_TIMEOUT_MARKER = "opensquad.agentmail.send_timeout";
+
+/**
+ * Exact AgentMail REST body for POST /v0/inboxes/{inbox_id}/messages/send.
+ * The approving transaction (P10) stores this object immutably and passes it
+ * here unchanged so a reconciliation replay is bit-identical.
+ *
+ * `headers` are RFC 5322 email headers (e.g. `References`). The HTTP
+ * `Idempotency-Key` is set by the transport below and must never be placed
+ * in this object.
+ */
+const vSendRequestBody = v.object({
+  to: v.union(v.string(), v.array(v.string())),
+  subject: v.optional(v.string()),
+  text: v.optional(v.string()),
+  html: v.optional(v.string()),
+  cc: v.optional(v.union(v.string(), v.array(v.string()))),
+  bcc: v.optional(v.union(v.string(), v.array(v.string()))),
+  reply_to: v.optional(v.union(v.string(), v.array(v.string()))),
+  labels: v.optional(v.array(v.string())),
+  headers: v.optional(v.record(v.string(), v.string())),
+  attachments: v.optional(
+    v.array(
+      v.object({
+        filename: v.string(),
+        content: v.string(),
+        content_type: v.optional(v.string()),
+      }),
+    ),
+  ),
+});
+
+type SendRequestBody = Infer<typeof vSendRequestBody>;
+
+/**
+ * Result of one provider request. Three honest outcomes — "accepted" is
+ * provider acknowledgement ("Sent") only; it is never "Delivered" (G3 step 9:
+ * delivery is established solely by verified webhook events).
+ */
+const vSendAttemptResult = v.union(
+  v.object({
+    outcome: v.literal("accepted"),
+    messageId: v.string(),
+    threadId: v.string(),
+    httpStatus: v.number(),
+  }),
+  v.object({
+    outcome: v.literal("rejected"),
+    httpStatus: v.number(),
+    providerError: v.string(),
+  }),
+  v.object({
+    outcome: v.literal("uncertain"),
+    reason: v.union(
+      v.literal("timeout"),
+      v.literal("transport_error"),
+      v.literal("http_5xx"),
+      v.literal("idempotency_conflict"),
+      v.literal("malformed_response"),
+    ),
+    httpStatus: v.optional(v.number()),
+    detail: v.string(),
+  }),
+);
+
+type SendAttemptResult = Infer<typeof vSendAttemptResult>;
+
+/**
+ * Exactly one POST to AgentMail. No retry, no SDK, no workpool — a second
+ * attempt is an explicit reconciliation decision, never this function's.
+ *
+ * Outcome semantics (G3 steps 5–9, architecture §8 "Send preflight and
+ * submission"):
+ * - `accepted` — 2xx with a JSON body carrying non-empty `message_id` and
+ *   `thread_id`. The caller stores those immutable provider references.
+ * - `rejected` — a definitive 4xx refusal other than 409. The provider did
+ *   not accept this request; it can never result in mail from this request.
+ *   Whether a corrected draft/attempt may follow is an application decision.
+ * - `uncertain` — timeout, transport failure, 5xx, 409 idempotency conflict,
+ *   or a malformed/empty success response. The request may or may not have
+ *   been processed. The attempt stays unresolved; nothing here may issue
+ *   another request or mint a fresh key.
+ */
+async function performSingleSendRequest(args: {
+  inboxId: string;
+  idempotencyKey: string;
+  payload: SendRequestBody;
+}): Promise<SendAttemptResult> {
+  const apiKey = process.env.AGENTMAIL_API_KEY;
+  if (!apiKey) {
+    // Misconfiguration, not a provider verdict: no request was ever made.
+    // Throw so operators see a loud configuration error rather than a
+    // recorded provider outcome.
+    throw new Error(
+      "AGENTMAIL_API_KEY is not set on this Convex deployment.",
+    );
+  }
+  const baseUrl = (
+    process.env.AGENTMAIL_BASE_URL ?? AGENTMAIL_DEFAULT_BASE_URL
+  ).replace(/\/+$/, "");
+  // Same path construction the component uses (lib.ts sendPath): plain
+  // inbox_id interpolation. Inbox IDs come from saved provider records, not
+  // from client input.
+  const url = `${baseUrl}/inboxes/${args.inboxId}/messages/send`;
+
+  let response: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error(SEND_TIMEOUT_MARKER)),
+    SEND_REQUEST_TIMEOUT_MS,
+  );
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        // Provider idempotency lives in the HTTP request headers. The body
+        // field `headers` is email headers and is NOT a substitute (G3).
+        "Idempotency-Key": args.idempotencyKey,
+      },
+      body: JSON.stringify(stripUndefined(args.payload)),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    // Aborted/timed-out or network-failed request: it may or may not have
+    // reached AgentMail. Never resend from here.
+    const isTimeout =
+      error instanceof Error &&
+      (error.message === SEND_TIMEOUT_MARKER || error.name === "AbortError");
+    return {
+      outcome: "uncertain",
+      reason: isTimeout ? "timeout" : "transport_error",
+      detail:
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (response.status === 409) {
+    // AgentMail idempotency semantics: replaying a key with a DIFFERENT body
+    // conflicts. A 409 therefore proves the provider already holds a record
+    // for this key — an earlier request arrived. What it holds and whether it
+    // delivered is unknown to us here: uncertain, investigate via provider
+    // reads; never resolve by minting a fresh key.
+    return {
+      outcome: "uncertain",
+      reason: "idempotency_conflict",
+      httpStatus: response.status,
+      detail: await readResponseBody(response),
+    };
+  }
+
+  if (response.status >= 500) {
+    // A 5xx is not a definitive refusal — the provider may have accepted the
+    // message before failing. Per architecture §8.8 this is never a
+    // "definitively safe retry"; it is uncertain.
+    return {
+      outcome: "uncertain",
+      reason: "http_5xx",
+      httpStatus: response.status,
+      detail: await readResponseBody(response),
+    };
+  }
+
+  if (!response.ok) {
+    // Remaining 4xx: the provider definitively refused this request.
+    return {
+      outcome: "rejected",
+      httpStatus: response.status,
+      providerError: await readResponseBody(response),
+    };
+  }
+
+  // 2xx: only meaningful if it carries the provider's immutable IDs. An empty
+  // or malformed success body is treated like a lost acknowledgement.
+  const text = await response.text();
+  let body: unknown;
+  try {
+    body = text.length > 0 ? JSON.parse(text) : null;
+  } catch {
+    return {
+      outcome: "uncertain",
+      reason: "malformed_response",
+      httpStatus: response.status,
+      detail: "2xx response body was not valid JSON",
+    };
+  }
+  if (!isSendAcceptedBody(body)) {
+    return {
+      outcome: "uncertain",
+      reason: "malformed_response",
+      httpStatus: response.status,
+      detail: "2xx response lacked a non-empty message_id/thread_id",
+    };
+  }
+  return {
+    outcome: "accepted",
+    messageId: body.message_id,
+    threadId: body.thread_id,
+    httpStatus: response.status,
+  };
+}
+
+function isSendAcceptedBody(
+  body: unknown,
+): body is { message_id: string; thread_id: string } {
+  const record = asRecord(body);
+  return (
+    record !== null &&
+    typeof record.message_id === "string" &&
+    record.message_id.length > 0 &&
+    typeof record.thread_id === "string" &&
+    record.thread_id.length > 0
+  );
+}
+
+async function readResponseBody(response: Response): Promise<string> {
+  const text = await response.text();
+  return text.length > PROVIDER_ERROR_BODY_LIMIT
+    ? `${text.slice(0, PROVIDER_ERROR_BODY_LIMIT)}…[truncated]`
+    : text;
+}
+
+function stripUndefined(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(stripUndefined);
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (entry === undefined) continue;
+    out[key] = stripUndefined(entry);
+  }
+  return out;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringField(
+  record: Record<string, unknown> | null,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * THE dispatch boundary for approved outbound mail (first contact).
+ *
+ * Caller contract — implemented by P10 (G3 steps 3–4, architecture §8): one
+ * Convex transaction immediately before this action validates the approved
+ * draft revision, workspace/campaign status, suppression, allowed demo
+ * recipient, conversation version, takeover state and rate allowance, and
+ * confirms no successful or unresolved attempt exists across the
+ * conversation's revisions. That transaction durably records the send
+ * attempt, this idempotency key, the payload fingerprint, endpoint, inbox
+ * and dispatch timestamp, and flips the attempt to `requesting`. The key is
+ * generated once per attempt and NEVER regenerated for an unresolved
+ * attempt.
+ *
+ * This action then performs exactly one HTTPS request and returns the
+ * outcome for the caller to persist. It performs no retry, no follow-up
+ * mutation and no workflow signalling itself. If the caller's recording
+ * mutation fails after a successful request (lost acknowledgement), the
+ * attempt remains `requesting`/`uncertain` and follows the reconciliation
+ * path — it is never resent with a new key.
+ *
+ * Replies in an existing thread use the same contract against the documented
+ * reply endpoint (`POST /v0/inboxes/{inbox_id}/messages/{message_id}/reply`);
+ * that extension lands with P10/P11, not in this spike.
+ */
+export const executeSendAttempt = internalAction({
+  args: {
+    inboxId: v.string(),
+    idempotencyKey: v.string(),
+    payload: vSendRequestBody,
+  },
+  returns: vSendAttemptResult,
+  handler: async (_ctx, args) => performSingleSendRequest(args),
+});
+
+/**
+ * Explicit reconciliation replay for an `uncertain` attempt (G3 step 8,
+ * architecture §8.7).
+ *
+ * Replays the EXACT same key and payload: AgentMail returns the original
+ * result for an identical request instead of double-sending. This is still a
+ * real send — if the original request never arrived, this initiates
+ * delivery. Lawful ONLY when the caller's preflight transaction has
+ * re-validated, at replay time:
+ *
+ * - the attempt is `uncertain` — never `requesting`, never already
+ *   `accepted`, and covered at most once by a recorded replacement decision;
+ * - workspace policy still permits dispatch (not paused, taken over or
+ *   suppressed; conversation version unchanged; send window valid);
+ * - the attempt was recorded within the provider's verified idempotency
+ *   window (documented as 24 h after completion — confirm by probe before
+ *   relying on it).
+ *
+ * If the key window expired or policy no longer permits, do NOT call this:
+ * use provider read APIs (`getMessage`/thread reads) and webhook evidence,
+ * and require human review. Never mint a fresh key for an unresolved
+ * attempt.
+ */
+export const reconcileSendAttempt = internalAction({
+  args: {
+    inboxId: v.string(),
+    idempotencyKey: v.string(),
+    payload: vSendRequestBody,
+  },
+  returns: vSendAttemptResult,
+  handler: async (_ctx, args) => performSingleSendRequest(args),
+});
+
+/**
+ * DEVELOPMENT-ONLY diagnostic for the G3 transport gate (P05).
+ *
+ * Lets an operator run the explicitly authorized controlled send once the
+ * owner supplies the missing inputs (usable inbox ID and controlled
+ * recipient — see plan/evidence/P05.md). Invoke manually via `convex run` or
+ * the dashboard. `idempotencyKey` is caller-supplied so the SAME key can be
+ * replayed to observe provider dedup behavior. This performs a real send —
+ * only ever target controlled recipients.
+ *
+ * TODO(P16): remove before public release. This is the only caller that
+ * bypasses the P10 approval preflight; that bypass must never ship.
+ */
+export const diagnosticSendProbe = internalAction({
+  args: {
+    inboxId: v.string(),
+    idempotencyKey: v.string(),
+    to: v.string(),
+    subject: v.string(),
+    text: v.string(),
+  },
+  returns: vSendAttemptResult,
+  handler: async (_ctx, args) =>
+    performSingleSendRequest({
+      inboxId: args.inboxId,
+      idempotencyKey: args.idempotencyKey,
+      payload: { to: args.to, subject: args.subject, text: args.text },
+    }),
+});
+
+// ---------------------------------------------------------------------------
+// Inbound: component webhook callbacks (P05 stubs — P11 owns full handling)
+// ---------------------------------------------------------------------------
+
+/**
+ * Pull inbox/thread/message identifiers out of any AgentMail event payload,
+ * whichever sub-object carries them (message/send/delivery/bounce/complaint/
+ * reject). Mirrors the component's eventLogic.extractIndexFields, which is
+ * not part of the package's public exports.
+ */
+function extractEventIndexFields(event: unknown): {
+  inboxId?: string;
+  threadId?: string;
+  messageId?: string;
+} {
+  const record = asRecord(event);
+  const payload =
+    asRecord(record?.message) ??
+    asRecord(record?.send) ??
+    asRecord(record?.delivery) ??
+    asRecord(record?.bounce) ??
+    asRecord(record?.complaint) ??
+    asRecord(record?.reject) ??
+    null;
+  return {
+    inboxId: stringField(payload, "inbox_id"),
+    threadId: stringField(payload, "thread_id"),
+    messageId: stringField(payload, "message_id"),
+  };
+}
+
+/**
+ * Component callback: invoked once per verified webhook event whose
+ * `event_id` the component has not already ingested (dispatch happens through
+ * its callback pool, after the event row commits — pool retries are safe
+ * because mutations are atomic).
+ *
+ * `event` is validated as `v.any()` deliberately: the provider may add event
+ * types beyond the installed component's union, and this receiver must stay
+ * up and observable rather than wedge on a validator.
+ *
+ * P05 stub — logs provider IDs only, changes no state. P11 contract (see
+ * architecture §8 "Incoming message processing" and G3 "OpenSquad callbacks
+ * must"):
+ * - Track message.sent/delivered/bounced/complained/rejected onto the app's
+ *   OWN send-attempt records by provider `message_id`. The app-owned sender
+ *   creates no component `outboundMessages` row, so the component's internal
+ *   status projection never matches ours — delivery facts arrive only here.
+ * - Store delivery events that arrive BEFORE the local send acknowledgement
+ *   recorded the provider message reference, and reconcile afterwards.
+ * - Apply verified unsubscribe/complaint facts to suppression.
+ * - Dedupe application handling by eventId AND by (inboxId, messageId).
+ * - Keep a small replay/failure record; component callback execution is not
+ *   proof that sales handling completed.
+ *
+ * Integrator note: that dedupe/replay record needs an app table (P02 schema),
+ * e.g. `mailEvents { eventId, eventType, inboxId, threadId?, messageId?,
+ * receivedAt, handledAt?, error? }` indexed `by_eventId` and
+ * `by_inboxId_and_messageId` — or fold it into P02's conversation/message
+ * records. Recorded in plan/evidence/P05.md.
+ */
+export const onEvent = internalMutation({
+  args: { event: v.any() },
+  returns: v.null(),
+  handler: async (_ctx, args) => {
+    const event = asRecord(args.event);
+    // Provider IDs only — never log addresses or bodies.
+    console.info("agentmail.onEvent (P05 stub, no state changes)", {
+      eventId: stringField(event, "event_id"),
+      eventType: stringField(event, "event_type"),
+      ...extractEventIndexFields(args.event),
+    });
+    return null;
+  },
+});
+
+/**
+ * Component callback for `message.received` events only. The component has
+ * already persisted the inbound message and deduped by `event_id` before
+ * this runs.
+ *
+ * P05 stub — logs provider IDs only, changes no state. P11 contract:
+ * - Resolve the workspace EXCLUSIVELY from a saved inbox assignment
+ *   (inbox_id → workspace). Unknown inboxes are quarantined; an unmatched
+ *   thread in a known inbox creates an unassigned conversation under
+ *   `humanTakeover` — no reply workflow/draft/send until authorized lead
+ *   association and explicit resume.
+ * - Dedupe by (inboxId, messageId) as well as eventId: a provider
+ *   re-delivery under a NEW event_id passes component dedupe but must not
+ *   start a second response workflow.
+ * - Advance conversation `contextVersion`, update latest inbound reference,
+ *   supersede obsolete draft decisions, cancel pending version-bound
+ *   follow-ups, and evaluate the deterministic opt-out rule before any send.
+ * - Signal/start the deduplicated reply workflow keyed to this inbound
+ *   message; callback execution alone is not proof that workflow ran.
+ */
+export const onMessageReceived = internalMutation({
+  args: { message: v.any(), thread: v.any(), eventId: v.string() },
+  returns: v.null(),
+  handler: async (_ctx, args) => {
+    const message = asRecord(args.message);
+    // Provider IDs only — never log addresses or bodies.
+    console.info("agentmail.onMessageReceived (P05 stub, no state changes)", {
+      eventId: args.eventId,
+      inboxId: stringField(message, "inbox_id"),
+      threadId: stringField(message, "thread_id"),
+      messageId: stringField(message, "message_id"),
+    });
+    return null;
+  },
+});
