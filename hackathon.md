@@ -195,3 +195,24 @@ component and §4.2 indexes are live there. waiting_for_runtime is plumbed but
 awaits P07 worker uncertainty; draft/sendAttempt references are bounded strings
 until P10/P11 tables land.
 Evidence: `plan/evidence/P06.md`.
+
+### 2026-09-14 - 8a766c1
+P07 scoped worker bridge + runtime lifecycle on `opensquad/P07` (task branch,
+not yet merged). Convex now owns the §4.4 transport schema — runtime
+connections, a durable lifecycle ledger, scoped worker credentials (hashed at
+rest, AES-256-GCM sealed for env injection), control requests, owner-only
+login challenges, agent sessions, worker requests, the single
+workspace execution slot and artifacts — plus nine authenticated
+`/worker/*` routes carrying the spec status codes. The Box worker is a real
+poll-driven daemon: control-claim loop (device-code login start/cancel,
+account inspect, logout, interrupt_turn), work-claim loop with lease
+heartbeats honoring backend-ordered stops, exactly-once result/failure
+posting with worker-computed canonical digests, and a runtime liveness loop.
+curl-verified end-to-end on an isolated local deployment across claim,
+heartbeats, activity dedupe, exactly-once + conflicting results, failure
+replay, expired-lease→uncertain→interrupt-confirmed slot release, the login
+challenge lifecycle, artifact upload dedupe, scope denial, generation
+retirement and throttling. Provider-gated seams stay honest: owner lifecycle
+mutations need a Hexclave session, and no disposable ASCII Box or live Codex
+turn ran this round — the daemon-in-Box live gate remains open.
+Evidence: `plan/evidence/P07.md`.
