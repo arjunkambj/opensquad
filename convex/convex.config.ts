@@ -2,6 +2,7 @@ import { defineApp } from "convex/server";
 import { v } from "convex/values";
 import agentmail from "@agentmail/convex/convex.config";
 import firecrawl from "@firecrawl/firecrawl-convex/convex.config";
+import workflow from "@convex-dev/workflow/convex.config";
 
 const app = defineApp({
   env: {
@@ -35,9 +36,14 @@ app.use(firecrawl, {
   },
 });
 
+// P06: Workflow — durable stage ordering, safe retries, durable event waits
+// and continuation after human decisions (architecture §2/§6.2). The mission
+// machinery lives in convex/workflows/; the component owns step checkpoints
+// and event state — no `jobs` table reproduces it.
+app.use(workflow);
+
 // Later tasks extend this file through the integrator — do not register these
 // components here:
-//   P06       @convex-dev/workflow        (durable missions/decisions)
 //   P16       @convex-dev/static-hosting  (app-owned root routing per G4)
 
 export default app;

@@ -424,3 +424,388 @@ export function assertSourcesEnabled(sources: SourceConfig[]): void {
     );
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Missions, runs, decisions and activity (P06 — architecture §4.2/§6)  */
+/* ------------------------------------------------------------------ */
+
+export const vMissionKind = v.union(
+  v.literal("sales_campaign"),
+  v.literal("reply"),
+  v.literal("follow_up"),
+);
+
+export type MissionKind = "sales_campaign" | "reply" | "follow_up";
+
+/**
+ * Mission states (§4.2/§6). `waiting_for_user` means a required open decision
+ * blocks the workflow; `waiting_for_runtime` means reconnect/capacity
+ * uncertainty needs attention — both render in Needs you but never pose as
+ * each other.
+ */
+export const vMissionState = v.union(
+  v.literal("queued"),
+  v.literal("active"),
+  v.literal("waiting_for_user"),
+  v.literal("waiting_for_runtime"),
+  v.literal("paused"),
+  v.literal("failed"),
+  v.literal("completed"),
+  v.literal("cancelled"),
+);
+
+export type MissionState =
+  | "queued"
+  | "active"
+  | "waiting_for_user"
+  | "waiting_for_runtime"
+  | "paused"
+  | "failed"
+  | "completed"
+  | "cancelled";
+
+/**
+ * Mission Control board columns (§6 table). Order is Backlog, Needs you,
+ * In flight, Done.
+ */
+export const vBoardColumn = v.union(
+  v.literal("backlog"),
+  v.literal("needs_you"),
+  v.literal("in_flight"),
+  v.literal("done"),
+);
+
+export type BoardColumn = "backlog" | "needs_you" | "in_flight" | "done";
+
+export const BOARD_COLUMN_ORDER: readonly BoardColumn[] = [
+  "backlog",
+  "needs_you",
+  "in_flight",
+  "done",
+];
+
+/** Direct state → column mapping from the architecture §6 table. */
+export const MISSION_STATE_BOARD: Readonly<Record<MissionState, BoardColumn>> = {
+  queued: "backlog",
+  active: "in_flight",
+  waiting_for_user: "needs_you",
+  waiting_for_runtime: "needs_you",
+  paused: "backlog",
+  failed: "needs_you",
+  completed: "done",
+  cancelled: "backlog",
+};
+
+/**
+ * The effective board column for a mission row (§6): `requiredDecisionCount`
+ * above zero places actionable work in Needs you even while the workflow
+ * still owns execution — except for paused/cancelled/completed missions,
+ * whose explicit badges win.
+ */
+export function boardColumnForMission(
+  state: MissionState,
+  requiredDecisionCount: number,
+): BoardColumn {
+  if (state === "paused" || state === "cancelled" || state === "completed") {
+    return MISSION_STATE_BOARD[state];
+  }
+  if (requiredDecisionCount > 0) {
+    return "needs_you";
+  }
+  return MISSION_STATE_BOARD[state];
+}
+
+/**
+ * Legal state transitions (§6). `paused` resumes through `missions.resume`,
+ * which picks the concrete target state by re-reading open asks; `failed`
+ * may only be cancelled (archive path) until an explicit retry flow lands.
+ * The workflow's internal transitions use the same table.
+ */
+export const MISSION_TRANSITIONS: Readonly<
+  Record<MissionState, readonly MissionState[]>
+> = {
+  queued: ["active", "paused", "cancelled"],
+  active: [
+    "waiting_for_user",
+    "waiting_for_runtime",
+    "paused",
+    "failed",
+    "completed",
+    "cancelled",
+  ],
+  waiting_for_user: ["active", "paused", "failed", "cancelled"],
+  waiting_for_runtime: ["active", "paused", "failed", "cancelled"],
+  paused: ["queued", "active", "waiting_for_user", "cancelled"],
+  failed: ["cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
+export function assertMissionTransition(
+  from: MissionState,
+  to: MissionState,
+): void {
+  if (!MISSION_TRANSITIONS[from].includes(to)) {
+    throw domainError(
+      "CONFLICT",
+      `mission cannot move from ${from} to ${to}`,
+    );
+  }
+}
+
+export const vMissionPriority = v.union(
+  v.literal("normal"),
+  v.literal("high"),
+);
+
+export const vMissionVisibility = v.union(
+  v.literal("visible"),
+  v.literal("archived"),
+);
+
+export type MissionVisibility = "visible" | "archived";
+
+/**
+ * Frozen inputs recorded at dispatch (§4.2): confirmed brief/source plan,
+ * business-profile version + relevant text, employee instruction versions,
+ * policy version and the requested outcome. Bound to 64 KiB serialized.
+ */
+export const INPUT_SNAPSHOT_MAX_BYTES = 64 * 1024;
+
+export const vInputSnapshot = v.object({
+  campaignTitle: v.string(),
+  campaignBrief: v.string(),
+  briefVersion: v.number(),
+  sourcePlan: vSourcePlan,
+  businessProfile: v.optional(
+    v.object({
+      version: v.number(),
+      websiteUrl: v.string(),
+      offer: v.string(),
+      idealCustomer: v.string(),
+      tone: v.string(),
+      exclusions: v.array(v.string()),
+    }),
+  ),
+  employeeInstructions: v.array(
+    v.object({
+      employeeId: v.id("employees"),
+      template: vEmployeeTemplate,
+      name: v.string(),
+      instructionVersion: v.number(),
+    }),
+  ),
+  policyVersion: v.number(),
+  requestedOutcome: v.string(),
+});
+
+export type InputSnapshot = Infer<typeof vInputSnapshot>;
+
+/** Enforce the §4.2 64 KiB serialized bound on a stored input snapshot. */
+export function assertInputSnapshotSize(snapshot: InputSnapshot): void {
+  const bytes = new TextEncoder().encode(JSON.stringify(snapshot)).length;
+  if (bytes > INPUT_SNAPSHOT_MAX_BYTES) {
+    throw invalid(
+      `inputSnapshot is ${bytes} bytes; the bound is ${INPUT_SNAPSHOT_MAX_BYTES}`,
+    );
+  }
+}
+
+export const vRunState = v.union(
+  v.literal("pending"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+  v.literal("uncertain"),
+);
+
+export type RunState =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "uncertain";
+
+export const vDecisionKind = v.union(
+  v.literal("draft_approval"),
+  v.literal("missing_information"),
+  v.literal("connection_required"),
+  v.literal("delivery_uncertain"),
+);
+
+export type DecisionKind =
+  | "draft_approval"
+  | "missing_information"
+  | "connection_required"
+  | "delivery_uncertain";
+
+export const vDecisionState = v.union(
+  v.literal("open"),
+  v.literal("resolved"),
+  v.literal("superseded"),
+  v.literal("cancelled"),
+);
+
+export type DecisionState = "open" | "resolved" | "superseded" | "cancelled";
+
+/**
+ * The human answer recorded on a decision. `fields` carries the values for a
+ * `missing_information` ask, `approved`+`body` carry approve/reject/reason for
+ * approval-flavored asks. Exact draft-approval binding (revision, payload
+ * hash, approvals table) is P10; P06 stores the honest answer generically.
+ */
+export const vDecisionAnswer = v.object({
+  body: v.optional(v.string()),
+  approved: v.optional(v.boolean()),
+  fields: v.optional(v.record(v.string(), v.string())),
+});
+
+export type DecisionAnswer = Infer<typeof vDecisionAnswer>;
+
+export function assertDecisionAnswer(answer: DecisionAnswer): void {
+  if (
+    answer.body === undefined &&
+    answer.approved === undefined &&
+    (answer.fields === undefined || Object.keys(answer.fields).length === 0)
+  ) {
+    throw invalid("answer must carry a body, an approved flag or fields");
+  }
+  if (answer.body !== undefined) {
+    boundedString(answer.body, "answer.body", { min: 1, max: 4000 });
+  }
+  if (answer.fields !== undefined) {
+    const entries = Object.entries(answer.fields);
+    if (entries.length > 20) {
+      throw invalid("answer.fields allows at most 20 entries");
+    }
+    for (const [key, value] of entries) {
+      boundedString(key, "answer.fields key", { min: 1, max: 100 });
+      boundedString(value, `answer.fields[${key}]`, { max: 2000 });
+    }
+  }
+}
+
+/**
+ * Per-prospect branch outcomes (§4.2 `missionProspects.outcome`, §6.1):
+ * the explicit terminal results a parent aggregates — approved/delivered
+ * work completed, contact still needed, intentionally rejected, deliberately
+ * skipped, technical failure or cancellation.
+ */
+export const vMissionProspectOutcome = v.union(
+  v.literal("completed"),
+  v.literal("contact_needed"),
+  v.literal("rejected"),
+  v.literal("skipped"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+);
+
+export type MissionProspectOutcome =
+  | "completed"
+  | "contact_needed"
+  | "rejected"
+  | "skipped"
+  | "failed"
+  | "cancelled";
+
+/**
+ * Terminal parent outcomes (§6.1 step 9 / P06 card): `completed` when every
+ * promised deliverable exists, `partial` when some branches completed and
+ * others ended rejected/contact-needed/skipped, `contact_needed` when work
+ * is done but contacts are still owed, `skipped` when everything was
+ * deliberately skipped, `failed`/`cancelled` for the technical paths.
+ */
+export const vMissionOutcome = v.union(
+  v.literal("completed"),
+  v.literal("partial"),
+  v.literal("contact_needed"),
+  v.literal("skipped"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+);
+
+export type MissionOutcome =
+  | "completed"
+  | "partial"
+  | "contact_needed"
+  | "skipped"
+  | "failed"
+  | "cancelled";
+
+/** Aggregate explicit child outcomes into the terminal parent outcome. */
+export function aggregateMissionOutcome(
+  outcomes: readonly MissionProspectOutcome[],
+): MissionOutcome {
+  if (outcomes.length === 0) {
+    return "completed";
+  }
+  const count = (kind: MissionProspectOutcome) =>
+    outcomes.filter((outcome) => outcome === kind).length;
+  const failed = count("failed");
+  const cancelled = count("cancelled");
+  if (failed === outcomes.length) {
+    return "failed";
+  }
+  if (cancelled === outcomes.length) {
+    return "cancelled";
+  }
+  if (count("completed") === outcomes.length) {
+    return "completed";
+  }
+  if (count("skipped") === outcomes.length) {
+    return "skipped";
+  }
+  if (count("contact_needed") + count("rejected") === outcomes.length) {
+    return "contact_needed";
+  }
+  return "partial";
+}
+
+/**
+ * Activity event kinds written by the mission machinery. `kind` stays a
+ * bounded string in storage so later tasks can add kinds; producers here
+ * keep to this list.
+ */
+export const ACTIVITY_KINDS = [
+  "mission_created",
+  "mission_state_changed",
+  "mission_archived",
+  "mission_restored",
+  "mission_completed",
+  "mission_failed",
+  "run_started",
+  "run_completed",
+  "run_failed",
+  "decision_opened",
+  "decision_resolved",
+  "decision_superseded",
+  "decision_cancelled",
+  "prospect_branch_started",
+  "prospect_branch_completed",
+  "comment_added",
+  "continuation_delivered",
+] as const;
+
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+export const vActivityKind = v.union(
+  v.literal("mission_created"),
+  v.literal("mission_state_changed"),
+  v.literal("mission_archived"),
+  v.literal("mission_restored"),
+  v.literal("mission_completed"),
+  v.literal("mission_failed"),
+  v.literal("run_started"),
+  v.literal("run_completed"),
+  v.literal("run_failed"),
+  v.literal("decision_opened"),
+  v.literal("decision_resolved"),
+  v.literal("decision_superseded"),
+  v.literal("decision_cancelled"),
+  v.literal("prospect_branch_started"),
+  v.literal("prospect_branch_completed"),
+  v.literal("comment_added"),
+  v.literal("continuation_delivered"),
+);
