@@ -18,11 +18,15 @@ import {
   vBoardColumn,
   vCampaignStatus,
   vCapabilityId,
+  vControlCommand,
+  vControlRequestState,
   vDecisionAnswer,
   vDecisionKind,
   vDecisionState,
   vEmployeeTemplate,
   vInputSnapshot,
+  vLifecycleOperation,
+  vLifecycleOperationState,
   vMembershipStatus,
   vMissionKind,
   vMissionOutcome,
@@ -30,9 +34,19 @@ import {
   vMissionProspectOutcome,
   vMissionState,
   vMissionVisibility,
+  vProviderConnectionState,
+  vProviderKind,
   vRole,
   vRunState,
+  vRuntimeConnectionState,
+  vSlotState,
   vSourcePlan,
+  vWorkerDataRef,
+  vWorkerOperation,
+  vWorkerPhase,
+  vWorkerRequestState,
+  vWorkerScope,
+  vArtifactKind,
 } from "./lib/validators";
 
 export const workspaceFields = {
@@ -294,6 +308,251 @@ export const activityEventFields = {
   artifactId: v.optional(v.string()),
 };
 
+/* ------------------------------------------------------------------ */
+/* §4.4 runtime transport (P07)                                        */
+/*                                                                     */
+/* External-execution transport state only: Workflow owns stage         */
+/* ordering/retries and human waits. These rows carry leases, the       */
+/* one-model-run slot, scoped worker credentials, the runtime lifecycle */
+/* ledger, owner-control commands and artifact receipts.                */
+/* ------------------------------------------------------------------ */
+
+export const runtimeConnectionFields = {
+  workspaceId: v.id("workspaces"),
+  /** Rotated on every replacement/reconnect — credentials, leases and
+   *  callbacks stamped with an older generation stay invalid (§7.7). */
+  generation: v.number(),
+  state: vRuntimeConnectionState,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  /** ASCII Box reference — the provider's opaque box ID. */
+  boxRef: v.optional(v.string()),
+  /** Owner-safe Codex account summary — never email/tokens/files. */
+  codexAccountSummary: v.optional(
+    v.object({
+      state: v.union(
+        v.literal("none"),
+        v.literal("chatgpt"),
+        v.literal("apiKey"),
+        v.literal("other"),
+      ),
+      planType: v.optional(v.string()),
+      verifiedAt: v.number(),
+    }),
+  ),
+  lastHeartbeatAt: v.optional(v.number()),
+  /** Last reported worker phase (liveness hint; never lease evidence). */
+  workerPhase: v.optional(vWorkerPhase),
+  workerVersion: v.optional(v.string()),
+  protocolVersion: v.optional(v.string()),
+  currentCodexTurnRef: v.optional(v.string()),
+  currentRunId: v.optional(v.id("runs")),
+  error: v.optional(v.string()),
+};
+
+export const runtimeLifecycleOperationFields = {
+  workspaceId: v.id("workspaces"),
+  runtimeConnectionId: v.id("runtimeConnections"),
+  runtimeGeneration: v.number(),
+  operation: vLifecycleOperation,
+  /** Stable dedupe key persisted before the provider call. */
+  operationKey: v.string(),
+  /** SHA-256 hex of the canonical request — replay compares bodies without
+   *  retaining credential-bearing payloads. */
+  requestFingerprint: v.string(),
+  /** Neutral settings + secure injection references only — no raw
+   *  credentials. Validated by `assertLifecycleRequestConfig`. */
+  requestConfig: v.any(),
+  state: vLifecycleOperationState,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  boxRef: v.optional(v.string()),
+  providerOperationRef: v.optional(v.string()),
+  error: v.optional(v.string()),
+};
+
+export const providerConnectionFields = {
+  workspaceId: v.id("workspaces"),
+  provider: vProviderKind,
+  state: vProviderConnectionState,
+  /** Verified capability IDs only — never assumed. */
+  capabilities: v.array(v.string()),
+  updatedAt: v.number(),
+  runtimeConnectionId: v.optional(v.id("runtimeConnections")),
+  remoteReference: v.optional(v.string()),
+  verifiedAt: v.optional(v.number()),
+  error: v.optional(v.string()),
+};
+
+export const workerCredentialFields = {
+  workspaceId: v.id("workspaces"),
+  runtimeConnectionId: v.id("runtimeConnections"),
+  runtimeGeneration: v.number(),
+  /** SHA-256 hex of the bearer token; plaintext is never persisted. */
+  credentialHash: v.string(),
+  scopes: v.array(vWorkerScope),
+  expiresAt: v.number(),
+  state: v.union(v.literal("active"), v.literal("revoked")),
+  createdAt: v.number(),
+  /** AES-256-GCM envelope (base64) sealing the plaintext token so a
+   *  generation-scoped Box env injection or a reconciled create replay can
+   *  recover it server-side; opened only inside provisioning actions under
+   *  `OPENSQUAD_WORKER_SEAL_KEY` and never returned by any function. */
+  sealedCredential: v.optional(v.string()),
+  /** Last authenticated bridge call — diagnostics only. */
+  lastUsedAt: v.optional(v.number()),
+  /** Last claim-class poll — enforces the minimum poll interval. */
+  lastPollAt: v.optional(v.number()),
+};
+
+export const runtimeControlRequestFields = {
+  workspaceId: v.id("workspaces"),
+  runtimeConnectionId: v.id("runtimeConnections"),
+  runtimeGeneration: v.number(),
+  /** Backend-minted request identity; also the claim dedupe key. */
+  requestId: v.string(),
+  command: vControlCommand,
+  state: vControlRequestState,
+  /** identityKey of the generating owner, or `system` for lease-expiry
+   *  interrupts issued by the bridge. */
+  requestedBy: v.string(),
+  expiresAt: v.number(),
+  createdAt: v.number(),
+  claimedAt: v.optional(v.number()),
+  /** Login challenge reference for start_login/cancel_login. */
+  loginId: v.optional(v.string()),
+  /** Codex turn/thread references for interrupt_turn. */
+  turnId: v.optional(v.string()),
+  threadId: v.optional(v.string()),
+  /** Sanitized result summary — never challenge material or credentials. */
+  safeResult: v.optional(v.any()),
+  /** First accepted result identity + digest — repeated identical results
+   *  are acknowledged no-ops; a reused resultId with a different digest is
+   *  rejected and recorded. */
+  resultId: v.optional(v.string()),
+  resultDigest: v.optional(v.string()),
+  completedAt: v.optional(v.number()),
+};
+
+export const runtimeLoginChallengeFields = {
+  workspaceId: v.id("workspaces"),
+  runtimeConnectionId: v.id("runtimeConnections"),
+  runtimeGeneration: v.number(),
+  controlRequestId: v.id("runtimeControlRequests"),
+  /** Provider-allowlisted verification URL — owner-only, never in feeds. */
+  verificationUrl: v.string(),
+  userCode: v.string(),
+  expiresAt: v.number(),
+  createdAt: v.number(),
+};
+
+export const agentSessionFields = {
+  workspaceId: v.id("workspaces"),
+  employeeId: v.id("employees"),
+  /** Campaign- or prospect-scoped session discriminator (bounded string). */
+  scopeKey: v.string(),
+  runtimeConnectionId: v.id("runtimeConnections"),
+  runtimeGeneration: v.number(),
+  /** Saved Codex thread reference; resumed only after ownership checks. */
+  codexThreadRef: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+};
+
+export const workerRequestFields = {
+  workspaceId: v.id("workspaces"),
+  runtimeConnectionId: v.id("runtimeConnections"),
+  runtimeGeneration: v.number(),
+  missionId: v.id("missions"),
+  runId: v.id("runs"),
+  /** Semantic step identity — unique per (missionId, stepKey, generation). */
+  stepKey: v.string(),
+  /** Attempt generation of this stage execution (mirrors run.generation). */
+  generation: v.number(),
+  /** §4.5 operation discriminator — selects the accepted result contract. */
+  operation: vWorkerOperation,
+  state: vWorkerRequestState,
+  /** Validated worker input: small inline document or private storage
+   *  reference (256 KiB cap, §4.4 note). */
+  inputRef: vWorkerDataRef,
+  outputSchemaVersion: v.number(),
+  /* Continuation binding — assigned by the dispatching backend, never
+   * trusted from a callback payload (§4.2 note covers worker requests). */
+  targetWorkflowId: v.string(),
+  continuationEventId: v.string(),
+  workflowGeneration: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  /** SHA-256 hex of the issued lease token — plaintext goes only to the
+   *  claiming worker inside the claim response. */
+  leaseHash: v.optional(v.string()),
+  leaseExpiresAt: v.optional(v.number()),
+  lastHeartbeatAt: v.optional(v.number()),
+  /** Last accepted worker-activity time — the 5 s routine-update throttle. */
+  lastActivityAt: v.optional(v.number()),
+  /** Dedupe of the accepted result: repeated identical results acknowledge;
+   *  a reused resultId with a different digest is rejected and recorded. */
+  resultId: v.optional(v.string()),
+  resultDigest: v.optional(v.string()),
+  resultRef: v.optional(vWorkerDataRef),
+  /** Forwarded usage — present only when the runtime reported it (§9). */
+  usage: v.optional(
+    v.object({
+      toolCalls: v.optional(v.number()),
+      modelCalls: v.optional(v.number()),
+      tokens: v.optional(v.number()),
+    }),
+  ),
+  error: v.optional(
+    v.object({
+      code: v.string(),
+      message: v.string(),
+      retrySafety: v.optional(
+        v.union(
+          v.literal("safe"),
+          v.literal("unsafe"),
+          v.literal("unknown"),
+        ),
+      ),
+    }),
+  ),
+};
+
+export const workspaceExecutionSlotFields = {
+  workspaceId: v.id("workspaces"),
+  /** Bumped on every acquisition — a stale slot generation cannot renew. */
+  generation: v.number(),
+  state: vSlotState,
+  updatedAt: v.number(),
+  workerRequestId: v.optional(v.id("workerRequests")),
+  runId: v.optional(v.id("runs")),
+  leaseExpiresAt: v.optional(v.number()),
+};
+
+/**
+ * §4.3 `artifacts` — defined in THIS block because the P07
+ * `POST /worker/artifact` route needs it now. The field map follows the
+ * §4.3 contract exactly (plus the transport-provenance `workerRequestId?`);
+ * P09 must NOT re-add this table — merge keeps this definition.
+ */
+export const artifactFields = {
+  workspaceId: v.id("workspaces"),
+  missionId: v.id("missions"),
+  kind: vArtifactKind,
+  /** Server-assigned storage ID — the worker never supplies it. */
+  storageId: v.id("_storage"),
+  mimeType: v.string(),
+  byteSize: v.number(),
+  /** Server-computed `sha256:<hex>` of the stored bytes. */
+  contentDigest: v.string(),
+  operationKey: v.string(),
+  createdAt: v.number(),
+  prospectId: v.optional(v.string()),
+  runId: v.optional(v.id("runs")),
+  /** The worker request whose lease authorized this upload. */
+  workerRequestId: v.optional(v.id("workerRequests")),
+};
+
 export default defineSchema({
   workspaces: defineTable(workspaceFields)
     .index("by_ownerIdentityKey", ["ownerIdentityKey"])
@@ -372,4 +631,75 @@ export default defineSchema({
     .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"])
     .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
     .index("by_workspaceId_and_dedupeKey", ["workspaceId", "dedupeKey"]),
+
+  /* §4.4 — runtime transport (P07) */
+
+  runtimeConnections: defineTable(runtimeConnectionFields)
+    // One active runtime record per workspace, enforced transactionally.
+    .index("by_workspaceId", ["workspaceId"]),
+
+  runtimeLifecycleOperations: defineTable(runtimeLifecycleOperationFields)
+    .index("by_runtimeConnectionId_and_createdAt", [
+      "runtimeConnectionId",
+      "createdAt",
+    ])
+    .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
+
+  providerConnections: defineTable(providerConnectionFields).index(
+    "by_workspaceId_and_provider",
+    ["workspaceId", "provider"],
+  ),
+
+  workerCredentials: defineTable(workerCredentialFields)
+    // Unique credential hash, enforced transactionally at issuance.
+    .index("by_credentialHash", ["credentialHash"])
+    .index("by_runtimeConnectionId_and_state", [
+      "runtimeConnectionId",
+      "state",
+    ]),
+
+  runtimeControlRequests: defineTable(runtimeControlRequestFields)
+    .index("by_runtimeConnectionId_and_state", [
+      "runtimeConnectionId",
+      "state",
+    ])
+    // At most one control request per (workspaceId, requestId).
+    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
+
+  runtimeLoginChallenges: defineTable(runtimeLoginChallengeFields)
+    .index("by_runtimeConnectionId", ["runtimeConnectionId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  agentSessions: defineTable(agentSessionFields)
+    // One Codex session per (workspace, employee, scope).
+    .index("by_workspaceId_and_employeeId_and_scopeKey", [
+      "workspaceId",
+      "employeeId",
+      "scopeKey",
+    ]),
+
+  workerRequests: defineTable(workerRequestFields)
+    .index("by_workspaceId_and_state_and_createdAt", [
+      "workspaceId",
+      "state",
+      "createdAt",
+    ])
+    .index("by_state_and_leaseExpiresAt", ["state", "leaseExpiresAt"])
+    .index("by_runId", ["runId"])
+    // One transport request per (mission, step, generation).
+    .index("by_missionId_and_stepKey_and_generation", [
+      "missionId",
+      "stepKey",
+      "generation",
+    ]),
+
+  workspaceExecutionSlots: defineTable(workspaceExecutionSlotFields)
+    // The single transactional model-run slot per workspace.
+    .index("by_workspaceId", ["workspaceId"]),
+
+  artifacts: defineTable(artifactFields)
+    .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
+    .index("by_prospectId", ["prospectId"])
+    // One artifact per (workspace, operationKey) — deduplicated uploads.
+    .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
 });
