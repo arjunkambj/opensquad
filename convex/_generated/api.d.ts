@@ -9,9 +9,11 @@
  */
 
 import type * as activity from "../activity.js";
+import type * as approvals from "../approvals.js";
 import type * as businessProfiles from "../businessProfiles.js";
 import type * as campaigns from "../campaigns.js";
 import type * as decisions from "../decisions.js";
+import type * as drafts from "../drafts.js";
 import type * as employees from "../employees.js";
 import type * as http from "../http.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
@@ -20,9 +22,14 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as missions from "../missions.js";
 import type * as runs from "../runs.js";
+import type * as sendAttempts from "../sendAttempts.js";
+import type * as sending from "../sending.js";
+import type * as suppressions from "../suppressions.js";
+import type * as usage from "../usage.js";
 import type * as workflows_devFixture from "../workflows/devFixture.js";
 import type * as workflows_events from "../workflows/events.js";
 import type * as workflows_manager from "../workflows/manager.js";
+import type * as workflows_send from "../workflows/send.js";
 import type * as workflows_steps from "../workflows/steps.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -34,9 +41,11 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
+  approvals: typeof approvals;
   businessProfiles: typeof businessProfiles;
   campaigns: typeof campaigns;
   decisions: typeof decisions;
+  drafts: typeof drafts;
   employees: typeof employees;
   http: typeof http;
   "integrations/agentmail": typeof integrations_agentmail;
@@ -45,9 +54,14 @@ declare const fullApi: ApiFromModules<{
   "lib/validators": typeof lib_validators;
   missions: typeof missions;
   runs: typeof runs;
+  sendAttempts: typeof sendAttempts;
+  sending: typeof sending;
+  suppressions: typeof suppressions;
+  usage: typeof usage;
   "workflows/devFixture": typeof workflows_devFixture;
   "workflows/events": typeof workflows_events;
   "workflows/manager": typeof workflows_manager;
+  "workflows/send": typeof workflows_send;
   "workflows/steps": typeof workflows_steps;
   workspaces: typeof workspaces;
 }>;
