@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
+    "plan": "node scripts/plan.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
