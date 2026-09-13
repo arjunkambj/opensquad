@@ -151,7 +151,7 @@
       "id": "P05",
       "title": "AgentMail transport and webhook proof",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P05",
       "branch": "opensquad/P05",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P05",
@@ -178,7 +178,8 @@
       "evidence": [
         "plan/evidence/P05.md: integrated at fbde8c4; @agentmail/convex@0.1.0 + convex-helpers@0.1.124 pinned, component registered in new convex/convex.config.ts, signed webhook mounted at POST /agentmail/webhook, narrow internal send adapter with HTTP Idempotency-Key and accepted/rejected/uncertain outcomes.",
         "Verified on isolated local backend: component+workpools install, 401 on missing/bogus Svix signatures, send actions unreachable publicly, live negative probe reached api.agentmail.to and classified 404 as rejected. Temporary diagnostic probe removed before merge per task card; executeSendAttempt remains callable via `convex run` for the controlled probe.",
-        "Blocked for live gate: controlled send/receipt/reply, same-key replay and duplicate-event observation need owner inputs; see blocker field. mailEvents dedupe/replay table need recorded for P02/P10 reconciliation."
+        "LIVE GATE PASSED at 787c0d2 on dev:flexible-grasshopper-949: webhook registered org-wide with API-returned secret synced via convex env set (401 on bad signature); second controlled inbox created via client_id with repeat-create dedupe; controlled send accepted with real message/thread IDs; same-key replay returned identical IDs with zero duplicate delivery or events; changed payload on same key → 409→uncertain; reply round trip delivered through signed webhook into component inboundMessages on the same sender-side thread; message.delivered observed arriving BEFORE message.sent (ordering tolerance required in P11); fabricated signed duplicate event deduped by event_id.",
+        "Recorded deltas: thread_id is per-inbox (P11 must key conversations by inboxId+threadId); message_id is RFC5322 Message-ID needing URL-encoding in path params; AgentMail has no event resend endpoint; 24h idempotency boundary unverified; unmapped inboxes currently persist inbound without quarantine (P11 must add resolution+quarantine). mailEvents dedupe/replay table need recorded for P02/P10 reconciliation. Read-only diagnosticInboundState remains internal with TODO(P16)."
       ]
     },
     {
