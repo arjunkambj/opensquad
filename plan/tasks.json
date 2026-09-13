@@ -202,7 +202,7 @@
       "id": "P06",
       "title": "Durable missions, runs and decisions",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P06",
       "branch": "opensquad/P06",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P06",
@@ -233,14 +233,32 @@
         "convex/runs.ts",
         "convex/workflows/"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P06.md: integrated at 8266686; six §4.2 tables (missions, missionProspects, runs, decisions, missionComments, activityEvents) with declared indexes, derived board columns, expectedVersion guards, requestId dedupe. @convex-dev/workflow@0.4.7 registered; dev-fixture workflow (explicitly not AI/provider work) exercises dispatch gate → validated stage → prospect branches → required decision → durable awaitEvent → persisted continuation → aggregated outcome.",
+        "Local-backend probes verified: full lifecycle queued→active→waiting_for_user→completed with board mapping; concurrent resolve single-apply (loser CONFLICT); requestId replay dedupe; backend kill+restart mid-wait resumed without re-running journaled steps; comments never resolve approvals; pause→resolve-while-parked→resume; cancel mid-wait retiring asks/children/runs; per-column cursor pagination; auth matrix (viewer FORBIDDEN, non-member NOT_FOUND, anonymous issuer FORBIDDEN); semantic duplicate mission CONFLICT.",
+        "Combined main pushed to dev:flexible-grasshopper-949 — workflow component + workpool subcomponents installed, §4.2 indexes live. lint/tsc/build clean on merged main.",
+        "Notes for P07/P10/P12: decisions carry backend-assigned targetWorkflowId/continuationEventId/workflowGeneration; decisions.resolve is the only continuation path; checkContinuation re-gates pause/cancel/stale inputs; insertRun/finishRun/sweepRuns are the receipt helpers; missionProspects.prospectId and decision draftId/sendAttemptId/approvalId are bounded strings pending §4.3 tables; waiting_for_runtime is plumbed but unexercised until worker uncertainty exists; cancelChildWorkflows code-reviewed but not exercised live."
+      ]
     },
     {
       "id": "P07",
       "title": "Scoped worker bridge and runtime lifecycle",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P07",
+      "branch": "opensquad/P07",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P07",
+      "reservedFiles": [
+        "worker/",
+        "convex/workerBridge.ts",
+        "convex/runtimeConnections.ts",
+        "convex/workerOperations.ts",
+        "convex/runtimeControlRequests.ts",
+        "convex/http.ts",
+        "convex/schema.ts",
+        "convex/lib/validators.ts",
+        "plan/evidence/P07.md"
+      ],
       "dependsOn": [
         "P03",
         "P06"
@@ -325,8 +343,22 @@
       "id": "P10",
       "title": "Exact drafts, approval and sending",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P10",
+      "branch": "opensquad/P10",
+      "worktree": "/Users/honey/Code/opensquad-worktrees/P10",
+      "reservedFiles": [
+        "convex/drafts.ts",
+        "convex/approvals.ts",
+        "convex/sendAttempts.ts",
+        "convex/suppressions.ts",
+        "convex/sending.ts",
+        "convex/usage.ts",
+        "convex/integrations/agentmail.ts",
+        "convex/schema.ts",
+        "convex/lib/validators.ts",
+        "plan/evidence/P10.md"
+      ],
       "dependsOn": [
         "P05",
         "P06"

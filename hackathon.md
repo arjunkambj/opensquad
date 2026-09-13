@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** not deployed
 - **Convex deployment:** not deployed
-- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex
-- **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions
+- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/workflow
+- **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions, durable workflows
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T20:47:46Z
+- **Last updated:** 2026-09-14T03:45:00Z
 
 ## Log
 
@@ -161,3 +161,37 @@ and offline manual checks passed; existing hook/chunk warnings remain. Apollo
 is deliberately untested. No deployment or provider call ran in this review.
 Evidence: `plan/evidence/P02.md`, `plan/evidence/review-worker.md`,
 `plan/evidence/review-providers.md`.
+
+### 2026-09-14 - 3497402
+P08 onboarding/employees/settings integrated. The onboarding wizard persists a
+business profile, workspace timezone (expectedPolicyVersion-guarded), send
+window/limit and campaign scope through the real P02 mutations, then renders the
+interpreted source plan + cap + enrichment allowance + send policy for explicit
+confirmation before activating automation. `/employees` shows the three employee
+templates with versioned instruction editing and honest status — only
+disconnected/disabled are reachable until P07 lands a runtime signal; nothing is
+simulated. Settings covers workspace, sending policy, automation pause and
+members/roles; integration/Codex rows stay disabled pending P07/P04. `/squads`
+is now a typed redirect; `/overview` remains the sign-in destination. Verified
+at API level on an isolated local backend (full onboarding chain, version
+conflicts, idempotent create, last-owner protection, cross-workspace
+NOT_FOUND); lint/tsc/build clean on merged main. Browser sign-in and the visual
+review remain the human gate.
+Evidence: `plan/evidence/P08.md`.
+
+### 2026-09-14 - 8266686
+P06 durable supervision layer integrated. Six §4.2 tables (missions,
+missionProspects, runs, decisions, missionComments, activityEvents) plus
+`@convex-dev/workflow@0.4.7` now own mission lifecycle, required human asks,
+run receipts and deduped activity. A clearly labeled dev-fixture pipeline (not
+AI/provider work) proves the durable contract every later stage reuses:
+dispatch gate → validated stage → per-prospect child workflows with stable
+start keys → required decision → durable event wait → persisted continuation →
+aggregated terminal outcome (partial/contact_needed included). Local probes
+verified concurrent-resolve single-apply, backend kill+restart mid-wait with no
+re-run steps, comments never resolving approvals, pause/cancel behavior and the
+auth matrix. Combined backend pushed to dev:flexible-grasshopper-949 — workflow
+component and §4.2 indexes are live there. waiting_for_runtime is plumbed but
+awaits P07 worker uncertainty; draft/sendAttempt references are bounded strings
+until P10/P11 tables land.
+Evidence: `plan/evidence/P06.md`.
