@@ -54,7 +54,8 @@
       "evidence": [
         "plan/evidence/P01.md: integrated at 39305d3; .env.example + worker/.env.example added, lint/build pass on merged main, zero env values in committed files.",
         "G1 unavailable: ASCII_API_KEY absent locally and on deployment; P03 blocked until owner supplies a Box API key. Codex CLI 0.154.0 confirmed on builder machine only.",
-        "G2 partial: Firecrawl key valid (1000 credits), webhook secret missing; Apollo OAuth needs human grant inside runtime. G3 partial: AgentMail key is inbox-scoped; P05 blocked on inbox ID, webhook secret, controlled recipient. Live Hexclave sign-in/JWT claims still need a human browser check (V01/V02 limitation)."
+        "G2 partial: Firecrawl key valid (1000 credits), webhook secret missing; Apollo OAuth needs human grant inside runtime. G3 partial: AgentMail key is inbox-scoped; P05 blocked on inbox ID, webhook secret, controlled recipient. Live Hexclave sign-in/JWT claims still need a human browser check (V01/V02 limitation).",
+        "2026-09-14 follow-up: owner completed live Hexclave sign-in — real JWT verified end to end (V01 step 3 limitation closed). ASCII_API_KEY, AgentMail key/webhook secret and controlled inboxes were later supplied for the P03/P05 live gates; FIRECRAWL_WEBHOOK_SECRET now set on the dev deployment."
       ]
     },
     {
@@ -93,7 +94,8 @@
       "evidence": [
         "plan/evidence/P02.md: integrated at f9f6664; five §4.1 tables (workspaces, memberships, businessProfiles, employees, campaigns) with declared indexes/invariants, typed auth guards (tokenIdentifier identityKey, anonymous-issuer rejection, uniform NOT_FOUND), idempotent one-transaction bootstrap, role matrix, campaign confirmSourcePlan/setState with immutable confirmed scope and version conflicts.",
         "Live local-backend probes with synthetic --identity claims exercised real authorization: unauthenticated/anonymous rejection, cross-workspace NOT_FOUND incl. caller-supplied workspaceId, viewer/owner/operator matrix, last-owner protection, leadLimit 1-5 cap, unconfirmed-activation and yc-source rejections, version CONFLICTs, pagination. lint/build/tsc clean on merged main.",
-        "Deferred gates: real Hexclave JWT end-to-end still needs human sign-in (P01 limitation); two-session V02 in P14; V03 UI portion in P08. First cloud push to dev:flexible-grasshopper-949 completed during integration via convex codegen upload/typecheck. P05 noted mailEvents dedupe table need for P10/P11 reconciliation."
+        "Deferred gates: real Hexclave JWT end-to-end still needs human sign-in (P01 limitation); two-session V02 in P14; V03 UI portion in P08. First cloud push to dev:flexible-grasshopper-949 completed during integration via convex codegen upload/typecheck. P05 noted mailEvents dedupe table need for P10/P11 reconciliation.",
+        "2026-09-14 follow-up: owner's live sign-in verified the real Hexclave JWT passes requireUser's issuer check (P01 limitation closed). Post-acceptance hardening on main: ensureWorkspace no longer dead-ends callers holding only non-owner memberships; campaigns.create dedupes on (workspaceId, requestId); workspaces.update skips no-op writes; setAutomationState lets a paused workspace update pauseReason."
       ]
     },
     {
@@ -149,7 +151,8 @@
         "plan/evidence/P04.md: integrated; @firecrawl/firecrawl-convex@0.1.1 pinned + registered via convex.config.ts app-env binding; component self-mounts signed webhook at /firecrawl/webhook via httpPrefix (no app route added); narrow internal wrapper in convex/integrations/firecrawl.ts with hostname/SSRF admission checks.",
         "Verified on isolated local backend: component install + push, ONE real bounded scrape (basicagency.com, 1 credit, 1000→999 balance), 6-case URL rejection matrix (non-http/userinfo/localhost/private ranges), webhook HMAC verification with 401 on missing/bogus signatures, public-surface unreachable. Live component also installed on dev deployment via merged push (FIRECRAWL_WEBHOOK_SECRET present there, 33 chars).",
         "IMPORTANT DELTA: component skips HMAC verification entirely when FIRECRAWL_WEBHOOK_SECRET is unset — must always be configured per deployment. poll fallback mode exists for unreachable deployments.",
-        "Apollo machinery committed and compiled (worker boxmcp.ts auth/call/list/token-inspect phases, p04gate.ts host driver, callback-url ferry for localhost-redirect OAuth) but NOT exercised — no Box provisioned, no tools/list, no search/enrichment probes. Employee image ships zero MCP servers (boundary verified by construction)."
+        "Apollo machinery committed and compiled (worker boxmcp.ts auth/call/list/token-inspect phases, p04gate.ts host driver, callback-url ferry for localhost-redirect OAuth) but NOT exercised — no Box provisioned, no tools/list, no search/enrichment probes. Employee image ships zero MCP servers (boundary verified by construction).",
+        "2026-09-14 follow-up: FIRECRAWL_WEBHOOK_SECRET now set on dev:flexible-grasshopper-949 (verified via convex env list, names only) — HMAC gate active there. scrapePage IPv6 guard widened (fe80/10 link-local, fec0/10 site-local, fe00/8 reserved, 64:ff9b NAT64). Apollo OAuth still deferred by owner; task stays blocked."
       ],
       "branch": "opensquad/P04",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P04",
