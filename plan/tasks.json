@@ -61,7 +61,7 @@
       "id": "P02",
       "title": "App authentication and workspace schema",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P02",
       "branch": "opensquad/P02",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P02",
@@ -90,7 +90,11 @@
         "convex/employees.ts",
         "convex/campaigns.ts"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P02.md: integrated at f9f6664; five §4.1 tables (workspaces, memberships, businessProfiles, employees, campaigns) with declared indexes/invariants, typed auth guards (tokenIdentifier identityKey, anonymous-issuer rejection, uniform NOT_FOUND), idempotent one-transaction bootstrap, role matrix, campaign confirmSourcePlan/setState with immutable confirmed scope and version conflicts.",
+        "Live local-backend probes with synthetic --identity claims exercised real authorization: unauthenticated/anonymous rejection, cross-workspace NOT_FOUND incl. caller-supplied workspaceId, viewer/owner/operator matrix, last-owner protection, leadLimit 1-5 cap, unconfirmed-activation and yc-source rejections, version CONFLICTs, pagination. lint/build/tsc clean on merged main.",
+        "Deferred gates: real Hexclave JWT end-to-end still needs human sign-in (P01 limitation); two-session V02 in P14; V03 UI portion in P08. First cloud push to dev:flexible-grasshopper-949 completed during integration via convex codegen upload/typecheck. P05 noted mailEvents dedupe table need for P10/P11 reconciliation."
+      ]
     },
     {
       "id": "P03",
