@@ -8,13 +8,27 @@
  * @module
  */
 
+import type * as businessProfiles from "../businessProfiles.js";
+import type * as campaigns from "../campaigns.js";
+import type * as employees from "../employees.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_validators from "../lib/validators.js";
+import type * as workspaces from "../workspaces.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
 
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  businessProfiles: typeof businessProfiles;
+  campaigns: typeof campaigns;
+  employees: typeof employees;
+  "lib/auth": typeof lib_auth;
+  "lib/validators": typeof lib_validators;
+  workspaces: typeof workspaces;
+}>;
 
 /**
  * A utility for referencing Convex functions in your app's public API.
