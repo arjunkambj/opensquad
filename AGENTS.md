@@ -21,3 +21,5 @@
   their own evidence files. Isolate Convex deployments as well as Git checkouts.
 - Update `hackathon.md` with the existing `convex-hackathon-skill` after meaningful
   work. Keep secrets, personal data and real email addresses out of public logs.
+
+always do featues wise commit, not big commits
