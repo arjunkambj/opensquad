@@ -220,6 +220,32 @@ export class BoxLifecycleAdapter {
         uncertain: false,
       };
     }
+    if (!begun.fresh && begun.record.boxId !== undefined) {
+      // Provider idempotency expires after 24 hours. Once the receipt supplies
+      // a Box ID, reconcile that Box instead of risking a second paid create.
+      const inspected = await this.#client.inspectBox(begun.record.boxId);
+      if (!inspected.ok) {
+        return { ok: false, record: begun.record, error: inspected.error, uncertain: true };
+      }
+      try {
+        return { ok: true, record: begun.record, value: sanitizeBox(inspected.value.box) };
+      } catch {
+        return {
+          ok: false,
+          record: begun.record,
+          error: { kind: "validation", message: "saved Box response failed validation" },
+          uncertain: true,
+        };
+      }
+    }
+    if (!begun.fresh && now() - begun.record.createdAt >= 24 * 60 * 60_000) {
+      return {
+        ok: false,
+        record: begun.record,
+        error: { kind: "validation", message: "create receipt missing and provider idempotency expired; reconcile before retrying" },
+        uncertain: true,
+      };
+    }
     const result = await this.#client.createBox(
       input.idempotencyKey,
       input.config,
