@@ -2,7 +2,7 @@
 
 - **Project:** OpenSquad
 - **Event:** Convex All Gas Hackathon
-- **What it does:** A frontend foundation for a sales and outreach CRM, with Hexclave sign-in, a dashboard shell, and date-range overview.
+- **What it does:** A squad of AI employees that handles sales research and outreach, with a built-in CRM to track leads, conversations, and next steps.
 - **Live app:** not deployed
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** not deployed
