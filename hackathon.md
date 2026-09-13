@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** not deployed
 - **Convex deployment:** not deployed
-- **Components:** none
-- **Convex features:** none yet
+- **Components:** @agentmail/convex
+- **Convex features:** HTTP actions, internal mutations/actions
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-13T17:25:04Z
+- **Last updated:** 2026-09-13T17:52:05Z
 
 ## Log
 
@@ -74,3 +74,20 @@ webhook secrets. Pinned component versions match the plan
 `@agentmail/convex@0.1.0`, `@firecrawl/firecrawl-convex@0.1.1`). Lint and build
 pass on the merged branch. No provider integration is claimed working.
 Verification: `plan/evidence/P01.md`.
+
+### 2026-09-13 - ad05ffc
+P03/P05 integrated (spikes merged; live provider gates remain blocked on
+owner-supplied credentials, recorded in `plan/tasks.json`). The `worker/`
+package now carries a typed ASCII Box lifecycle adapter (idempotent create,
+resume/TTL/stop/delete incl. the verified `X-Ascii-Confirm-Delete` header) and
+a Codex App Server stdio client with protocol types generated from the
+installed `codex-cli 0.154.0`; the initialize/account/login-start/cancel/
+rate-limits protocol was exercised for real over stdio, but no Box was
+provisioned and no model turn ran. On the mail side, `@agentmail/convex@0.1.0`
+is registered and its Svix-signed webhook is mounted at `/agentmail/webhook`;
+a narrow internal `executeSendAttempt` adapter performs exactly one
+`Idempotency-Key`-headered POST with honest accepted/rejected/uncertain
+outcomes — verified unreachable publicly, signature rejection and a live
+negative probe confirmed on an isolated local backend
+(`convex/convex.config.ts`, `convex/http.ts`, `convex/integrations/agentmail.ts`,
+`worker/`). Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
