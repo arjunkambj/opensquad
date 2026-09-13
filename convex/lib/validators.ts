@@ -219,11 +219,7 @@ export function intersectCapabilities(
       `capabilities ${denied.join(", ")} are not permitted for ${template}`,
     );
   }
-  const unique = [...new Set(requested)];
-  if (unique.length > HOST_CAPABILITY_POLICY[template].length) {
-    throw invalid("allowedCapabilities exceeds the host policy set");
-  }
-  return unique;
+  return [...new Set(requested)];
 }
 
 /* ------------------------------------------------------------------ */
