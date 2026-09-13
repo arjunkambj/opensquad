@@ -816,6 +816,19 @@ export class BoxLifecycleAdapter {
     const sleep = input.sleep ?? defaultSleep;
     const deadline = now() + input.waitMs;
     for (;;) {
+      // `blocked` is a TRANSIENT deletion status (observed live 2026-09-13:
+      // the op polls as blocked while the box is still active, then completes
+      // and the box 404s). Ground truth for "deleted" is the box itself
+      // returning 404; the operation record is the secondary signal.
+      const inspected = await this.#client.inspectBox(input.boxId);
+      if (!inspected.ok && inspected.error.status === 404) {
+        const done = await this.#finish(accepted, "completed");
+        return {
+          ok: true,
+          record: done,
+          value: { deleted: true, boxId: input.boxId },
+        };
+      }
       const op = await this.#client.getDeletionOperation(operationId);
       if (op.ok) {
         const status =
@@ -829,17 +842,6 @@ export class BoxLifecycleAdapter {
             ok: true,
             record: done,
             value: { deleted: true, boxId: input.boxId },
-          };
-        }
-        if (status === "blocked") {
-          const done = await this.#finish(accepted, "failed", {
-            lastError: "deletion operation blocked by provider",
-          });
-          return {
-            ok: false,
-            record: done,
-            error: { kind: "http", message: "deletion operation blocked" },
-            uncertain: false,
           };
         }
       }
