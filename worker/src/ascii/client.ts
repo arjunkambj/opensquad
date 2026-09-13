@@ -22,11 +22,18 @@ import {
   ResponseError,
   type Box,
   type BoxActionResponse,
+  type BoxEnvironmentListResponse,
   type BoxInfoResponse,
+  type BoxListResponse,
   type Command200Response,
   type CommandStatusResponse,
   type CreateBoxResponse,
   type DeletionOperationResponse,
+  type FileReadResponse,
+  type FileWriteResponse,
+  type LimitsResponse,
+  type MeResponse,
+  type NamedSnapshotListResponse,
 } from "@asciidev/box-sdk";
 
 import type { BoxCommandSpec, BoxCreateConfig } from "./types.js";
@@ -256,6 +263,85 @@ export class AsciiBoxClient {
     operationId: string,
   ): Promise<AsciiCallResult<DeletionOperationResponse>> {
     return call(() => this.#api.getDeletionOperation({ operationId }));
+  }
+
+  /** GET /me — account metadata for the API key holder. Contains personal
+   * fields (login, email); callers must record presence only, never values. */
+  me(): Promise<AsciiCallResult<MeResponse>> {
+    return call(() => this.#api.me());
+  }
+
+  /** GET /limits — account/trial limits (access tier, active-box caps). */
+  limits(): Promise<AsciiCallResult<LimitsResponse>> {
+    return call(() => this.#api.limits());
+  }
+
+  /** GET /environments — named Box environments attachable via
+   * `createBoxRequest.environment`. */
+  listEnvironments(): Promise<AsciiCallResult<BoxEnvironmentListResponse>> {
+    return call(() => this.#api.environments());
+  }
+
+  /** GET /named-snapshots — named snapshots usable as `createBoxRequest.from`. */
+  listNamedSnapshots(): Promise<AsciiCallResult<NamedSnapshotListResponse>> {
+    return call(() => this.#api.listNamedSnapshots());
+  }
+
+  /** GET /boxes — list account boxes (cleanup verification; returns raw
+   * response, callers sanitize before persisting). */
+  listBoxes(options?: {
+    limit?: number;
+    state?: string;
+  }): Promise<AsciiCallResult<BoxListResponse>> {
+    return call(() =>
+      this.#api.boxes({
+        ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+        ...(options?.state !== undefined ? { state: options.state } : {}),
+      }),
+    );
+  }
+
+  /** PUT /boxes/{boxId}/files — write a UTF-8/base64 file inside the Box.
+   * Used by the live gate to place the worker bundle + marker files. */
+  writeFile(
+    boxId: string,
+    path: string,
+    content: string,
+    encoding?: "utf8" | "base64",
+  ): Promise<AsciiCallResult<FileWriteResponse>> {
+    return call(() =>
+      this.#api.writeFile({
+        boxId,
+        fileWriteRequest: {
+          path,
+          content,
+          ...(encoding !== undefined ? { encoding } : {}),
+        },
+      }),
+    );
+  }
+
+  /** GET /boxes/{boxId}/files — read a file inside the Box. The live gate
+   * uses this only for files OpenSquad itself wrote (status/marker files) —
+   * never to read credential material. */
+  readFile(
+    boxId: string,
+    path: string,
+    encoding?: "utf8" | "base64",
+  ): Promise<AsciiCallResult<FileReadResponse>> {
+    return call(() =>
+      this.#api.readFile({
+        boxId,
+        path,
+        ...(encoding !== undefined ? { encoding } : {}),
+      }),
+    );
+  }
+
+  /** POST /boxes/{boxId}/interrupt — interrupt the box's current activity
+   * (built-in prompt harness). Not used for worker-owned processes. */
+  interruptBox(boxId: string): Promise<AsciiCallResult<BoxActionResponse>> {
+    return call(() => this.#api.interrupt({ boxId }));
   }
 }
 

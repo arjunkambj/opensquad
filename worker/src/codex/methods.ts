@@ -304,7 +304,11 @@ export type TurnHandle = {
 };
 
 /** `turn/start` — one bounded turn. `input` is a single text item; an
- * `outputSchema` constrains the final assistant message to structured JSON. */
+ * `outputSchema` constrains the final assistant message to structured JSON.
+ * Default host policy: `approvalPolicy:"never"` + readOnly/no-network. The
+ * optional `sandboxPolicy` override exists for environments where codex's
+ * bubblewrap sandbox cannot initialise (e.g. a container Box lacking user
+ * namespaces) — `externalSandbox` tells codex the host already sandboxes. */
 export async function turnStart(
   server: CodexAppServer,
   params: {
@@ -312,6 +316,10 @@ export async function turnStart(
     readonly prompt: string;
     readonly outputSchema?: JsonValue;
     readonly model?: string;
+    readonly sandboxPolicy?:
+      | { readonly type: "readOnly"; readonly networkAccess: boolean }
+      | { readonly type: "externalSandbox"; readonly networkAccess: "restricted" | "enabled" }
+      | { readonly type: "dangerFullAccess" };
   },
 ): Promise<TurnHandle> {
   const request: ClientRequest = {
@@ -321,7 +329,10 @@ export async function turnStart(
       threadId: params.threadId,
       input: [{ type: "text", text: params.prompt, text_elements: [] }],
       approvalPolicy: "never",
-      sandboxPolicy: { type: "readOnly", networkAccess: false },
+      sandboxPolicy: params.sandboxPolicy ?? {
+        type: "readOnly",
+        networkAccess: false,
+      },
       ...(params.outputSchema !== undefined
         ? { outputSchema: params.outputSchema }
         : {}),

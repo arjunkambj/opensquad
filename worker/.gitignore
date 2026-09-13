@@ -1,0 +1,4 @@
+# Live-gate local state — untracked handoff channel, may contain the
+# short-lived device-code challenge (owner-only). Never commit.
+LIVE_GATE_STATUS.json
+.livegate/
