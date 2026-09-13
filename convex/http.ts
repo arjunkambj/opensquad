@@ -35,7 +35,10 @@ http.route({
 
 // --- Reserved sections; owning tasks add their routes here --------------------
 //   /worker/*     P07 — authenticated ASCII worker bridge
-//   /firecrawl/*  P04/P09 — Firecrawl component callbacks
+//   /firecrawl/*  P04 (registered): the @firecrawl component SELF-MOUNTS its
+//                 signed webhook at /firecrawl/webhook via `httpPrefix` in
+//                 convex.config.ts — no app route is added here on purpose;
+//                 keeping the prefix free of app routes preserves the G4 table.
 //   /*            P16 — Vite SPA static fallback, registered LAST per G4
 
 export default http;

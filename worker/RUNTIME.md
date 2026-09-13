@@ -70,3 +70,14 @@ Codex pin → regenerate → review the diff.
 2. Whether the managed Codex device-code login completes end-to-end inside a
    real Box (owner's ChatGPT account) — locally proven only to `login/start` +
    cancel on codex-cli 0.154.0.
+
+## P04 diagnostic drivers (NOT the employee image)
+
+`src/boxmcp.ts` + `src/p04gate.ts` are the P04 Apollo/Firecrawl diagnostic
+probe: `p04gate.js` runs on the builder host and drives one disposable Box;
+`boxmcp.js` runs inside it and configures a RAW diagnostic
+`[mcp_servers.apollo]` connection in its throwaway CODEX_HOME. That raw
+connection is the trusted-operator diagnostic surface only — the employee
+image contract above (`/etc/opensquad/worker.env`, the systemd unit, the
+pinned package set) ships NO MCP servers; the filtered workspace gateway is
+P07. See plan/evidence/P04.md for the deferred-OAuth state and resume steps.

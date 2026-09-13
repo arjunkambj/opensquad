@@ -2,3 +2,11 @@
 # short-lived device-code challenge (owner-only). Never commit.
 LIVE_GATE_STATUS.json
 .livegate/
+
+# P04 Apollo diagnostic gate — untracked local state. P04_AUTH_STATUS.json /
+# P04_CALLBACK_URL.txt relay the OAuth authorization URL and the owner's
+# pasted redirect URL between the host driver and the Box; they can carry
+# short-lived OAuth parameters. Never commit.
+P04_AUTH_STATUS.json
+P04_CALLBACK_URL.txt
+.p04gate/
