@@ -251,6 +251,11 @@ These are proposed OpenSquad function names, not existing exports or provider me
 
 Every mutation changing a versioned record accepts the expected version; stale versions return `CONFLICT` with the new readable state. Side-effect-creating commands accept an idempotency key. Keep semantic uniqueness on mission creation, decisions and send records; where a command needs a general request receipt, introduce a small indexed receipt store rather than claiming arbitrary retries are automatically idempotent.
 
+`workspaces.update` requires `expectedPolicyVersion` when changing timezone,
+because timezone determines the sending window and local-day budget. It bumps
+`policyVersion` in the same transaction. Name-only edits and an unchanged
+timezone preserve the policy version.
+
 Queries return DTOs containing only UI fields. Default 25 rows, hard maximum 50; board queries page each column and return explicit “more” information. Do not hide old active missions by applying the Overview date filter to the board. Use date ranges only on activity and run history. Avoid exact unlimited counters; expose bounded counts with “50+”, or add maintained counters when required.
 
 ## 6. Mission and workflow behavior

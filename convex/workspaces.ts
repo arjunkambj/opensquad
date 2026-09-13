@@ -291,12 +291,16 @@ export const listMembers = query({
 /* Workspace settings                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Owner-only rename/timezone change (timezone feeds send-window math). */
+/**
+ * Owner-only rename/timezone change. A timezone change alters sending policy,
+ * so it requires the current policy version and invalidates earlier approvals.
+ */
 export const update = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     name: v.optional(v.string()),
     timezone: v.optional(v.string()),
+    expectedPolicyVersion: v.optional(v.number()),
   },
   returns: vWorkspaceDoc,
   handler: async (ctx, args) => {
@@ -315,14 +319,26 @@ export const update = mutation({
     ) {
       return workspace;
     }
-    const patch: { name?: string; timezone?: string; updatedAt: number } = {
+    const patch: {
+      name?: string;
+      timezone?: string;
+      policyVersion?: number;
+      updatedAt: number;
+    } = {
       updatedAt: Date.now(),
     };
     if (name !== undefined && name !== workspace.name) {
       patch.name = name;
     }
     if (timezone !== undefined && timezone !== workspace.timezone) {
+      if (args.expectedPolicyVersion !== workspace.policyVersion) {
+        throw domainError(
+          "CONFLICT",
+          `timezone changes require policyVersion ${workspace.policyVersion}`,
+        );
+      }
       patch.timezone = timezone;
+      patch.policyVersion = workspace.policyVersion + 1;
     }
     await ctx.db.patch("workspaces", workspace._id, patch);
     const updated = await ctx.db.get("workspaces", workspace._id);
