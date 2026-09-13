@@ -1811,3 +1811,542 @@ export const vWorkerRequestCompletion = v.object({
   detail: v.optional(v.string()),
 });
 export type WorkerRequestCompletion = Infer<typeof vWorkerRequestCompletion>;
+
+/* ------------------------------------------------------------------ */
+/* Correspondence, sending and usage (P10 — architecture §4.3/§4.4/§8)  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Activity kinds produced by the P10 correspondence/send modules. `kind` is a
+ * bounded string in storage; producers keep to this list so P11/P13 can
+ * formalize them later without a data migration.
+ */
+export const ACTIVITY_KINDS_P10 = [
+  "draft_created",
+  "draft_revised",
+  "approval_recorded",
+  "send_attempt_reserved",
+  "send_attempt_dispatched",
+  "send_attempt_acknowledged",
+  "send_attempt_failed",
+  "send_attempt_uncertain",
+  "send_attempt_cancelled",
+  "send_attempt_reconciled",
+  "suppression_added",
+  "suppression_removed",
+  "delivery_receipt_applied",
+  "delivery_receipt_parked",
+] as const;
+
+export type ActivityKindP10 = (typeof ACTIVITY_KINDS_P10)[number];
+
+/* ----- conversation/draft/approval/send-attempt state unions -------- */
+
+export const vConversationState = v.union(
+  v.literal("open"),
+  v.literal("closed"),
+  v.literal("unassigned"),
+);
+
+export type ConversationState = "open" | "closed" | "unassigned";
+
+/** Provider endpoint an attempt targets (integrations.md §G3 step 5). */
+export const vEndpointOperation = v.union(
+  v.literal("send"),
+  v.literal("reply"),
+);
+
+export type EndpointOperation = "send" | "reply";
+
+/**
+ * §4.3 `sendAttempts.state`. `acknowledged` means the provider accepted the
+ * message ("Sent") — never "Delivered"; delivery facts arrive only through
+ * verified provider events.
+ */
+export const vSendAttemptState = v.union(
+  v.literal("reserved"),
+  v.literal("requesting"),
+  v.literal("acknowledged"),
+  v.literal("uncertain"),
+  v.literal("definitively_failed"),
+  v.literal("cancelled"),
+);
+
+export type SendAttemptState =
+  | "reserved"
+  | "requesting"
+  | "acknowledged"
+  | "uncertain"
+  | "definitively_failed"
+  | "cancelled";
+
+/**
+ * Attempt states that block ANY new send on the conversation across all
+ * draft revisions (§8.3). `reserved`/`requesting` can never be covered by a
+ * replacement decision; `uncertain` is coverable only through the recorded
+ * delivery_uncertain decision exception (§8.7).
+ */
+export const UNRESOLVED_ATTEMPT_STATES: readonly SendAttemptState[] = [
+  "reserved",
+  "requesting",
+  "uncertain",
+];
+
+/** The immutable content verdict recorded on an `approvals` row. */
+export const vApprovalVerdict = v.union(
+  v.literal("approved"),
+  v.literal("rejected"),
+);
+
+export type ApprovalVerdict = "approved" | "rejected";
+
+/**
+ * How a `draft_approval` decision was resolved — carried on the decision
+ * answer's `fields.draftResolution` so the waiting workflow can tell a
+ * redraft request from a deliberate rejection. `approved` is the only value
+ * that produces an `approved` approvals row.
+ */
+export const DRAFT_RESOLUTIONS = [
+  "approved",
+  "changes_requested",
+  "rejected",
+] as const;
+
+export type DraftResolution = (typeof DRAFT_RESOLUTIONS)[number];
+
+/* ----- suppressions -------------------------------------------------- */
+
+export const vSuppressionKind = v.union(
+  v.literal("email"),
+  v.literal("domain"),
+);
+
+export type SuppressionKind = "email" | "domain";
+
+export const vSuppressionReason = v.union(
+  v.literal("unsubscribe"),
+  v.literal("manual"),
+  v.literal("bounce"),
+  v.literal("provider"),
+);
+
+export type SuppressionReason = "unsubscribe" | "manual" | "bounce" | "provider";
+
+/* ----- email normalization ------------------------------------------- */
+
+export const EMAIL_ADDRESS_MAX_LENGTH = 320;
+export const EMAIL_LOCAL_PART = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+export const EMAIL_DOMAIN =
+  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+/**
+ * Canonical recipient identity for approvals, suppressions and payload
+ * hashing: trimmed, ASCII-lowercased `local@domain`, one `@`, a dot-ful
+ * domain. Normalization is deliberately small and deterministic — no plus
+ * stripping or provider-specific rewriting, so the address sent is the
+ * address approved.
+ */
+export function normalizeEmailAddress(
+  value: string,
+  field = "recipient",
+): string {
+  const trimmed = boundedString(value, field, {
+    min: 3,
+    max: EMAIL_ADDRESS_MAX_LENGTH,
+  }).toLowerCase();
+  const at = trimmed.lastIndexOf("@");
+  if (at <= 0 || at !== trimmed.indexOf("@") || at === trimmed.length - 1) {
+    throw invalid(`${field} must be a single email address`);
+  }
+  const local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  if (!EMAIL_LOCAL_PART.test(local)) {
+    throw invalid(`${field} has an invalid local part`);
+  }
+  if (!EMAIL_DOMAIN.test(domain)) {
+    throw invalid(`${field} has an invalid domain`);
+  }
+  return `${local}@${domain}`;
+}
+
+/**
+ * Normalize a bare domain for `kind: "domain"` suppressions: trims a leading
+ * `@` or `mailto:`-style noise, lowercases, requires at least one dot so a
+ * bare TLD/host label can never suppress an entire suffix.
+ */
+export function normalizeDomain(value: string, field = "domain"): string {
+  const trimmed = boundedString(value, field, { min: 1, max: 253 })
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/\.+$/, "");
+  if (!EMAIL_DOMAIN.test(trimmed)) {
+    throw invalid(`${field} must be a valid dotted domain`);
+  }
+  return trimmed;
+}
+
+/** The domain part of an already-normalized email address. */
+export function domainOfNormalizedEmail(normalizedEmail: string): string {
+  return normalizedEmail.slice(normalizedEmail.lastIndexOf("@") + 1);
+}
+
+/* ----- draft payload hashing ------------------------------------------ */
+
+export const DRAFT_SUBJECT_MAX_LENGTH = 200;
+export const DRAFT_BODY_MAX_LENGTH = 12_000;
+export const DRAFT_EVIDENCE_MAX_ITEMS = 25;
+export const DRAFT_EVIDENCE_ID_MAX_LENGTH = 128;
+export const PROVIDER_REF_MAX_LENGTH = 400;
+
+/**
+ * The exact fields a send commits to (§8 "Exact draft approval"): sender
+ * inbox, normalized recipient, subject, body, the reply parent and which
+ * provider endpoint carries it. Evidence links and context versions are
+ * approval inputs, not send payload — they live on the draft row and on the
+ * approvals record instead of inside the hash.
+ */
+export type DraftPayloadFingerprint = {
+  endpointOperation: EndpointOperation;
+  inboxRef: string;
+  normalizedRecipient: string;
+  subject: string;
+  body: string;
+  replyToMessageRef: string | null;
+};
+
+/** SHA-256 hex of the canonical fingerprint — the stored `payloadHash`. */
+export async function computePayloadHash(
+  payload: DraftPayloadFingerprint,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonicalJson(payload)),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/* ----- usage accounting ------------------------------------------------ */
+
+export const vUsageMetric = v.union(
+  v.literal("sends"),
+  v.literal("apollo_enrichments"),
+  v.literal("model_runs"),
+  v.literal("research_pages"),
+  v.literal("research_searches"),
+);
+
+export type UsageMetric =
+  | "sends"
+  | "apollo_enrichments"
+  | "model_runs"
+  | "research_pages"
+  | "research_searches";
+
+export const vUsageReservationState = v.union(
+  v.literal("reserved"),
+  v.literal("committed"),
+  v.literal("released"),
+  v.literal("uncertain"),
+);
+
+export type UsageReservationState =
+  | "reserved"
+  | "committed"
+  | "released"
+  | "uncertain";
+
+/* ----- provider event receipts ------------------------------------------ */
+
+export const vEmailEventHandlingState = v.union(
+  v.literal("pending"),
+  v.literal("handled"),
+  v.literal("failed"),
+);
+
+export type EmailEventHandlingState = "pending" | "handled" | "failed";
+
+/**
+ * Application handling key for inbound messages
+ * (`incoming:<inbox>:<message>`) — a second provider event ID for the same
+ * message can never start a second reply mission (§4.3 note). Outbound
+ * delivery events use `outbound:<messageRef>:<eventType>` instead.
+ */
+export function inboundApplicationKey(inboxRef: string, messageRef: string) {
+  return `incoming:${inboxRef}:${messageRef}`;
+}
+
+export function outboundApplicationKey(
+  messageRef: string,
+  eventType: string,
+) {
+  return `outbound:${messageRef}:${eventType}`;
+}
+
+/* ----- send window / local-day helpers (IANA timezone) ------------------ */
+
+/**
+ * Local wall-clock parts of `atMs` in `timezone`, read through `Intl`.
+ * `weekday` is the civil weekday (0 = Sunday … 6 = Saturday); `minuteOfDay`
+ * is minutes after local midnight.
+ */
+export function localDayParts(
+  atMs: number,
+  timezone: string,
+): {
+  year: number;
+  month: number;
+  day: number;
+  weekday: number;
+  minuteOfDay: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    weekday: "short",
+  }).formatToParts(new Date(atMs));
+  const read = (type: string): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const weekday = (
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+  ).indexOf(read("weekday") as "Sun");
+  const hour = Number(read("hour"));
+  const minute = Number(read("minute"));
+  const result = {
+    year: Number(read("year")),
+    month: Number(read("month")),
+    day: Number(read("day")),
+    weekday,
+    minuteOfDay: hour * 60 + minute,
+  };
+  if (
+    weekday < 0 ||
+    !Number.isFinite(result.year) ||
+    !Number.isFinite(result.month) ||
+    !Number.isFinite(result.day) ||
+    !Number.isFinite(result.minuteOfDay)
+  ) {
+    throw invalid(`timezone ${timezone} produced unreadable local time`);
+  }
+  return result;
+}
+
+/** `YYYY-MM-DD` local date of `atMs` in `timezone` — the sends period key. */
+export function localDayKey(atMs: number, timezone: string): string {
+  const parts = localDayParts(atMs, timezone);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+}
+
+/**
+ * Best-effort UTC instant for a civil local date + minute-of-day in
+ * `timezone`, without a timezone database library: guess the civil time as
+ * UTC, measure the zone's offset at the guess and correct. Converges in two
+ * or three iterations; across a DST "gap" (a local time that never occurs)
+ * it lands on a boundary instant — acceptable for a wait-until hint because
+ * the send window is re-validated before dispatch.
+ */
+export function localCivilToUtc(
+  year: number,
+  month: number,
+  day: number,
+  minuteOfDay: number,
+  timezone: string,
+): number {
+  const desired =
+    Date.UTC(year, month - 1, day) + minuteOfDay * 60_000;
+  let guess = desired;
+  for (let i = 0; i < 4; i++) {
+    const actual = localDayParts(guess, timezone);
+    const actualMs =
+      Date.UTC(actual.year, actual.month - 1, actual.day) +
+      actual.minuteOfDay * 60_000;
+    const diff = desired - actualMs;
+    if (diff === 0) {
+      break;
+    }
+    guess += diff;
+  }
+  return guess;
+}
+
+export type SendWindowStatus =
+  | { permitted: true; localDayKey: string }
+  | { permitted: false; localDayKey: string; nextPermittedAt: number };
+
+/**
+ * Evaluate the workspace's IANA send window at `atMs`. When outside the
+ * window, returns the next UTC instant the window opens (§8.2 — the caller
+ * waits durably, then re-runs the whole preflight).
+ */
+export function sendWindowStatus(
+  workspace: {
+    timezone: string;
+    sendWindow: { weekdays: number[]; startMinute: number; endMinute: number };
+  },
+  atMs: number,
+): SendWindowStatus {
+  const { timezone, sendWindow } = workspace;
+  const todayKey = localDayKey(atMs, timezone);
+  const now = localDayParts(atMs, timezone);
+  const withinToday =
+    sendWindow.weekdays.includes(now.weekday) &&
+    now.minuteOfDay >= sendWindow.startMinute &&
+    now.minuteOfDay < sendWindow.endMinute;
+  if (withinToday) {
+    return { permitted: true, localDayKey: todayKey };
+  }
+  // Scan civil days forward from "today" in the workspace timezone. Weekday
+  // is a property of the civil date, so it is timezone-independent.
+  for (let offset = 0; offset <= 8; offset++) {
+    const civil = new Date(
+      Date.UTC(now.year, now.month - 1, now.day + offset),
+    );
+    const year = civil.getUTCFullYear();
+    const month = civil.getUTCMonth() + 1;
+    const day = civil.getUTCDate();
+    const weekday = civil.getUTCDay();
+    if (!sendWindow.weekdays.includes(weekday)) {
+      continue;
+    }
+    const startUtc = localCivilToUtc(
+      year,
+      month,
+      day,
+      sendWindow.startMinute,
+      timezone,
+    );
+    const endUtc = localCivilToUtc(
+      year,
+      month,
+      day,
+      sendWindow.endMinute,
+      timezone,
+    );
+    if (offset === 0 && atMs >= endUtc) {
+      continue; // today's window already closed
+    }
+    if (atMs < startUtc) {
+      return {
+        permitted: false,
+        localDayKey: todayKey,
+        nextPermittedAt: startUtc,
+      };
+    }
+    // offset === 0 && within was handled above; offset > 0 always opens in
+    // the future.
+    if (offset > 0) {
+      return {
+        permitted: false,
+        localDayKey: todayKey,
+        nextPermittedAt: startUtc,
+      };
+    }
+  }
+  // weekdays is validated non-empty (1–7 entries), so a permitted day always
+  // exists within eight days; reaching this means the window opens on a
+  // further day — report the same instant bounded at +8 days for safety.
+  const civil = new Date(Date.UTC(now.year, now.month - 1, now.day + 8));
+  return {
+    permitted: false,
+    localDayKey: todayKey,
+    nextPermittedAt: localCivilToUtc(
+      civil.getUTCFullYear(),
+      civil.getUTCMonth() + 1,
+      civil.getUTCDate(),
+      sendWindow.startMinute,
+      timezone,
+    ),
+  };
+}
+
+/* ----- delivery-uncertain replacement answer (§8.7) --------------------- */
+
+/**
+ * Field keys a resolved `delivery_uncertain` decision's `answer.fields` must
+ * carry to authorize ONE replacement attempt covering a still-`uncertain`
+ * send. `body` holds the human-readable reason; `resolvedBy`/`resolvedAt` on
+ * the decision supply actor/time.
+ */
+export const REPLACEMENT_ANSWER_FIELDS = {
+  unresolvedAttemptId: "unresolvedAttemptId",
+  replacementDraftId: "replacementDraftId",
+  replacementPayloadHash: "replacementPayloadHash",
+  contextVersion: "contextVersion",
+  acknowledgement: "acknowledgement",
+  reason: "reason",
+} as const;
+
+/** The only acknowledgement string that satisfies §8.7. */
+export const REPLACEMENT_ACKNOWLEDGEMENT = "duplicate_delivery_accepted";
+
+export type ReplacementAnswer = {
+  unresolvedAttemptId: string;
+  replacementDraftId: string;
+  replacementPayloadHash: string;
+  contextVersion: number;
+  reason: string;
+};
+
+/**
+ * Extract and validate the §8.7 replacement binding from a resolved
+ * `delivery_uncertain` decision's answer. Throws `INVALID` naming the exact
+ * missing/wrong field — a generic or stale approval can never stand in for
+ * this record.
+ */
+export function readReplacementAnswer(
+  answer: DecisionAnswer | undefined,
+): ReplacementAnswer {
+  const fields = answer?.fields;
+  if (fields === undefined) {
+    throw invalid(
+      "replacement decision answer must carry fields binding the uncertain attempt and the replacement draft",
+    );
+  }
+  const F = REPLACEMENT_ANSWER_FIELDS;
+  const unresolvedAttemptId = boundedString(
+    fields[F.unresolvedAttemptId] ?? "",
+    `answer.fields.${F.unresolvedAttemptId}`,
+    { min: 1, max: 100 },
+  );
+  const replacementDraftId = boundedString(
+    fields[F.replacementDraftId] ?? "",
+    `answer.fields.${F.replacementDraftId}`,
+    { min: 1, max: 100 },
+  );
+  const replacementPayloadHash = boundedString(
+    fields[F.replacementPayloadHash] ?? "",
+    `answer.fields.${F.replacementPayloadHash}`,
+    { min: 1, max: 128 },
+  );
+  const contextVersionRaw = fields[F.contextVersion] ?? "";
+  const contextVersion = Number(contextVersionRaw);
+  if (!Number.isInteger(contextVersion) || contextVersion < 0) {
+    throw invalid(
+      `answer.fields.${F.contextVersion} must be the recorded context version`,
+    );
+  }
+  const acknowledgement = fields[F.acknowledgement] ?? "";
+  if (acknowledgement !== REPLACEMENT_ACKNOWLEDGEMENT) {
+    throw invalid(
+      `answer.fields.${F.acknowledgement} must be "${REPLACEMENT_ACKNOWLEDGEMENT}" — the reviewer must acknowledge possible duplicate delivery`,
+    );
+  }
+  const reason = boundedString(fields[F.reason] ?? "", `answer.fields.${F.reason}`, {
+    min: 1,
+    max: 500,
+  });
+  return {
+    unresolvedAttemptId,
+    replacementDraftId,
+    replacementPayloadHash,
+    contextVersion,
+    reason,
+  };
+}
