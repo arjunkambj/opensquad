@@ -100,7 +100,7 @@
       "id": "P03",
       "title": "ASCII sandbox and Codex auth proof",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P03",
       "branch": "opensquad/P03",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P03",
@@ -121,9 +121,9 @@
         "plan/evidence/P03.md"
       ],
       "evidence": [
-        "plan/evidence/P03.md: integrated at ad05ffc; worker/ spike merged (ASCII lifecycle adapter, Codex app-server stdio client, generated protocol types from codex-cli 0.154.0, systemd unit, RUNTIME.md).",
-        "Proven locally: stdio initialize/initialized handshake, account/read logged-in and isolated logged-out states, device-code login start/cancel surface, rateLimits/read both ways, presence-only credential checks, adapter/SDK verification incl. deleteBox X-Ascii-Confirm-Delete delta. No model turn used builder credentials.",
-        "Blocked for live gate: all in-Box probes (create/idempotent replay, owner device-code login, bounded turn, pause/resume, second-workspace isolation) need ASCII_API_KEY; see blocker field."
+        "plan/evidence/P03.md: integrated at 73ff205; worker package with typed ASCII lifecycle adapter (persisted idempotency, fingerprint-guarded reuse, uncertain-outcome classification, X-Ascii-Confirm-Delete delta encoded), Codex App Server stdio client + 711 generated protocol files from codex-cli 0.154.0, runloop/bridge seams, systemd unit, RUNTIME.md.",
+        "LIVE GATE PASSED on real ASCII Boxes: idempotent create+replay (bx_f5tr3und), readiness+heartbeat, presence-clean at birth, in-Box Node 24.21.0 + codex 0.154.0 bootstrap, managed device-code login completed by owner inside Box (bx_a879jdvq) verified chatgpt via account/read, bounded structured turn completed (gpt-6-astra, {\"ok\":true}), pause→archived→resume with marker byte-identical, managed login+thread survived resume with second turn on resumed thread, second-Box isolation verified, all boxes deleted (0 remaining).",
+        "Recorded deltas/notes: ChatGPT device-code authorization must be enabled in account security settings (owner enabled it); in-Box generate-ts output differs from committed generated files (P07 to pin generation version); Codex warns Linux sandbox needs bubblewrap user namespaces; idle/running states reflect built-in harness only — heartbeat files are the liveness signal; lease-expiry→Needs-attention and bridge routing remain P07/P14 scope."
       ]
     },
     {
