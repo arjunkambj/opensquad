@@ -4,6 +4,8 @@
 // objects are translated into them at the adapter boundary. Never persist
 // secret-bearing provider fields (desktop/VNC URLs can contain access tokens).
 
+import { createHash } from "node:crypto";
+
 /** Lifecycle operations this adapter performs, mirroring
  * `runtimeLifecycleOperations.operation` in plan/architecture.md §4.4. */
 export type BoxOperationKind =
@@ -74,7 +76,7 @@ export type BoxOperationRecord = {
   readonly operation: BoxOperationKind;
   readonly boxId?: string;
   readonly idempotencyKey?: string;
-  /** Canonical JSON of the request config used for fingerprint comparisons. */
+  /** SHA-256 of canonical request JSON; never persist provisioning secrets. */
   readonly requestFingerprint: string;
   state: BoxOperationState;
   attempts: number;
@@ -155,7 +157,7 @@ export function sanitizeBox(input: unknown): BoxFacts {
 }
 
 /** Deterministic JSON for fingerprinting request configs. */
-export function stableStringify(value: unknown): string {
+function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableStringify).join(",")}]`;
   }
@@ -167,4 +169,9 @@ export function stableStringify(value: unknown): string {
     return `{${parts.join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
+}
+
+/** Compare requests without storing worker tokens, scripts or command bodies. */
+export function requestFingerprint(value: unknown): string {
+  return createHash("sha256").update(stableStringify(value)).digest("hex");
 }

@@ -10,7 +10,7 @@ import type { AsciiCallError, AsciiBoxClient } from "./client.js";
 import {
   classifyBoxState,
   sanitizeBox,
-  stableStringify,
+  requestFingerprint,
   type BoxCommandSpec,
   type BoxCreateConfig,
   type BoxFacts,
@@ -116,7 +116,7 @@ export class BoxLifecycleAdapter {
   async #begin(
     operation: BoxOperationKind,
     operationKey: string,
-    requestFingerprint: string,
+    fingerprint: string,
     boxId?: string,
     idempotencyKey?: string,
   ): Promise<
@@ -126,19 +126,32 @@ export class BoxLifecycleAdapter {
   > {
     const existing = await this.#store.get(operationKey);
     if (existing !== undefined) {
-      if (existing.requestFingerprint !== requestFingerprint) {
+      let storedFingerprint = existing.requestFingerprint;
+      if (storedFingerprint.startsWith("{")) {
+        // Upgrade old diagnostic receipts without retaining their plaintext
+        // request bodies or losing the provider operation used for recovery.
+        try {
+          const legacyRequest: unknown = JSON.parse(storedFingerprint);
+          storedFingerprint = requestFingerprint(legacyRequest);
+        } catch {
+          return { conflict: "stored operation fingerprint is malformed" };
+        }
+      }
+      if (storedFingerprint !== fingerprint) {
         // Same key, different body: exactly what the provider reports as
         // idempotency_key_reused on create; refuse before calling out.
         return {
           conflict: `operationKey ${operationKey} was already used with a different request`,
         };
       }
-      return { fresh: false, record: existing };
+      const record = { ...existing, requestFingerprint: fingerprint };
+      if (existing.requestFingerprint !== fingerprint) await this.#store.save(record);
+      return { fresh: false, record };
     }
     const record: BoxOperationRecord = {
       operationKey,
       operation,
-      requestFingerprint,
+      requestFingerprint: fingerprint,
       state: "pending",
       attempts: 0,
       createdAt: now(),
@@ -187,7 +200,7 @@ export class BoxLifecycleAdapter {
     readonly idempotencyKey: string;
     readonly config: BoxCreateConfig;
   }): Promise<AdapterOutcome<BoxFacts>> {
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "create",
       idempotencyKey: input.idempotencyKey,
       config: input.config,
@@ -251,7 +264,7 @@ export class BoxLifecycleAdapter {
     readonly operationKey: string;
     readonly boxId: string;
   }): Promise<AdapterOutcome<BoxFacts>> {
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "inspect",
       boxId: input.boxId,
     });
@@ -382,7 +395,7 @@ export class BoxLifecycleAdapter {
     }>
   > {
     const spec: BoxCommandSpec = { ...input.spec, detached: true };
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "bootstrap",
       boxId: input.boxId,
       spec,
@@ -401,40 +414,57 @@ export class BoxLifecycleAdapter {
         uncertain: false,
       };
     }
-    const started = await this.#client.runCommand(input.boxId, spec);
-    if (!started.ok) {
-      const uncertain =
-        started.error.kind === "transport" ||
-        (started.error.status !== undefined && started.error.status >= 500);
-      const record = await this.#finish(
-        begun.record,
-        uncertain ? "uncertain" : "failed",
-        {
-          lastError: `${started.error.code ?? started.error.kind}: ${started.error.message}`,
-        },
-      );
-      return { ok: false, record, error: started.error, uncertain };
-    }
-    const startedValue = started.value;
-    if (
-      !isRecord(startedValue) ||
-      startedValue["type"] !== "command.started" ||
-      typeof startedValue["processId"] !== "number"
-    ) {
-      const record = await this.#finish(begun.record, "uncertain", {
-        lastError: "bootstrap did not return a detached processId",
+    let processId: number;
+    let record = begun.record;
+    if (!begun.fresh) {
+      const savedProcess = /^process:(\d+)$/.exec(record.providerOperationRef ?? "");
+      if (savedProcess === null || !Number.isSafeInteger(Number(savedProcess[1]))) {
+        // A persisted pending/uncertain operation may already have dispatched
+        // its command. Without its receipt, a repeat requires reconciliation.
+        return {
+          ok: false,
+          record,
+          error: { kind: "validation", message: "bootstrap already attempted; reconcile before retrying" },
+          uncertain: record.state !== "failed",
+        };
+      }
+      processId = Number(savedProcess[1]);
+    } else {
+      const started = await this.#client.runCommand(input.boxId, spec);
+      if (!started.ok) {
+        const uncertain =
+          started.error.kind === "transport" ||
+          (started.error.status !== undefined && started.error.status >= 500);
+        const record = await this.#finish(
+          begun.record,
+          uncertain ? "uncertain" : "failed",
+          {
+            lastError: `${started.error.code ?? started.error.kind}: ${started.error.message}`,
+          },
+        );
+        return { ok: false, record, error: started.error, uncertain };
+      }
+      const startedValue = started.value;
+      if (
+        !isRecord(startedValue) ||
+        startedValue["type"] !== "command.started" ||
+        typeof startedValue["processId"] !== "number"
+      ) {
+        const record = await this.#finish(begun.record, "uncertain", {
+          lastError: "bootstrap did not return a detached processId",
+        });
+        return {
+          ok: false,
+          record,
+          error: { kind: "validation", message: "unexpected command response shape" },
+          uncertain: true,
+        };
+      }
+      processId = startedValue["processId"];
+      record = await this.#finish(begun.record, "accepted", {
+        providerOperationRef: `process:${processId}`,
       });
-      return {
-        ok: false,
-        record,
-        error: { kind: "validation", message: "unexpected command response shape" },
-        uncertain: true,
-      };
     }
-    const processId = startedValue["processId"];
-    const record = await this.#finish(begun.record, "accepted", {
-      providerOperationRef: `process:${processId}`,
-    });
 
     // Poll command status until terminal or deadline.
     const sleep = input.sleep ?? defaultSleep;
@@ -516,7 +546,7 @@ export class BoxLifecycleAdapter {
     readonly ttlSeconds?: number;
     readonly wait?: PollOptions;
   }): Promise<AdapterOutcome<BoxFacts>> {
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "resume",
       boxId: input.boxId,
       ttlSeconds: input.ttlSeconds ?? null,
@@ -598,7 +628,7 @@ export class BoxLifecycleAdapter {
     readonly boxId: string;
     readonly ttlSeconds: number;
   }): Promise<AdapterOutcome<BoxFacts>> {
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "extend_ttl",
       boxId: input.boxId,
       ttlSeconds: input.ttlSeconds,
@@ -659,7 +689,7 @@ export class BoxLifecycleAdapter {
     readonly sleep?: PollOptions["sleep"];
     readonly signal?: AbortSignal;
   }): Promise<AdapterOutcome<BoxFacts>> {
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "stop",
       boxId: input.boxId,
       force: input.force ?? false,
@@ -767,7 +797,7 @@ export class BoxLifecycleAdapter {
     readonly sleep?: PollOptions["sleep"];
     readonly signal?: AbortSignal;
   }): Promise<AdapterOutcome<{ readonly deleted: true; readonly boxId: string }>> {
-    const fingerprint = stableStringify({
+    const fingerprint = requestFingerprint({
       operation: "delete",
       boxId: input.boxId,
     });
