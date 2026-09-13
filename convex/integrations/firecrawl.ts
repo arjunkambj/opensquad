@@ -158,7 +158,11 @@ function assertPublicHttpUrl(raw: string): URL {
       v6 === "::" ||
       v6.startsWith("fc") ||
       v6.startsWith("fd") ||
-      v6.startsWith("fe80") ||
+      // fe80::/10 link-local + fec0::/10 site-local + the rest of the
+      // reserved fe00::/8 space — all non-public for a fetch policy.
+      v6.startsWith("fe") ||
+      // NAT64 well-known prefix can embed a private IPv4 target.
+      v6.startsWith("64:ff9b") ||
       v6.startsWith("::ffff:")
     ) {
       throw new Error(`private/reserved IPv6 not allowed: ${host}`);
