@@ -108,17 +108,19 @@ export function normalizeHttpUrl(value: string, field: string): string {
 
 /**
  * Validate an IANA timezone name using the runtime's Intl database.
- * Returns the input unchanged; throws `INVALID` for unknown zones.
+ * Returns the canonical IANA name; throws `INVALID` for unknown zones.
  */
 export function assertIanaTimezone(value: string, field = "timezone"): string {
   const trimmed = boundedString(value, field, { min: 1, max: 100 });
   try {
-    // Throws RangeError for names outside the IANA database.
-    new Intl.DateTimeFormat("en-US", { timeZone: trimmed });
+    // Throws RangeError for names outside the IANA database. The resolved
+    // name is canonical ("america/new_york" → "America/New_York") so stored
+    // values compare equal across case variants.
+    return new Intl.DateTimeFormat("en-US", { timeZone: trimmed })
+      .resolvedOptions().timeZone;
   } catch {
     throw invalid(`${field} must be a valid IANA timezone`);
   }
-  return trimmed;
 }
 
 /* ------------------------------------------------------------------ */

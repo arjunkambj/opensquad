@@ -400,6 +400,34 @@ export const setSendingPolicy = mutation({
         `policyVersion is ${workspace.policyVersion}, not ${args.expectedPolicyVersion}`,
       );
     }
+    const dailySendLimit =
+      args.dailySendLimit !== undefined
+        ? boundedInt(args.dailySendLimit, "dailySendLimit", {
+            min: 1,
+            max: 1000,
+          })
+        : undefined;
+    if (args.sendWindow !== undefined) {
+      assertSendWindow(args.sendWindow);
+    }
+    // Skip the write when nothing changes — a policyVersion bump invalidates
+    // every pending approved draft, so a re-save must not produce one.
+    const windowChanged =
+      args.sendWindow !== undefined &&
+      (args.sendWindow.startMinute !== workspace.sendWindow.startMinute ||
+        args.sendWindow.endMinute !== workspace.sendWindow.endMinute ||
+        args.sendWindow.weekdays.length !==
+          workspace.sendWindow.weekdays.length ||
+        args.sendWindow.weekdays.some(
+          (day, i) => day !== workspace.sendWindow.weekdays[i],
+        ));
+    if (
+      (dailySendLimit === undefined ||
+        dailySendLimit === workspace.dailySendLimit) &&
+      !windowChanged
+    ) {
+      return workspace;
+    }
     const patch: {
       dailySendLimit?: number;
       sendWindow?: {
@@ -410,14 +438,10 @@ export const setSendingPolicy = mutation({
       policyVersion: number;
       updatedAt: number;
     } = { policyVersion: workspace.policyVersion + 1, updatedAt: Date.now() };
-    if (args.dailySendLimit !== undefined) {
-      patch.dailySendLimit = boundedInt(args.dailySendLimit, "dailySendLimit", {
-        min: 1,
-        max: 1000,
-      });
+    if (dailySendLimit !== undefined) {
+      patch.dailySendLimit = dailySendLimit;
     }
     if (args.sendWindow !== undefined) {
-      assertSendWindow(args.sendWindow);
       patch.sendWindow = args.sendWindow;
     }
     await ctx.db.patch("workspaces", workspace._id, patch);
