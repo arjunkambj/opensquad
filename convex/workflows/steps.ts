@@ -571,6 +571,9 @@ export async function completeMissionTx(
       ? "Mission completed"
       : `Mission completed — ${branches.length} prospect branches: ` +
         [...counts.entries()].map(([k, n]) => `${n} ${k}`).join(", ");
+  // A completed mission must not leak open asks into the operator queue —
+  // retire them before the terminal transition (same as cancel/fail paths).
+  await retireAllOpenDecisions(ctx, fresh._id, "superseded", "workflow");
   await transitionMission(ctx, fresh, "completed", {
     actor: "workflow",
     kind: "mission_completed",
@@ -674,6 +677,18 @@ export async function failMission(
   });
   await retireAllOpenDecisions(ctx, mission._id, "cancelled", "workflow");
   await cancelChildWorkflows(ctx, mission._id);
+  // A fail call that arrives while the owning workflow is still parked (e.g.
+  // on a resume event) must not leak it — same guard as cancelMissionWork.
+  if (mission.workflowId !== undefined) {
+    const status = await getStatus(
+      ctx,
+      components.workflow,
+      mission.workflowId as WorkflowId,
+    );
+    if (status.type === "inProgress") {
+      await cancel(ctx, components.workflow, mission.workflowId as WorkflowId);
+    }
+  }
   await sweepRuns(ctx, mission._id, "failed");
   const fresh = await getMissionOrThrow(ctx, mission._id);
   if (

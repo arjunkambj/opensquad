@@ -32,6 +32,7 @@ import {
 import type { AuthCtx } from "./lib/auth";
 import {
   assertDecisionAnswer,
+  assertMissionTransition,
   boardColumnForMission,
   boundedLimit,
   boundedString,
@@ -121,13 +122,29 @@ async function closeAskOnMission(
   if (state === "waiting_for_user" && requiredDecisionCount === 0) {
     state = "active";
   }
+  if (state !== mission.state) {
+    // Route through the declared transition table so an un-park is both
+    // legal and visible in the activity feed (same as transitionMission).
+    assertMissionTransition(mission.state, state);
+  }
+  const version = mission.version + 1;
   await ctx.db.patch("missions", mission._id, {
     state,
     boardColumn: boardColumnForMission(state, requiredDecisionCount),
     requiredDecisionCount,
-    version: mission.version + 1,
+    version,
     updatedAt: Date.now(),
   });
+  if (state !== mission.state) {
+    await recordActivityEvent(ctx, {
+      workspaceId: mission.workspaceId,
+      missionId: mission._id,
+      kind: "mission_state_changed",
+      summary: "Mission resumed — required decisions resolved",
+      actor: "workflow",
+      dedupeKey: `mission:${mission._id}:v${version}:${state}`,
+    });
+  }
 }
 
 /**
@@ -161,7 +178,7 @@ async function deliverDecisionContinuation(
  * re-check state instead of hanging on a stale ask (§6.2).
  */
 async function retireDecision(
-  ctx: MutationCtx,
+  ctx: MutationCtx | WriteCtx,
   decision: Doc<"decisions">,
   to: "superseded" | "cancelled",
   actor: string,
@@ -190,7 +207,12 @@ async function retireDecision(
     dedupeKey: `decision:${decision._id}:${to}`,
   });
   // Wake the waiting workflow so a parked await re-checks mission state.
-  // A dead workflow never consumes the event — harmless either way.
+  // A step ctx (WriteCtx) has no runMutation and can't send events — but a
+  // step that retires decisions IS the workflow itself finishing, and its
+  // sequential steps can no longer be parked on these events.
+  if (!("runMutation" in ctx)) {
+    return;
+  }
   try {
     await sendEvent(ctx, components.workflow, {
       id: decision.continuationEventId as EventId,
@@ -384,10 +406,11 @@ export const supersedeDecision = internalMutation({
 
 /**
  * Retire every open decision on a mission — shared by the mission
- * cancel/fail paths and callable directly inside a larger transaction.
+ * cancel/fail/complete paths and callable directly inside a larger
+ * transaction (including a workflow step's WriteCtx).
  */
 export async function retireAllOpenDecisions(
-  ctx: MutationCtx,
+  ctx: MutationCtx | WriteCtx,
   missionId: Id<"missions">,
   to: "superseded" | "cancelled",
   actor: string,

@@ -165,6 +165,8 @@ export const create = mutation({
     }
 
     // Semantic duplicate: one non-terminal sales mission per campaign.
+    // .collect() — the eq-range is bounded by visible missions on ONE
+    // campaign, and a capped scan could miss a live sibling past the cap.
     const siblings = await ctx.db
       .query("missions")
       .withIndex(
@@ -175,7 +177,7 @@ export const create = mutation({
             .eq("campaignId", args.campaignId)
             .eq("visibility", "visible"),
       )
-      .take(64);
+      .collect();
     if (
       siblings.some(
         (m) =>
@@ -414,10 +416,12 @@ export const pause = mutation({
       args.workspaceId,
       args.missionId,
     );
-    assertExpectedVersion(mission, args.expectedVersion);
+    // Idempotent retry: a pause that already committed returns the doc —
+    // checking the version first would CONFLICT a retried request.
     if (mission.state === "paused") {
       return mission;
     }
+    assertExpectedVersion(mission, args.expectedVersion);
     if (
       !(
         mission.state === "queued" ||
@@ -462,6 +466,14 @@ export const resume = mutation({
       args.workspaceId,
       args.missionId,
     );
+    // Idempotent retry: a resume that already committed lands on `active`
+    // or `waiting_for_user` — return the doc instead of CONFLICT.
+    if (
+      mission.state === "active" ||
+      mission.state === "waiting_for_user"
+    ) {
+      return mission;
+    }
     assertExpectedVersion(mission, args.expectedVersion);
     if (mission.state !== "paused") {
       throw domainError(
@@ -534,10 +546,10 @@ export const cancel = mutation({
       args.workspaceId,
       args.missionId,
     );
-    assertExpectedVersion(mission, args.expectedVersion);
     if (mission.state === "cancelled") {
       return mission;
     }
+    assertExpectedVersion(mission, args.expectedVersion);
     if (mission.state === "completed") {
       throw domainError(
         "CONFLICT",
@@ -570,10 +582,10 @@ export const archive = mutation({
       args.workspaceId,
       args.missionId,
     );
-    assertExpectedVersion(mission, args.expectedVersion);
     if (mission.visibility === "archived") {
       return mission;
     }
+    assertExpectedVersion(mission, args.expectedVersion);
     if (
       !(
         mission.state === "completed" ||
@@ -625,10 +637,10 @@ export const restore = mutation({
       args.workspaceId,
       args.missionId,
     );
-    assertExpectedVersion(mission, args.expectedVersion);
     if (mission.visibility === "visible") {
       return mission;
     }
+    assertExpectedVersion(mission, args.expectedVersion);
     await ctx.db.patch("missions", mission._id, {
       visibility: "visible",
       version: mission.version + 1,
