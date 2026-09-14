@@ -703,6 +703,15 @@ export const sendAttemptFields = {
    *  the single recorded replacement for a prior uncertain attempt (§8.7). */
   replacementDecisionId: v.optional(v.id("decisions")),
   requestStartedAt: v.optional(v.number()),
+  /** When a `reserved` (parked) attempt may dispatch — recorded so the row
+   *  self-describes its wake condition and the stale-attempt sweep can
+   *  re-drive one whose scheduled wake was lost. */
+  nextPermittedAt: v.optional(v.number()),
+  /** The replacement attempt that covers THIS uncertain attempt — set when
+   *  a `delivery_uncertain` decision authorized the replacement (§8.7).
+   *  Coverage is transitive down the chain, so a re-uncertain replacement
+   *  only needs a fresh decision for the latest open uncertainty. */
+  coveredByAttemptId: v.optional(v.id("sendAttempts")),
   error: v.optional(
     v.object({
       message: v.string(),
@@ -979,12 +988,19 @@ export default defineSchema({
     // The §8.3 across-revisions guard: queries reserved|requesting|uncertain
     // per conversation inside the reservation mutation.
     .index("by_conversationId_and_state", ["conversationId", "state"])
+    // Chronological audit listing — the unfiltered conversation view is
+    // newest-first, not state-bucketed.
+    .index("by_conversationId_and_createdAt", ["conversationId", "createdAt"])
     .index("by_replacementDecisionId", ["replacementDecisionId"])
     .index("by_workspaceId_and_state_and_updatedAt", [
       "workspaceId",
       "state",
       "updatedAt",
     ])
+    // Workspace-agnostic sweeps: stale `requesting` rows and parked
+    // `reserved` rows whose recorded wake time has passed.
+    .index("by_state_and_updatedAt", ["state", "updatedAt"])
+    .index("by_state_and_nextPermittedAt", ["state", "nextPermittedAt"])
     // Stable logical-send key; uniqueness enforced transactionally.
     .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"])
     .index("by_providerMessageRef", ["providerMessageRef"]),

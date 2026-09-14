@@ -58,6 +58,11 @@ const vSendWorkflowResult = v.union(
     sendAttemptId: v.id("sendAttempts"),
     state: v.string(),
   }),
+  v.object({
+    outcome: v.literal("in_flight"),
+    sendAttemptId: v.id("sendAttempts"),
+    state: v.string(),
+  }),
 );
 
 /**

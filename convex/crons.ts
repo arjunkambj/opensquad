@@ -15,4 +15,14 @@ crons.interval(
   {},
 );
 
+// Belt for the send boundary: per-attempt sweeps and window wakes are
+// scheduled transactionally at commit time, and this sweep re-drives any
+// `requesting`/`reserved` row whose recovery path still got lost.
+crons.interval(
+  "send-attempt-sweep",
+  { minutes: 5 },
+  internal.sending.sweepStaleAttemptsGlobal,
+  {},
+);
+
 export default crons;

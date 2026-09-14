@@ -41,7 +41,7 @@ import {
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Infer } from "convex/values";
 import {
   requireWorkspaceEditor,
@@ -222,7 +222,10 @@ async function coveringDecisionValid(
   ctx: AuthCtx,
   args: {
     decisionId: Id<"decisions">;
-    uncertainAttemptId: Id<"sendAttempts">;
+    /** The specific uncertain attempt the binding must name — `undefined`
+     *  when validating that the decision authorizes THIS draft at all (the
+     *  covered-attempt name is then not re-checked). */
+    uncertainAttemptId?: Id<"sendAttempts">;
     draft: Doc<"drafts">;
     conversation: Doc<"conversations">;
     selfAttemptId?: Id<"sendAttempts">;
@@ -244,7 +247,8 @@ async function coveringDecisionValid(
     return false;
   }
   if (
-    binding.unresolvedAttemptId !== String(args.uncertainAttemptId) ||
+    (args.uncertainAttemptId !== undefined &&
+      binding.unresolvedAttemptId !== String(args.uncertainAttemptId)) ||
     binding.replacementDraftId !== String(args.draft._id) ||
     binding.replacementPayloadHash !== args.draft.payloadHash ||
     binding.contextVersion !== args.conversation.contextVersion
@@ -409,6 +413,25 @@ async function evaluateSendGates(
   }
 
   // --- across-revisions unresolved-attempt guard -------------------------
+  // A carried replacement authorization must bind THIS draft even when no
+  // uncovered attempt remains (the chain may already be fully covered) —
+  // otherwise an unrelated decision id could decorate a send it never
+  // authorized.
+  if (args.replacementDecisionId !== undefined) {
+    const authorized = await coveringDecisionValid(ctx, {
+      decisionId: args.replacementDecisionId,
+      uncertainAttemptId: undefined,
+      draft,
+      conversation,
+      selfAttemptId: args.excludeAttemptId,
+    });
+    if (!authorized) {
+      return block(
+        "missing_replacement_authorization",
+        "the replacement decision does not authorize this draft revision",
+      );
+    }
+  }
   const unresolved: Doc<"sendAttempts">[] = [];
   for (const state of UNRESOLVED_ATTEMPT_STATES) {
     const rows = await ctx.db
@@ -424,6 +447,14 @@ async function evaluateSendGates(
       continue;
     }
     if (other.state === "uncertain") {
+      // An attempt already covered by a recorded replacement carries
+      // `coveredByAttemptId` — its uncertainty was resolved when the human
+      // authorized the replacement, so coverage is transitive down the
+      // chain: only the LATEST still-uncovered uncertain attempt needs a
+      // fresh delivery_uncertain decision on this dispatch.
+      if (other.coveredByAttemptId !== undefined) {
+        continue;
+      }
       const covered =
         args.replacementDecisionId !== undefined &&
         (await coveringDecisionValid(ctx, {
@@ -589,6 +620,9 @@ async function insertReservedAttempt(
     approval: Doc<"approvals">;
     operationKey: string;
     replacementDecisionId?: Id<"decisions">;
+    /** Recorded wake time for a parked attempt — set by the wait branches
+     *  so the sweep can re-drive a lost schedule. */
+    nextPermittedAt?: number;
   },
 ): Promise<Id<"sendAttempts">> {
   const { draft, conversation, workspace } = args.context;
@@ -614,7 +648,36 @@ async function insertReservedAttempt(
     ...(args.replacementDecisionId !== undefined
       ? { replacementDecisionId: args.replacementDecisionId }
       : {}),
+    ...(args.nextPermittedAt !== undefined
+      ? { nextPermittedAt: args.nextPermittedAt }
+      : {}),
   });
+  if (args.replacementDecisionId !== undefined) {
+    // Chain link for §8.7 transitive coverage: the decision binds which
+    // uncertain attempt this replacement covers. The covered attempt keeps
+    // its honest `uncertain` state — the link only tells the
+    // across-revisions guard the uncertainty was resolved by replacement.
+    const covering = await ctx.db.get(
+      "decisions",
+      args.replacementDecisionId,
+    );
+    if (covering?.sendAttemptId !== undefined) {
+      const covered = await ctx.db.get(
+        "sendAttempts",
+        covering.sendAttemptId as Id<"sendAttempts">,
+      );
+      if (
+        covered !== null &&
+        covered.state === "uncertain" &&
+        covered.coveredByAttemptId === undefined
+      ) {
+        await ctx.db.patch("sendAttempts", covered._id, {
+          coveredByAttemptId: attemptId,
+          updatedAt: now,
+        });
+      }
+    }
+  }
   await recordActivityEvent(ctx, {
     workspaceId: workspace._id,
     missionId: args.context.mission._id,
@@ -765,7 +828,16 @@ export const reserveSendIntent = internalMutation({
         approval: gate.approval,
         operationKey,
         replacementDecisionId: args.replacementDecisionId,
+        nextPermittedAt: window.nextPermittedAt,
       });
+      // Scheduled INSIDE the committing mutation — the durable wake can
+      // never be lost between the `reserved` write and a caller-side
+      // schedule (the action may die in between).
+      await ctx.scheduler.runAfter(
+        Math.max(0, window.nextPermittedAt - now),
+        internal.sending.dispatchAttempt,
+        { sendAttemptId },
+      );
       return {
         action: "wait" as const,
         sendAttemptId,
@@ -777,16 +849,23 @@ export const reserveSendIntent = internalMutation({
     // --- daily allowance -------------------------------------------------------
     const capacity = await sendCapacity(ctx, workspace, now);
     if (capacity.remaining < 1) {
+      const nextPermittedAt = nextWindowStart(workspace, now);
       const sendAttemptId = await insertReservedAttempt(ctx, {
         context,
         approval: gate.approval,
         operationKey,
         replacementDecisionId: args.replacementDecisionId,
+        nextPermittedAt,
       });
+      await ctx.scheduler.runAfter(
+        Math.max(0, nextPermittedAt - now),
+        internal.sending.dispatchAttempt,
+        { sendAttemptId },
+      );
       return {
         action: "wait" as const,
         sendAttemptId,
-        nextPermittedAt: nextWindowStart(workspace, now),
+        nextPermittedAt,
         reason: "send_limit_reached",
       };
     }
@@ -927,25 +1006,61 @@ export const beginDispatch = internalMutation({
     const now = Date.now();
     const window = sendWindowStatus(workspace, now);
     if (!window.permitted) {
+      await ctx.db.patch("sendAttempts", attempt._id, {
+        nextPermittedAt: window.nextPermittedAt,
+        updatedAt: now,
+      });
+      // Transactional wake — the parked attempt's re-drive cannot be lost.
+      await ctx.scheduler.runAfter(
+        Math.max(0, window.nextPermittedAt - now),
+        internal.sending.dispatchAttempt,
+        { sendAttemptId: attempt._id },
+      );
       return {
         action: "wait" as const,
         nextPermittedAt: window.nextPermittedAt,
         reason: "outside_window",
       };
     }
-    const reservation = await ctx.runMutation(
+    let reservation: Doc<"usageReservations"> | null = await ctx.runMutation(
       internal.usage.getByOperationKey,
       {
         workspaceId: workspace._id,
         operationKey: attempt.operationKey,
       },
     );
+    if (reservation !== null && reservation.state === "reserved") {
+      // A reservation taken on a previous local day must not fund today's
+      // send — release it and re-reserve under the current period so the
+      // daily cap is charged to the day the mail actually goes out.
+      const heldBucket = await ctx.db.get("usageBuckets", reservation.bucketId);
+      if (
+        heldBucket !== null &&
+        heldBucket.periodKey !== localDayKey(now, workspace.timezone)
+      ) {
+        await ctx.runMutation(internal.usage.release, {
+          workspaceId: workspace._id,
+          operationKey: attempt.operationKey,
+        });
+        reservation = null;
+      }
+    }
     if (reservation === null) {
       const capacity = await sendCapacity(ctx, workspace, now);
       if (capacity.remaining < 1) {
+        const nextPermittedAt = nextWindowStart(workspace, now);
+        await ctx.db.patch("sendAttempts", attempt._id, {
+          nextPermittedAt,
+          updatedAt: now,
+        });
+        await ctx.scheduler.runAfter(
+          Math.max(0, nextPermittedAt - now),
+          internal.sending.dispatchAttempt,
+          { sendAttemptId: attempt._id },
+        );
         return {
           action: "wait" as const,
-          nextPermittedAt: nextWindowStart(workspace, now),
+          nextPermittedAt,
           reason: "send_limit_reached",
         };
       }
@@ -959,12 +1074,19 @@ export const beginDispatch = internalMutation({
     }
 
     // Commit point — after this patch the request may be in flight and can
-    // no longer be retracted by local state.
+    // no longer be retracted by local state. The lost-acknowledgement sweep
+    // is scheduled in the SAME transaction: a `requesting` row always has a
+    // recovery path even if the calling action dies before returning.
     await ctx.db.patch("sendAttempts", attempt._id, {
       state: "requesting",
       requestStartedAt: now,
       updatedAt: now,
     });
+    await ctx.scheduler.runAfter(
+      REQUEST_STALE_SWEEP_MS,
+      internal.sending.sweepStaleRequesting,
+      { sendAttemptId: attempt._id },
+    );
     await recordActivityEvent(ctx, {
       workspaceId: workspace._id,
       missionId: mission._id,
@@ -1410,6 +1532,52 @@ export const sweepStaleAttempts = internalMutation({
   },
 });
 
+/**
+ * The cron belt (see `crons.ts`): workspace-agnostic sweep covering the two
+ * durable wait states. `requesting` rows past the stale margin get the
+ * lost-acknowledgement treatment; `reserved` rows whose recorded
+ * `nextPermittedAt` passed get a fresh `dispatchAttempt` schedule — covers
+ * a scheduled wake that never fired. Both bounds keep the scan small.
+ */
+export const sweepStaleAttemptsGlobal = internalMutation({
+  args: {},
+  returns: v.object({ swept: v.number(), redriven: v.number() }),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const staleRequesting = await ctx.db
+      .query("sendAttempts")
+      .withIndex("by_state_and_updatedAt", (q) =>
+        q
+          .eq("state", "requesting")
+          .lt("updatedAt", now - REQUEST_STALE_SWEEP_MS),
+      )
+      .take(64);
+    let swept = 0;
+    for (const attempt of staleRequesting) {
+      if (await markLostAcknowledgement(ctx, attempt)) {
+        swept += 1;
+      }
+    }
+    const overdue = await ctx.db
+      .query("sendAttempts")
+      .withIndex("by_state_and_nextPermittedAt", (q) =>
+        q.eq("state", "reserved").lte("nextPermittedAt", now),
+      )
+      .take(64);
+    let redriven = 0;
+    for (const attempt of overdue) {
+      // The wake is re-armed against the CURRENT time — the recorded
+      // instant already passed. dispatchAttempt re-runs every gate; a
+      // still-blocked attempt re-parks itself with a fresh schedule.
+      await ctx.scheduler.runAfter(0, internal.sending.dispatchAttempt, {
+        sendAttemptId: attempt._id,
+      });
+      redriven += 1;
+    }
+    return { swept, redriven };
+  },
+});
+
 /* ------------------------------------------------------------------ */
 /* Dispatch actions (single-flight, no retries)                          */
 /* ------------------------------------------------------------------ */
@@ -1451,6 +1619,14 @@ const vDispatchOutcome = v.union(
     sendAttemptId: v.id("sendAttempts"),
     state: v.string(),
   }),
+  v.object({
+    // A provider request for this draft is live — distinct from
+    // `already_resolved` so a journaled caller never records "resolved"
+    // for mail still in flight.
+    outcome: v.literal("in_flight"),
+    sendAttemptId: v.id("sendAttempts"),
+    state: v.string(),
+  }),
 );
 
 type DispatchOutcome = Infer<typeof vDispatchOutcome>;
@@ -1468,15 +1644,11 @@ async function executeAttemptDispatch(
     sendAttemptId,
   });
   if (begin.action === "wait") {
-    // Durable wait — re-enter through the scheduler at the computed instant;
-    // every gate re-runs before dispatch. Reported to callers (incl. the
-    // workflow boundary) as a `preflight_refused`/`outside_send_window` so a
+    // `beginDispatch` already parked the attempt with a recorded
+    // `nextPermittedAt` AND scheduled the re-drive transactionally — this
+    // action must not schedule again. Reported to callers (incl. the
+    // workflow boundary) as `preflight_refused`/`outside_send_window` so a
     // journaled caller may also sleep durably on the same instant.
-    await ctx.scheduler.runAfter(
-      Math.max(0, begin.nextPermittedAt - Date.now()),
-      internal.sending.dispatchAttempt,
-      { sendAttemptId },
-    );
     return {
       outcome: "preflight_refused",
       sendAttemptId,
@@ -1501,17 +1673,17 @@ async function executeAttemptDispatch(
     };
   }
 
-  // Lost-acknowledgement safety net — fires after the provider timeout would
-  // have elapsed; a recorded outcome makes it a no-op.
-  await ctx.scheduler.runAfter(
-    REQUEST_STALE_SWEEP_MS,
-    internal.sending.sweepStaleRequesting,
-    { sendAttemptId },
-  );
+  // The lost-acknowledgement sweep was scheduled inside `beginDispatch`'s
+  // commit transaction — a `requesting` row always has its recovery path.
 
-  // Exactly one provider request. The adapter never retries; a thrown error
-  // here is provably pre-request (the adapter classifies transport results
-  // itself) and lands as definitively_failed.
+  // Exactly one provider request. The adapter never retries; it classifies
+  // transport results itself, so a returned value is already an honest
+  // outcome. A THROWN error is different: `runAction` can fail because the
+  // callee isolate was killed or the invocation transport broke — possibly
+  // AFTER the provider request was issued. That is provably unknowable, so
+  // it lands `uncertain` (the reconcile path treats its identical catch the
+  // same way): a false-uncertain costs a human review, a false-rejected can
+  // double-send.
   let result:
     | {
         outcome: "accepted";
@@ -1551,8 +1723,9 @@ async function executeAttemptDispatch(
     }
   } catch (error) {
     result = {
-      outcome: "rejected",
-      providerError: `pre-dispatch failure: ${error instanceof Error ? error.message : String(error)}`.slice(
+      outcome: "uncertain",
+      reason: "dispatch_error",
+      providerError: `dispatch invocation failed (outcome unknown): ${error instanceof Error ? error.message : String(error)}`.slice(
         0,
         500,
       ),
@@ -1588,6 +1761,19 @@ async function executeAttemptDispatch(
     providerMessageRef: recorded.attempt.providerMessageRef ?? "",
     providerThreadRef: recorded.attempt.providerThreadRef ?? "",
   };
+}
+
+/** The domain-error code carried by a thrown ConvexError, if any. */
+function thrownCode(error: unknown): string | undefined {
+  if (
+    error instanceof ConvexError &&
+    typeof error.data === "object" &&
+    error.data !== null
+  ) {
+    const code = (error.data as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
 }
 
 function transportToOutcome(call: {
@@ -1645,9 +1831,14 @@ export const sendApprovedDraft = internalAction({
     let gate;
     try {
       gate = await ctx.runMutation(internal.sending.reserveSendIntent, args);
-    } catch {
-      // A capacity race aborts the reserve transaction — re-run once for the
-      // structured result rather than surfacing a raw failure.
+    } catch (error) {
+      // Retry once only on optimistic-concurrency conflicts — a capacity
+      // race is transient. A deterministic domain error (NOT_FOUND, INVALID)
+      // would fail identically and must surface with its real code, never
+      // relabelled as a transient attempt conflict.
+      if (thrownCode(error) !== "CONFLICT") {
+        throw error;
+      }
       try {
         gate = await ctx.runMutation(
           internal.sending.reserveSendIntent,
@@ -1672,11 +1863,8 @@ export const sendApprovedDraft = internalAction({
       };
     }
     if (gate.action === "wait") {
-      await ctx.scheduler.runAfter(
-        Math.max(0, gate.nextPermittedAt - Date.now()),
-        internal.sending.dispatchAttempt,
-        { sendAttemptId: gate.sendAttemptId },
-      );
+      // `reserveSendIntent` parked the attempt and scheduled the re-drive
+      // transactionally — nothing more to schedule here.
       return {
         outcome: "preflight_refused",
         sendAttemptId: gate.sendAttemptId,
@@ -1686,19 +1874,14 @@ export const sendApprovedDraft = internalAction({
       };
     }
     if (gate.action === "existing") {
+      // `existing` only ever reports `reserved` or `requesting` (uncertain
+      // is blocked earlier with `attempt_uncertain`). A live provider
+      // request is NOT resolved — report it honestly as in-flight.
       if (gate.state === "reserved") {
         return await executeAttemptDispatch(ctx, gate.sendAttemptId);
       }
-      if (gate.state === "uncertain") {
-        return {
-          outcome: "uncertain",
-          sendAttemptId: gate.sendAttemptId,
-          reason:
-            "an attempt for this draft is already uncertain — reconcile it",
-        };
-      }
       return {
-        outcome: "already_resolved",
+        outcome: "in_flight",
         sendAttemptId: gate.sendAttemptId,
         state: gate.state,
       };
@@ -1795,6 +1978,13 @@ export const prepareReconcile = internalMutation({
     }
     const window = sendWindowStatus(workspace, Date.now());
     if (!window.permitted) {
+      // Transactional re-drive — a reconcile wait can never be lost between
+      // this return and a caller-side schedule.
+      await ctx.scheduler.runAfter(
+        Math.max(0, window.nextPermittedAt - Date.now()),
+        internal.sending.reconcileUncertainAttempt,
+        { sendAttemptId: attempt._id },
+      );
       return {
         action: "wait" as const,
         nextPermittedAt: window.nextPermittedAt,
@@ -1849,11 +2039,7 @@ export const reconcileUncertainAttempt = internalAction({
       };
     }
     if (prepared.action === "wait") {
-      await ctx.scheduler.runAfter(
-        Math.max(0, prepared.nextPermittedAt - Date.now()),
-        internal.sending.reconcileUncertainAttempt,
-        { sendAttemptId: args.sendAttemptId },
-      );
+      // `prepareReconcile` already scheduled the re-drive transactionally.
       return {
         outcome: "preflight_refused",
         sendAttemptId: args.sendAttemptId,
@@ -2155,7 +2341,19 @@ export const resolveDeliveryUncertainty = mutation({
       decision.state === "resolved" &&
       decision.resolutionRequestId === requestId
     ) {
-      return { resolved: true, replayed: true, dispatched: false };
+      // Report what the original call actually did — `dispatched` is true
+      // iff a replacement attempt carries this decision's authorization.
+      const replacement = await ctx.db
+        .query("sendAttempts")
+        .withIndex("by_replacementDecisionId", (q) =>
+          q.eq("replacementDecisionId", decision._id),
+        )
+        .first();
+      return {
+        resolved: true,
+        replayed: true,
+        dispatched: replacement !== null,
+      };
     }
     if (decision.state !== "open") {
       throw domainError(
@@ -2349,6 +2547,71 @@ export const cancelAttempt = mutation({
       throw domainError("NOT_FOUND", "send attempt not found after update");
     }
     return updated;
+  },
+});
+
+/**
+ * Retire every parked `reserved` intent on a conversation — invoked by
+ * `drafts` when a revision or inbound context invalidates the draft an
+ * attempt was authorized against. `reserved` is provably pre-dispatch (the
+ * commit point flips to `requesting`), so cancelling can never retract a
+ * sent request; `requesting`/`uncertain` rows are untouched — those are
+ * honest in-flight states the reconcile path owns.
+ */
+export const cancelParkedConversationAttempts = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    reason: v.string(),
+  },
+  returns: v.object({ cancelled: v.number() }),
+  handler: async (ctx, args) => {
+    const parked = await ctx.db
+      .query("sendAttempts")
+      .withIndex("by_conversationId_and_state", (q) =>
+        q
+          .eq("conversationId", args.conversationId)
+          .eq("state", "reserved"),
+      )
+      .collect();
+    const now = Date.now();
+    for (const attempt of parked) {
+      await ctx.db.patch("sendAttempts", attempt._id, {
+        state: "cancelled",
+        error: {
+          message: args.reason.slice(0, 200),
+          at: now,
+          reason: "superseded",
+        },
+        updatedAt: now,
+      });
+      const reservation = await ctx.runMutation(
+        internal.usage.getByOperationKey,
+        {
+          workspaceId: args.workspaceId,
+          operationKey: attempt.operationKey,
+        },
+      );
+      if (reservation !== null && reservation.state === "reserved") {
+        await ctx.runMutation(internal.usage.release, {
+          workspaceId: args.workspaceId,
+          operationKey: attempt.operationKey,
+        });
+      }
+      const draft = await ctx.db.get("drafts", attempt.draftId);
+      if (draft !== null) {
+        await recordActivityEvent(ctx, {
+          workspaceId: args.workspaceId,
+          missionId: draft.missionId,
+          kind: "send_attempt_cancelled",
+          summary: `Parked send intent retired — ${args.reason.slice(0, 160)}`,
+          actor: "workflow",
+          dedupeKey: `sendattempt:${attempt._id}:cancelled`,
+          conversationId: args.conversationId,
+        });
+      }
+    }
+    return { cancelled: parked.length };
   },
 });
 
