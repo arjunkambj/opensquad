@@ -30,6 +30,7 @@ import {
   domainError,
   invalid,
   PROVIDER_REF_MAX_LENGTH,
+  vSendAttemptState,
 } from "./lib/validators";
 import { emailEventReceiptFields, sendAttemptFields } from "./schema";
 
@@ -93,7 +94,7 @@ export const listForConversation = query({
   args: {
     workspaceId: v.id("workspaces"),
     conversationId: v.id("conversations"),
-    state: v.optional(v.string()),
+    state: v.optional(vSendAttemptState),
     limit: v.optional(v.number()),
   },
   returns: v.array(vSendAttemptDoc),
@@ -107,13 +108,14 @@ export const listForConversation = query({
       throw domainError("NOT_FOUND", "conversation not found");
     }
     const limit = boundedLimit(args.limit);
-    if (args.state !== undefined) {
+    const state = args.state;
+    if (state !== undefined) {
       return await ctx.db
         .query("sendAttempts")
         .withIndex("by_conversationId_and_state", (q) =>
           q
             .eq("conversationId", args.conversationId)
-            .eq("state", args.state as Doc<"sendAttempts">["state"]),
+            .eq("state", state),
         )
         .order("desc")
         .take(limit);
@@ -352,13 +354,20 @@ export async function recordReceipt(
   // facts. Early events (no attempt yet) stay `pending` for the
   // acknowledgement path in sending.ts.
   if (!duplicateApplicationKey) {
-    const attempt = await ctx.db
+    // .collect() not .unique(): a provider anomaly could put the same
+    // message ref on two attempts — unique() would throw and wedge the
+    // receipt forever. The workspace check picks our attempt out of any
+    // such collision.
+    const candidates = await ctx.db
       .query("sendAttempts")
       .withIndex("by_providerMessageRef", (q) =>
         q.eq("providerMessageRef", providerMessageRef),
       )
-      .unique();
-    if (attempt !== null && attempt.workspaceId === args.workspaceId) {
+      .collect();
+    const attempt = candidates.find(
+      (candidate) => candidate.workspaceId === args.workspaceId,
+    );
+    if (attempt !== undefined) {
       await applyReceiptToAttempt(ctx, receipt, attempt._id);
     }
   }

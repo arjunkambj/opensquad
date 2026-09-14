@@ -271,6 +271,33 @@ async function coveringDecisionValid(
 }
 
 /**
+ * Unwind §8.7 coverage when a covering attempt dies without sending: an
+ * uncertain attempt whose `coveredByAttemptId` points at `attempt` was never
+ * actually resolved by a send, so the across-revisions guard must treat it
+ * as uncovered again (a fresh delivery_uncertain decision becomes required).
+ * Coverage links only ever point within one conversation.
+ */
+async function releaseCoverageLinks(
+  ctx: MutationCtx,
+  attempt: Doc<"sendAttempts">,
+): Promise<void> {
+  const uncovered = await ctx.db
+    .query("sendAttempts")
+    .withIndex("by_conversationId_and_state", (q) =>
+      q.eq("conversationId", attempt.conversationId).eq("state", "uncertain"),
+    )
+    .collect();
+  for (const other of uncovered) {
+    if (other.coveredByAttemptId === attempt._id) {
+      await ctx.db.patch("sendAttempts", other._id, {
+        coveredByAttemptId: undefined,
+        updatedAt: Date.now(),
+      });
+    }
+  }
+}
+
+/**
  * Every send gate that does not depend on wall-clock window/capacity:
  * workspace/campaign/mission liveness, exact approval + context binding,
  * takeover/closed state, suppression, inbox match, demo allowlist, and the
@@ -666,10 +693,21 @@ async function insertReservedAttempt(
         "sendAttempts",
         covering.sendAttemptId as Id<"sendAttempts">,
       );
+      // An existing link is honored only while the covering attempt can
+      // still send — a link at a dead (cancelled/failed) attempt is stale
+      // and a later authorized replacement may take it over.
+      const linked =
+        covered?.coveredByAttemptId !== undefined
+          ? await ctx.db.get("sendAttempts", covered.coveredByAttemptId)
+          : null;
+      const linkLive =
+        linked !== null &&
+        linked?.state !== "cancelled" &&
+        linked?.state !== "definitively_failed";
       if (
         covered !== null &&
         covered.state === "uncertain" &&
-        covered.coveredByAttemptId === undefined
+        (covered.coveredByAttemptId === undefined || !linkLive)
       ) {
         await ctx.db.patch("sendAttempts", covered._id, {
           coveredByAttemptId: attemptId,
@@ -979,6 +1017,7 @@ export const beginDispatch = internalMutation({
         error: { message: reason, at: Date.now(), reason: code },
         updatedAt: Date.now(),
       });
+      await releaseCoverageLinks(ctx, attempt);
       // Release any deferred reservation the parked attempt holds.
       const reservation = await ctx.runMutation(
         internal.usage.getByOperationKey,
@@ -1158,7 +1197,8 @@ const vRecordResult = v.object({
  *   that race; they are verified provider facts, not transport truth).
  * - `rejected` marks `definitively_failed` and releases the reservation.
  * - `uncertain` keeps the attempt unresolved, retains capacity as
- *   `uncertain`, and (via the caller) opens the `delivery_uncertain` ask —
+ *   `uncertain`, and opens the `delivery_uncertain` ask in the same
+ *   transaction — an uncertain attempt can never exist without its ask —
  *   no retry, no new key.
  * - `reconcile: true` marks this as the reconciliation path outcome and is
  *   the only way an `uncertain` attempt may transition; a confirmed verdict
@@ -1322,6 +1362,10 @@ export const recordSendOutcome = internalMutation({
         updatedAt: now,
       });
       await settle("released");
+      // A definitively failed replacement never sent — release the coverage
+      // link so the covered uncertain attempt blocks dispatch again until a
+      // fresh delivery_uncertain decision authorizes another replacement.
+      await releaseCoverageLinks(ctx, attempt);
       await retireUncertaintyAsk(
         "reconciled: provider definitively refused the request",
       );
@@ -1360,6 +1404,12 @@ export const recordSendOutcome = internalMutation({
         actor: "workflow",
         dedupeKey: `sendattempt:${attempt._id}:uncertain`,
         conversationId: attempt.conversationId,
+      });
+      // Open the Needs-you ask inside this transaction: if the calling action
+      // dies after this commit, the attempt can never be left uncertain with
+      // no ask. Idempotent per attempt via askKey (replay/reconcile safe).
+      await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
+        sendAttemptId: attempt._id,
       });
     }
 
@@ -1742,9 +1792,6 @@ async function executeAttemptDispatch(
     result,
   });
   if (result.outcome === "uncertain") {
-    await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
-      sendAttemptId,
-    });
     return {
       outcome: "uncertain",
       sendAttemptId,
@@ -1935,6 +1982,12 @@ const vPrepareResult = v.union(
     action: v.literal("resolved"),
     state: vSendAttemptState,
   }),
+  v.object({
+    // A provider request is still live — distinct from `resolved` so a
+    // journaled caller never records "resolved" for mail in flight.
+    action: v.literal("in_flight"),
+    state: vSendAttemptState,
+  }),
 );
 
 /**
@@ -1954,6 +2007,9 @@ export const prepareReconcile = internalMutation({
       throw domainError("NOT_FOUND", "send attempt not found");
     }
     if (attempt.state !== "uncertain") {
+      if (attempt.state === "reserved" || attempt.state === "requesting") {
+        return { action: "in_flight" as const, state: attempt.state };
+      }
       return { action: "resolved" as const, state: attempt.state };
     }
     const started = attempt.requestStartedAt ?? attempt.createdAt;
@@ -2032,6 +2088,13 @@ export const reconcileUncertainAttempt = internalAction({
         state: prepared.state,
       };
     }
+    if (prepared.action === "in_flight") {
+      return {
+        outcome: "in_flight",
+        sendAttemptId: args.sendAttemptId,
+        state: prepared.state,
+      };
+    }
     if (prepared.action === "needs_review") {
       // Make sure the human-attention ask exists even if the sweep raced.
       await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
@@ -2102,9 +2165,6 @@ export const reconcileUncertainAttempt = internalAction({
       },
     );
     if (result.outcome === "uncertain") {
-      await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
-        sendAttemptId: args.sendAttemptId,
-      });
       return {
         outcome: "uncertain",
         sendAttemptId: args.sendAttemptId,
@@ -2522,6 +2582,7 @@ export const cancelAttempt = mutation({
       error: { message: "cancelled by operator", at: now, reason: "manual" },
       updatedAt: now,
     });
+    await releaseCoverageLinks(ctx, attempt);
     const reservation = await ctx.runMutation(
       internal.usage.getByOperationKey,
       {
@@ -2590,6 +2651,7 @@ export const cancelParkedConversationAttempts = internalMutation({
         },
         updatedAt: now,
       });
+      await releaseCoverageLinks(ctx, attempt);
       const reservation = await ctx.runMutation(
         internal.usage.getByOperationKey,
         {

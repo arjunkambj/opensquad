@@ -417,7 +417,12 @@ export const markUncertain = internalMutation({
     }),
 });
 
-/** Internal lookup for a reservation by its stable operation key. */
+/**
+ * Internal lookup for a reservation by its stable operation key. One
+ * operation may hold a row per bucket — callers asking "is a reservation
+ * still live" must see a `reserved`/`uncertain` row, not whichever settled
+ * row sorts first.
+ */
 export const getByOperationKey = internalMutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -432,7 +437,11 @@ export const getByOperationKey = internalMutation({
           .eq("workspaceId", args.workspaceId)
           .eq("operationKey", args.operationKey),
       )
-      .take(2);
-    return rows[0] ?? null;
+      .collect();
+    return (
+      rows.find((row) => row.state === "reserved" || row.state === "uncertain") ??
+      rows[0] ??
+      null
+    );
   },
 });
