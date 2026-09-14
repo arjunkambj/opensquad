@@ -1,6 +1,6 @@
 # Review round 3 — P01–P10 readiness audit for P11/P12
 
-Date: 2026-09-15. Scope: six parallel read-only audits across the merged
+Date: 2026-09-14. Scope: six parallel read-only audits across the merged
 P01–P10 surface — frontend (P08), domain layer (P02), send boundary (P05/P10),
 mission/decision lifecycle (P06), worker runtime + daemon (P03/P07), and a
 cross-cutting seam pass — plus a follow-up fix pass on this branch. Static

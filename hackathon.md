@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-14T10:56:20Z
+- **Last updated:** 2026-09-14T13:26:34Z
 
 ## Log
 
@@ -356,3 +356,31 @@ concurrent bump can't be silently overwritten. Verified: all three
 typechecks, lint, build, `pnpm plan check`.
 Evidence: `plan/evidence/review-send.md`, `plan/evidence/review-bridge.md`,
 `plan/evidence/review-orch.md`, `plan/evidence/review-p10-modules.md`.
+
+### 2026-09-14 - fa1854c
+
+Third adversarial review round — six parallel audits over the merged
+P01–P10 surface (send boundary, mission/decision lifecycle, worker runtime
++ daemon, control channel, domain layer, frontend, cross-cutting seams)
+ahead of starting P11/P12. Thirty-two findings fixed feature-wise.
+Runtime: a resume+disconnect race could leave a live Box billed to TTL —
+the post-resume recheck now stops the box unless a newer generation owns
+it; failed teardowns land the connection on `error` instead of wedging
+`stopping`; a new 5-minute lifecycle sweep re-drives lost schedules and
+dead drivers on a `by_state_and_updatedAt` index; revive also scans op
+ledger rows for boxes `connection.boxRef` never referenced. Daemon: work
+claims now require a verified managed account (60 s recheck while
+unauthenticated), a contract-invalid result posts
+`output_contract_violation` instead of dying into `interrupted`, and
+systemd restart loops are bounded. Send: the `delivery_uncertain` ask is
+opened inside the outcome transaction; cancelled/failed replacement
+attempts unlink their covered rows; reconcile reports `in_flight`
+honestly. Controls: command dedupe is payload-aware (a second-turn
+interrupt can't alias the first) and owner diagnostics are owner-gated.
+Hardening: worker results are rejected when any string carries an
+`osw_`/`osl_` credential pattern; challenge material is stripped
+recursively from stored control results; the dev bridge dump no longer
+emits live device codes. UI: root error + not-found boundaries; employee
+cards submit the edit-base version. Verified: lint, build, root + worker
+tsc, `pnpm plan check` clean.
+Evidence: `plan/evidence/review-round3.md`.
