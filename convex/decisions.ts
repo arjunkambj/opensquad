@@ -40,6 +40,7 @@ import {
   vDecisionAnswer,
   vDecisionKind,
 } from "./lib/validators";
+import type { DecisionAnswer } from "./lib/validators";
 import { recordActivityEvent } from "./activity";
 import type { WriteCtx } from "./activity";
 import { decisionFields } from "./schema";
@@ -564,7 +565,138 @@ export const get = query({
  * - A decision bound to an older `workflowGeneration` still records the
  *   answer, but the workflow-side continuation step validates generation and
  *   recorded state before applying it — a stale signal never advances.
+ *
+ * Generic asks (`missing_information`, `connection_required`) resolve here;
+ * `draft_approval` and `delivery_uncertain` are refused — their resolution
+ * owns an artifact (the approvals row, the §8.7 covering authorization) that
+ * only `approvals.*` / `sending.resolveDeliveryUncertainty` can produce.
  */
+/**
+ * Shared resolution write path — used by the public `resolve` for generic
+ * asks and by `resolveBound` for kinds whose resolution ceremony lives in a
+ * dedicated mutation (`approvals.*` writes the approvals row,
+ * `sending.resolveDeliveryUncertainty` writes the covering authorization).
+ * Callers authenticate and pass `identityKey` through; every guard here
+ * (replay, state, version, kind minimums) re-runs regardless of entry point.
+ */
+async function applyResolution(
+  ctx: MutationCtx,
+  args: {
+    workspaceId: Id<"workspaces">;
+    decisionId: Id<"decisions">;
+    expectedVersion: number;
+    requestId: string;
+    answer: DecisionAnswer;
+    resolvedBy: string;
+  },
+): Promise<Doc<"decisions">> {
+  const requestId = boundedString(args.requestId, "requestId", {
+    min: 1,
+    max: 100,
+  });
+  assertDecisionAnswer(args.answer);
+  const identityKey = args.resolvedBy;
+
+  const decision = await getDecisionInWorkspace(
+    ctx,
+    args.workspaceId,
+    args.decisionId,
+  );
+
+  // Idempotent replay of a committed resolution.
+  if (
+    decision.state === "resolved" &&
+    decision.resolutionRequestId === requestId
+  ) {
+    return decision;
+  }
+  if (decision.state !== "open") {
+    throw domainError(
+      "CONFLICT",
+      `decision is ${decision.state}; it is no longer open`,
+    );
+  }
+  if (decision.version !== args.expectedVersion) {
+    throw domainError(
+      "CONFLICT",
+      `decision version is ${decision.version}, not ${args.expectedVersion}`,
+    );
+  }
+
+  // Kind-specific minimums — exact draft/revision binding lands in P10.
+  if (decision.kind === "draft_approval" && args.answer.approved === undefined) {
+    throw invalid("draft_approval decisions require answer.approved");
+  }
+  if (
+    decision.kind === "missing_information" &&
+    args.answer.fields === undefined &&
+    args.answer.body === undefined
+  ) {
+    throw invalid("missing_information decisions require fields or a body");
+  }
+
+  const mission = await getMissionInWorkspace(
+    ctx,
+    args.workspaceId,
+    decision.missionId,
+  );
+
+  const now = Date.now();
+  const nextVersion = decision.version + 1;
+  await ctx.db.patch("decisions", decision._id, {
+    state: "resolved",
+    version: nextVersion,
+    answer: args.answer,
+    resolvedBy: identityKey,
+    resolvedAt: now,
+    resolutionRequestId: requestId,
+    updatedAt: now,
+  });
+
+  if (decision.required) {
+    await closeAskOnMission(ctx, mission, decision);
+  } else {
+    await ctx.db.patch("missions", mission._id, { updatedAt: now });
+  }
+
+  await recordActivityEvent(ctx, {
+    workspaceId: args.workspaceId,
+    missionId: mission._id,
+    kind: "decision_resolved",
+    summary: `Decision resolved: ${decision.reason}`,
+    actor: identityKey,
+    dedupeKey: `decision:${decision._id}:resolved`,
+  });
+
+  // Durable continuation signal — transactional with the resolution. If the
+  // mission's workflow generation moved on, the signal still lands on the
+  // recorded event but the continuation step ignores it.
+  await deliverDecisionContinuation(ctx, decision, {
+    decisionId: decision._id,
+    version: nextVersion,
+    resolvedBy: identityKey,
+    resolvedAt: now,
+    answer: args.answer,
+  });
+  await ctx.db.patch("decisions", decision._id, {
+    continuationSentAt: Date.now(),
+  });
+  await recordActivityEvent(ctx, {
+    workspaceId: args.workspaceId,
+    missionId: mission._id,
+    kind: "continuation_delivered",
+    summary: `Continuation signal delivered for ${decision.kind}`,
+    actor: "system",
+    dedupeKey: `decision:${decision._id}:continuation`,
+  });
+
+  const updated = await ctx.db.get("decisions", decision._id);
+  if (updated === null) {
+    throw domainError("NOT_FOUND", "decision not found");
+  }
+  return updated;
+}
+
 export const resolve = mutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -576,109 +708,52 @@ export const resolve = mutation({
   returns: vDecisionDoc,
   handler: async (ctx, args) => {
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
-    const requestId = boundedString(args.requestId, "requestId", {
-      min: 1,
-      max: 100,
-    });
-    assertDecisionAnswer(args.answer);
-
     const decision = await getDecisionInWorkspace(
       ctx,
       args.workspaceId,
       args.decisionId,
     );
-
-    // Idempotent replay of a committed resolution.
-    if (
-      decision.state === "resolved" &&
-      decision.resolutionRequestId === requestId
-    ) {
-      return decision;
-    }
-    if (decision.state !== "open") {
-      throw domainError(
-        "CONFLICT",
-        `decision is ${decision.state}; it is no longer open`,
+    // Artifact-bound kinds must resolve through their owning mutation:
+    // `draft_approval` needs the immutable approvals row written by
+    // `approvals.*` (the send boundary accepts no other artifact) and
+    // `delivery_uncertain` needs the §8.7 validations in
+    // `sending.resolveDeliveryUncertainty`. A bare answer here would burn
+    // the ask while recording a resolution no downstream gate honors —
+    // the bound revision could never gain an approval again.
+    if (decision.kind === "draft_approval") {
+      throw invalid(
+        "draft_approval decisions resolve through approvals.approve/requestChanges/reject",
       );
     }
-    if (decision.version !== args.expectedVersion) {
-      throw domainError(
-        "CONFLICT",
-        `decision version is ${decision.version}, not ${args.expectedVersion}`,
+    if (decision.kind === "delivery_uncertain") {
+      throw invalid(
+        "delivery_uncertain decisions resolve through sending.resolveDeliveryUncertainty",
       );
     }
+    return await applyResolution(ctx, { ...args, resolvedBy: identityKey });
+  },
+});
 
-    // Kind-specific minimums — exact draft/revision binding lands in P10.
-    if (decision.kind === "draft_approval" && args.answer.approved === undefined) {
-      throw invalid("draft_approval decisions require answer.approved");
-    }
-    if (
-      decision.kind === "missing_information" &&
-      args.answer.fields === undefined &&
-      args.answer.body === undefined
-    ) {
-      throw invalid("missing_information decisions require fields or a body");
-    }
-
-    const mission = await getMissionInWorkspace(
-      ctx,
-      args.workspaceId,
-      decision.missionId,
-    );
-
-    const now = Date.now();
-    const nextVersion = decision.version + 1;
-    await ctx.db.patch("decisions", decision._id, {
-      state: "resolved",
-      version: nextVersion,
-      answer: args.answer,
-      resolvedBy: identityKey,
-      resolvedAt: now,
-      resolutionRequestId: requestId,
-      updatedAt: now,
+/**
+ * Resolution entry for the owning mutations — identical guards and write
+ * path as `resolve`, but reachable only from backend callers that already
+ * authenticated the reviewer and produced the kind's required artifact.
+ */
+export const resolveBound = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    decisionId: v.id("decisions"),
+    expectedVersion: v.number(),
+    requestId: v.string(),
+    answer: vDecisionAnswer,
+    resolvedBy: v.string(),
+  },
+  returns: vDecisionDoc,
+  handler: async (ctx, args) => {
+    const resolvedBy = boundedString(args.resolvedBy, "resolvedBy", {
+      min: 1,
+      max: 100,
     });
-
-    if (decision.required) {
-      await closeAskOnMission(ctx, mission, decision);
-    } else {
-      await ctx.db.patch("missions", mission._id, { updatedAt: now });
-    }
-
-    await recordActivityEvent(ctx, {
-      workspaceId: args.workspaceId,
-      missionId: mission._id,
-      kind: "decision_resolved",
-      summary: `Decision resolved: ${decision.reason}`,
-      actor: identityKey,
-      dedupeKey: `decision:${decision._id}:resolved`,
-    });
-
-    // Durable continuation signal — transactional with the resolution. If the
-    // mission's workflow generation moved on, the signal still lands on the
-    // recorded event but the continuation step ignores it.
-    await deliverDecisionContinuation(ctx, decision, {
-      decisionId: decision._id,
-      version: nextVersion,
-      resolvedBy: identityKey,
-      resolvedAt: now,
-      answer: args.answer,
-    });
-    await ctx.db.patch("decisions", decision._id, {
-      continuationSentAt: Date.now(),
-    });
-    await recordActivityEvent(ctx, {
-      workspaceId: args.workspaceId,
-      missionId: mission._id,
-      kind: "continuation_delivered",
-      summary: `Continuation signal delivered for ${decision.kind}`,
-      actor: "system",
-      dedupeKey: `decision:${decision._id}:continuation`,
-    });
-
-    const updated = await ctx.db.get("decisions", decision._id);
-    if (updated === null) {
-      throw domainError("NOT_FOUND", "decision not found");
-    }
-    return updated;
+    return await applyResolution(ctx, { ...args, resolvedBy });
   },
 });

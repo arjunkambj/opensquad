@@ -7,7 +7,7 @@
  * (workspaceId, requestId) through the approvals table, (c) bind the exact
  * draft revision — payload hash, normalized recipient, current-draft pointer
  * and conversation context version — then (d) write one immutable
- * `approvals` row and (e) resolve the decision through `decisions.resolve`
+ * `approvals` row and (e) resolve the decision through `decisions.resolveBound`
  * (P06's single resolution path: it also delivers the workflow continuation
  * transactionally).
  *
@@ -24,7 +24,7 @@
  */
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
@@ -109,7 +109,7 @@ type ResolveInput = {
  * Shared resolution path for all three operations. The whole flow — dedupe
  * check, draft/context binding checks, approval insert, decision resolution
  * and the `approvalId` link — runs in ONE transaction; the nested
- * `decisions.resolve` re-validates `expectedVersion` and rejects a
+ * `decisions.resolveBound` re-validates `expectedVersion` and rejects a
  * second/different resolution of the same decision.
  */
 async function resolveDraftDecision(
@@ -221,22 +221,23 @@ async function resolveDraftDecision(
     throw domainError("NOT_FOUND", "approval not found after insert");
   }
 
-  // Resolve through P06's single resolution path: version + state checks are
-  // re-applied there and the workflow continuation is delivered in the same
-  // transaction. The same requestId marks the decision's resolutionRequestId.
-  // P06 requires answer.approved on draft_approval resolutions; the verdict
+  // Resolve through the bound internal path (the public `resolve` refuses
+  // artifact-bound kinds): version + state checks are re-applied there and
+  // the workflow continuation is delivered in the same transaction. The same
+  // requestId marks the decision's resolutionRequestId. The verdict
   // distinction (changes requested vs rejected) rides in fields.
   const answer = {
     approved: args.verdict === "approved",
     ...(args.body !== undefined ? { body: args.body } : {}),
     fields: { draftResolution: args.draftResolution },
   };
-  await ctx.runMutation(api.decisions.resolve, {
+  await ctx.runMutation(internal.decisions.resolveBound, {
     workspaceId: args.workspaceId,
     decisionId: args.decisionId,
     expectedVersion: args.expectedVersion,
     requestId,
     answer,
+    resolvedBy: identityKey,
   });
   // Link the decision to its immutable approval row (forward string ref).
   await ctx.db.patch("decisions", args.decisionId, {

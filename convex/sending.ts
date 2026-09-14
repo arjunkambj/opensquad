@@ -39,7 +39,7 @@ import {
   query,
 } from "./_generated/server";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
@@ -2132,7 +2132,10 @@ export const resolveDeliveryUncertainty = mutation({
     dispatched: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
@@ -2252,12 +2255,13 @@ export const resolveDeliveryUncertainty = mutation({
           [F.reason]: reason.slice(0, 500),
         },
       };
-      await ctx.runMutation(api.decisions.resolve, {
+      await ctx.runMutation(internal.decisions.resolveBound, {
         workspaceId: args.workspaceId,
         decisionId: decision._id,
         expectedVersion: args.expectedVersion,
         requestId,
         answer,
+        resolvedBy: identityKey,
       });
       await ctx.scheduler.runAfter(
         0,
@@ -2269,7 +2273,7 @@ export const resolveDeliveryUncertainty = mutation({
       );
       dispatched = true;
     } else {
-      await ctx.runMutation(api.decisions.resolve, {
+      await ctx.runMutation(internal.decisions.resolveBound, {
         workspaceId: args.workspaceId,
         decisionId: decision._id,
         expectedVersion: args.expectedVersion,
@@ -2279,6 +2283,7 @@ export const resolveDeliveryUncertainty = mutation({
           body: reason,
           fields: { uncertaintyResolution: "left_unresolved" },
         },
+        resolvedBy: identityKey,
       });
     }
     return { resolved: true, replayed: false, dispatched };
