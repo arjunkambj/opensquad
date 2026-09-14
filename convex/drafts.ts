@@ -273,16 +273,35 @@ async function installRevision(
     throw domainError("NOT_FOUND", "draft not found after insert");
   }
 
+  // Superseding open draft_approval asks is a correctness invariant of the
+  // revision change itself — independent of whether a fresh ask opens. An
+  // `openDecision:false` install must not strand the prior revision's ask.
+  const retired = await supersedeOpenDraftDecisions(
+    ctx,
+    args.conversation._id,
+  );
+
+  // A parked (pre-dispatch) send intent authorized against the superseded
+  // revision can never legally dispatch now — retire it in the same
+  // transaction so its stale wake cannot block the corrected send.
+  await ctx.runMutation(internal.sending.cancelParkedConversationAttempts, {
+    workspaceId: args.workspace._id,
+    conversationId: args.conversation._id,
+    reason: `revision ${revision} superseded the draft it was authorized against`,
+  });
+
   if (args.openDecision) {
-    const retired = await supersedeOpenDraftDecisions(
-      ctx,
-      args.conversation._id,
+    // The fresh ask prefers an explicitly passed waiter, then a retired ask
+    // from THIS mission (a foreign mission's targetWorkflowId would fail
+    // openRequiredDecision's ownership check), then the mission workflow.
+    const sameMission = retired.find(
+      (decision) => decision.missionId === args.mission._id,
     );
     await openDraftApprovalDecision(ctx, {
       mission: args.mission,
       draft,
       targetWorkflowId:
-        args.targetWorkflowId ?? retired[0]?.targetWorkflowId,
+        args.targetWorkflowId ?? sameMission?.targetWorkflowId,
     });
   }
   return draft;
@@ -796,9 +815,20 @@ export const applyInboundContext = internalMutation({
       updatedAt: Date.now(),
     });
 
-    // Inbound mail makes a pending draft approval obsolete (§8.5).
+    // Inbound mail makes a pending draft approval obsolete (§8.5) — and a
+    // parked send intent authorized against the now-stale context can never
+    // legally dispatch either, so retire it here rather than letting it
+    // block the conversation until its stale wake fires.
     if (conversation.currentDraftId !== undefined) {
       await supersedeOpenDraftDecisions(ctx, conversation._id);
+      await ctx.runMutation(
+        internal.sending.cancelParkedConversationAttempts,
+        {
+          workspaceId: conversation.workspaceId,
+          conversationId: conversation._id,
+          reason: "inbound mail changed the conversation context",
+        },
+      );
     }
 
     const updated = await ctx.db.get("conversations", conversation._id);
