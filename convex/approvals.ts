@@ -32,6 +32,7 @@ import {
   requireWorkspaceMember,
 } from "./lib/auth";
 import {
+  boundedLimit,
   boundedString,
   domainError,
   invalid,
@@ -84,7 +85,7 @@ export const listForDraft = query({
     return await ctx.db
       .query("approvals")
       .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
-      .take(args.limit ?? 50);
+      .take(boundedLimit(args.limit));
   },
 });
 
