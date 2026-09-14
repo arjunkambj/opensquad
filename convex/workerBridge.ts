@@ -1405,6 +1405,17 @@ export const claimControl = internalMutation({
         state: "claimed",
         claimedAt: now,
       });
+      // A pending claim extended the poll — extend every still-claimed
+      // command's floor too, or a continuous pending stream could expire a
+      // long-running command (start_login) mid-execution and drop its
+      // terminal post as a 409.
+      for (const other of liveClaimed) {
+        if (other.expiresAt - now < 30_000) {
+          await ctx.db.patch("runtimeControlRequests", other._id, {
+            expiresAt: now + 30_000,
+          });
+        }
+      }
     }
     // Claiming — and re-delivering a claimed command — extends the window
     // slightly so a live execution does not expire mid-run. The response
@@ -1618,16 +1629,29 @@ export const applyControlResult = internalMutation({
   },
 });
 
+/** Challenge material lives only in runtimeLoginChallenges — strip it at
+ *  any depth, not just the top level of a stored result. */
+function stripChallengeMaterial(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripChallengeMaterial);
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "verificationUrl" || key === "userCode") {
+        continue;
+      }
+      out[key] = stripChallengeMaterial(entry);
+    }
+    return out;
+  }
+  return value;
+}
+
 /** Bound + sanitize a stored control result (no challenge material, ≤4KiB). */
 function sanitizeSafeResult(value: unknown): Record<string, unknown> {
   const record = asRecord(value, "safeResult");
-  const out: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(record)) {
-    if (key === "verificationUrl" || key === "userCode") {
-      continue; // challenge material lives only in runtimeLoginChallenges
-    }
-    out[key] = entry;
-  }
+  const out = stripChallengeMaterial(record) as Record<string, unknown>;
   const bytes = new TextEncoder().encode(JSON.stringify(out)).length;
   if (bytes > 4 * 1024) {
     throw bridgeInvalid("safeResult exceeds 4 KiB");

@@ -440,7 +440,13 @@ http.route({
         throw bridgeFailure("INVALID", "content does not match the declared digest");
       }
       const sniffed = sniffMimeType(bytes);
-      if (sniffed !== null && sniffed !== mimeType) {
+      // JSON-looking bytes are still valid text — a declared text/* artifact
+      // starting with '{' or '[' is markdown/plain text, not a type lie.
+      if (
+        sniffed !== null &&
+        sniffed !== mimeType &&
+        !(sniffed === "application/json" && mimeType.startsWith("text/"))
+      ) {
         throw bridgeFailure(
           "INVALID",
           `bytes look like ${sniffed}, not declared ${mimeType}`,

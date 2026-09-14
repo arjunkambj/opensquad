@@ -1373,6 +1373,37 @@ export const vWorkerResult = v.union(
 export type WorkerResult = Infer<typeof vWorkerResult>;
 
 /**
+ * Worker bearer (`osw_`) and lease (`osl_`) tokens must never ride inside
+ * model output — a hostile prompt could instruct the model to echo the
+ * worker env or `/proc` environ into a result field. Reject the whole
+ * result instead of persisting a live credential.
+ */
+const CREDENTIAL_PATTERN = /\b(?:osw|osl)_[A-Za-z0-9]{24}\b/;
+
+function assertNoCredentialLeak(value: unknown, depth = 0): void {
+  if (depth > 16) {
+    return;
+  }
+  if (typeof value === "string") {
+    if (CREDENTIAL_PATTERN.test(value)) {
+      throw bridgeInvalid("result contains a worker credential pattern");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertNoCredentialLeak(item, depth + 1);
+    }
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      assertNoCredentialLeak(item, depth + 1);
+    }
+  }
+}
+
+/**
  * Runtime-check a result envelope AND enforce the documented bounds. The
  * `v.*` validators above pin the shape for schema/`returns`; this parser is
  * what the bridge trusts — worker output is untrusted JSON.
@@ -1382,6 +1413,7 @@ export function parseWorkerResult(
   expectedOperation: WorkerOperation,
 ): WorkerResult {
   const result = asRecord(value, "result");
+  assertNoCredentialLeak(result);
   if (result.schemaVersion !== 1) {
     throw bridgeInvalid("result.schemaVersion must be 1");
   }

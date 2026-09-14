@@ -83,6 +83,40 @@ export const dispatchWorkerRequest = internalMutation({
     if (mission === null) {
       throw domainError("NOT_FOUND", "mission not found");
     }
+    if (
+      mission.state === "completed" ||
+      mission.state === "cancelled" ||
+      mission.state === "failed"
+    ) {
+      throw domainError(
+        "CONFLICT",
+        `mission is ${mission.state}; cannot dispatch worker work`,
+      );
+    }
+    if (mission.workflowId === undefined) {
+      throw bridgeInvalid("mission has no dispatched workflow to signal");
+    }
+    // The continuation event may only bind a workflow this mission owns —
+    // its own workflow or a registered prospect-branch child (same rule as
+    // openRequiredDecision): a misbound target would complete the real
+    // workflow's step yet never re-enqueue it, parking the mission forever.
+    if (args.targetWorkflowId !== mission.workflowId) {
+      const branch = await ctx.db
+        .query("missionProspects")
+        .withIndex("by_childWorkflowId", (q) =>
+          q.eq("childWorkflowId", args.targetWorkflowId),
+        )
+        .unique();
+      if (branch === null || branch.missionId !== mission._id) {
+        throw bridgeInvalid("targetWorkflowId is not owned by this mission");
+      }
+    }
+    if (args.workflowGeneration !== mission.workflowGeneration) {
+      throw domainError(
+        "CONFLICT",
+        `workflowGeneration is ${mission.workflowGeneration}, not ${args.workflowGeneration}`,
+      );
+    }
     const stepKey = boundedString(args.stepKey, "stepKey", {
       min: 1,
       max: 200,
@@ -1098,6 +1132,12 @@ export const devSeedWorkerRequest = internalMutation({
       employeeId: mission.assignedEmployeeId,
     });
     const operation: WorkerOperation = args.operation ?? "draft";
+    if (mission.workflowId === undefined) {
+      throw domainError(
+        "CONFLICT",
+        "mission has no dispatched workflow — seed a workflow-bound mission first",
+      );
+    }
     const dispatch = await dispatchWorkerRequestHandler(ctx, {
       missionId: mission._id,
       runId,
@@ -1109,7 +1149,7 @@ export const devSeedWorkerRequest = internalMutation({
       operation,
       input: fixtureInputFor(operation),
       outputSchemaVersion: 1,
-      targetWorkflowId: mission.workflowId ?? "",
+      targetWorkflowId: mission.workflowId,
       workflowGeneration: mission.workflowGeneration,
     });
     return {
@@ -1241,10 +1281,10 @@ export const devDumpBridge = internalQuery({
         expiresAt: r.expiresAt,
         safeResult: r.safeResult,
       })),
+      // Device-code material is bearer credential data — never dump it;
+      // presence + expiry is enough for evidence.
       loginChallenges: challenges.map((c) => ({
         _id: c._id,
-        verificationUrl: c.verificationUrl,
-        userCode: c.userCode,
         expiresAt: c.expiresAt,
       })),
       credentials: credentials.map((c) => ({
