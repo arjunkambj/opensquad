@@ -15,6 +15,11 @@
 Description=OpenSquad worker (Codex App Server stdio supervisor)
 After=network-online.target
 Wants=network-online.target
+# A permanently broken image/binary must not restart every 5 s forever —
+# after 5 rapid failures the unit stays failed (the honest state) until an
+# operator or reprovisioning intervenes.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple

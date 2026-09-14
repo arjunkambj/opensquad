@@ -185,6 +185,9 @@ export class CodexAppServer {
     child.on("error", (err) => {
       this.#terminate(new AppServerClosedError(`spawn error: ${err.message}`));
     });
+    // A write landing after the child died emits an `error` on stdin —
+    // without a listener it is an unhandled 'error' event.
+    child.stdin.on("error", () => {});
     child.on("exit", (code, signal) => {
       this.#terminate(
         new AppServerClosedError(
@@ -304,7 +307,12 @@ export class CodexAppServer {
         };
       }
     }
-    this.#write(reply);
+    try {
+      this.#write(reply);
+    } catch {
+      // Child closed mid-request — the reply has nowhere to go and the
+      // rejection must not surface as an unhandledRejection.
+    }
   }
 
   #write(message: Record<string, unknown>): void {

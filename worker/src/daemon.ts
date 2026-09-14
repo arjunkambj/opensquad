@@ -36,7 +36,7 @@ import {
   waitForLoginCompleted,
   waitForTurn,
 } from "./codex/methods.js";
-import type { TurnTerminal } from "./codex/methods.js";
+import type { AccountState, TurnTerminal } from "./codex/methods.js";
 import type { WorkerConfig } from "./config.js";
 import {
   BridgeAuthError,
@@ -63,6 +63,7 @@ const RUNTIME_HEARTBEAT_MS = 15_000;
 const WORK_HEARTBEAT_MS = 15_000;
 const INTERRUPT_CONFIRM_MS = 30_000;
 const LOGIN_WAIT_MAX_MS = 9 * 60_000;
+const ACCOUNT_RECHECK_MS = 60_000;
 
 function log(event: string, fields?: Record<string, unknown>): void {
   process.stdout.write(
@@ -79,6 +80,18 @@ function bridgePhaseFor(
   phase: "boot" | "ready" | "running" | "degraded" | "stopping",
 ): WorkerPhase {
   return phase;
+}
+
+/** Whether the app-server account can run managed model work — an API-key
+ *  account is not a managed worker login (review fix). */
+function managedAccountReady(account: AccountState): boolean {
+  if (account.account.state === "apiKey") {
+    return false;
+  }
+  return (
+    account.account.state === "chatgpt" ||
+    (account.account.state !== "none" && !account.requiresOpenaiAuth)
+  );
 }
 
 type ActiveLogin = {
@@ -134,17 +147,11 @@ export class WorkerDaemon {
    */
   async run(): Promise<number> {
     // Verify account posture once — no implicit login; the owner drives it
-    // via the control channel (start_login).
+    // via the control channel (start_login). A slow recheck keeps polling so
+    // a transient read failure or a completed login is never sticky.
     try {
       const account = await accountRead(this.#server, { refreshToken: false });
-      this.#accountReady =
-        account.account.state === "chatgpt" ||
-        (account.account.state !== "none" && !account.requiresOpenaiAuth);
-      if (account.account.state === "apiKey") {
-        // An API-key account is not a managed worker login (review fix).
-        this.#accountReady = false;
-      }
-      this.#phase = this.#accountReady ? "ready" : "degraded";
+      this.#applyAccountReadiness(managedAccountReady(account));
       log("account_state", { state: account.account.state });
     } catch (error) {
       this.#phase = "degraded";
@@ -157,6 +164,10 @@ export class WorkerDaemon {
     );
     const control = setInterval(() => void this.#controlTick(), CONTROL_POLL_MS);
     const work = setInterval(() => void this.#workTick(), WORK_POLL_MS);
+    const accountRecheck = setInterval(
+      () => void this.#accountRecheck(),
+      ACCOUNT_RECHECK_MS,
+    );
     void this.#runtimeHeartbeat();
 
     try {
@@ -167,6 +178,7 @@ export class WorkerDaemon {
       clearInterval(heartbeat);
       clearInterval(control);
       clearInterval(work);
+      clearInterval(accountRecheck);
     }
     if (this.#fatal !== null) {
       return this.#fatal instanceof BridgeAuthError ? 78 : 1;
@@ -181,6 +193,32 @@ export class WorkerDaemon {
       return true;
     }
     return false;
+  }
+
+  /** Apply an observed account posture — never clobbers running/stopping. */
+  #applyAccountReadiness(ready: boolean): void {
+    this.#accountReady = ready;
+    if (this.#phase === "running" || this.#phase === "stopping") {
+      return;
+    }
+    this.#phase = ready ? "ready" : "degraded";
+  }
+
+  /** Slow account re-read while unauthenticated: a boot-time read failure or
+   *  an externally completed login must not park work claims forever. */
+  async #accountRecheck(): Promise<void> {
+    if (this.#accountReady || this.#stopping || this.#fatal !== null) {
+      return;
+    }
+    try {
+      const account = await accountRead(this.#server, { refreshToken: false });
+      this.#applyAccountReadiness(managedAccountReady(account));
+      if (this.#accountReady) {
+        log("account_ready", { state: account.account.state });
+      }
+    } catch {
+      // stay degraded — the next tick re-checks
+    }
   }
 
   async #runtimeHeartbeat(): Promise<void> {
@@ -329,6 +367,7 @@ export class WorkerDaemon {
         const account = await accountRead(this.#server, {
           refreshToken: false,
         });
+        this.#applyAccountReadiness(managedAccountReady(account));
         await this.#postControlResult(
           claim.controlRequestId,
           "completed",
@@ -404,8 +443,7 @@ export class WorkerDaemon {
           refreshToken: false,
         });
         const ok = verified.account.state === "chatgpt";
-        this.#accountReady = ok;
-        this.#phase = ok ? "ready" : "degraded";
+        this.#applyAccountReadiness(ok);
         await this.#postControlResult(
           claim.controlRequestId,
           ok ? "completed" : "failed",
@@ -449,8 +487,7 @@ export class WorkerDaemon {
       }
       case "logout": {
         await accountLogout(this.#server);
-        this.#accountReady = false;
-        this.#phase = "degraded";
+        this.#applyAccountReadiness(false);
         await this.#postControlResult(claim.controlRequestId, "completed", {});
         return;
       }
@@ -511,7 +548,10 @@ export class WorkerDaemon {
       this.#stopping ||
       this.#fatal !== null ||
       this.#currentWork !== null ||
-      this.#phase === "boot"
+      this.#phase === "boot" ||
+      // No managed login = claiming would only fail turn setup and burn the
+      // request's honest state — park until the account read says ready.
+      !this.#accountReady
     ) {
       return;
     }
@@ -838,6 +878,16 @@ export class WorkerDaemon {
       } catch (error) {
         if (this.#isFatal(error)) return;
         if (error instanceof BridgeConflictError) {
+          // A 400 refuses the payload itself while the row is still leased
+          // (contract violation) — report an honest failure now rather than
+          // letting the lease lapse into a misleading "interrupted".
+          if (error.status === 400) {
+            await this.#reportFailureSafe(work, {
+              code: "output_contract_violation",
+              retrySafety: "unsafe",
+              summary: `result rejected by bridge: ${error.message}`,
+            });
+          }
           log("work_result_conflict", {
             workerRequestId: work.workerRequestId,
             error: error.message,
