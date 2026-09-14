@@ -887,7 +887,9 @@ export const applyFailure = internalMutation({
     // is queued so the runtime confirms termination — confirmation owns the
     // release.
     const unconfirmed =
-      code === "termination_unconfirmed" || code === "interruption_unconfirmed";
+      code === "termination_unconfirmed" ||
+      code === "interruption_unconfirmed" ||
+      code === "turn_start_unconfirmed";
     if (unconfirmed) {
       await ctx.db.patch("workerRequests", request._id, {
         state: "uncertain",

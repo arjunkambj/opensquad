@@ -52,6 +52,7 @@ import {
 import type {
   ClaimedControl,
   ClaimedWork,
+  ControlStatus,
   WorkerPhase,
 } from "./contracts.js";
 import { mintBridgeId } from "./ids.js";
@@ -101,6 +102,14 @@ export class WorkerDaemon {
    *  claimed command on every poll (crash recovery), so the same request
    *  must never be run twice concurrently. */
   #executingControls = new Set<string>();
+  /** Terminal results the bridge hasn't acked yet — a redelivered claimed
+   *  row reposts the stored result (same resultId) instead of re-executing
+   *  the command; re-running a start_login would mint a second device-code
+   *  challenge mid-entry. */
+  #settledControls = new Map<
+    string,
+    { status: ControlStatus; safeResult: Record<string, unknown>; resultId: string }
+  >();
 
   constructor(config: WorkerConfig, server: CodexAppServer) {
     this.#config = config;
@@ -208,7 +217,14 @@ export class WorkerDaemon {
     if (claim === null) return;
     // The bridge re-delivers a still-claimed command while it executes —
     // without this gate a second start_login would race the first and post
-    // a terminal "failed" onto the live login request.
+    // a terminal "failed" onto the live login request. A command whose
+    // result post was dropped is NOT re-executed — the recorded result is
+    // reposted with its original resultId.
+    const settled = this.#settledControls.get(claim.controlRequestId);
+    if (settled !== undefined) {
+      void this.#repostControlResult(claim.controlRequestId, settled);
+      return;
+    }
     if (this.#executingControls.has(claim.controlRequestId)) {
       return;
     }
@@ -234,24 +250,72 @@ export class WorkerDaemon {
       });
   }
 
+  /** Deliver a terminal control outcome; keeps it in #settledControls until
+   *  the bridge acks so a redelivered claim reposts rather than re-runs. */
   async #postControlResult(
     controlRequestId: string,
-    status: "challenge_issued" | "completed" | "failed",
+    status: ControlStatus,
     safeResult: Record<string, unknown>,
+  ): Promise<void> {
+    const settled = {
+      status,
+      safeResult,
+      resultId: mintBridgeId("cres"),
+    };
+    this.#settledControls.set(controlRequestId, settled);
+    await this.#deliverControlResult(controlRequestId, settled);
+  }
+
+  /** Repost an already-recorded outcome for a redelivered claimed row. */
+  async #repostControlResult(
+    controlRequestId: string,
+    settled: {
+      status: ControlStatus;
+      safeResult: Record<string, unknown>;
+      resultId: string;
+    },
+  ): Promise<void> {
+    if (this.#executingControls.has(controlRequestId)) return;
+    this.#executingControls.add(controlRequestId);
+    try {
+      await this.#deliverControlResult(controlRequestId, settled);
+    } finally {
+      this.#executingControls.delete(controlRequestId);
+    }
+  }
+
+  async #deliverControlResult(
+    controlRequestId: string,
+    settled: {
+      status: ControlStatus;
+      safeResult: Record<string, unknown>;
+      resultId: string;
+    },
   ): Promise<void> {
     try {
       await this.#bridge.reportControlResult(
         controlRequestId,
-        status,
-        safeResult,
+        settled.status,
+        settled.safeResult,
+        settled.resultId,
       );
+      this.#settledControls.delete(controlRequestId);
     } catch (error) {
-      if (this.#isFatal(error)) return;
-      if (error instanceof BridgeConflictError) {
-        // Expired/retired control request — the outcome is moot.
-        log("control_result_dropped", { controlRequestId, status });
+      if (this.#isFatal(error)) {
+        // Credential is dead — nothing can ever be reposted.
+        this.#settledControls.delete(controlRequestId);
         return;
       }
+      if (error instanceof BridgeConflictError) {
+        // Expired/retired control request — the outcome is moot.
+        this.#settledControls.delete(controlRequestId);
+        log("control_result_dropped", {
+          controlRequestId,
+          status: settled.status,
+        });
+        return;
+      }
+      // Transient failure — stays settled; the next claim redelivery reposts.
       log("control_result_error", {
         controlRequestId,
         error: errorMessage(error),
@@ -507,6 +571,19 @@ export class WorkerDaemon {
     }
   }
 
+  /**
+   * §7.7 last resort — the daemon could not prove a turn died. Kill the
+   * app-server child (process death is the only reliable termination
+   * proof) and exit non-zero so the supervisor restarts a fresh worker.
+   * The backend keeps the slot `uncertain` until a post-restart
+   * interrupt_turn confirms nothing is running.
+   */
+  async #dieAfterUnconfirmedTermination(detail: string): Promise<void> {
+    log("unconfirmed_termination_exit", { detail });
+    await this.#server.close().catch(() => {});
+    this.#fatal = new Error(`${detail}; restarting to guarantee turn death`);
+  }
+
   /** Lease heartbeat during a turn — "stop" aborts the turn wait. */
   async #workHeartbeatLoop(
     work: ClaimedWork,
@@ -606,11 +683,25 @@ export class WorkerDaemon {
     } catch (error) {
       stop.abort();
       await heartbeatLoop;
+      // An AppServerError means the server processed and REJECTED the start
+      // — the turn never ran, safely reportable as failed. A timeout or a
+      // mid-request disconnect proves nothing: the turn may be live, so the
+      // report is unconfirmed (§7.7) and this process exits — child-process
+      // death is the only reliable termination proof.
+      if (error instanceof AppServerError) {
+        await this.#reportFailureSafe(work, {
+          code: "turn_start_failed",
+          retrySafety: "safe",
+          summary: errorMessage(error),
+        });
+        return;
+      }
       await this.#reportFailureSafe(work, {
-        code: "turn_start_failed",
-        retrySafety: "safe",
-        summary: errorMessage(error),
+        code: "turn_start_unconfirmed",
+        retrySafety: "unknown",
+        summary: `turn start outcome unknown: ${errorMessage(error)}`,
       });
+      await this.#dieAfterUnconfirmedTermination("turn start unconfirmed");
       return;
     }
     // Reported as `threadId:turnId` — the backend splits on ':' for
@@ -662,6 +753,11 @@ export class WorkerDaemon {
             ? "stop ordered; turn termination unconfirmed"
             : "stop ordered by the backend",
       });
+      if (confirmed === null) {
+        // The turn could not be proven dead — exit so the supervisor
+        // restarts a fresh app-server; process death IS the proof.
+        await this.#dieAfterUnconfirmedTermination("interruption unconfirmed");
+      }
       return;
     }
 
@@ -683,6 +779,9 @@ export class WorkerDaemon {
             ? "deadline exceeded; termination unconfirmed"
             : `deadline exceeded; turn ${confirmed.status}`,
       });
+      if (confirmed === null) {
+        await this.#dieAfterUnconfirmedTermination("termination unconfirmed");
+      }
       return;
     }
 
