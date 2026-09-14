@@ -1102,6 +1102,16 @@ export const checkArtifactGrant = internalMutation({
       )
       .unique();
     if (existing !== null) {
+      // Dedupe is content-addressed: a repeated key returns the prior
+      // SAME-digest artifact. Different bytes under a reused key are a
+      // conflict — silently returning the old artifact would drop the new
+      // content while telling the worker the upload succeeded.
+      if (existing.contentDigest !== args.digest) {
+        throw bridgeError(
+          "CONFLICT",
+          "operationKey was already used with different content",
+        );
+      }
       return { deduplicated: true, artifactId: existing._id };
     }
     return { deduplicated: false };
