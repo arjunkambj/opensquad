@@ -17,22 +17,26 @@
 ## Log
 
 ### 2026-09-13 - 0eb661d
+
 Created the frontend foundation in the project root with React, Vite, pnpm,
 Oxlint, and file-based TanStack Router routes for home and about. Verified a
 clean lint, production build, and local responses for both routes (`package.json`,
 `vite.config.ts`, `src/main.tsx`, `src/routes/`).
 
 ### 2026-09-13 - 85c467a
+
 Added the shadcn/ui system with Hugeicons, Inter, and zinc tokens, plus the
 sidebar, calendar, and form primitives used by the dashboard (`components.json`,
 `src/index.css`, `src/components/ui/`).
 
 ### 2026-09-13 - 17c546e
+
 Wired Hexclave React auth into the Vite app and Convex client, including cookie
 tokens and Convex JWT providers (`src/hexclave/client.ts`, `src/main.tsx`,
 `convex/auth.config.ts`). Auth: Other.
 
 ### 2026-09-13 - 7ee8f4e
+
 Ported the MultiFeed remake date picker, collapsible sidebar, user profile menu,
 and custom email/Google sign-in page onto OpenSquad. Routes: `/sign-in`,
 `/overview`, `/squads`, `/settings`, `/handler/$`. Added a marketing navbar only
@@ -40,15 +44,18 @@ and custom email/Google sign-in page onto OpenSquad. Routes: `/sign-in`,
 Hugeicons; colors use shadcn tokens.
 
 ### 2026-09-13 - 1bb4bed
+
 Removed the muted open-state background behind the profile menu avatar trigger
 so the button keeps its base radius
 (`src/components/Layout/UserProfileMenu.tsx`).
 
 ### 2026-09-13 - 988fb16
+
 Refined shared theme variables and UI component styling
 (`src/index.css`, `src/components/ui/`, `src/components/auth/SignInForm.tsx`).
 
 ### 2026-09-13 - 0d71156
+
 Added the portable sales CRM, research, outreach and booking plan, plus a task
 navigator and repository build skill (with `f2a5f14`; `plan/`, `scripts/plan.mjs`,
 `AGENTS.md`, `.agents/skills/opensquad-build/`). Replaced development time budgets
@@ -62,6 +69,7 @@ Corrected frontend hosting to not deployed based on the inspected source and
 linked the configured repository. Verification: `plan/evidence/P00.md`.
 
 ### 2026-09-13 - 39305d3
+
 P01 integrated: added the tracked `.env.example` contract covering every
 planned configuration name with per-destination sourcing comments, plus a
 worker env example under `worker/`; verified no real values were committed
@@ -76,6 +84,7 @@ pass on the merged branch. No provider integration is claimed working.
 Verification: `plan/evidence/P01.md`.
 
 ### 2026-09-13 - ad05ffc
+
 P03/P05 integrated (spikes merged; live provider gates remain blocked on
 owner-supplied credentials, recorded in `plan/tasks.json`). The `worker/`
 package now carries a typed ASCII Box lifecycle adapter (idempotent create,
@@ -93,6 +102,7 @@ negative probe confirmed on an isolated local backend
 `worker/`). Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
 
 ### 2026-09-13 - f9f6664
+
 P02 integrated: the first domain schema and authorization layer now exist —
 `workspaces`, `memberships`, `businessProfiles`, `employees`, `campaigns` with
 declared indexes and transactional invariants, typed Hexclave identity guards
@@ -107,6 +117,7 @@ lead-cap and source-gate rejections all verified; a real provider-issued JWT
 still awaits the human sign-in check. Verification: `plan/evidence/P02.md`.
 
 ### 2026-09-13 - 73ff205
+
 P03/P05 live gates passed on real providers. G1: disposable ASCII Boxes were
 provisioned with persisted idempotency (repeat create → one box), bootstrapped
 to Node 24.21.0 + codex-cli 0.154.0, verified credential-clean at birth; the
@@ -124,6 +135,7 @@ Noted deltas: ChatGPT device-code auth must be enabled in security settings;
 Verification: `plan/evidence/P03.md`, `plan/evidence/P05.md`.
 
 ### 2026-09-14 - 9153365..1de8be6
+
 Post-review hardening on main plus two closed limitations. The owner completed
 a live Hexclave sign-in — the real JWT now verified end to end against
 `requireUser`'s issuer check (P01/P02 recorded limitation closed), and
@@ -140,6 +152,7 @@ restarts it (`convex/workspaces.ts`, `convex/campaigns.ts`, `convex/schema.ts`,
 stays blocked. Lint, build, both typechecks and `pnpm plan check` pass.
 
 ### 2026-09-13 - 1a93886
+
 P04 integrated, Firecrawl half verified: `@firecrawl/firecrawl-convex@0.1.1` is
 registered with credentials bound by reference and its signed webhook
 self-mounts at `/firecrawl/webhook`; a narrow internal `scrapePage` wrapper
@@ -152,6 +165,7 @@ owner choice: the in-Box MCP OAuth probe machinery is committed but unexercised
 Apollo grant — no discovery or enrichment is claimed working.
 
 ### 2026-09-13 - 2349f80..48c1380
+
 Reviewed the unpushed implementation against the plan. Fixed workspace timezone
 policy versioning, worker login persistence and operation replay, secret-free
 request fingerprints, fast completion handling, AgentMail response-body
@@ -163,6 +177,7 @@ Evidence: `plan/evidence/P02.md`, `plan/evidence/review-worker.md`,
 `plan/evidence/review-providers.md`.
 
 ### 2026-09-14 - 3497402
+
 P08 onboarding/employees/settings integrated. The onboarding wizard persists a
 business profile, workspace timezone (expectedPolicyVersion-guarded), send
 window/limit and campaign scope through the real P02 mutations, then renders the
@@ -180,6 +195,7 @@ review remain the human gate.
 Evidence: `plan/evidence/P08.md`.
 
 ### 2026-09-14 - 8266686
+
 P06 durable supervision layer integrated. Six §4.2 tables (missions,
 missionProspects, runs, decisions, missionComments, activityEvents) plus
 `@convex-dev/workflow@0.4.7` now own mission lifecycle, required human asks,
@@ -197,6 +213,7 @@ until P10/P11 tables land.
 Evidence: `plan/evidence/P06.md`.
 
 ### 2026-09-14 - 8a766c1
+
 P07 scoped worker bridge + runtime lifecycle on `opensquad/P07` (task branch,
 not yet merged). Convex now owns the §4.4 transport schema — runtime
 connections, a durable lifecycle ledger, scoped worker credentials (hashed at
@@ -218,6 +235,7 @@ turn ran this round — the daemon-in-Box live gate remains open.
 Evidence: `plan/evidence/P07.md`.
 
 ### 2026-09-14 - aca0591
+
 P07 + P10 integrated into main. P10 lands the exact-draft send boundary:
 immutable draft revisions with a canonical payload hash; approvals bind the
 exact revision + normalized recipient + conversation context version and run
@@ -232,13 +250,14 @@ real controlled inbox→inbox send (SES provider ref recorded) plus the full
 V17 block matrix and V18 reconcile/replace probes. Schema/validator section
 conflicts between the P07 and P10 branches resolved by union; the §4.3
 `artifacts` table is P07-owned (P09 must not re-add it). Combined main
-pushed to dev:flexible-grasshopper-949 — §4.3/§4.4 tables, /worker/* routes,
+pushed to dev:flexible-grasshopper-949 — §4.3/§4.4 tables, /worker/\* routes,
 crons and indexes live. Deferred honestly: P07's owner lifecycle needs a
 Hexclave session, the daemon-in-Box live gate stays open, and demo-recipient
 gating is code-verified only.
 Evidence: `plan/evidence/P07.md`, `plan/evidence/P10.md`.
 
 ### 2026-09-14 - fcd564b
+
 Independent post-merge review of P07 (scoped worker bridge + runtime
 lifecycle) on `opensquad/review-bridge` — the branch had merged without an
 independent read of its adversarial seams. Twelve concrete defects found by
@@ -261,6 +280,7 @@ only — no provider call, Box, live turn or deployment ran in this review.
 Evidence: `plan/evidence/review-bridge.md`.
 
 ### 2026-09-14 - 5ffca96
+
 Orchestration-seam review of the integrated P06+P07+P10 backend on
 `opensquad/review-orch` (review branch, not pushed). Five real defects
 found and fixed in feature-wise commits: (1) `boundedString` crashed on
@@ -288,6 +308,7 @@ redraft-loop design. tsc (root + convex), lint, build all clean.
 Evidence: `plan/evidence/review-orch.md`.
 
 ### 2026-09-14 - 9147a50
+
 Integrated the leftover send-path review branch (`opensquad/review-send`,
 4 commits) and the verified P10 acceptance evidence, then ran a dedicated
 review of the P10 support modules — approvals, drafts, suppressions, usage,
@@ -307,7 +328,9 @@ bounded limit. Documented residuals for P09/P11: exact-address suppression
 vs `+tag` sub-addresses, public-suffix domain suppressions, IDN rejection,
 and unaudited suppression removal. Verified: convex tsc, lint, build clean.
 Evidence: `plan/evidence/review-send.md`, `plan/evidence/review-p10-modules.md`.
+
 ### 2026-09-14 - cd25cd6
+
 Second adversarial review round across the send boundary, worker bridge,
 orchestration seams, daemon and versioned UI forms — 14 defects fixed
 feature-wise. Send boundary: a post-request action failure now records
