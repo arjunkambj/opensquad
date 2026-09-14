@@ -1257,6 +1257,36 @@ async function runResume(
     return;
   }
   const config = op.requestConfig as LifecycleRequestConfig;
+  const bridgeUrl =
+    process.env.OPENSQUAD_BRIDGE_URL ?? process.env.CONVEX_SITE_URL;
+  if (bridgeUrl === undefined) {
+    await record(ctx, op._id, {
+      outcome: "failed",
+      error: "OPENSQUAD_BRIDGE_URL/CONVEX_SITE_URL is not configured",
+    });
+    return;
+  }
+  // The resumed box still carries the PREVIOUS generation's worker env —
+  // its token was revoked and its runtimeGeneration is stale, so without
+  // re-injection the service inside exits 78 and the reconnect can never
+  // come up. Rebuild the same env create would have injected.
+  const sealed = (await ctx.runQuery(
+    internal.runtimeConnections.readSealedCredential,
+    { runtimeConnectionId: connection._id },
+  )) as string | null;
+  if (sealed === null) {
+    await record(ctx, op._id, {
+      outcome: "failed",
+      error: "no sealed worker credential for this generation",
+    });
+    return;
+  }
+  const env: Record<string, string> = {
+    OPENSQUAD_BRIDGE_URL: bridgeUrl,
+    OPENSQUAD_RUNTIME_ID: connection._id,
+    OPENSQUAD_RUNTIME_GENERATION: String(connection.generation),
+    OPENSQUAD_WORKER_TOKEN: await unsealCredential(sealed),
+  };
   const resumed = await asciiRequest(
     "POST",
     `/boxes/${encodeURIComponent(connection.boxRef)}/resume`,
@@ -1277,10 +1307,45 @@ async function runResume(
     });
     return;
   }
+  // A disconnect committed while this resume was in flight wins: re-read
+  // the connection. If it moved on WITHOUT keeping this box attached, stop
+  // the just-resumed box rather than leave a live orphan; if a new
+  // generation still references the same box (a reconnect-resume in
+  // flight), leave it alone — the newer op owns it.
+  const latest = (await ctx.runQuery(
+    internal.runtimeConnections.getRuntimeConnection,
+    { runtimeConnectionId: op.runtimeConnectionId },
+  )) as Doc<"runtimeConnections"> | null;
+  if (
+    latest === null ||
+    latest.generation !== op.runtimeGeneration ||
+    latest.state === "stopping" ||
+    latest.state === "stopped" ||
+    latest.state === "disconnected"
+  ) {
+    if (latest === null || latest.boxRef !== connection.boxRef) {
+      await asciiRequest(
+        "POST",
+        `/boxes/${encodeURIComponent(connection.boxRef)}/stop`,
+        { body: {}, timeoutMs: 60_000 },
+      );
+    }
+    await record(ctx, op._id, {
+      outcome: "completed",
+      boxRef: connection.boxRef,
+      error:
+        "connection moved on during resume; outcome recorded without touching it",
+    });
+    return;
+  }
+  // Rewrite worker.env with THIS generation's credential and re-run the
+  // image setup — the persisted env predates the reconnect.
+  const bootstrap = await bootstrapBox(connection.boxRef, env, config);
   await record(ctx, op._id, {
-    outcome: "completed",
+    outcome: bootstrap.ok ? "completed" : "uncertain",
     boxRef: connection.boxRef,
     connectionState: "connecting",
+    ...(bootstrap.ok ? {} : { error: bootstrap.error ?? "bootstrap failed" }),
   });
 }
 
