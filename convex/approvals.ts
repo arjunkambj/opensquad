@@ -157,6 +157,16 @@ async function resolveDraftDecision(
         `requestId ${requestId} was already used to resolve a different decision`,
       );
     }
+    // `requestChanges` and `reject` share the "rejected" verdict — the
+    // workflow-visible distinction lives on the recorded answer. Reusing
+    // one operation's requestId for the other must CONFLICT, not silently
+    // replay a terminal rejection as a redraft request (or vice versa).
+    if (decision.answer?.fields?.draftResolution !== args.draftResolution) {
+      throw domainError(
+        "CONFLICT",
+        `requestId ${requestId} recorded a different draft resolution`,
+      );
+    }
     return { approval: prior, replayed: true };
   }
 

@@ -21,6 +21,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireWorkspaceEditor } from "./lib/auth";
 import {
+  boundedLimit,
   boundedString,
   domainError,
   invalid,
@@ -73,7 +74,7 @@ export const summary = query({
   returns: v.array(vUsageBucketSummary),
   handler: async (ctx, args) => {
     await requireWorkspaceEditor(ctx, args.workspaceId);
-    const limit = Math.min(args.limit ?? 100, 500);
+    const limit = boundedLimit(args.limit);
     const buckets = await ctx.db
       .query("usageBuckets")
       .withIndex(
@@ -182,13 +183,6 @@ export const reserve = internalMutation({
       });
     } else {
       bucketId = bucket._id;
-      // Keep the cap current — a lowered policy applies immediately.
-      if (bucket.limit !== args.limit) {
-        await ctx.db.patch("usageBuckets", bucketId, {
-          limit: args.limit,
-          updatedAt: now,
-        });
-      }
     }
 
     const prior = await ctx.db
@@ -208,6 +202,16 @@ export const reserve = internalMutation({
         );
       }
       return { bucketId, reservationId: prior._id, replayed: true };
+    }
+
+    // Keep the cap current — a lowered policy applies to new reservations
+    // immediately. Replayed calls return above without touching the bucket,
+    // so a stale caller can never silently rewrite the shared limit.
+    if (bucket !== null && bucket.limit !== args.limit) {
+      await ctx.db.patch("usageBuckets", bucketId, {
+        limit: args.limit,
+        updatedAt: now,
+      });
     }
 
     const effective = await ctx.db.get("usageBuckets", bucketId);

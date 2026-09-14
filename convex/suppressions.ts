@@ -21,6 +21,7 @@ import {
 } from "./lib/auth";
 import type { AuthCtx } from "./lib/auth";
 import {
+  boundedLimit,
   domainError,
   domainOfNormalizedEmail,
   normalizeDomain,
@@ -116,7 +117,7 @@ export const list = query({
   returns: v.array(vSuppressionDoc),
   handler: async (ctx, args) => {
     await requireWorkspaceMember(ctx, args.workspaceId);
-    const limit = Math.min(args.limit ?? 200, 500);
+    const limit = boundedLimit(args.limit);
     const kind = args.kind;
     if (kind !== undefined) {
       // Narrow scan: range over the kind prefix of the unique index.
