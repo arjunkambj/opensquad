@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-14T12:00:00Z
+- **Last updated:** 2026-09-14T10:56:20Z
 
 ## Log
 
@@ -307,3 +307,29 @@ bounded limit. Documented residuals for P09/P11: exact-address suppression
 vs `+tag` sub-addresses, public-suffix domain suppressions, IDN rejection,
 and unaudited suppression removal. Verified: convex tsc, lint, build clean.
 Evidence: `plan/evidence/review-send.md`, `plan/evidence/review-p10-modules.md`.
+### 2026-09-14 - cd25cd6
+Second adversarial review round across the send boundary, worker bridge,
+orchestration seams, daemon and versioned UI forms — 14 defects fixed
+feature-wise. Send boundary: a post-request action failure now records
+`uncertain` (never `definitively_failed` with a released reservation and a
+possible duplicate), all wake/reconcile schedules moved inside the
+committing mutations plus a 5-minute belt cron, replacement attempts carry
+a `coveredByAttemptId` chain for transitive uncertainty, parked `reserved`
+intents are cancelled in-transaction when a revision or inbound context
+supersedes them, and a live `requesting` attempt reports the new
+`in_flight` outcome rather than `already_resolved`. Worker bridge:
+`draft`/`classify_reply` results no longer require a `summary` field the
+contracts never declared; unconfirmed terminations hold the slot as
+`uncertain` and enqueue `interrupt_turn` instead of freeing capacity while
+a turn may still run; control results validate before the terminal patch;
+stale pinned teardowns can't kill a reclaimed box; revive re-covers
+orphaned boxes. Orchestration: mid-pipeline pause now parks the workflow
+on the resume event instead of failing the mission, and every dead-mission
+cancel path finishes its run receipt. Daemon: unacked control results
+repost with the same resultId instead of re-executing, and an unconfirmed
+turn kills the app-server and exits so the supervisor restart proves
+termination. UI: versioned forms submit the edit-base version so a
+concurrent bump can't be silently overwritten. Verified: all three
+typechecks, lint, build, `pnpm plan check`.
+Evidence: `plan/evidence/review-send.md`, `plan/evidence/review-bridge.md`,
+`plan/evidence/review-orch.md`, `plan/evidence/review-p10-modules.md`.
