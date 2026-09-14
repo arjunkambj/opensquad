@@ -93,6 +93,9 @@ export function EmployeeCard({
 
   const [form, setForm] = useState<EmployeeForm>(() => toForm(employee))
   const [syncedAt, setSyncedAt] = useState(employee.updatedAt)
+  // Optimistic-concurrency base must be the version the edit STARTED from —
+  // reading the live prop at submit would pass a version the user never saw.
+  const [baseVersion, setBaseVersion] = useState(employee.instructionVersion)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +105,7 @@ export function EmployeeCard({
   // `updatedAt` is the signal: name/enabled edits don't bump the version.
   if (employee.updatedAt !== syncedAt && !dirty) {
     setSyncedAt(employee.updatedAt)
+    setBaseVersion(employee.instructionVersion)
     setForm(toForm(employee))
   }
 
@@ -121,7 +125,7 @@ export function EmployeeCard({
       await updateEmployee({
         workspaceId,
         employeeId: employee._id,
-        expectedInstructionVersion: employee.instructionVersion,
+        expectedInstructionVersion: baseVersion,
         name: form.name,
         instructions: form.instructions,
         enabled: form.enabled,

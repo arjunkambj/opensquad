@@ -54,7 +54,7 @@ export function EmployeesView() {
     )
   }
 
-  if (employees === undefined) {
+  if (employees === undefined || runtime === undefined) {
     return (
       <LoadingState
         title="Loading employees"
