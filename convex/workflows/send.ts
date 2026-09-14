@@ -48,6 +48,10 @@ const vSendWorkflowResult = v.union(
     code: v.string(),
     reason: v.string(),
     nextPermittedAt: v.optional(v.number()),
+    // Carried whenever the refusal follows a committed reservation so the
+    // pipeline can reference the parked attempt (mirrors vDispatchOutcome —
+    // the workflow `returns` validator rejects extra fields).
+    sendAttemptId: v.optional(v.id("sendAttempts")),
   }),
   v.object({
     outcome: v.literal("already_resolved"),
