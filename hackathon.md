@@ -259,3 +259,30 @@ workspace-scoped, and control effects can no longer resurrect a dying runtime.
 Verified by convex + worker typechecks, lint and the full build; code-traced
 only — no provider call, Box, live turn or deployment ran in this review.
 Evidence: `plan/evidence/review-bridge.md`.
+
+### 2026-09-14 - 5ffca96
+Orchestration-seam review of the integrated P06+P07+P10 backend on
+`opensquad/review-orch` (review branch, not pushed). Five real defects
+found and fixed in feature-wise commits: (1) `boundedString` crashed on
+non-string fields carved out of `v.any()` worker envelopes — a malformed
+authenticated callback mapped to 503 instead of the documented 400
+INVALID; (2) `MISSION_TRANSITIONS` could not express terminal reconcile
+from `queued`/`paused`, and the workflow workpool swallows onComplete
+errors, so a pre-gate failure or a pause racing the terminal callback
+wedged the mission non-terminal forever; (3) `onMissionWorkflowComplete`
+treated every successful workflow as mission-complete — an abandoned run
+(ask superseded/retired) wrote `completed` on a live mission — and neither
+completion callback verified `args.workflowId` against the durable row;
+(4) `vSendWorkflowResult.preflight_refused` drifted from `vDispatchOutcome`
+(missing `sendAttemptId`) and would fail workflow return validation after
+a committed reservation; (5) `decisions.listForMission` paginated the
+state-major index instead of "newest first". Re-verified correct without
+patches: decision-resolution single path, send commit/reconcile contract,
+worker lease/slot/exactly-once semantics, owner control channel,
+artifact two-phase upload, named-event resume cycles, and the frontend
+runtime-status consumers. Documented-but-unpatched: dead
+`cancelMissionWorkerRequests` (wiring it in without slot release would
+leak `held` forever), permanently-dead-worker uncertain slots until owner
+reconnect, and post-revise mission state/badge drift pending the P09
+redraft-loop design. tsc (root + convex), lint, build all clean.
+Evidence: `plan/evidence/review-orch.md`.

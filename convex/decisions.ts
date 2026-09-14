@@ -518,7 +518,7 @@ export const listForMission = query({
     const limit = boundedLimit(args.limit);
     const result = await ctx.db
       .query("decisions")
-      .withIndex("by_missionId_and_state", (q) =>
+      .withIndex("by_missionId_and_createdAt", (q) =>
         q.eq("missionId", args.missionId),
       )
       .order("desc")

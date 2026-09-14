@@ -38,12 +38,19 @@ export function invalid(message: string): ConvexError<{
  * Validate that `value` is a string of `min..max` characters after trimming.
  * Returns the trimmed value. All free-text fields pass through this so stored
  * records and public args stay bounded.
+ *
+ * Fields carved out of `v.any()` payloads (worker result/input/config
+ * envelopes) are `unknown` at runtime — a non-string must be an INVALID
+ * rejection, not an uncaught TypeError.
  */
 export function boundedString(
   value: string,
   field: string,
   options: { min?: number; max: number },
 ): string {
+  if (typeof value !== "string") {
+    throw invalid(`${field} must be a string`);
+  }
   const trimmed = value.trim();
   const min = options.min ?? 0;
   if (trimmed.length < min) {
@@ -520,11 +527,19 @@ export function boardColumnForMission(
  * which picks the concrete target state by re-reading open asks; `failed`
  * may only be cancelled (archive path) until an explicit retry flow lands.
  * The workflow's internal transitions use the same table.
+ *
+ * `queued → failed`, `paused → failed` and `paused → completed` exist for
+ * the terminal reconcile paths (`failMission`/`completeMissionTx` via
+ * `onMissionWorkflowComplete`): the owning workflow can die before the
+ * dispatch gate runs (still `queued`) or land its terminal callback after a
+ * `pause` committed (`paused`). An onComplete error is swallowed by the
+ * workpool, so an illegal-transition throw here would wedge the mission in
+ * a non-terminal state with a dead workflow.
  */
 export const MISSION_TRANSITIONS: Readonly<
   Record<MissionState, readonly MissionState[]>
 > = {
-  queued: ["active", "paused", "cancelled"],
+  queued: ["active", "paused", "cancelled", "failed"],
   active: [
     "waiting_for_user",
     "waiting_for_runtime",
@@ -541,7 +556,14 @@ export const MISSION_TRANSITIONS: Readonly<
     "completed",
     "cancelled",
   ],
-  paused: ["queued", "active", "waiting_for_user", "cancelled"],
+  paused: [
+    "queued",
+    "active",
+    "waiting_for_user",
+    "failed",
+    "completed",
+    "cancelled",
+  ],
   failed: ["cancelled"],
   completed: [],
   cancelled: [],
@@ -1170,9 +1192,6 @@ export function assertWorkerRequestInput(
     min: 1,
     max: 16000,
   });
-  if (typeof input.prompt !== "string") {
-    throw invalid("input.prompt must be a string");
-  }
   if (input.context !== undefined) {
     const context = asArray(input.context, "input.context");
     if (context.length > 16) {
