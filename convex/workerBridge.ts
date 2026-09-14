@@ -396,6 +396,15 @@ export const claimWork = internalMutation({
     }
 
     const request = eligible[0]!;
+    if (request.inputRef.kind !== "inline") {
+      // Must run BEFORE any state mutation — throwing here must leave the
+      // request pending and the slot idle, not a leased request holding a
+      // slot the worker never received.
+      throw bridgeError(
+        "UNAVAILABLE",
+        "storage-backed inputs are not servable by this build",
+      );
+    }
     const leaseToken = mintLeaseToken();
     const leaseExpiresAt = now + WORKER_LEASE_TTL_MS;
     const leaseHash = await sha256Hex(leaseToken);
@@ -422,12 +431,6 @@ export const claimWork = internalMutation({
       {},
     );
 
-    if (request.inputRef.kind !== "inline") {
-      throw bridgeError(
-        "UNAVAILABLE",
-        "storage-backed inputs are not servable by this build",
-      );
-    }
     return {
       claimed: true as const,
       workerRequestId: request._id,
