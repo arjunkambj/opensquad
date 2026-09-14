@@ -43,6 +43,7 @@ import {
 } from "./lib/validators";
 import type { LifecycleRequestConfig } from "./lib/validators";
 import {
+  cancelMissionWorkerRequests,
   issueCredentialRow,
   unsealCredential,
 } from "./workerOperations";
@@ -249,12 +250,17 @@ async function retireRuntimeInternals(
     }
   }
   // Non-terminal worker requests: cancelled — their callbacks stay invalid.
+  // The cancellation must go through the mission-level canceller so each
+  // run receipt is finished AND the awaiting workflow's continuation event
+  // fires — patching the row alone would leave the workflow parked on an
+  // awaitEvent that can never resolve.
   const requests = await ctx.db
     .query("workerRequests")
     .withIndex("by_workspaceId_and_state_and_createdAt", (q) =>
       q.eq("workspaceId", connection.workspaceId),
     )
     .take(64);
+  const missionIds = new Set<Id<"missions">>();
   for (const request of requests) {
     if (
       request.runtimeConnectionId === connection._id &&
@@ -262,12 +268,14 @@ async function retireRuntimeInternals(
         request.state === "leased" ||
         request.state === "running")
     ) {
-      await ctx.db.patch("workerRequests", request._id, {
-        state: "cancelled",
-        error: { code: "runtime_retired", message: "runtime was retired" },
-        updatedAt: Date.now(),
-      });
+      missionIds.add(request.missionId);
     }
+  }
+  for (const missionId of missionIds) {
+    await cancelMissionWorkerRequests(ctx, missionId, {
+      code: "runtime_retired",
+      detail: "runtime was retired",
+    });
   }
   // Slot: the runtime is gone — nothing is holding it.
   const slot = await ctx.db
