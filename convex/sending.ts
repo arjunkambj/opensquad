@@ -871,11 +871,16 @@ export const reserveSendIntent = internalMutation({
     }
 
     // --- reserve intent + allowance atomically ---------------------------------
+    // `nextPermittedAt: now` — dispatch is permitted immediately, and the
+    // belt sweep can re-drive this row if the caller dies between the
+    // commit and beginDispatch (an unindexed reserved row would park
+    // forever).
     const sendAttemptId = await insertReservedAttempt(ctx, {
       context,
       approval: gate.approval,
       operationKey,
       replacementDecisionId: args.replacementDecisionId,
+      nextPermittedAt: now,
     });
     const attempt = await ctx.db.get("sendAttempts", sendAttemptId);
     if (attempt === null) {
