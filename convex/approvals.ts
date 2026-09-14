@@ -32,6 +32,7 @@ import {
   requireWorkspaceMember,
 } from "./lib/auth";
 import {
+  boundedLimit,
   boundedString,
   domainError,
   invalid,
@@ -84,7 +85,7 @@ export const listForDraft = query({
     return await ctx.db
       .query("approvals")
       .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
-      .take(args.limit ?? 50);
+      .take(boundedLimit(args.limit));
   },
 });
 
@@ -121,8 +122,20 @@ async function resolveDraftDecision(
     max: 100,
   });
 
+  const decision = await ctx.db.get("decisions", args.decisionId);
+  if (decision === null || decision.workspaceId !== args.workspaceId) {
+    throw domainError("NOT_FOUND", "decision not found");
+  }
+  if (decision.kind !== "draft_approval") {
+    throw invalid("decision is not a draft approval ask");
+  }
+
   // Idempotent replay — the recorded row is returned verbatim; the decision
-  // stays resolved exactly once and the activity feed stays unique.
+  // stays resolved exactly once and the activity feed stays unique. The
+  // dedupe is bound to THIS decision's recorded approval: reusing the same
+  // requestId against a different ask (e.g. the new revision's decision
+  // after a supersede) must surface a CONFLICT, not silently return a
+  // verdict recorded for unrelated content while this ask stays open.
   const prior = await ctx.db
     .query("approvals")
     .withIndex("by_workspaceId_and_requestId", (q) =>
@@ -138,16 +151,15 @@ async function resolveDraftDecision(
         `requestId ${requestId} already recorded a "${prior.decision}" verdict`,
       );
     }
+    if (decision.approvalId !== String(prior._id)) {
+      throw domainError(
+        "CONFLICT",
+        `requestId ${requestId} was already used to resolve a different decision`,
+      );
+    }
     return { approval: prior, replayed: true };
   }
 
-  const decision = await ctx.db.get("decisions", args.decisionId);
-  if (decision === null || decision.workspaceId !== args.workspaceId) {
-    throw domainError("NOT_FOUND", "decision not found");
-  }
-  if (decision.kind !== "draft_approval") {
-    throw invalid("decision is not a draft approval ask");
-  }
   if (decision.state !== "open") {
     throw domainError(
       "CONFLICT",
