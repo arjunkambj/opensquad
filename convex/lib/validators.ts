@@ -527,11 +527,19 @@ export function boardColumnForMission(
  * which picks the concrete target state by re-reading open asks; `failed`
  * may only be cancelled (archive path) until an explicit retry flow lands.
  * The workflow's internal transitions use the same table.
+ *
+ * `queued → failed`, `paused → failed` and `paused → completed` exist for
+ * the terminal reconcile paths (`failMission`/`completeMissionTx` via
+ * `onMissionWorkflowComplete`): the owning workflow can die before the
+ * dispatch gate runs (still `queued`) or land its terminal callback after a
+ * `pause` committed (`paused`). An onComplete error is swallowed by the
+ * workpool, so an illegal-transition throw here would wedge the mission in
+ * a non-terminal state with a dead workflow.
  */
 export const MISSION_TRANSITIONS: Readonly<
   Record<MissionState, readonly MissionState[]>
 > = {
-  queued: ["active", "paused", "cancelled"],
+  queued: ["active", "paused", "cancelled", "failed"],
   active: [
     "waiting_for_user",
     "waiting_for_runtime",
@@ -548,7 +556,14 @@ export const MISSION_TRANSITIONS: Readonly<
     "completed",
     "cancelled",
   ],
-  paused: ["queued", "active", "waiting_for_user", "cancelled"],
+  paused: [
+    "queued",
+    "active",
+    "waiting_for_user",
+    "failed",
+    "completed",
+    "cancelled",
+  ],
   failed: ["cancelled"],
   completed: [],
   cancelled: [],
