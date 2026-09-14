@@ -377,7 +377,9 @@ export const commit = internalMutation({
           ? undefined
           : boundedString(args.providerReference, "providerReference", {
               min: 1,
-              max: 300,
+              // ≥ the 400-char bound on `messageId` in recordSendOutcome —
+              // a longer provider ref must never wedge the settle path.
+              max: 400,
             }),
     }),
 });
