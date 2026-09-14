@@ -249,10 +249,14 @@ const vSettleResult = v.object({
 });
 
 /**
- * Shared settle path: a `reserved` (or `uncertain` → `committed`) row moves
- * to the target state and the bucket counters shift by `quantity`. Other
- * transitions are `CONFLICT` — a released reservation can never be
- * re-committed, an uncertain one can only commit or stay uncertain.
+ * Shared settle path: every reservation under the operation key moves to the
+ * target state and each owning bucket's counters shift by that row's
+ * `quantity`. An operation may hold per-bucket reservations (the reserve
+ * dedupe key is `(operationKey, bucketId)`), so all of them settle together
+ * — one logical outcome, every debit accounted. Rows already in `target`
+ * replay; any other illegal transition is a `CONFLICT` and rolls the whole
+ * batch back — a released reservation can never be re-committed, an
+ * uncertain one can only commit or release.
  */
 async function settleReservation(
   ctx: MutationCtx,
@@ -281,62 +285,74 @@ async function settleReservation(
       `no reservation for operation ${operationKey}`,
     );
   }
-  if (reservations.length > 1) {
-    throw domainError(
-      "CONFLICT",
-      `operation ${operationKey} has ${reservations.length} reservations`,
-    );
-  }
-  const reservation = reservations[0];
-  if (reservation.state === args.target) {
-    return { reservation, replayed: true };
-  }
   const allowed: Record<UsageReservationState, UsageReservationState[]> = {
     reserved: ["committed", "released", "uncertain"],
     committed: [],
     released: [],
     uncertain: ["committed", "released"],
   };
-  if (!allowed[reservation.state].includes(args.target)) {
-    throw domainError(
-      "CONFLICT",
-      `reservation is ${reservation.state}, cannot become ${args.target}`,
-    );
-  }
-  const bucket = await ctx.db.get("usageBuckets", reservation.bucketId);
-  if (bucket === null) {
-    throw domainError("NOT_FOUND", "usage bucket not found");
-  }
-  const qty = reservation.quantity;
-  const counters: Record<UsageReservationState, Partial<Doc<"usageBuckets">>> = {
-    committed:
-      reservation.state === "uncertain"
-        ? { uncertain: bucket.uncertain - qty, committed: bucket.committed + qty }
-        : { reserved: bucket.reserved - qty, committed: bucket.committed + qty },
-    released:
-      reservation.state === "uncertain"
-        ? { uncertain: bucket.uncertain - qty }
-        : { reserved: bucket.reserved - qty },
-    uncertain: { reserved: bucket.reserved - qty, uncertain: bucket.uncertain + qty },
-    reserved: {},
-  };
   const now = Date.now();
-  await ctx.db.patch("usageBuckets", bucket._id, {
-    ...counters[args.target],
-    updatedAt: now,
-  });
-  await ctx.db.patch("usageReservations", reservation._id, {
-    state: args.target,
-    updatedAt: now,
-    ...(args.providerReference !== undefined
-      ? { providerReference: args.providerReference }
-      : {}),
-  });
-  const updated = await ctx.db.get("usageReservations", reservation._id);
-  if (updated === null) {
+  let first: Doc<"usageReservations"> | null = null;
+  for (const reservation of reservations) {
+    if (reservation.state === args.target) {
+      first ??= reservation;
+      continue;
+    }
+    if (!allowed[reservation.state].includes(args.target)) {
+      throw domainError(
+        "CONFLICT",
+        `reservation is ${reservation.state}, cannot become ${args.target}`,
+      );
+    }
+    const bucket = await ctx.db.get("usageBuckets", reservation.bucketId);
+    if (bucket === null) {
+      throw domainError("NOT_FOUND", "usage bucket not found");
+    }
+    const qty = reservation.quantity;
+    const counters: Record<
+      UsageReservationState,
+      Partial<Doc<"usageBuckets">>
+    > = {
+      committed:
+        reservation.state === "uncertain"
+          ? {
+              uncertain: bucket.uncertain - qty,
+              committed: bucket.committed + qty,
+            }
+          : {
+              reserved: bucket.reserved - qty,
+              committed: bucket.committed + qty,
+            },
+      released:
+        reservation.state === "uncertain"
+          ? { uncertain: bucket.uncertain - qty }
+          : { reserved: bucket.reserved - qty },
+      uncertain: {
+        reserved: bucket.reserved - qty,
+        uncertain: bucket.uncertain + qty,
+      },
+      reserved: {},
+    };
+    await ctx.db.patch("usageBuckets", bucket._id, {
+      ...counters[args.target],
+      updatedAt: now,
+    });
+    await ctx.db.patch("usageReservations", reservation._id, {
+      state: args.target,
+      updatedAt: now,
+      ...(args.providerReference !== undefined
+        ? { providerReference: args.providerReference }
+        : {}),
+    });
+    first ??= await ctx.db.get("usageReservations", reservation._id);
+  }
+  if (first === null) {
     throw domainError("NOT_FOUND", "reservation not found after update");
   }
-  return { reservation: updated, replayed: false };
+  return {
+    reservation: first,
+    replayed: reservations.every((row) => row.state === args.target),
+  };
 }
 
 /** Commit — the debited capacity became a real provider-accepted send. */
