@@ -89,8 +89,13 @@ function bridgeOk(payload: unknown, status = 200): Response {
 
 /** Map a thrown bridge/domain error (or defect) to its documented status. */
 function bridgeErrorResponse(error: unknown): Response {
-  if (error instanceof Error && error.name === "ValidatorError") {
-    // Mutation arg validation rejected a field — a client shape problem.
+  // Mutation arg validation rejects a field with ArgumentValidationError —
+  // a client shape problem, never a retryable backend failure.
+  if (
+    error instanceof Error &&
+    (error.name === "ArgumentValidationError" ||
+      error.name === "ValidatorError")
+  ) {
     return bridgeFailure("INVALID", "request fields failed validation");
   }
   if (
@@ -102,6 +107,10 @@ function bridgeErrorResponse(error: unknown): Response {
     const data = (error as { data: { code?: unknown; message?: unknown } })
       .data;
     const code = data.code;
+    // The backend also surfaces arg-validation failure inside error data.
+    if (code === "ArgumentValidationError") {
+      return bridgeFailure("INVALID", "request fields failed validation");
+    }
     if (
       typeof code === "string" &&
       code in BRIDGE_ERROR_STATUS

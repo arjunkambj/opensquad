@@ -243,15 +243,18 @@ async function retireRuntimeInternals(
   for (const challenge of challenges) {
     await ctx.db.delete("runtimeLoginChallenges", challenge._id);
   }
-  // Outstanding control requests: expired — a dead generation must not run.
-  const controls = await ctx.db
-    .query("runtimeControlRequests")
-    .withIndex("by_runtimeConnectionId_and_state", (q) =>
-      q.eq("runtimeConnectionId", connection._id),
-    )
-    .collect();
-  for (const request of controls) {
-    if (request.state === "pending" || request.state === "claimed") {
+  // Outstanding control requests: expired — a dead generation must not
+  // run. Live states only; never scan the connection's lifetime history.
+  for (const state of ["pending", "claimed"] as const) {
+    const controls = await ctx.db
+      .query("runtimeControlRequests")
+      .withIndex("by_runtimeConnectionId_and_state", (q) =>
+        q
+          .eq("runtimeConnectionId", connection._id)
+          .eq("state", state),
+      )
+      .collect();
+    for (const request of controls) {
       await ctx.db.patch("runtimeControlRequests", request._id, {
         state: "expired",
       });
@@ -364,7 +367,38 @@ export const connect = mutation({
       connection = created;
     } else {
       // Revive a terminal connection — same generation path as reconnect.
-      const generation = connection.generation + 1;
+      const prior = connection;
+      const generation = prior.generation + 1;
+      // A prior teardown may have failed/uncertain or never pinned this box
+      // (disconnect during provisioning had no boxRef yet) — before clearing
+      // the reference, open a pinned stop when no live/completed teardown
+      // covers it, so revive never orphans a still-running box.
+      if (prior.boxRef !== undefined) {
+        const priorOps = await ctx.db
+          .query("runtimeLifecycleOperations")
+          .withIndex("by_runtimeConnectionId_and_createdAt", (q) =>
+            q.eq("runtimeConnectionId", prior._id),
+          )
+          .collect();
+        const covered = priorOps.some(
+          (op) =>
+            (op.operation === "stop" || op.operation === "delete") &&
+            op.boxRef === prior.boxRef &&
+            (op.state === "pending" ||
+              op.state === "accepted" ||
+              op.state === "completed"),
+        );
+        if (!covered) {
+          await openLifecycleOperation(ctx, {
+            workspaceId: args.workspaceId,
+            connection: prior,
+            operation: "stop",
+            operationKey: `stop:${prior._id}:orphan:${prior.boxRef}`,
+            requestConfig: { ttlSeconds: DEFAULT_BOX_TTL_SECONDS, envNames: [] },
+            targetBoxRef: prior.boxRef,
+          });
+        }
+      }
       await ctx.db.patch("runtimeConnections", connection._id, {
         generation,
         state: "provisioning",
@@ -774,16 +808,31 @@ export const runLifecycleOperation = internalAction({
     const pinnedTeardown =
       (op.operation === "stop" || op.operation === "delete") &&
       op.boxRef !== undefined;
+    // …but a newer generation can RECLAIM the pinned box (reconnect keeps
+    // boxRef): executing the stale teardown then would kill a box a live
+    // runtime is using. Only safe when the box is no longer attached or the
+    // connection is itself tearing down.
+    const reclaimedByNewerGeneration =
+      pinnedTeardown &&
+      connection !== null &&
+      connection.generation > op.runtimeGeneration &&
+      connection.boxRef === op.boxRef &&
+      connection.state !== "stopping" &&
+      connection.state !== "stopped" &&
+      connection.state !== "disconnected";
     if (
       connection === null ||
-      (connection.generation !== op.runtimeGeneration && !pinnedTeardown)
+      (connection.generation !== op.runtimeGeneration && !pinnedTeardown) ||
+      reclaimedByNewerGeneration
     ) {
       await ctx.runMutation(
         internal.runtimeConnections.recordLifecycleOutcome,
         {
           operationId: op._id,
           outcome: "failed",
-          error: "runtime generation moved on; operation is stale",
+          error: reclaimedByNewerGeneration
+            ? "a newer runtime generation reclaimed the pinned box; teardown superseded"
+            : "runtime generation moved on; operation is stale",
         },
       );
       return null;
@@ -1001,7 +1050,17 @@ export const retryLifecycleOperation = internalMutation({
     if (op === null) {
       throw domainError("NOT_FOUND", "lifecycle operation not found");
     }
-    if (op.state !== "uncertain" && op.state !== "accepted") {
+    // `uncertain` is always safe to re-drive. `accepted` means a driver is
+    // possibly mid-flight on a multi-minute provider wait — only reschedule
+    // one that has been silent past the action timeout, otherwise a second
+    // driver races the still-executing first.
+    if (
+      op.state !== "uncertain" &&
+      !(
+        op.state === "accepted" &&
+        op.updatedAt <= Date.now() - ASCII_READY_TIMEOUT_MS
+      )
+    ) {
       return { rescheduled: false };
     }
     await ctx.db.patch("runtimeLifecycleOperations", op._id, {
@@ -1116,6 +1175,33 @@ async function runCreate(
     return;
   }
   const bootstrap = await bootstrapBox(boxId, env, config);
+  // The same disconnect race exists inside the (up to 5-minute) bootstrap
+  // window — re-read the connection again; if it moved on, stop the fresh
+  // box rather than leaving a live box nobody claims (the ledger records
+  // where it went either way).
+  const afterBootstrap = (await ctx.runQuery(
+    internal.runtimeConnections.getRuntimeConnection,
+    { runtimeConnectionId: op.runtimeConnectionId },
+  )) as Doc<"runtimeConnections"> | null;
+  if (
+    afterBootstrap === null ||
+    afterBootstrap.generation !== op.runtimeGeneration ||
+    afterBootstrap.state === "stopping" ||
+    afterBootstrap.state === "stopped" ||
+    afterBootstrap.state === "disconnected"
+  ) {
+    await asciiRequest("POST", `/boxes/${encodeURIComponent(boxId)}/stop`, {
+      body: {},
+      timeoutMs: 60_000,
+    });
+    await record(ctx, op._id, {
+      outcome: "completed",
+      boxRef: boxId,
+      error:
+        "connection moved on during bootstrap; fresh box stopped immediately",
+    });
+    return;
+  }
   await record(ctx, op._id, {
     outcome: bootstrap.ok ? "completed" : "uncertain",
     boxRef: boxId,

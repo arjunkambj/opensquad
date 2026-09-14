@@ -84,16 +84,23 @@ async function enqueueControlCommand(
     };
   }
 
-  const outstanding = await ctx.db
-    .query("runtimeControlRequests")
-    .withIndex("by_runtimeConnectionId_and_state", (q) =>
-      q.eq("runtimeConnectionId", args.connection._id),
-    )
-    .collect();
+  // Only live states — the connection-prefix alone would re-read the row's
+  // entire lifetime history on every enqueue.
+  const outstanding: Doc<"runtimeControlRequests">[] = [];
+  for (const state of ["pending", "claimed"] as const) {
+    outstanding.push(
+      ...(await ctx.db
+        .query("runtimeControlRequests")
+        .withIndex("by_runtimeConnectionId_and_state", (q) =>
+          q
+            .eq("runtimeConnectionId", args.connection._id)
+            .eq("state", state),
+        )
+        .collect()),
+    );
+  }
   const live = outstanding.filter(
-    (request) =>
-      (request.state === "pending" || request.state === "claimed") &&
-      request.expiresAt > Date.now(),
+    (request) => request.expiresAt > Date.now(),
   );
 
   // One outstanding command of the same kind is a replay, not an error.
@@ -258,18 +265,24 @@ export const cancelLogin = mutation({
 
     // Retire any live start_login request first: an unclaimed one expires
     // outright; a claimed one is cancelled at the worker via the command
-    // we enqueue below (carrying its loginId).
-    const outstanding = await ctx.db
-      .query("runtimeControlRequests")
-      .withIndex("by_runtimeConnectionId_and_state", (q) =>
-        q.eq("runtimeConnectionId", connection._id),
-      )
-      .collect();
+    // we enqueue below (carrying its loginId). Live states only — never
+    // scan the connection's lifetime control history.
+    const outstanding: Doc<"runtimeControlRequests">[] = [];
+    for (const state of ["pending", "claimed"] as const) {
+      outstanding.push(
+        ...(await ctx.db
+          .query("runtimeControlRequests")
+          .withIndex("by_runtimeConnectionId_and_state", (q) =>
+            q
+              .eq("runtimeConnectionId", connection._id)
+              .eq("state", state),
+          )
+          .collect()),
+      );
+    }
     const liveStartLogin = outstanding.find(
       (request) =>
-        request.command === "start_login" &&
-        (request.state === "pending" || request.state === "claimed") &&
-        request.expiresAt > now,
+        request.command === "start_login" && request.expiresAt > now,
     );
     // Challenges for this connection never survive a cancel.
     const challenges = await ctx.db
@@ -429,18 +442,21 @@ export const listOutstanding = query({
     if (connection === null) {
       return [];
     }
-    const rows = await ctx.db
-      .query("runtimeControlRequests")
-      .withIndex("by_runtimeConnectionId_and_state", (q) =>
-        q.eq("runtimeConnectionId", connection._id),
-      )
-      .collect();
+    const rows: Doc<"runtimeControlRequests">[] = [];
+    for (const state of ["pending", "claimed"] as const) {
+      rows.push(
+        ...(await ctx.db
+          .query("runtimeControlRequests")
+          .withIndex("by_runtimeConnectionId_and_state", (q) =>
+            q
+              .eq("runtimeConnectionId", connection._id)
+              .eq("state", state),
+          )
+          .collect()),
+      );
+    }
     return rows
-      .filter(
-        (request) =>
-          (request.state === "pending" || request.state === "claimed") &&
-          request.expiresAt > Date.now(),
-      )
+      .filter((request) => request.expiresAt > Date.now())
       .map((request) => ({
         controlRequestId: request._id,
         command: request.command,
