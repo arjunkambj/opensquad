@@ -1471,7 +1471,10 @@ export const applyControlResult = internalMutation({
     if (args.status === "completed") {
       await applyControlEffects(ctx, connection, request, args.safeResult);
     }
-    // A login challenge never survives its command's terminal state.
+    // A login challenge never survives its command's terminal state. A
+    // terminal `cancel_login` clears EVERY challenge on the connection —
+    // challenge rows are keyed to the start_login request, never to the
+    // cancel that killed them.
     if (
       request.command === "start_login" ||
       request.command === "cancel_login"
@@ -1483,7 +1486,10 @@ export const applyControlResult = internalMutation({
         )
         .collect();
       for (const row of challenges) {
-        if (row.controlRequestId === request._id) {
+        if (
+          request.command === "cancel_login" ||
+          row.controlRequestId === request._id
+        ) {
           await ctx.db.delete("runtimeLoginChallenges", row._id);
         }
       }
@@ -1544,9 +1550,15 @@ async function applyControlEffects(
         verifiedAt: now,
       };
       // A managed (ChatGPT) login makes the runtime ready; API-key state is
-      // recorded but is NOT a production login for OpenSquad workers.
+      // recorded but is NOT a production login for OpenSquad workers. The
+      // promotion must never resurrect a runtime that is already tearing
+      // down — a login completing mid-disconnect stays `stopping`.
+      const liveStates =
+        connection.state === "provisioning" ||
+        connection.state === "connecting" ||
+        connection.state === "ready";
       const nextState =
-        request.command === "start_login" && state === "chatgpt"
+        request.command === "start_login" && state === "chatgpt" && liveStates
           ? ("ready" as const)
           : connection.state === "provisioning"
             ? ("connecting" as const)
@@ -1579,12 +1591,41 @@ async function applyControlEffects(
         state: "disconnected",
         verifiedAt: now,
       });
+      // A logged-out session can never complete a pending login — its
+      // challenge material must not outlive it.
+      const challenges = await ctx.db
+        .query("runtimeLoginChallenges")
+        .withIndex("by_runtimeConnectionId", (q) =>
+          q.eq("runtimeConnectionId", connection._id),
+        )
+        .collect();
+      for (const row of challenges) {
+        await ctx.db.delete("runtimeLoginChallenges", row._id);
+      }
       break;
     }
     case "interrupt_turn": {
       const terminated = result.terminated === true;
       if (!terminated) {
         break;
+      }
+      // The confirmed-dead turn ref must not linger: it would keep steering
+      // owner interrupts and every future lease-expiry sweep at a turn that
+      // no longer exists. Clear it only when it still names this turn — a
+      // heartbeat may already have recorded the next one.
+      const recordedRef = connection.currentCodexTurnRef;
+      if (recordedRef !== undefined && request.turnId !== undefined) {
+        const stillThisTurn =
+          request.threadId !== undefined
+            ? recordedRef === `${request.threadId}:${request.turnId}`
+            : recordedRef.split(":")[1] === request.turnId;
+        if (stillThisTurn) {
+          await ctx.db.patch("runtimeConnections", connection._id, {
+            currentCodexTurnRef: undefined,
+            currentRunId: undefined,
+            updatedAt: now,
+          });
+        }
       }
       // Confirmed termination releases the uncertain slot and fails the
       // interrupted request — replacement may now proceed (§7.7).
