@@ -269,9 +269,13 @@ export function buildWorkerResult(
   if (!isRecord(output)) {
     throw new Error("model output is not a JSON object");
   }
+  // The worker owns the envelope: schemaVersion/operation are stamped AFTER
+  // the model output so a stray key in the output cannot silently rewrite
+  // the contracted discriminator (which would make the server reject the
+  // result as an operation mismatch).
   return {
+    ...output,
     schemaVersion: WORKER_RESULT_SCHEMA_VERSION,
     operation,
-    ...output,
   };
 }
