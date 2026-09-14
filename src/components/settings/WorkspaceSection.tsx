@@ -43,6 +43,9 @@ export function WorkspaceSection({
     timezone: workspace.timezone,
   })
   const [syncedAt, setSyncedAt] = useState(workspace.updatedAt)
+  // Optimistic-concurrency base must be the version the edit STARTED from —
+  // reading the live prop at submit would pass a version the user never saw.
+  const [baseVersion, setBaseVersion] = useState(workspace.policyVersion)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +53,7 @@ export function WorkspaceSection({
   // Sync on `updatedAt`: name-only edits do not bump `policyVersion`.
   if (workspace.updatedAt !== syncedAt && !dirty) {
     setSyncedAt(workspace.updatedAt)
+    setBaseVersion(workspace.policyVersion)
     setForm({ name: workspace.name, timezone: workspace.timezone })
   }
 
@@ -70,7 +74,7 @@ export function WorkspaceSection({
         workspaceId: workspace._id,
         name: form.name,
         timezone: form.timezone,
-        expectedPolicyVersion: workspace.policyVersion,
+        expectedPolicyVersion: baseVersion,
       })
       setDirty(false)
       toast.add({ title: "Workspace saved", type: "success" })

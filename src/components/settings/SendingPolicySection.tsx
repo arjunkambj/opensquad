@@ -45,6 +45,9 @@ export function SendingPolicySection({
     dailySendLimit: String(workspace.dailySendLimit),
   })
   const [syncedAt, setSyncedAt] = useState(workspace.updatedAt)
+  // Optimistic-concurrency base must be the version the edit STARTED from —
+  // reading the live prop at submit would pass a version the user never saw.
+  const [baseVersion, setBaseVersion] = useState(workspace.policyVersion)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +55,7 @@ export function SendingPolicySection({
   // Sync on `updatedAt` so concurrent edits anywhere on the record resync.
   if (workspace.updatedAt !== syncedAt && !dirty) {
     setSyncedAt(workspace.updatedAt)
+    setBaseVersion(workspace.policyVersion)
     setForm({
       weekdays: [...workspace.sendWindow.weekdays],
       startTime: minutesToTimeString(workspace.sendWindow.startMinute),
@@ -90,7 +94,7 @@ export function SendingPolicySection({
     try {
       await setSendingPolicy({
         workspaceId: workspace._id,
-        expectedPolicyVersion: workspace.policyVersion,
+        expectedPolicyVersion: baseVersion,
         dailySendLimit: Number(form.dailySendLimit),
         sendWindow: {
           weekdays: form.weekdays,

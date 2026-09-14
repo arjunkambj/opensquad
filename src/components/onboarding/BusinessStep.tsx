@@ -48,6 +48,9 @@ export function BusinessStep({
     profileToForm(profile),
   )
   const [syncedAt, setSyncedAt] = useState(profile?.updatedAt ?? 0)
+  // Optimistic-concurrency base must be the version the edit STARTED from —
+  // reading the live prop at submit would pass a version the user never saw.
+  const [baseVersion, setBaseVersion] = useState(profile?.version ?? 0)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +61,7 @@ export function BusinessStep({
   const docUpdatedAt = profile?.updatedAt ?? 0
   if (docUpdatedAt !== syncedAt && !dirty) {
     setSyncedAt(docUpdatedAt)
+    setBaseVersion(profile?.version ?? 0)
     setForm(profileToForm(profile))
   }
 
@@ -72,7 +76,7 @@ export function BusinessStep({
     try {
       await updateProfile({
         workspaceId,
-        expectedVersion: profile?.version ?? 0,
+        expectedVersion: baseVersion,
         websiteUrl: form.websiteUrl,
         offer: form.offer,
         idealCustomer: form.idealCustomer,

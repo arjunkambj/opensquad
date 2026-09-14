@@ -56,6 +56,9 @@ export function WorkspaceStep({
     workspaceToForm(workspace, detectedTimezone),
   )
   const [syncedAt, setSyncedAt] = useState(workspace.updatedAt)
+  // Optimistic-concurrency base must be the version the edit STARTED from —
+  // reading the live prop at submit would pass a version the user never saw.
+  const [baseVersion, setBaseVersion] = useState(workspace.policyVersion)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,6 +67,7 @@ export function WorkspaceStep({
   // the form must still follow the authoritative record.
   if (workspace.updatedAt !== syncedAt && !dirty) {
     setSyncedAt(workspace.updatedAt)
+    setBaseVersion(workspace.policyVersion)
     setForm(workspaceToForm(workspace, detectedTimezone))
   }
 
@@ -115,7 +119,7 @@ export function WorkspaceStep({
           workspaceId: workspace._id,
           name: form.name,
           timezone: form.timezone,
-          expectedPolicyVersion: workspace.policyVersion,
+          expectedPolicyVersion: baseVersion,
         })
       }
 
@@ -130,7 +134,10 @@ export function WorkspaceStep({
       if (windowChanged || limitChanged) {
         await setSendingPolicy({
           workspaceId: workspace._id,
-          expectedPolicyVersion: current.policyVersion,
+          expectedPolicyVersion:
+            nameChanged || timezoneChanged
+              ? current.policyVersion
+              : baseVersion,
           dailySendLimit,
           sendWindow: {
             weekdays: form.weekdays,
