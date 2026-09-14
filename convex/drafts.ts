@@ -661,6 +661,25 @@ export const stageConversation = internalMutation({
       if (existing === null || existing.workspaceId !== args.workspaceId) {
         throw domainError("NOT_FOUND", "conversation not found");
       }
+      // The (inboxRef, providerThreadRef) pair must stay unique on patch too
+      // — otherwise two conversations claim the same provider thread and the
+      // create-path `.unique()` lookup starts throwing forever.
+      if (providerThreadRef !== undefined) {
+        const duplicate = await ctx.db
+          .query("conversations")
+          .withIndex("by_inboxRef_and_providerThreadRef", (q) =>
+            q
+              .eq("inboxRef", existing.inboxRef)
+              .eq("providerThreadRef", providerThreadRef),
+          )
+          .unique();
+        if (duplicate !== null && duplicate._id !== existing._id) {
+          throw domainError(
+            "CONFLICT",
+            `inbox/thread already mapped to conversation ${duplicate._id}`,
+          );
+        }
+      }
       await ctx.db.patch("conversations", existing._id, {
         ...(args.employeeId !== undefined
           ? { employeeId: args.employeeId }
