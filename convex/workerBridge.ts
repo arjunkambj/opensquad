@@ -364,7 +364,9 @@ export const claimWork = internalMutation({
         mission.state === "completed" ||
         mission.state === "failed"
       ) {
-        // Dead mission — cancel the transport row so it never claims again.
+        // Dead mission — cancel the transport row AND finish its run
+        // receipt (mirror cancelMissionWorkerRequests): the request's event
+        // alone leaves a `running` run no other path revisits.
         await ctx.db.patch("workerRequests", request._id, {
           state: "cancelled",
           error: {
@@ -373,6 +375,12 @@ export const claimWork = internalMutation({
           },
           updatedAt: now,
         });
+        const run = await ctx.db.get("runs", request.runId);
+        if (run !== null) {
+          await finishRun(ctx, run, "cancelled", {
+            errorMessage: `mission is ${mission.state}`,
+          });
+        }
         await deliverCompletion(ctx, request, "cancelled", "mission terminal");
         continue;
       }

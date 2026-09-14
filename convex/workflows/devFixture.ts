@@ -51,17 +51,30 @@ export const devFixtureMissionWorkflow = workflow.define({
   }
 
   // 2. Validated stage output — dev fixture only (deterministic synthetic
-  //    prospect keys, run receipt recorded inside the step).
-  const scan = await step.runMutation(
+  //    prospect keys, run receipt recorded inside the step). A pause racing
+  //    the step parks the workflow on the resume event — it never fails a
+  //    resumable mission; a terminal state abandons honestly.
+  let scan = await step.runMutation(
     internal.workflows.steps.devFixtureStage,
     { missionId: args.missionId },
     { name: "devFixtureStage" },
   );
+  while (scan.action === "wait") {
+    await step.awaitEvent(resumeEvent);
+    scan = await step.runMutation(
+      internal.workflows.steps.devFixtureStage,
+      { missionId: args.missionId },
+      { name: "devFixtureStage" },
+    );
+  }
+  if (scan.action === "abandon") {
+    return { outcome: "cancelled" as const };
+  }
 
   // 3. Prospect branches — stable (missionId, prospectId) start keys make a
   //    replayed step idempotent; each child gets a backend-created
   //    completion event on THIS workflow.
-  const registered = await step.runMutation(
+  let registered = await step.runMutation(
     internal.workflows.steps.registerBranches,
     {
       missionId: args.missionId,
@@ -70,6 +83,21 @@ export const devFixtureMissionWorkflow = workflow.define({
     },
     { name: "registerBranches" },
   );
+  while (registered.action === "wait") {
+    await step.awaitEvent(resumeEvent);
+    registered = await step.runMutation(
+      internal.workflows.steps.registerBranches,
+      {
+        missionId: args.missionId,
+        parentWorkflowId: step.workflowId,
+        prospectKeys: scan.prospectKeys,
+      },
+      { name: "registerBranches" },
+    );
+  }
+  if (registered.action === "abandon") {
+    return { outcome: "cancelled" as const };
+  }
 
   // 4. Durable wait for each child's terminal outcome — events may arrive in
   //    any order and survive a backend restart; the branch row is truth.

@@ -419,17 +419,25 @@ export const sweepExpiredLeases = internalMutation({
         mission.state === "completed" ||
         mission.state === "failed";
       if (staleGeneration || deadMission) {
+        const detail = staleGeneration
+          ? "request predates the current runtime generation"
+          : "mission terminated before dispatch";
         await ctx.db.patch("workerRequests", request._id, {
           state: "cancelled",
           error: {
             code: staleGeneration ? "stale_generation" : "mission_terminal",
-            message: staleGeneration
-              ? "request predates the current runtime generation"
-              : "mission terminated before dispatch",
+            message: detail,
           },
           updatedAt: now,
         });
         cancelledRequests += 1;
+        // Finish the run receipt too — the event alone leaves the run
+        // `running` forever (sweepRuns only fires at mission termination,
+        // which may already have passed for a completed mission).
+        const run = await ctx.db.get("runs", request.runId);
+        if (run !== null) {
+          await finishRun(ctx, run, "cancelled", { errorMessage: detail });
+        }
         await deliverCompletionSafe(
           ctx,
           request,

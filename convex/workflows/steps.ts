@@ -186,17 +186,24 @@ export const markAwaitingUser = internalMutation({
  */
 export const devFixtureStage = internalMutation({
   args: { missionId: v.id("missions") },
-  returns: v.object({
-    prospectKeys: v.array(v.string()),
-    summary: v.string(),
-  }),
+  returns: v.union(
+    v.object({ action: v.literal("wait") }),
+    v.object({ action: v.literal("abandon"), reason: v.string() }),
+    v.object({
+      action: v.literal("done"),
+      prospectKeys: v.array(v.string()),
+      summary: v.string(),
+    }),
+  ),
   handler: async (ctx, args) => {
     const mission = await getMissionOrThrow(ctx, args.missionId);
+    // A mid-pipeline pause must park the workflow, not kill it — throwing
+    // here would escalate to mission `failed` and make resume impossible.
+    if (mission.state === "paused") {
+      return { action: "wait" as const };
+    }
     if (mission.state !== "active") {
-      throw domainError(
-        "CONFLICT",
-        `mission is ${mission.state}; the stage requires an active mission`,
-      );
+      return { action: "abandon" as const, reason: mission.state };
     }
     const runId = await insertRun(ctx, {
       missionId: mission._id,
@@ -236,6 +243,7 @@ export const devFixtureStage = internalMutation({
       updatedAt: Date.now(),
     });
     return {
+      action: "done" as const,
       prospectKeys,
       summary: `${prospectKeys.length} synthetic prospect branches selected`,
     };
@@ -256,22 +264,29 @@ export const registerBranches = internalMutation({
     parentWorkflowId: v.string(),
     prospectKeys: v.array(v.string()),
   },
-  returns: v.object({
-    branches: v.array(
-      v.object({
-        branchId: v.id("missionProspects"),
-        prospectId: v.string(),
-        completionEventId: v.string(),
-      }),
-    ),
-  }),
+  returns: v.union(
+    v.object({ action: v.literal("wait") }),
+    v.object({ action: v.literal("abandon"), reason: v.string() }),
+    v.object({
+      action: v.literal("done"),
+      branches: v.array(
+        v.object({
+          branchId: v.id("missionProspects"),
+          prospectId: v.string(),
+          completionEventId: v.string(),
+        }),
+      ),
+    }),
+  ),
   handler: async (ctx, args) => {
     const mission = await getMissionOrThrow(ctx, args.missionId);
+    // Same mid-pipeline contract as devFixtureStage — a pause parks, a
+    // terminal state abandons; neither may fail the mission.
+    if (mission.state === "paused") {
+      return { action: "wait" as const };
+    }
     if (mission.state !== "active") {
-      throw domainError(
-        "CONFLICT",
-        `mission is ${mission.state}; cannot start prospect branches`,
-      );
+      return { action: "abandon" as const, reason: mission.state };
     }
     const prospectKeys = args.prospectKeys.map((key, index) =>
       boundedString(key, `prospectKeys[${index}]`, { min: 1, max: 100 }),
@@ -349,7 +364,7 @@ export const registerBranches = internalMutation({
         completionEventId: branch.completionEventId,
       });
     }
-    return { branches };
+    return { action: "done" as const, branches };
   },
 });
 
@@ -566,6 +581,9 @@ export async function completeMissionTx(
       progressSummary: summary,
     },
   });
+  // A completed mission cannot leave a run `running` — residual transport
+  // rows are cancelled so the run ledger is terminal alongside the mission.
+  await sweepRuns(ctx, fresh._id, "cancelled");
   return kind;
 }
 
