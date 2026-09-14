@@ -118,14 +118,15 @@ export const listForConversation = query({
         .order("desc")
         .take(limit);
     }
-    const collected = await ctx.db
+    // No state filter → newest-first audit order (the state index would
+    // return state-bucketed groups, not chronology).
+    return await ctx.db
       .query("sendAttempts")
-      .withIndex("by_conversationId_and_state", (q) =>
+      .withIndex("by_conversationId_and_createdAt", (q) =>
         q.eq("conversationId", args.conversationId),
       )
       .order("desc")
       .take(limit);
-    return collected;
   },
 });
 
@@ -303,7 +304,9 @@ export async function recordReceipt(
 
   // Application-key dedupe: a second event id for the same logical effect
   // (e.g. provider re-delivery of one inbound message) is recorded but
-  // marked handled so P11 never runs its business path twice.
+  // marked handled so P11 never runs its business path twice. `.first()`,
+  // not `.unique()` — once a second row exists for the key (marked
+  // `handled`), a third delivery must still record, not throw and wedge.
   const byKey = await ctx.db
     .query("emailEventReceipts")
     .withIndex("by_workspaceId_and_applicationKey", (q) =>
@@ -311,7 +314,7 @@ export async function recordReceipt(
         .eq("workspaceId", args.workspaceId)
         .eq("applicationKey", applicationKey),
     )
-    .unique();
+    .first();
   const duplicateApplicationKey = byKey !== null;
 
   const now = Date.now();
