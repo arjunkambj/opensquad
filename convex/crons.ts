@@ -25,4 +25,14 @@ crons.interval(
   {},
 );
 
+// Lifecycle reconcile: a lost schedule or a dead driver otherwise wedges a
+// runtime connection mid-transition (`pending`/`accepted`/`uncertain` ops
+// with a live Box behind them). Re-drives bounded stale rows every 5 min.
+crons.interval(
+  "lifecycle-op-sweep",
+  { minutes: 5 },
+  internal.runtimeConnections.sweepLifecycleOperations,
+  {},
+);
+
 export default crons;

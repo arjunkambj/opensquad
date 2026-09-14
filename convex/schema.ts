@@ -891,6 +891,8 @@ export default defineSchema({
       "runtimeConnectionId",
       "createdAt",
     ])
+    // Stuck-op sweep: `uncertain`, stale `accepted` and stale `pending` rows.
+    .index("by_state_and_updatedAt", ["state", "updatedAt"])
     .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
 
   providerConnections: defineTable(providerConnectionFields).index(

@@ -373,17 +373,32 @@ export const connect = mutation({
       // (disconnect during provisioning had no boxRef yet) — before clearing
       // the reference, open a pinned stop when no live/completed teardown
       // covers it, so revive never orphans a still-running box.
+      const priorOps = await ctx.db
+        .query("runtimeLifecycleOperations")
+        .withIndex("by_runtimeConnectionId_and_createdAt", (q) =>
+          q.eq("runtimeConnectionId", prior._id),
+        )
+        .collect();
+      // Boxes needing coverage: the attached boxRef plus any box a
+      // create/resume op RECORDED — an uncertain/failed op can leave a live
+      // box at the provider that connection.boxRef never referenced.
+      const orphanCandidates = new Set<string>();
       if (prior.boxRef !== undefined) {
-        const priorOps = await ctx.db
-          .query("runtimeLifecycleOperations")
-          .withIndex("by_runtimeConnectionId_and_createdAt", (q) =>
-            q.eq("runtimeConnectionId", prior._id),
-          )
-          .collect();
+        orphanCandidates.add(prior.boxRef);
+      }
+      for (const op of priorOps) {
+        if (
+          (op.operation === "create" || op.operation === "resume") &&
+          op.boxRef !== undefined
+        ) {
+          orphanCandidates.add(op.boxRef);
+        }
+      }
+      for (const boxRef of orphanCandidates) {
         const covered = priorOps.some(
           (op) =>
             (op.operation === "stop" || op.operation === "delete") &&
-            op.boxRef === prior.boxRef &&
+            op.boxRef === boxRef &&
             (op.state === "pending" ||
               op.state === "accepted" ||
               op.state === "completed"),
@@ -393,9 +408,9 @@ export const connect = mutation({
             workspaceId: args.workspaceId,
             connection: prior,
             operation: "stop",
-            operationKey: `stop:${prior._id}:orphan:${prior.boxRef}`,
+            operationKey: `stop:${prior._id}:orphan:${boxRef}`,
             requestConfig: { ttlSeconds: DEFAULT_BOX_TTL_SECONDS, envNames: [] },
-            targetBoxRef: prior.boxRef,
+            targetBoxRef: boxRef,
           });
         }
       }
@@ -859,9 +874,15 @@ export const runLifecycleOperation = internalAction({
       return null;
     }
 
-    await ctx.runMutation(internal.runtimeConnections.markLifecycleAccepted, {
-      operationId: op._id,
-    });
+    // Exclusive claim — a second driver (a re-driven schedule racing the
+    // first) must not execute the same provider operation twice.
+    const claim = await ctx.runMutation(
+      internal.runtimeConnections.markLifecycleAccepted,
+      { operationId: op._id },
+    );
+    if (!claim.claimed) {
+      return null;
+    }
 
     if (process.env.ASCII_API_KEY === undefined) {
       await ctx.runMutation(
@@ -922,7 +943,7 @@ export const getRuntimeConnection = internalQuery({
 
 export const markLifecycleAccepted = internalMutation({
   args: { operationId: v.id("runtimeLifecycleOperations") },
-  returns: v.null(),
+  returns: v.object({ claimed: v.boolean() }),
   handler: async (ctx, args) => {
     const op = await ctx.db.get("runtimeLifecycleOperations", args.operationId);
     if (op !== null && op.state === "pending") {
@@ -930,8 +951,9 @@ export const markLifecycleAccepted = internalMutation({
         state: "accepted",
         updatedAt: Date.now(),
       });
+      return { claimed: true };
     }
-    return null;
+    return { claimed: false };
   },
 });
 
@@ -1014,13 +1036,16 @@ export const recordLifecycleOutcome = internalMutation({
       return null;
     }
     // failed | uncertain — surface the error on the connection; state moves
-    // to `error` for failed ops and stays for uncertain (a reconcile may
-    // still land it).
+    // to `error` for failed ops on a transition-state connection (a failed
+    // provisioning OR a failed teardown — `stopping` has no other exit, and
+    // `disconnect` no-ops on it, so the wedge must be owner-visible), and
+    // stays for uncertain (a reconcile may still land it).
     await ctx.db.patch("runtimeConnections", connection._id, {
       ...(args.outcome === "failed"
         ? {
             state:
-              connection.state === "provisioning"
+              connection.state === "provisioning" ||
+              connection.state === "stopping"
                 ? ("error" as const)
                 : connection.state,
           }
@@ -1073,6 +1098,68 @@ export const retryLifecycleOperation = internalMutation({
       { operationId: op._id },
     );
     return { rescheduled: true };
+  },
+});
+
+/** A `pending` op unclaimed past this bound lost its scheduled driver —
+ *  drivers claim within seconds of the scheduler firing. */
+const LIFECYCLE_PENDING_STALE_MS = 60_000;
+
+/**
+ * Lifecycle-op reconcile sweep (cron): re-drives `uncertain` ops, `accepted`
+ * ops whose driver went silent past the action timeout, and `pending` ops
+ * whose scheduled driver never claimed them. Without it a lost schedule or
+ * a dead driver wedges the connection mid-transition forever.
+ */
+export const sweepLifecycleOperations = internalMutation({
+  args: {},
+  returns: v.object({ rescheduled: v.number() }),
+  handler: async (ctx) => {
+    const now = Date.now();
+    let rescheduled = 0;
+    const [uncertain, staleAccepted, stalePending] = await Promise.all([
+      ctx.db
+        .query("runtimeLifecycleOperations")
+        .withIndex("by_state_and_updatedAt", (q) => q.eq("state", "uncertain"))
+        .take(32),
+      ctx.db
+        .query("runtimeLifecycleOperations")
+        .withIndex("by_state_and_updatedAt", (q) =>
+          q
+            .eq("state", "accepted")
+            .lt("updatedAt", now - ASCII_READY_TIMEOUT_MS),
+        )
+        .take(32),
+      ctx.db
+        .query("runtimeLifecycleOperations")
+        .withIndex("by_state_and_updatedAt", (q) =>
+          q
+            .eq("state", "pending")
+            .lt("updatedAt", now - LIFECYCLE_PENDING_STALE_MS),
+        )
+        .take(32),
+    ]);
+    for (const op of [...uncertain, ...staleAccepted]) {
+      const res = await ctx.runMutation(
+        internal.runtimeConnections.retryLifecycleOperation,
+        { operationId: op._id },
+      );
+      if (res.rescheduled) {
+        rescheduled += 1;
+      }
+    }
+    for (const op of stalePending) {
+      // Already `pending` — it only needs the driver scheduled again; the
+      // driver's exclusive pending→accepted claim keeps a late-firing
+      // original schedule from double-driving it.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.runtimeConnections.runLifecycleOperation,
+        { operationId: op._id },
+      );
+      rescheduled += 1;
+    }
+    return { rescheduled };
   },
 });
 
@@ -1397,7 +1484,9 @@ async function runResume(
   // the connection. If it moved on WITHOUT keeping this box attached, stop
   // the just-resumed box rather than leave a live orphan; if a new
   // generation still references the same box (a reconnect-resume in
-  // flight), leave it alone — the newer op owns it.
+  // flight), leave it alone — the newer op owns it. A dying SAME-generation
+  // connection keeps its boxRef until teardown completes, so matching
+  // boxRef alone must not skip the stop.
   const latest = (await ctx.runQuery(
     internal.runtimeConnections.getRuntimeConnection,
     { runtimeConnectionId: op.runtimeConnectionId },
@@ -1409,7 +1498,11 @@ async function runResume(
     latest.state === "stopped" ||
     latest.state === "disconnected"
   ) {
-    if (latest === null || latest.boxRef !== connection.boxRef) {
+    const ownedByNewerGeneration =
+      latest !== null &&
+      latest.generation !== op.runtimeGeneration &&
+      latest.boxRef === connection.boxRef;
+    if (!ownedByNewerGeneration) {
       await asciiRequest(
         "POST",
         `/boxes/${encodeURIComponent(connection.boxRef)}/stop`,
