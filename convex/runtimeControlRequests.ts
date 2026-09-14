@@ -14,10 +14,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import {
-  requireWorkspaceMember,
-  requireWorkspaceOwner,
-} from "./lib/auth";
+import { requireWorkspaceOwner } from "./lib/auth";
 import type { AuthCtx } from "./lib/auth";
 import {
   CONTROL_REQUEST_TTL_MS,
@@ -103,8 +100,16 @@ async function enqueueControlCommand(
     (request) => request.expiresAt > Date.now(),
   );
 
-  // One outstanding command of the same kind is a replay, not an error.
-  const sameKind = live.find((request) => request.command === args.command);
+  // One outstanding command of the same kind AND payload is a replay, not
+  // an error — an interrupt_turn for turn B must not dedupe onto turn A's
+  // still-live request and silently never reach B.
+  const sameKind = live.find(
+    (request) =>
+      request.command === args.command &&
+      request.turnId === args.turnId &&
+      request.threadId === args.threadId &&
+      request.loginId === args.loginId,
+  );
   if (sameKind !== undefined) {
     return {
       controlRequestId: sameKind._id,
@@ -434,7 +439,7 @@ export const listOutstanding = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireWorkspaceOwner(ctx, args.workspaceId);
     const connection = await ctx.db
       .query("runtimeConnections")
       .withIndex("by_workspaceId", (q) => q.eq("workspaceId", args.workspaceId))
