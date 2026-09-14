@@ -396,6 +396,15 @@ export const claimWork = internalMutation({
     }
 
     const request = eligible[0]!;
+    if (request.inputRef.kind !== "inline") {
+      // Must run BEFORE any state mutation — throwing here must leave the
+      // request pending and the slot idle, not a leased request holding a
+      // slot the worker never received.
+      throw bridgeError(
+        "UNAVAILABLE",
+        "storage-backed inputs are not servable by this build",
+      );
+    }
     const leaseToken = mintLeaseToken();
     const leaseExpiresAt = now + WORKER_LEASE_TTL_MS;
     const leaseHash = await sha256Hex(leaseToken);
@@ -422,12 +431,6 @@ export const claimWork = internalMutation({
       {},
     );
 
-    if (request.inputRef.kind !== "inline") {
-      throw bridgeError(
-        "UNAVAILABLE",
-        "storage-backed inputs are not servable by this build",
-      );
-    }
     return {
       claimed: true as const,
       workerRequestId: request._id,
@@ -924,6 +927,16 @@ export const runtimeHeartbeat = internalMutation({
     ) {
       throw bridgeError("THROTTLED", "runtime heartbeat too frequent");
     }
+    // A reported run only counts when it belongs to this credential's
+    // workspace — a worker must not pin a foreign run onto its connection.
+    const reportedRun =
+      args.currentRunId !== undefined
+        ? await ctx.db.get("runs", args.currentRunId)
+        : null;
+    const scopedRun =
+      reportedRun !== null && reportedRun.workspaceId === credential.workspaceId
+        ? reportedRun
+        : null;
     await ctx.db.patch("runtimeConnections", connection._id, {
       lastHeartbeatAt: now,
       workerPhase: args.phase,
@@ -934,7 +947,7 @@ export const runtimeHeartbeat = internalMutation({
       ...(connection.state === "provisioning"
         ? { state: "connecting" as const }
         : {}),
-      ...(args.currentRunId !== undefined
+      ...(args.currentRunId !== undefined && scopedRun !== null
         ? { currentRunId: args.currentRunId }
         : {}),
       ...(args.currentCodexTurnRef !== undefined
@@ -947,16 +960,14 @@ export const runtimeHeartbeat = internalMutation({
     // `thread/resume` the scoped session (§4.4 agentSessions). The turn ref
     // is `threadId:turnId`; the thread half is the resumable handle.
     if (
-      args.currentRunId !== undefined &&
+      scopedRun !== null &&
       args.currentCodexTurnRef !== undefined
     ) {
       const threadId = args.currentCodexTurnRef.split(":")[0];
-      const run = await ctx.db.get("runs", args.currentRunId);
+      const run = scopedRun;
       if (
         threadId !== undefined &&
-        threadId.length > 0 &&
-        run !== null &&
-        run.workspaceId === credential.workspaceId
+        threadId.length > 0
       ) {
         const scopeKey = `run:${args.currentRunId}`;
         const existing = await ctx.db
@@ -1091,6 +1102,16 @@ export const checkArtifactGrant = internalMutation({
       )
       .unique();
     if (existing !== null) {
+      // Dedupe is content-addressed: a repeated key returns the prior
+      // SAME-digest artifact. Different bytes under a reused key are a
+      // conflict — silently returning the old artifact would drop the new
+      // content while telling the worker the upload succeeded.
+      if (existing.contentDigest !== args.digest) {
+        throw bridgeError(
+          "CONFLICT",
+          "operationKey was already used with different content",
+        );
+      }
       return { deduplicated: true, artifactId: existing._id };
     }
     return { deduplicated: false };
@@ -1265,12 +1286,18 @@ export const claimControl = internalMutation({
       }
     }
 
-    const live = [...claimed, ...pending].filter(
-      (request) => request.expiresAt > now,
-    );
-    // Prefer re-delivering an in-flight claimed request (the worker may have
-    // crashed after claiming); then the oldest pending command.
-    const next = live.sort((a, b) => a.createdAt - b.createdAt)[0];
+    // A pending command always wins over re-delivering an in-flight claimed
+    // one — otherwise a claimed long-running command (start_login) would
+    // starve every queued cancel_login/interrupt_turn behind it, defeating
+    // the control channel's responsiveness guarantee. The claimed command is
+    // still re-delivered whenever no pending work exists (crash recovery).
+    const livePending = pending
+      .filter((request) => request.expiresAt > now)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const liveClaimed = claimed
+      .filter((request) => request.expiresAt > now)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const next = livePending[0] ?? liveClaimed[0];
     if (next === undefined) {
       return { claimed: false as const };
     }
@@ -1279,13 +1306,15 @@ export const claimControl = internalMutation({
         state: "claimed",
         claimedAt: now,
       });
-      // Claiming extends the window slightly so a just-claimed command does
-      // not expire mid-execution — bounded by the original TTL either way.
-      if (next.expiresAt - now < 30_000) {
-        await ctx.db.patch("runtimeControlRequests", next._id, {
-          expiresAt: now + 30_000,
-        });
-      }
+    }
+    // Claiming — and re-delivering a claimed command — extends the window
+    // slightly so a live execution does not expire mid-run. The response
+    // advertises this floor; the row must reflect it or the sweep can expire
+    // a command whose claim just promised 30 s.
+    if (next.expiresAt - now < 30_000) {
+      await ctx.db.patch("runtimeControlRequests", next._id, {
+        expiresAt: now + 30_000,
+      });
     }
     return {
       claimed: true as const,
@@ -1442,7 +1471,10 @@ export const applyControlResult = internalMutation({
     if (args.status === "completed") {
       await applyControlEffects(ctx, connection, request, args.safeResult);
     }
-    // A login challenge never survives its command's terminal state.
+    // A login challenge never survives its command's terminal state. A
+    // terminal `cancel_login` clears EVERY challenge on the connection —
+    // challenge rows are keyed to the start_login request, never to the
+    // cancel that killed them.
     if (
       request.command === "start_login" ||
       request.command === "cancel_login"
@@ -1454,7 +1486,10 @@ export const applyControlResult = internalMutation({
         )
         .collect();
       for (const row of challenges) {
-        if (row.controlRequestId === request._id) {
+        if (
+          request.command === "cancel_login" ||
+          row.controlRequestId === request._id
+        ) {
           await ctx.db.delete("runtimeLoginChallenges", row._id);
         }
       }
@@ -1515,9 +1550,15 @@ async function applyControlEffects(
         verifiedAt: now,
       };
       // A managed (ChatGPT) login makes the runtime ready; API-key state is
-      // recorded but is NOT a production login for OpenSquad workers.
+      // recorded but is NOT a production login for OpenSquad workers. The
+      // promotion must never resurrect a runtime that is already tearing
+      // down — a login completing mid-disconnect stays `stopping`.
+      const liveStates =
+        connection.state === "provisioning" ||
+        connection.state === "connecting" ||
+        connection.state === "ready";
       const nextState =
-        request.command === "start_login" && state === "chatgpt"
+        request.command === "start_login" && state === "chatgpt" && liveStates
           ? ("ready" as const)
           : connection.state === "provisioning"
             ? ("connecting" as const)
@@ -1550,12 +1591,41 @@ async function applyControlEffects(
         state: "disconnected",
         verifiedAt: now,
       });
+      // A logged-out session can never complete a pending login — its
+      // challenge material must not outlive it.
+      const challenges = await ctx.db
+        .query("runtimeLoginChallenges")
+        .withIndex("by_runtimeConnectionId", (q) =>
+          q.eq("runtimeConnectionId", connection._id),
+        )
+        .collect();
+      for (const row of challenges) {
+        await ctx.db.delete("runtimeLoginChallenges", row._id);
+      }
       break;
     }
     case "interrupt_turn": {
       const terminated = result.terminated === true;
       if (!terminated) {
         break;
+      }
+      // The confirmed-dead turn ref must not linger: it would keep steering
+      // owner interrupts and every future lease-expiry sweep at a turn that
+      // no longer exists. Clear it only when it still names this turn — a
+      // heartbeat may already have recorded the next one.
+      const recordedRef = connection.currentCodexTurnRef;
+      if (recordedRef !== undefined && request.turnId !== undefined) {
+        const stillThisTurn =
+          request.threadId !== undefined
+            ? recordedRef === `${request.threadId}:${request.turnId}`
+            : recordedRef.split(":")[1] === request.turnId;
+        if (stillThisTurn) {
+          await ctx.db.patch("runtimeConnections", connection._id, {
+            currentCodexTurnRef: undefined,
+            currentRunId: undefined,
+            updatedAt: now,
+          });
+        }
       }
       // Confirmed termination releases the uncertain slot and fails the
       // interrupted request — replacement may now proceed (§7.7).

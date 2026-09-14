@@ -221,6 +221,7 @@ export const startLogin = mutation({
     if (
       connection.state === "disconnected" ||
       connection.state === "stopped" ||
+      connection.state === "stopping" ||
       connection.state === "error"
     ) {
       throw domainError(

@@ -237,3 +237,25 @@ crons and indexes live. Deferred honestly: P07's owner lifecycle needs a
 Hexclave session, the daemon-in-Box live gate stays open, and demo-recipient
 gating is code-verified only.
 Evidence: `plan/evidence/P07.md`, `plan/evidence/P10.md`.
+
+### 2026-09-14 - fcd564b
+Independent post-merge review of P07 (scoped worker bridge + runtime
+lifecycle) on `opensquad/review-bridge` — the branch had merged without an
+independent read of its adversarial seams. Twelve concrete defects found by
+tracing backend/HTTP/worker/lifecycle paths and fixed as ten focused commits:
+retired runtimes now deliver every cancelled request's workflow continuation
+and finish its run receipt (steps previously parked forever); the lease-expiry
+interrupt handshake can actually release an uncertain slot (daemon reports
+terminated:true for provably dead turns, the sweep enqueues bare interrupts);
+control claims prefer pending commands so cancel_login/interrupt_turn are no
+longer starved behind a claimed start_login, and the daemon dedupes
+re-delivered claims instead of failing the live login; disconnect supersedes
+in-flight provisioning ops, teardown ops pin their target box across generation
+bumps, stale-generation outcomes can no longer rewrite a live connection, and
+resume re-injects the new generation's worker env (reconnect onto an existing
+box was previously a dead end); claim validates input before mutating, artifact
+operationKey dedupe conflicts on digest mismatch, heartbeat run refs are
+workspace-scoped, and control effects can no longer resurrect a dying runtime.
+Verified by convex + worker typechecks, lint and the full build; code-traced
+only — no provider call, Box, live turn or deployment ran in this review.
+Evidence: `plan/evidence/review-bridge.md`.

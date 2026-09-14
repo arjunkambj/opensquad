@@ -208,13 +208,19 @@ export const readWorkerRequest = internalQuery({
 
 /**
  * Cancel every non-terminal worker request for a mission — used by the
- * sweep and callable from mission-termination plumbing. Leased/running rows
- * move to `cancelled`; the worker is ordered to stop at its next heartbeat.
+ * sweep and callable from mission-termination or runtime-retirement
+ * plumbing. Leased/running rows move to `cancelled`; the worker is ordered
+ * to stop at its next heartbeat; each cancellation finishes the run receipt
+ * AND signals the awaiting workflow's continuation event — a request
+ * cancelled without its event would park the workflow step forever.
  */
 export async function cancelMissionWorkerRequests(
   ctx: MutationCtx,
   missionId: Id<"missions">,
+  reason?: { code: string; detail: string },
 ): Promise<number> {
+  const code = reason?.code ?? "mission_cancelled";
+  const detail = reason?.detail ?? "mission terminated";
   const rows = await ctx.db
     .query("workerRequests")
     .withIndex("by_missionId_and_stepKey_and_generation", (q) =>
@@ -230,17 +236,17 @@ export async function cancelMissionWorkerRequests(
     ) {
       await ctx.db.patch("workerRequests", request._id, {
         state: "cancelled",
-        error: { code: "mission_cancelled", message: "mission terminated" },
+        error: { code, message: detail },
         updatedAt: Date.now(),
       });
       cancelled += 1;
       const run = await ctx.db.get("runs", request.runId);
       if (run !== null) {
         await finishRun(ctx, run, "cancelled", {
-          errorMessage: "mission terminated",
+          errorMessage: detail,
         });
       }
-      await deliverCompletionSafe(ctx, request, "cancelled", "mission terminated");
+      await deliverCompletionSafe(ctx, request, "cancelled", detail);
     }
   }
   return cancelled;
@@ -349,15 +355,18 @@ export const sweepExpiredLeases = internalMutation({
         }
         await deliverCompletionSafe(ctx, request, "uncertain", "lease expired");
         // Ask the runtime to confirm termination (§7.7: replacement only
-        // after confirmed interruption).
+        // after confirmed interruption). When the recorded turn ref is
+        // missing — e.g. the worker stalled before its first heartbeat —
+        // a bare interrupt_turn still asks the worker "interrupt whatever
+        // turn is running, or confirm none is"; without it the uncertain
+        // slot would wedge forever.
         const connection = await ctx.db.get(
           "runtimeConnections",
           request.runtimeConnectionId,
         );
         if (
           connection !== null &&
-          connection.generation === request.runtimeGeneration &&
-          (connection.currentCodexTurnRef ?? "") !== ""
+          connection.generation === request.runtimeGeneration
         ) {
           const [threadId, turnId] = (connection.currentCodexTurnRef ?? "").split(":");
           const alreadyQueued = await ctx.db
@@ -369,18 +378,18 @@ export const sweepExpiredLeases = internalMutation({
           const hasInterrupt = alreadyQueued.some(
             (r) => r.command === "interrupt_turn",
           );
-          if (!hasInterrupt && turnId !== undefined && turnId !== "") {
+          if (!hasInterrupt) {
             await ctx.db.insert("runtimeControlRequests", {
               workspaceId: request.workspaceId,
               runtimeConnectionId: connection._id,
               runtimeGeneration: request.runtimeGeneration,
-              requestId: `sys-interrupt:${request._id}:${turnId}`,
+              requestId: `sys-interrupt:${request._id}:${turnId ?? "none"}`,
               command: "interrupt_turn",
               state: "pending",
               requestedBy: "system",
               expiresAt: now + CONTROL_REQUEST_TTL_MS,
               createdAt: now,
-              turnId,
+              ...(turnId !== undefined && turnId !== "" ? { turnId } : {}),
               ...(threadId !== undefined && threadId !== ""
                 ? { threadId }
                 : {}),

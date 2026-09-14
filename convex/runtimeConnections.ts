@@ -43,6 +43,7 @@ import {
 } from "./lib/validators";
 import type { LifecycleRequestConfig } from "./lib/validators";
 import {
+  cancelMissionWorkerRequests,
   issueCredentialRow,
   unsealCredential,
 } from "./workerOperations";
@@ -163,6 +164,10 @@ async function openLifecycleOperation(
     operation: "create" | "resume" | "extend_ttl" | "stop" | "delete";
     operationKey: string;
     requestConfig: LifecycleRequestConfig;
+    /** For stop/delete: the box this teardown targets — pinned at open time
+     *  so the op still finds its box after a generation bump clears
+     *  connection.boxRef. */
+    targetBoxRef?: string;
   },
 ): Promise<{ operationId: Id<"runtimeLifecycleOperations">; deduplicated: boolean }> {
   assertLifecycleRequestConfig(args.requestConfig);
@@ -190,6 +195,10 @@ async function openLifecycleOperation(
     state: "pending",
     createdAt: now,
     updatedAt: now,
+    // Teardown ops pin their target box at open time: a later generation
+    // bump clears connection.boxRef, but the stop/delete must still find
+    // the box it was issued for.
+    ...(args.targetBoxRef !== undefined ? { boxRef: args.targetBoxRef } : {}),
   });
   await ctx.scheduler.runAfter(
     0,
@@ -249,12 +258,17 @@ async function retireRuntimeInternals(
     }
   }
   // Non-terminal worker requests: cancelled — their callbacks stay invalid.
+  // The cancellation must go through the mission-level canceller so each
+  // run receipt is finished AND the awaiting workflow's continuation event
+  // fires — patching the row alone would leave the workflow parked on an
+  // awaitEvent that can never resolve.
   const requests = await ctx.db
     .query("workerRequests")
     .withIndex("by_workspaceId_and_state_and_createdAt", (q) =>
       q.eq("workspaceId", connection.workspaceId),
     )
     .take(64);
+  const missionIds = new Set<Id<"missions">>();
   for (const request of requests) {
     if (
       request.runtimeConnectionId === connection._id &&
@@ -262,12 +276,14 @@ async function retireRuntimeInternals(
         request.state === "leased" ||
         request.state === "running")
     ) {
-      await ctx.db.patch("workerRequests", request._id, {
-        state: "cancelled",
-        error: { code: "runtime_retired", message: "runtime was retired" },
-        updatedAt: Date.now(),
-      });
+      missionIds.add(request.missionId);
     }
+  }
+  for (const missionId of missionIds) {
+    await cancelMissionWorkerRequests(ctx, missionId, {
+      code: "runtime_retired",
+      detail: "runtime was retired",
+    });
   }
   // Slot: the runtime is gone — nothing is holding it.
   const slot = await ctx.db
@@ -516,6 +532,31 @@ export const disconnect = mutation({
     await retireRuntimeInternals(ctx, connection);
     await upsertProviderState(ctx, connection, "disconnected");
 
+    // A pending/accepted create, resume or extend_ttl still belongs to the
+    // pre-stop intent — retire it so the action driver cannot race a fresh
+    // box into a disconnecting runtime (the generation is unchanged, so the
+    // ledger row alone is no protection).
+    const lifecycleOps = await ctx.db
+      .query("runtimeLifecycleOperations")
+      .withIndex("by_runtimeConnectionId_and_createdAt", (q) =>
+        q.eq("runtimeConnectionId", connection._id),
+      )
+      .collect();
+    for (const op of lifecycleOps) {
+      if (
+        (op.state === "pending" || op.state === "accepted") &&
+        (op.operation === "create" ||
+          op.operation === "resume" ||
+          op.operation === "extend_ttl")
+      ) {
+        await ctx.db.patch("runtimeLifecycleOperations", op._id, {
+          state: "failed",
+          error: "superseded by disconnect",
+          updatedAt: now,
+        });
+      }
+    }
+
     const requestId =
       args.requestId !== undefined
         ? boundedString(args.requestId, "requestId", { min: 1, max: 100 })
@@ -527,6 +568,9 @@ export const disconnect = mutation({
       operation,
       operationKey: `${operation}:${connection._id}:gen${connection.generation}:${requestId}`,
       requestConfig: { ttlSeconds: DEFAULT_BOX_TTL_SECONDS, envNames: [] },
+      ...(connection.boxRef !== undefined
+        ? { targetBoxRef: connection.boxRef }
+        : {}),
     });
     return {
       runtimeConnectionId: connection._id,
@@ -724,13 +768,43 @@ export const runLifecycleOperation = internalAction({
       internal.runtimeConnections.getRuntimeConnection,
       { runtimeConnectionId: op.runtimeConnectionId },
     )) as Doc<"runtimeConnections"> | null;
-    if (connection === null || connection.generation !== op.runtimeGeneration) {
+    // A teardown op with a pinned boxRef remains valid across a generation
+    // bump — it must still reach the box it was issued for (reconnect/
+    // revive clears connection.boxRef without stopping that box).
+    const pinnedTeardown =
+      (op.operation === "stop" || op.operation === "delete") &&
+      op.boxRef !== undefined;
+    if (
+      connection === null ||
+      (connection.generation !== op.runtimeGeneration && !pinnedTeardown)
+    ) {
       await ctx.runMutation(
         internal.runtimeConnections.recordLifecycleOutcome,
         {
           operationId: op._id,
           outcome: "failed",
           error: "runtime generation moved on; operation is stale",
+        },
+      );
+      return null;
+    }
+    // A create/resume/extend_ttl is meaningless once the connection is
+    // tearing down: refuse to bring a box up under a dying runtime even if
+    // its ledger row was still pending when read.
+    if (
+      (op.operation === "create" ||
+        op.operation === "resume" ||
+        op.operation === "extend_ttl") &&
+      (connection.state === "stopping" ||
+        connection.state === "stopped" ||
+        connection.state === "disconnected")
+    ) {
+      await ctx.runMutation(
+        internal.runtimeConnections.recordLifecycleOutcome,
+        {
+          operationId: op._id,
+          outcome: "failed",
+          error: `runtime connection is ${connection.state}; operation superseded`,
         },
       );
       return null;
@@ -853,7 +927,27 @@ export const recordLifecycleOutcome = internalMutation({
     if (connection === null) {
       return null;
     }
+    // A stale-generation outcome must never rewrite the new generation's
+    // connection row — the ledger entry above already records what the
+    // provider did.
+    if (connection.generation !== op.runtimeGeneration) {
+      return null;
+    }
     if (args.outcome === "completed") {
+      // A create/resume/extend_ttl completing under a disconnect must not
+      // flip the connection back to a live-looking state — the provider
+      // effect is on the ledger; the connection stays stopping/stopped.
+      const dyingConnection =
+        connection.state === "stopping" ||
+        connection.state === "stopped" ||
+        connection.state === "disconnected";
+      const provisioningOp =
+        op.operation === "create" ||
+        op.operation === "resume" ||
+        op.operation === "extend_ttl";
+      if (dyingConnection && provisioningOp) {
+        return null;
+      }
       const patch: Record<string, unknown> = {
         updatedAt: now,
         error: undefined,
@@ -992,6 +1086,32 @@ async function runCreate(
       outcome: "uncertain",
       boxRef: boxId,
       error: `readiness: ${ready.detail}`,
+    });
+    return;
+  }
+  // A disconnect committed while this create was in flight must not inherit
+  // a live box — re-read the connection and tear the fresh box down instead
+  // of claiming it (the ledger still records where the box went).
+  const latest = (await ctx.runQuery(
+    internal.runtimeConnections.getRuntimeConnection,
+    { runtimeConnectionId: op.runtimeConnectionId },
+  )) as Doc<"runtimeConnections"> | null;
+  if (
+    latest === null ||
+    latest.generation !== op.runtimeGeneration ||
+    latest.state === "stopping" ||
+    latest.state === "stopped" ||
+    latest.state === "disconnected"
+  ) {
+    await asciiRequest("POST", `/boxes/${encodeURIComponent(boxId)}/stop`, {
+      body: {},
+      timeoutMs: 60_000,
+    });
+    await record(ctx, op._id, {
+      outcome: "completed",
+      boxRef: boxId,
+      error:
+        "connection moved on during provisioning; fresh box stopped immediately",
     });
     return;
   }
@@ -1137,6 +1257,36 @@ async function runResume(
     return;
   }
   const config = op.requestConfig as LifecycleRequestConfig;
+  const bridgeUrl =
+    process.env.OPENSQUAD_BRIDGE_URL ?? process.env.CONVEX_SITE_URL;
+  if (bridgeUrl === undefined) {
+    await record(ctx, op._id, {
+      outcome: "failed",
+      error: "OPENSQUAD_BRIDGE_URL/CONVEX_SITE_URL is not configured",
+    });
+    return;
+  }
+  // The resumed box still carries the PREVIOUS generation's worker env —
+  // its token was revoked and its runtimeGeneration is stale, so without
+  // re-injection the service inside exits 78 and the reconnect can never
+  // come up. Rebuild the same env create would have injected.
+  const sealed = (await ctx.runQuery(
+    internal.runtimeConnections.readSealedCredential,
+    { runtimeConnectionId: connection._id },
+  )) as string | null;
+  if (sealed === null) {
+    await record(ctx, op._id, {
+      outcome: "failed",
+      error: "no sealed worker credential for this generation",
+    });
+    return;
+  }
+  const env: Record<string, string> = {
+    OPENSQUAD_BRIDGE_URL: bridgeUrl,
+    OPENSQUAD_RUNTIME_ID: connection._id,
+    OPENSQUAD_RUNTIME_GENERATION: String(connection.generation),
+    OPENSQUAD_WORKER_TOKEN: await unsealCredential(sealed),
+  };
   const resumed = await asciiRequest(
     "POST",
     `/boxes/${encodeURIComponent(connection.boxRef)}/resume`,
@@ -1157,10 +1307,45 @@ async function runResume(
     });
     return;
   }
+  // A disconnect committed while this resume was in flight wins: re-read
+  // the connection. If it moved on WITHOUT keeping this box attached, stop
+  // the just-resumed box rather than leave a live orphan; if a new
+  // generation still references the same box (a reconnect-resume in
+  // flight), leave it alone — the newer op owns it.
+  const latest = (await ctx.runQuery(
+    internal.runtimeConnections.getRuntimeConnection,
+    { runtimeConnectionId: op.runtimeConnectionId },
+  )) as Doc<"runtimeConnections"> | null;
+  if (
+    latest === null ||
+    latest.generation !== op.runtimeGeneration ||
+    latest.state === "stopping" ||
+    latest.state === "stopped" ||
+    latest.state === "disconnected"
+  ) {
+    if (latest === null || latest.boxRef !== connection.boxRef) {
+      await asciiRequest(
+        "POST",
+        `/boxes/${encodeURIComponent(connection.boxRef)}/stop`,
+        { body: {}, timeoutMs: 60_000 },
+      );
+    }
+    await record(ctx, op._id, {
+      outcome: "completed",
+      boxRef: connection.boxRef,
+      error:
+        "connection moved on during resume; outcome recorded without touching it",
+    });
+    return;
+  }
+  // Rewrite worker.env with THIS generation's credential and re-run the
+  // image setup — the persisted env predates the reconnect.
+  const bootstrap = await bootstrapBox(connection.boxRef, env, config);
   await record(ctx, op._id, {
-    outcome: "completed",
+    outcome: bootstrap.ok ? "completed" : "uncertain",
     boxRef: connection.boxRef,
     connectionState: "connecting",
+    ...(bootstrap.ok ? {} : { error: bootstrap.error ?? "bootstrap failed" }),
   });
 }
 
@@ -1200,7 +1385,12 @@ async function runStop(
   op: Doc<"runtimeLifecycleOperations">,
   connection: Doc<"runtimeConnections">,
 ): Promise<void> {
-  if (connection.boxRef === undefined) {
+  // The pinned target wins: a teardown issued for a box that a generation
+  // bump later detached from the connection must still reach that box.
+  const targetBoxRef = op.boxRef ?? connection.boxRef;
+  const stillCurrent =
+    targetBoxRef !== undefined && targetBoxRef === connection.boxRef;
+  if (targetBoxRef === undefined) {
     // Nothing to stop — the intent is already satisfied.
     await record(ctx, op._id, {
       outcome: "completed",
@@ -1210,7 +1400,7 @@ async function runStop(
   }
   const stopped = await asciiRequest(
     "POST",
-    `/boxes/${encodeURIComponent(connection.boxRef)}/stop`,
+    `/boxes/${encodeURIComponent(targetBoxRef)}/stop`,
     { body: {} },
   );
   if (stopped.kind === "uncertain") {
@@ -1227,10 +1417,11 @@ async function runStop(
     });
     return;
   }
-  // 404 = box already gone — stop intent satisfied.
+  // 404 = box already gone — stop intent satisfied. Only claim the
+  // connection transition when the stopped box is still the attached one.
   await record(ctx, op._id, {
     outcome: "completed",
-    connectionState: "stopped",
+    ...(stillCurrent ? { connectionState: "stopped" as const } : {}),
   });
 }
 
@@ -1239,7 +1430,10 @@ async function runDelete(
   op: Doc<"runtimeLifecycleOperations">,
   connection: Doc<"runtimeConnections">,
 ): Promise<void> {
-  if (connection.boxRef === undefined) {
+  const targetBoxRef = op.boxRef ?? connection.boxRef;
+  const stillCurrent =
+    targetBoxRef !== undefined && targetBoxRef === connection.boxRef;
+  if (targetBoxRef === undefined) {
     await record(ctx, op._id, {
       outcome: "completed",
       connectionState: "disconnected",
@@ -1247,7 +1441,7 @@ async function runDelete(
     });
     return;
   }
-  const boxId = connection.boxRef;
+  const boxId = targetBoxRef;
   const deleted = await asciiRequest(
     "DELETE",
     `/boxes/${encodeURIComponent(boxId)}`,
@@ -1285,8 +1479,9 @@ async function runDelete(
   }
   await record(ctx, op._id, {
     outcome: "completed",
-    connectionState: "disconnected",
-    clearBoxRef: true,
+    ...(stillCurrent
+      ? { connectionState: "disconnected" as const, clearBoxRef: true }
+      : {}),
   });
 }
 
