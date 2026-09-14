@@ -21,12 +21,18 @@ STATE_DIR="/tmp/p10-probe-$SFX"
 mkdir -p "$STATE_DIR"
 
 # convex run prints "Already up to date / Done in …" before the payload;
-# failures print "✖ Failed …" + "Error: {json}". Show payloads AND errors.
+# failures print "✖ Failed …" + "Error: {json}". Show payloads AND errors,
+# and propagate the run's exit status so callers never save a null id.
 cr() { # cr <fn> <args-json> [identity-json]
-  local out
+  local out rc
   out=$(pnpm exec convex run "$1" "$2" ${3:+--identity "$3"} 2>&1)
+  rc=$?
   echo "$out" | sed -n '/^{/,$p'
   echo "$out" | grep -E '^(✖|Error:)' | sed 's/^/  /' >&2
+  if [ "$rc" -ne 0 ] || echo "$out" | grep -qE '^(✖|Error:)'; then
+    echo "  probe step failed (rc=$rc): $1" >&2
+    return 1
+  fi
 }
 
 # Save/load fixture ids between steps.

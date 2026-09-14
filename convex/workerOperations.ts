@@ -860,6 +860,19 @@ async function dispatchWorkerRequestHandler(
   if (connection === null) {
     throw domainError("CONFLICT", "workspace has no runtime connection");
   }
+  // A request pins `runtimeGeneration` at dispatch — on a terminal runtime
+  // it could never be claimed (revive bumps the generation, retiring it).
+  // Reject dispatch on a dead connection instead of parking forever.
+  if (
+    connection.state !== "provisioning" &&
+    connection.state !== "connecting" &&
+    connection.state !== "ready"
+  ) {
+    throw domainError(
+      "CONFLICT",
+      `runtime connection is ${connection.state}; dispatch requires a live runtime`,
+    );
+  }
   const existing = await ctx.db
     .query("workerRequests")
     .withIndex("by_missionId_and_stepKey_and_generation", (q) =>

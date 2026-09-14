@@ -24,7 +24,10 @@ type RuntimeStatus = FunctionReturnType<
 type ConnectedStatus = Extract<RuntimeStatus, { state: string }>
 
 function statusLabel(status: RuntimeStatus | undefined): string {
-  if (status === undefined || !("state" in status)) {
+  if (status === undefined) {
+    return "Checking…"
+  }
+  if (!("state" in status)) {
     return "Not connected"
   }
   switch (status.state) {
@@ -97,10 +100,11 @@ export function RuntimeSection({
   const conn: ConnectedStatus | null =
     status !== undefined && "state" in status ? status : null
   const canConnect =
-    conn === null ||
-    conn.state === "disconnected" ||
-    conn.state === "stopped" ||
-    conn.state === "error"
+    status !== undefined &&
+    (conn === null ||
+      conn.state === "disconnected" ||
+      conn.state === "stopped" ||
+      conn.state === "error")
   const canDisconnect =
     conn !== null &&
     (conn.state === "provisioning" ||

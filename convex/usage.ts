@@ -81,9 +81,10 @@ export const summary = query({
         "by_workspaceId_and_scopeKey_and_metric_and_periodKey",
         (q) => q.eq("workspaceId", args.workspaceId),
       )
-      .take(limit);
+      .collect();
     return buckets
       .filter((bucket) => args.metric === undefined || bucket.metric === args.metric)
+      .slice(0, limit)
       .map((bucket) => ({
         bucketId: bucket._id,
         scopeKey: bucket.scopeKey,
