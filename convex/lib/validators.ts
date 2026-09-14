@@ -38,12 +38,19 @@ export function invalid(message: string): ConvexError<{
  * Validate that `value` is a string of `min..max` characters after trimming.
  * Returns the trimmed value. All free-text fields pass through this so stored
  * records and public args stay bounded.
+ *
+ * Fields carved out of `v.any()` payloads (worker result/input/config
+ * envelopes) are `unknown` at runtime — a non-string must be an INVALID
+ * rejection, not an uncaught TypeError.
  */
 export function boundedString(
   value: string,
   field: string,
   options: { min?: number; max: number },
 ): string {
+  if (typeof value !== "string") {
+    throw invalid(`${field} must be a string`);
+  }
   const trimmed = value.trim();
   const min = options.min ?? 0;
   if (trimmed.length < min) {
@@ -1170,9 +1177,6 @@ export function assertWorkerRequestInput(
     min: 1,
     max: 16000,
   });
-  if (typeof input.prompt !== "string") {
-    throw invalid("input.prompt must be a string");
-  }
   if (input.context !== undefined) {
     const context = asArray(input.context, "input.context");
     if (context.length > 16) {
