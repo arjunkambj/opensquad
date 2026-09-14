@@ -91,39 +91,37 @@ function endpointFor(replyToMessageRef: string | undefined): EndpointOperation {
 /**
  * Supersede every OPEN `draft_approval` decision bound to drafts of this
  * conversation (there is at most one by askKey uniqueness, but a stale ask
- * on an older revision is retired too). Called inside the same transaction
- * that installs the new current draft.
+ * on an older revision is retired too). The lookup is by draft, not by
+ * mission: a revision installed under a different mission (a P11 reply
+ * mission revising an outreach conversation) must still retire the ask the
+ * outgoing revision left open — otherwise that ask stays bound to a
+ * superseded draft forever, unresolvable and pinning `requiredDecisionCount`
+ * on the originating mission.
  */
 async function supersedeOpenDraftDecisions(
   ctx: MutationCtx,
-  missionId: Id<"missions">,
   conversationId: Id<"conversations">,
 ): Promise<Doc<"decisions">[]> {
-  const open = await ctx.db
-    .query("decisions")
-    .withIndex("by_missionId_and_state", (q) =>
-      q.eq("missionId", missionId).eq("state", "open"),
-    )
-    .collect();
   const draftsOfConversation = await ctx.db
     .query("drafts")
     .withIndex("by_conversationId_and_revision", (q) =>
       q.eq("conversationId", conversationId),
     )
     .collect();
-  const draftIds = new Set(draftsOfConversation.map((draft) => draft._id));
   const retired: Doc<"decisions">[] = [];
-  for (const decision of open) {
-    if (
-      decision.kind === "draft_approval" &&
-      decision.draftId !== undefined &&
-      draftIds.has(decision.draftId as Id<"drafts">)
-    ) {
-      await ctx.runMutation(internal.decisions.supersedeDecision, {
-        decisionId: decision._id,
-        reason: "replaced by a newer draft revision",
-      });
-      retired.push(decision);
+  for (const draft of draftsOfConversation) {
+    const bound = await ctx.db
+      .query("decisions")
+      .withIndex("by_draftId", (q) => q.eq("draftId", draft._id))
+      .collect();
+    for (const decision of bound) {
+      if (decision.kind === "draft_approval" && decision.state === "open") {
+        await ctx.runMutation(internal.decisions.supersedeDecision, {
+          decisionId: decision._id,
+          reason: "replaced by a newer draft revision",
+        });
+        retired.push(decision);
+      }
     }
   }
   return retired;
@@ -278,7 +276,6 @@ async function installRevision(
   if (args.openDecision) {
     const retired = await supersedeOpenDraftDecisions(
       ctx,
-      args.mission._id,
       args.conversation._id,
     );
     await openDraftApprovalDecision(ctx, {
@@ -801,14 +798,7 @@ export const applyInboundContext = internalMutation({
 
     // Inbound mail makes a pending draft approval obsolete (§8.5).
     if (conversation.currentDraftId !== undefined) {
-      const draft = await ctx.db.get("drafts", conversation.currentDraftId);
-      if (draft !== null) {
-        await supersedeOpenDraftDecisions(
-          ctx,
-          draft.missionId,
-          conversation._id,
-        );
-      }
+      await supersedeOpenDraftDecisions(ctx, conversation._id);
     }
 
     const updated = await ctx.db.get("conversations", conversation._id);
