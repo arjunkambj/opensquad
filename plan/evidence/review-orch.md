@@ -190,3 +190,46 @@ P10 evidence. No provider calls, no deployment, no test files added.
 - `efa8d50` fix(workflows): carry sendAttemptId on preflight_refused
   workflow results
 - `5ffca96` fix(decisions): return mission ask history newest-first
+
+---
+
+## Round 2 — pause/dead-mission seam review
+
+Date: 2026-09-14 (same day, second pass). Scope: mid-pipeline pause
+handling in `workflows/steps.ts`/`devFixture.ts`, and run-receipt
+completeness on dead-mission cancel paths.
+
+### Confirmed defects and fixes
+
+1. **Mid-pipeline pause permanently failed the mission — MEDIUM.**
+   `devFixtureStage` and `registerBranches` threw `CONFLICT` on any
+   non-`active` mission — a routine operator pause landing between the
+   dispatch gate and a state-checked step failed the workflow, and
+   `onMissionWorkflowComplete` transitioned the paused mission to
+   `failed`, making resume impossible. Both steps now return `wait` /
+   `abandon` signals; the workflow parks on `resumeEvent` for `wait`
+   (matching the `gate:dispatch` contract) and returns `cancelled` on a
+   terminal state. — `86b5e56`.
+
+2. **Dead-mission cancel paths never finished the run receipt — MEDIUM.**
+   `claimWork`'s dead-mission skip and `sweepExpiredLeases`'s pending-row
+   cancel patched `workerRequests`→`cancelled` and delivered the
+   completion event but skipped `finishRun` — a `running` run stayed
+   `running` forever (`sweepRuns` only fires at mission termination, which
+   may already have passed for a `completed` mission). Both paths now
+   finish the run, mirroring `cancelMissionWorkerRequests`; and
+   `completeMissionTx` sweeps in-flight runs on completion so a mission
+   cannot reach `completed` with a live receipt. — `86b5e56`.
+
+### Residuals
+
+- `waiting_for_user` missions have no UI badge distinguishing a parked ask
+  from a working one — cosmetic, P09+.
+- `missions.workflowId` is a single field (the parent workflow); child
+  branch workflows are tracked on `missionProspects.childWorkflowId` —
+  adequate as designed.
+
+### Commits
+
+- `86b5e56` park on mid-pipeline pause; finish run receipts on
+  dead-mission cancels

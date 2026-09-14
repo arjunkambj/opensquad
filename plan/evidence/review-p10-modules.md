@@ -120,3 +120,43 @@ pass) and complements `review-orch.md` (seams).
 - `c43d89b` fix(usage): settle every reservation under an operation key
 - `25754b2` fix(convex): tighten replay bindings and list bounds —
   draftResolution dedupe, reserve limit refresh, boundedLimit
+
+---
+
+## Round 2 — frontend/concurrency + tooling pass
+
+Date: 2026-09-14 (same day, second pass). Scope: the five versioned form
+components, runtime-status rendering, `usage.summary` ordering, and the
+P10 probe script.
+
+### Confirmed defects and fixes
+
+1. **Versioned forms sent the live-prop version, not the edit-base —
+   MEDIUM.** `WorkspaceSection`, `SendingPolicySection`, `BusinessStep`
+   and `WorkspaceStep` read `workspace.policyVersion`/`profile.version`
+   from the live query result at submit time — a concurrent bump while
+   dirty passed a version the user never saw, silently overwriting it.
+   Each now snapshots `baseVersion` alongside `syncedAt`; `WorkspaceStep`
+   uses the post-update version only for its follow-on `setSendingPolicy`
+   call after its own bump. — `785e0ae`.
+
+2. **`usage.summary` took-then-filtered — LOW.** `take(limit)` ran before
+   the metric filter, so early buckets of other metrics could drop every
+   matching row. Now collect → filter → slice (the index cannot eq
+   `metric` without `scopeKey`). — `13d82a8`.
+
+3. **Runtime card flashed "Not connected" while loading — LOW.**
+   `status === undefined` (query in flight) rendered the not-connected
+   label and enabled Connect. Now renders "Checking…" and gates
+   `canConnect` on a resolved query. — `13d82a8`.
+
+4. **`p10-probe.sh` masked `convex run` failures — LOW.** `cr()` always
+   exited 0 through its sed/grep pipeline — a failed step saved a null id
+   and kept going silently. It now propagates the run's exit status and
+   prints a failure marker to stderr. — `13d82a8`.
+
+### Commits
+
+- `785e0ae` submit the edit-base version, not the live prop
+- `13d82a8` loading flash, summary ordering, dispatch liveness, probe exit
+  status
