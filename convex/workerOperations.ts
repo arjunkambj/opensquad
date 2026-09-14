@@ -355,15 +355,18 @@ export const sweepExpiredLeases = internalMutation({
         }
         await deliverCompletionSafe(ctx, request, "uncertain", "lease expired");
         // Ask the runtime to confirm termination (§7.7: replacement only
-        // after confirmed interruption).
+        // after confirmed interruption). When the recorded turn ref is
+        // missing — e.g. the worker stalled before its first heartbeat —
+        // a bare interrupt_turn still asks the worker "interrupt whatever
+        // turn is running, or confirm none is"; without it the uncertain
+        // slot would wedge forever.
         const connection = await ctx.db.get(
           "runtimeConnections",
           request.runtimeConnectionId,
         );
         if (
           connection !== null &&
-          connection.generation === request.runtimeGeneration &&
-          (connection.currentCodexTurnRef ?? "") !== ""
+          connection.generation === request.runtimeGeneration
         ) {
           const [threadId, turnId] = (connection.currentCodexTurnRef ?? "").split(":");
           const alreadyQueued = await ctx.db
@@ -375,18 +378,18 @@ export const sweepExpiredLeases = internalMutation({
           const hasInterrupt = alreadyQueued.some(
             (r) => r.command === "interrupt_turn",
           );
-          if (!hasInterrupt && turnId !== undefined && turnId !== "") {
+          if (!hasInterrupt) {
             await ctx.db.insert("runtimeControlRequests", {
               workspaceId: request.workspaceId,
               runtimeConnectionId: connection._id,
               runtimeGeneration: request.runtimeGeneration,
-              requestId: `sys-interrupt:${request._id}:${turnId}`,
+              requestId: `sys-interrupt:${request._id}:${turnId ?? "none"}`,
               command: "interrupt_turn",
               state: "pending",
               requestedBy: "system",
               expiresAt: now + CONTROL_REQUEST_TTL_MS,
               createdAt: now,
-              turnId,
+              ...(turnId !== undefined && turnId !== "" ? { turnId } : {}),
               ...(threadId !== undefined && threadId !== ""
                 ? { threadId }
                 : {}),

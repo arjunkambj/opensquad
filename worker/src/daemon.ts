@@ -97,6 +97,10 @@ export class WorkerDaemon {
   #currentWork: ClaimedWork | null = null;
   #currentTurnRef: string | null = null;
   #activeLogin: ActiveLogin | null = null;
+  /** controlRequestIds currently executing — the bridge re-delivers a
+   *  claimed command on every poll (crash recovery), so the same request
+   *  must never be run twice concurrently. */
+  #executingControls = new Set<string>();
 
   constructor(config: WorkerConfig, server: CodexAppServer) {
     this.#config = config;
@@ -202,21 +206,32 @@ export class WorkerDaemon {
       return;
     }
     if (claim === null) return;
+    // The bridge re-delivers a still-claimed command while it executes —
+    // without this gate a second start_login would race the first and post
+    // a terminal "failed" onto the live login request.
+    if (this.#executingControls.has(claim.controlRequestId)) {
+      return;
+    }
+    this.#executingControls.add(claim.controlRequestId);
     log("control_claimed", {
       controlRequestId: claim.controlRequestId,
       command: claim.command,
     });
     // Executed without blocking the poll loop — login waits take minutes.
-    void this.#executeControl(claim).catch((error) => {
-      if (this.#isFatal(error)) return;
-      log("control_execute_error", {
-        command: claim.command,
-        error: errorMessage(error),
+    void this.#executeControl(claim)
+      .catch((error) => {
+        if (this.#isFatal(error)) return;
+        log("control_execute_error", {
+          command: claim.command,
+          error: errorMessage(error),
+        });
+        void this.#postControlResult(claim.controlRequestId, "failed", {
+          error: errorMessage(error).slice(0, 300),
+        });
+      })
+      .finally(() => {
+        this.#executingControls.delete(claim.controlRequestId);
       });
-      void this.#postControlResult(claim.controlRequestId, "failed", {
-        error: errorMessage(error).slice(0, 300),
-      });
-    });
   }
 
   async #postControlResult(
@@ -377,14 +392,28 @@ export class WorkerDaemon {
       }
       case "interrupt_turn": {
         const turnRef = this.#currentTurnRef;
-        const match =
-          turnRef !== null &&
-          claim.turnId !== undefined &&
-          turnRef === `${claim.threadId ?? ""}:${claim.turnId}`;
-        if (!match || this.#currentWork === null) {
+        const running = turnRef !== null && this.#currentWork !== null;
+        // No turnId = "interrupt whatever turn is running" — issued by the
+        // lease-expiry sweep when the backend never learned the ref. The
+        // uncertain slot blocks new claims, so the only turn that can be
+        // running is the orphaned one.
+        const matches =
+          running &&
+          (claim.turnId === undefined ||
+            (claim.threadId !== undefined
+              ? turnRef === `${claim.threadId}:${claim.turnId}`
+              : turnRef.split(":")[1] === claim.turnId));
+        if (!matches || turnRef === null) {
+          // The targeted turn is not running on this worker — that IS a
+          // confirmed termination (a restarted worker kills its app-server
+          // child and every turn it hosted; a finished turn is gone too).
+          // Reporting terminated:false here would leave the workspace's
+          // uncertain slot wedged forever.
           await this.#postControlResult(claim.controlRequestId, "completed", {
-            terminated: false,
-            reason: "no matching active turn",
+            terminated: true,
+            reason: running
+              ? "a different turn is running; the targeted turn is gone"
+              : "no matching active turn",
           });
           return;
         }
