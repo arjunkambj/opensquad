@@ -927,6 +927,16 @@ export const runtimeHeartbeat = internalMutation({
     ) {
       throw bridgeError("THROTTLED", "runtime heartbeat too frequent");
     }
+    // A reported run only counts when it belongs to this credential's
+    // workspace — a worker must not pin a foreign run onto its connection.
+    const reportedRun =
+      args.currentRunId !== undefined
+        ? await ctx.db.get("runs", args.currentRunId)
+        : null;
+    const scopedRun =
+      reportedRun !== null && reportedRun.workspaceId === credential.workspaceId
+        ? reportedRun
+        : null;
     await ctx.db.patch("runtimeConnections", connection._id, {
       lastHeartbeatAt: now,
       workerPhase: args.phase,
@@ -937,7 +947,7 @@ export const runtimeHeartbeat = internalMutation({
       ...(connection.state === "provisioning"
         ? { state: "connecting" as const }
         : {}),
-      ...(args.currentRunId !== undefined
+      ...(args.currentRunId !== undefined && scopedRun !== null
         ? { currentRunId: args.currentRunId }
         : {}),
       ...(args.currentCodexTurnRef !== undefined
@@ -950,16 +960,14 @@ export const runtimeHeartbeat = internalMutation({
     // `thread/resume` the scoped session (§4.4 agentSessions). The turn ref
     // is `threadId:turnId`; the thread half is the resumable handle.
     if (
-      args.currentRunId !== undefined &&
+      scopedRun !== null &&
       args.currentCodexTurnRef !== undefined
     ) {
       const threadId = args.currentCodexTurnRef.split(":")[0];
-      const run = await ctx.db.get("runs", args.currentRunId);
+      const run = scopedRun;
       if (
         threadId !== undefined &&
-        threadId.length > 0 &&
-        run !== null &&
-        run.workspaceId === credential.workspaceId
+        threadId.length > 0
       ) {
         const scopeKey = `run:${args.currentRunId}`;
         const existing = await ctx.db
