@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** none
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-14T03:45:00Z
+- **Last updated:** 2026-09-14T12:00:00Z
 
 ## Log
 
@@ -286,3 +286,24 @@ leak `held` forever), permanently-dead-worker uncertain slots until owner
 reconnect, and post-revise mission state/badge drift pending the P09
 redraft-loop design. tsc (root + convex), lint, build all clean.
 Evidence: `plan/evidence/review-orch.md`.
+
+### 2026-09-14 - 9147a50
+Integrated the leftover send-path review branch (`opensquad/review-send`,
+4 commits) and the verified P10 acceptance evidence, then ran a dedicated
+review of the P10 support modules — approvals, drafts, suppressions, usage,
+send-attempt reads — against the merged tree. Seven defects found and fixed
+feature-wise: receipt reads by providerMessageRef no longer cross workspace
+boundaries; the public `decisions.resolve` now refuses artifact-bound kinds
+(`draft_approval`, `delivery_uncertain`) — those asks must resolve through
+`approvals.*`/`sending.resolveDeliveryUncertainty` via a shared bound
+internal path, closing a hole where a bare answer burned the ask and left
+the revision unapprovable forever; draft-approval supersede now scans by
+draft (not mission) so a cross-mission revision can't strand an open ask;
+usage settling covers every reservation under an operation key instead of
+deadlocking on multi-bucket keys; requestChanges/reject requestId replays
+can no longer alias each other's recorded resolution; bucket limits refresh
+only on new reservations; and the remaining list queries use the standard
+bounded limit. Documented residuals for P09/P11: exact-address suppression
+vs `+tag` sub-addresses, public-suffix domain suppressions, IDN rejection,
+and unaudited suppression removal. Verified: convex tsc, lint, build clean.
+Evidence: `plan/evidence/review-send.md`, `plan/evidence/review-p10-modules.md`.
