@@ -804,6 +804,12 @@ export const applyInboundContext = internalMutation({
       "lastInboundMessageRef",
       { min: 1, max: PROVIDER_REF_MAX_LENGTH },
     );
+    // Idempotent per message: a re-delivered inbound must not bump
+    // contextVersion again — a second bump would strand a draft approved
+    // after the first application via `context_changed`.
+    if (conversation.lastInboundMessageRef === messageRef) {
+      return conversation;
+    }
     const at = args.at ?? Date.now();
     await ctx.db.patch("conversations", conversation._id, {
       contextVersion: conversation.contextVersion + 1,
