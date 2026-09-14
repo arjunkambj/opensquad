@@ -142,11 +142,14 @@ export const listReceipts = query({
     const limit = boundedLimit(args.limit);
     const providerMessageRef = args.providerMessageRef;
     if (providerMessageRef !== undefined) {
+      // by_providerMessageRef is a global index — the workspace filter is
+      // applied in the query so a known ref can never read across tenants.
       return await ctx.db
         .query("emailEventReceipts")
         .withIndex("by_providerMessageRef", (q) =>
           q.eq("providerMessageRef", providerMessageRef),
         )
+        .filter((q) => q.eq(q.field("workspaceId"), args.workspaceId))
         .order("desc")
         .take(limit);
     }
