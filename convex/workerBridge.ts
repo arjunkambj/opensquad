@@ -1569,7 +1569,7 @@ export const applyControlResult = internalMutation({
     ) {
       try {
         parseAccountSummary(args.safeResult);
-      } catch (error) {
+      } catch {
         await ctx.db.patch("runtimeControlRequests", request._id, {
           state: "failed",
           resultId,
