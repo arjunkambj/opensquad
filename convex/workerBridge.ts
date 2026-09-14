@@ -1286,12 +1286,18 @@ export const claimControl = internalMutation({
       }
     }
 
-    const live = [...claimed, ...pending].filter(
-      (request) => request.expiresAt > now,
-    );
-    // Prefer re-delivering an in-flight claimed request (the worker may have
-    // crashed after claiming); then the oldest pending command.
-    const next = live.sort((a, b) => a.createdAt - b.createdAt)[0];
+    // A pending command always wins over re-delivering an in-flight claimed
+    // one — otherwise a claimed long-running command (start_login) would
+    // starve every queued cancel_login/interrupt_turn behind it, defeating
+    // the control channel's responsiveness guarantee. The claimed command is
+    // still re-delivered whenever no pending work exists (crash recovery).
+    const livePending = pending
+      .filter((request) => request.expiresAt > now)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const liveClaimed = claimed
+      .filter((request) => request.expiresAt > now)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const next = livePending[0] ?? liveClaimed[0];
     if (next === undefined) {
       return { claimed: false as const };
     }
@@ -1300,13 +1306,15 @@ export const claimControl = internalMutation({
         state: "claimed",
         claimedAt: now,
       });
-      // Claiming extends the window slightly so a just-claimed command does
-      // not expire mid-execution — bounded by the original TTL either way.
-      if (next.expiresAt - now < 30_000) {
-        await ctx.db.patch("runtimeControlRequests", next._id, {
-          expiresAt: now + 30_000,
-        });
-      }
+    }
+    // Claiming — and re-delivering a claimed command — extends the window
+    // slightly so a live execution does not expire mid-run. The response
+    // advertises this floor; the row must reflect it or the sweep can expire
+    // a command whose claim just promised 30 s.
+    if (next.expiresAt - now < 30_000) {
+      await ctx.db.patch("runtimeControlRequests", next._id, {
+        expiresAt: now + 30_000,
+      });
     }
     return {
       claimed: true as const,
