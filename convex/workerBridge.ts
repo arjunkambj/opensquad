@@ -37,6 +37,7 @@ import {
   ARTIFACT_MIME_TYPES,
   ARTIFACT_MAX_BYTES,
   BRIDGE_MIN_POLL_INTERVAL_MS,
+  CONTROL_REQUEST_TTL_MS,
   HEARTBEAT_MIN_INTERVAL_MS,
   LOGIN_CHALLENGE_TTL_MS,
   WORKER_ACTIVITY_KINDS,
@@ -694,7 +695,7 @@ export const applyResult = internalMutation({
   args: vResultArgs,
   returns: v.object({ acknowledged: v.boolean(), duplicate: v.boolean() }),
   handler: async (ctx, args): Promise<{ acknowledged: boolean; duplicate: boolean }> => {
-    const { credential } = await authenticateWorker(
+    const { credential, connection } = await authenticateWorker(
       ctx,
       args.credentialHash,
       "result",
@@ -773,6 +774,16 @@ export const applyResult = internalMutation({
       ...(parsed.usage !== undefined ? { usage: parsed.usage } : {}),
       updatedAt: now,
     });
+    // The settled turn's refs must not linger — a stale currentCodexTurnRef
+    // would steer owner interrupts and the lease-expiry sweep at a turn
+    // that no longer exists. Clear only when it still names THIS run.
+    if (connection.currentRunId === request.runId) {
+      await ctx.db.patch("runtimeConnections", connection._id, {
+        currentCodexTurnRef: undefined,
+        currentRunId: undefined,
+        updatedAt: now,
+      });
+    }
     await releaseSlot(ctx, request);
     const run = await ctx.db.get("runs", request.runId);
     if (run !== null) {
@@ -810,7 +821,7 @@ export const applyFailure = internalMutation({
   args: vFailureArgs,
   returns: v.object({ acknowledged: v.boolean(), duplicate: v.boolean() }),
   handler: async (ctx, args) => {
-    const { credential } = await authenticateWorker(
+    const { credential, connection } = await authenticateWorker(
       ctx,
       args.credentialHash,
       "result",
@@ -869,12 +880,90 @@ export const applyFailure = internalMutation({
     assertLiveLease(request, slot, args.generation, leaseHash);
 
     const now = Date.now();
+    // §7.7 — a daemon that could not PROVE the turn died must not release
+    // the slot: freeing it while a model turn may still be running lets a
+    // replacement claim concurrent execution on the same app-server. The
+    // request goes `uncertain` (same as lease expiry) and an interrupt_turn
+    // is queued so the runtime confirms termination — confirmation owns the
+    // release.
+    const unconfirmed =
+      code === "termination_unconfirmed" || code === "interruption_unconfirmed";
+    if (unconfirmed) {
+      await ctx.db.patch("workerRequests", request._id, {
+        state: "uncertain",
+        resultId: `failure:${failureId}`,
+        error: { code, message: summary, retrySafety: args.retrySafety },
+        updatedAt: now,
+      });
+      if (
+        slot !== null &&
+        slot.workerRequestId === request._id &&
+        slot.state === "held"
+      ) {
+        await ctx.db.patch("workspaceExecutionSlots", slot._id, {
+          state: "uncertain",
+          updatedAt: now,
+        });
+      }
+      const run = await ctx.db.get("runs", request.runId);
+      if (run !== null) {
+        await finishRun(ctx, run, "uncertain", { errorMessage: summary });
+      }
+      await deliverCompletion(ctx, request, "uncertain", summary);
+      const connection = await ctx.db.get(
+        "runtimeConnections",
+        request.runtimeConnectionId,
+      );
+      if (
+        connection !== null &&
+        connection.generation === request.runtimeGeneration
+      ) {
+        const [threadId, turnId] = (connection.currentCodexTurnRef ?? "").split(
+          ":",
+        );
+        const queued = await ctx.db
+          .query("runtimeControlRequests")
+          .withIndex("by_runtimeConnectionId_and_state", (q) =>
+            q
+              .eq("runtimeConnectionId", connection._id)
+              .eq("state", "pending"),
+          )
+          .collect();
+        if (!queued.some((r) => r.command === "interrupt_turn")) {
+          await ctx.db.insert("runtimeControlRequests", {
+            workspaceId: request.workspaceId,
+            runtimeConnectionId: connection._id,
+            runtimeGeneration: request.runtimeGeneration,
+            requestId: `sys-interrupt:${request._id}:${turnId ?? "none"}`,
+            command: "interrupt_turn",
+            state: "pending",
+            requestedBy: "system",
+            expiresAt: now + CONTROL_REQUEST_TTL_MS,
+            createdAt: now,
+            ...(turnId !== undefined && turnId !== "" ? { turnId } : {}),
+            ...(threadId !== undefined && threadId !== ""
+              ? { threadId }
+              : {}),
+          });
+        }
+      }
+      return { acknowledged: true, duplicate: false };
+    }
     await ctx.db.patch("workerRequests", request._id, {
       state: "failed",
       resultId: `failure:${failureId}`,
       error: { code, message: summary, retrySafety: args.retrySafety },
       updatedAt: now,
     });
+    // The reported-dead turn's refs must not linger and steer later
+    // interrupts — clear when they still name this run.
+    if (connection.currentRunId === request.runId) {
+      await ctx.db.patch("runtimeConnections", connection._id, {
+        currentCodexTurnRef: undefined,
+        currentRunId: undefined,
+        updatedAt: now,
+      });
+    }
     await releaseSlot(ctx, request);
     const run = await ctx.db.get("runs", request.runId);
     if (run !== null) {
@@ -1466,8 +1555,29 @@ export const applyControlResult = internalMutation({
       return { acknowledged: true, duplicate: false };
     }
 
-    // Terminal statuses: completed | failed.
+    // Terminal statuses: completed | failed. Validate the effect-relevant
+    // shape BEFORE the terminal patch — an account result the effect path
+    // would reject must land `failed` here; a throw after the patch rolls
+    // the terminal state back and the claimed row re-executes forever.
     const safeResult = sanitizeSafeResult(args.safeResult);
+    if (
+      args.status === "completed" &&
+      (request.command === "start_login" ||
+        request.command === "inspect_account")
+    ) {
+      try {
+        parseAccountSummary(args.safeResult);
+      } catch (error) {
+        await ctx.db.patch("runtimeControlRequests", request._id, {
+          state: "failed",
+          resultId,
+          resultDigest: digest,
+          safeResult,
+          completedAt: now,
+        });
+        return { acknowledged: true, duplicate: false };
+      }
+    }
     await ctx.db.patch("runtimeControlRequests", request._id, {
       state: args.status === "completed" ? "completed" : "failed",
       resultId,
@@ -1523,6 +1633,40 @@ function sanitizeSafeResult(value: unknown): Record<string, unknown> {
   return out;
 }
 
+/**
+ * Parse the account summary a `start_login`/`inspect_account` result must
+ * carry. Throws `bridgeInvalid` on a malformed shape — callers run this
+ * BEFORE recording a terminal state so a bad result never rolls back an
+ * already-settled row.
+ */
+function parseAccountSummary(safeResult: unknown): {
+  state: "none" | "chatgpt" | "apiKey" | "other";
+  planType?: string;
+} {
+  const result = asRecord(safeResult, "safeResult");
+  const account = asRecord(result.account, "safeResult.account");
+  const state = account.state;
+  if (
+    state !== "none" &&
+    state !== "chatgpt" &&
+    state !== "apiKey" &&
+    state !== "other"
+  ) {
+    throw bridgeInvalid("safeResult.account.state is not recognized");
+  }
+  const planType =
+    typeof account.planType === "string"
+      ? boundedString(account.planType, "safeResult.account.planType", {
+          min: 1,
+          max: 100,
+        })
+      : undefined;
+  return {
+    state: state as "none" | "chatgpt" | "apiKey" | "other",
+    ...(planType !== undefined ? { planType } : {}),
+  };
+}
+
 /** Apply the effects of a completed control command to runtime state. */
 async function applyControlEffects(
   ctx: MutationCtx,
@@ -1535,23 +1679,11 @@ async function applyControlEffects(
   switch (request.command) {
     case "inspect_account":
     case "start_login": {
-      const account = asRecord(result.account, "safeResult.account");
+      // Pre-validated by the caller — a malformed account shape can never
+      // reach here and roll back the recorded terminal state.
+      const account = parseAccountSummary(safeResult);
       const state = account.state;
-      if (
-        state !== "none" &&
-        state !== "chatgpt" &&
-        state !== "apiKey" &&
-        state !== "other"
-      ) {
-        throw bridgeInvalid("safeResult.account.state is not recognized");
-      }
-      const planType =
-        typeof account.planType === "string"
-          ? boundedString(account.planType, "safeResult.account.planType", {
-              min: 1,
-              max: 100,
-            })
-          : undefined;
+      const planType = account.planType;
       const summary = {
         state: state as "none" | "chatgpt" | "apiKey" | "other",
         ...(planType !== undefined ? { planType } : {}),
@@ -1600,7 +1732,9 @@ async function applyControlEffects(
         verifiedAt: now,
       });
       // A logged-out session can never complete a pending login — its
-      // challenge material must not outlive it.
+      // challenge material must not outlive it, and a still-live
+      // `start_login` must not complete LATER and re-promote the runtime to
+      // ready over the logout.
       const challenges = await ctx.db
         .query("runtimeLoginChallenges")
         .withIndex("by_runtimeConnectionId", (q) =>
@@ -1609,6 +1743,25 @@ async function applyControlEffects(
         .collect();
       for (const row of challenges) {
         await ctx.db.delete("runtimeLoginChallenges", row._id);
+      }
+      const liveLogins = await ctx.db
+        .query("runtimeControlRequests")
+        .withIndex("by_runtimeConnectionId_and_state", (q) =>
+          q.eq("runtimeConnectionId", connection._id).eq("state", "pending"),
+        )
+        .collect();
+      const claimedLogins = await ctx.db
+        .query("runtimeControlRequests")
+        .withIndex("by_runtimeConnectionId_and_state", (q) =>
+          q.eq("runtimeConnectionId", connection._id).eq("state", "claimed"),
+        )
+        .collect();
+      for (const login of [...liveLogins, ...claimedLogins]) {
+        if (login.command === "start_login") {
+          await ctx.db.patch("runtimeControlRequests", login._id, {
+            state: "expired",
+          });
+        }
       }
       break;
     }

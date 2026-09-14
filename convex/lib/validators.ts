@@ -1388,10 +1388,25 @@ export function parseWorkerResult(
       `result.operation ${String(result.operation)} does not match request operation ${expectedOperation}`,
     );
   }
-  boundedString(result.summary as string, "result.summary", {
-    min: 0,
-    max: 1000,
-  });
+  // `summary` is contract-required for discover/research/contact; the
+  // draft/classify_reply contracts don't declare it — requiring it here
+  // would reject every conformant result of those operations. When present
+  // it's still bounded.
+  if (
+    expectedOperation === "discover" ||
+    expectedOperation === "research" ||
+    expectedOperation === "contact"
+  ) {
+    boundedString(result.summary as string, "result.summary", {
+      min: 0,
+      max: 1000,
+    });
+  } else if (result.summary !== undefined) {
+    boundedString(result.summary as string, "result.summary", {
+      min: 0,
+      max: 1000,
+    });
+  }
   if (result.evidenceRefs !== undefined) {
     const refs = asArray(result.evidenceRefs, "result.evidenceRefs");
     if (refs.length > 10) {
