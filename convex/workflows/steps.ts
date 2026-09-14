@@ -681,6 +681,14 @@ export async function failMission(
  * the handler's own steps normally leave it terminal. This callback cleans up
  * the paths the handler can't (step threw → `failed`; `cancel()` →
  * `canceled`).
+ *
+ * Two guards matter at this seam:
+ * - the callback is ignored when it names a workflow that is NOT the
+ *   mission's current `workflowId` — a superseded generation can never
+ *   reconcile onto a newer one (§6.2);
+ * - a `success` result whose handler returned `outcome: "cancelled"` is an
+ *   ABANDONED run (its parked ask was superseded/retired), not a completed
+ *   one — on a live mission that lands as `failed`, never `completed`.
  */
 export const onMissionWorkflowComplete = internalMutation({
   args: {
@@ -697,8 +705,38 @@ export const onMissionWorkflowComplete = internalMutation({
     if (mission === null || mission.workspaceId !== args.context.workspaceId) {
       return null;
     }
+    if (
+      mission.workflowId !== undefined &&
+      args.workflowId !== mission.workflowId
+    ) {
+      // Stale-generation callback — the current workflow owns this mission.
+      return null;
+    }
     if (args.result.kind === "success") {
-      if (mission.state !== "completed" && mission.state !== "cancelled") {
+      const returned = args.result.returnValue;
+      const outcome =
+        typeof returned === "object" &&
+        returned !== null &&
+        "outcome" in returned &&
+        typeof (returned as { outcome?: unknown }).outcome === "string"
+          ? (returned as { outcome: string }).outcome
+          : undefined;
+      if (outcome === "cancelled") {
+        // The workflow abandoned on a live mission (its awaited decision was
+        // superseded/retired or its generation went stale) — nothing else
+        // drives the mission, so land it honestly instead of marking it Done.
+        if (
+          mission.state !== "completed" &&
+          mission.state !== "cancelled" &&
+          mission.state !== "failed"
+        ) {
+          await failMission(
+            ctx,
+            mission,
+            "workflow abandoned before completing its stages",
+          );
+        }
+      } else if (mission.state !== "completed" && mission.state !== "cancelled") {
         await completeMissionTx(ctx, mission);
       }
     } else if (args.result.kind === "failed") {
@@ -731,6 +769,13 @@ export const onProspectWorkflowComplete = internalMutation({
   handler: async (ctx, args) => {
     const branch = await ctx.db.get("missionProspects", args.context.branchId);
     if (branch === null || branch.outcome !== undefined) {
+      return null;
+    }
+    if (
+      branch.childWorkflowId !== undefined &&
+      args.workflowId !== branch.childWorkflowId
+    ) {
+      // Stale-generation child callback — the current child owns this branch.
       return null;
     }
     if (args.result.kind === "success") {
