@@ -419,6 +419,12 @@ export const revise = mutation({
       args.requestId === undefined
         ? undefined
         : boundedString(args.requestId, "requestId", { min: 1, max: 100 });
+
+    const current = await getDraftInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.draftId,
+    );
     if (requestId !== undefined) {
       const replayed = await findRevisionByRequestId(
         ctx,
@@ -426,15 +432,22 @@ export const revise = mutation({
         requestId,
       );
       if (replayed !== null) {
+        // The requestId dedupe must bind THIS revision target: the same key
+        // reused against a different draft/conversation is a CONFLICT, not
+        // a silent replay of an unrelated revision.
+        if (
+          replayed.conversationId !== current.conversationId ||
+          replayed.revision !== current.revision + 1
+        ) {
+          throw domainError(
+            "CONFLICT",
+            `requestId ${requestId} already recorded a different revision`,
+          );
+        }
         return replayed;
       }
     }
 
-    const current = await getDraftInWorkspace(
-      ctx,
-      args.workspaceId,
-      args.draftId,
-    );
     if (current.revision !== args.expectedRevision) {
       throw domainError(
         "CONFLICT",
@@ -552,6 +565,14 @@ export const createRevision = internalMutation({
         requestId,
       );
       if (replayed !== null) {
+        // Bind the dedupe to this conversation — a requestId recorded for a
+        // different conversation is a CONFLICT, not a silent replay.
+        if (replayed.conversationId !== args.conversationId) {
+          throw domainError(
+            "CONFLICT",
+            `requestId ${requestId} already recorded a different revision`,
+          );
+        }
         return replayed;
       }
     }
