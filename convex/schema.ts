@@ -856,6 +856,8 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_missionId_and_state", ["missionId", "state"])
+    // Chronological ask history for one mission (`listForMission`).
+    .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
     // §4.3 forward reference — becomes useful when `drafts` lands (P10).
     .index("by_draftId", ["draftId"]),
 
