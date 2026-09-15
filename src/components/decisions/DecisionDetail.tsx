@@ -2,7 +2,6 @@ import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
-import type { FunctionReturnType } from "convex/server"
 import { useState } from "react"
 import type { ReactNode } from "react"
 import { api } from "../../../convex/_generated/api"
@@ -35,14 +34,15 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import type { WorkspaceRole } from "@/lib/workspace-role"
 
 /**
- * Derived from the query rather than re-declared, so a role added to the
- * backend union cannot silently fall through a switch here.
+ * Re-exported so the decision panels keep importing the name from here, while
+ * the type itself has exactly one definition — the board and the mission
+ * detail need the same role and a second `NonNullable<…>["role"]` would be a
+ * second thing to keep in step.
  */
-export type WorkspaceRole = NonNullable<
-  FunctionReturnType<typeof api.workspaces.getCurrent>
->["role"]
+export type { WorkspaceRole }
 
 /**
  * One decision, rendered by kind.
