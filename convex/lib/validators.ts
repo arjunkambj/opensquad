@@ -2959,6 +2959,128 @@ export function draftOutputSchema(): Record<string, unknown> {
   };
 }
 
+/**
+ * The JSON Schema for a `research` turn, mirroring `vResearchResult` and the
+ * runtime bounds `parseWorkerResult` enforces (12 observations, topic 200,
+ * finding 1000, sourceUrl 500). It carries no `retrievedAt`, `excerpt` or
+ * `confidence` field DELIBERATELY: those three columns are synthesized by the
+ * backend from its own retrieval receipts (§4.5 synthesis rule), and a field
+ * here would put them back under model control, which is the exact failure
+ * `vEvidenceConfidence` exists to prevent.
+ */
+export function researchOutputSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["schemaVersion", "operation", "status", "summary", "observations"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      operation: { type: "string", enum: ["research"] },
+      status: { type: "string", enum: ["complete", "pending"] },
+      summary: { type: "string", maxLength: 1000 },
+      observations: {
+        type: "array",
+        maxItems: RESEARCH_OBSERVATIONS_MAX,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["topic", "finding"],
+          properties: {
+            topic: { type: "string", maxLength: EVIDENCE_TOPIC_MAX_LENGTH },
+            finding: {
+              type: "string",
+              maxLength: EVIDENCE_OBSERVATION_MAX_LENGTH,
+            },
+            sourceUrl: { type: "string", maxLength: 500 },
+          },
+        },
+      },
+    },
+  };
+}
+
+/**
+ * The JSON Schema for a `discover` turn — the Apollo company-search seam P09
+ * owns. Declared here so the contract exists and is bounded before its caller
+ * does; P21 ships no Apollo call.
+ *
+ * `sources` is the campaign's OWN confirmed source list, so the enum the model
+ * is handed can never name a source this campaign did not confirm. The
+ * importer refuses one anyway (`importCampaignProspects`); this stops the
+ * model producing a candidate that was always going to be discarded.
+ */
+export function discoverOutputSchema(
+  sources: readonly ProspectSource[],
+): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["schemaVersion", "operation", "summary", "candidates"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      operation: { type: "string", enum: ["discover"] },
+      summary: { type: "string", maxLength: 1000 },
+      candidates: {
+        type: "array",
+        maxItems: CAMPAIGN_LEAD_LIMIT_MAX,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["companyName", "reason"],
+          properties: {
+            companyName: {
+              type: "string",
+              maxLength: PROSPECT_COMPANY_NAME_MAX_LENGTH,
+            },
+            domain: { type: "string", maxLength: 200 },
+            industry: { type: "string", maxLength: 200 },
+            size: { type: "string", maxLength: 200 },
+            reason: { type: "string", maxLength: 500 },
+            source: { type: "string", enum: [...new Set(sources)] },
+          },
+        },
+      },
+    },
+  };
+}
+
+/**
+ * The JSON Schema for a `contact` turn — the Apollo enrichment seam P09 owns.
+ * `emailConfidence` is the model's own hedge and is NEVER stored as
+ * `providerEmailStatus`: only a provider-returned address may be described as
+ * verified (`assertProspectContact`), which is what stops a guessed address
+ * being presented as a confirmed one.
+ */
+export function contactOutputSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["schemaVersion", "operation", "status", "contacts", "summary"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      operation: { type: "string", enum: ["contact"] },
+      status: { type: "string", enum: ["found", "not_found", "ambiguous"] },
+      summary: { type: "string", maxLength: 1000 },
+      contacts: {
+        type: "array",
+        maxItems: 5,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["fullName"],
+          properties: {
+            fullName: { type: "string", maxLength: 200 },
+            role: { type: "string", maxLength: 200 },
+            email: { type: "string", maxLength: EMAIL_ADDRESS_MAX_LENGTH },
+            emailConfidence: { type: "string", enum: ["high", "medium", "low"] },
+            source: { type: "string", maxLength: 200 },
+          },
+        },
+      },
+    },
+  };
+}
+
 /* ----- send window / local-day helpers (IANA timezone) ------------------ */
 
 /**
