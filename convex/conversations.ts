@@ -33,6 +33,7 @@ import {
   requireWorkspaceEditor,
   requireWorkspaceMember,
 } from "./lib/auth";
+import type { AuthCtx } from "./lib/auth";
 import {
   boundedLimit,
   boundedString,
@@ -182,6 +183,52 @@ async function summarize(
           },
     updatedAt: conversation.updatedAt,
   };
+}
+
+/**
+ * The address this thread would actually be mailed at, resolved entirely by
+ * the application — and the latest revision it was resolved against.
+ *
+ * ONE definition, because three callers need the same answer and they must not
+ * disagree: `resume`'s sender/contact check, the inbound opt-out rule's
+ * suppression target, and the reply-automation gate. The lead's contact wins;
+ * the last revision's `normalizedRecipient` is the fallback for a thread whose
+ * lead has no contact yet.
+ *
+ * It is NEVER read from an inbound payload. An inbound `from` can at most be
+ * compared against this and cause a refusal.
+ */
+export async function resolveOutboundRecipient(
+  ctx: AuthCtx,
+  conversation: Doc<"conversations">,
+): Promise<{ recipient: string | null; latestDraft: Doc<"drafts"> | null }> {
+  const latestDraft = await ctx.db
+    .query("drafts")
+    .withIndex("by_conversationId_and_revision", (q) =>
+      q.eq("conversationId", conversation._id),
+    )
+    .order("desc")
+    .first();
+  let recipient: string | null = null;
+  if (conversation.prospectId !== undefined) {
+    const prospect = await ctx.db.get("prospects", conversation.prospectId);
+    const email = prospect?.contact?.email;
+    if (
+      prospect !== null &&
+      prospect.workspaceId === conversation.workspaceId &&
+      email !== undefined
+    ) {
+      try {
+        recipient = normalizeEmailAddress(email, "recipient");
+      } catch {
+        recipient = null;
+      }
+    }
+  }
+  if (recipient === null && latestDraft !== null) {
+    recipient = latestDraft.normalizedRecipient;
+  }
+  return { recipient, latestDraft };
 }
 
 /**
@@ -1349,24 +1396,10 @@ export const resume = mutation({
     // The address we would actually mail, resolved by the application: the
     // lead's contact, else the address the last revision was authorized
     // against. Never the inbound `from`.
-    const latestDraft = await ctx.db
-      .query("drafts")
-      .withIndex("by_conversationId_and_revision", (q) =>
-        q.eq("conversationId", conversation._id),
-      )
-      .order("desc")
-      .first();
-    let recipient: string | null = null;
-    if (prospect.contact?.email !== undefined) {
-      try {
-        recipient = normalizeEmailAddress(prospect.contact.email, "recipient");
-      } catch {
-        recipient = null;
-      }
-    }
-    if (recipient === null && latestDraft !== null) {
-      recipient = latestDraft.normalizedRecipient;
-    }
+    const { recipient, latestDraft } = await resolveOutboundRecipient(
+      ctx,
+      conversation,
+    );
     if (recipient === null) {
       return blocked("recipient_unknown");
     }

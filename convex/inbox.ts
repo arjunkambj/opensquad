@@ -31,6 +31,21 @@
  * succeed are written as `failed` with a bounded reason instead of thrown, so
  * they are visible rather than looping.
  *
+ * THE ORDER, which is the whole point of the card and what V16–V18 test:
+ *
+ *   1. `drafts.applyInboundContext` — advance `contextVersion`, supersede
+ *      every open draft approval, cancel every parked follow-up;
+ *   2. the inbound facts the conversation row owns;
+ *   3. the deterministic opt-out rule — suppress a verified explicit request,
+ *      freeze automation for an unclear one, guess at neither;
+ *   4. the reply-automation gate, read after all of the above so it sees what
+ *      they just changed;
+ *   5. ONLY THEN may reply work start.
+ *
+ * All five are one transaction, so step 5 cannot commit unless step 1 did.
+ * `applyToConversation` carries the argument for why that is provable rather
+ * than merely intended.
+ *
  * EVERY INBOUND STRING IS DATA. Svix proved the payload came from AgentMail
  * untampered; it proved nothing about the content, which was written by
  * whoever sent the email. `from` is stored as data and can only ever make a
@@ -46,7 +61,12 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { boundedString, OPT_OUT_SIGNALS } from "./lib/validators";
 import type { OptOutSignal } from "./lib/validators";
-import { recordConversationNote } from "./conversations";
+import type { AuthCtx } from "./lib/auth";
+import {
+  recordConversationNote,
+  resolveOutboundRecipient,
+} from "./conversations";
+import { matchSuppression } from "./suppressions";
 
 /* ------------------------------------------------------------------ */
 /* Receipt facts                                                       */
@@ -93,6 +113,63 @@ function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFacts {
 }
 
 /* ------------------------------------------------------------------ */
+/* The reply-automation gate                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Why automation did not answer this reply. Architecture §8 step 7: "if
+ * takeover is active, the conversation is unassigned/closed, or no valid
+ * prospect/campaign is linked, retain the reply for human review without a
+ * reply workflow, draft or send."
+ *
+ * Names line up with `SEND_BLOCK_CODES` and `conversations.RESUME_BLOCK_CODES`
+ * wherever the same gate exists, so the inbox, the resume path and the send
+ * preflight speak one vocabulary.
+ */
+export const REPLY_GATE_BLOCK_CODES = [
+  "opt_out_explicit",
+  "opt_out_ambiguous",
+  "conversation_unassigned",
+  "conversation_closed",
+  "human_takeover",
+  "association_missing",
+  "campaign_mismatch",
+  "campaign_inactive",
+  "workspace_paused",
+  "inbox_unassigned",
+  "inbox_mismatch",
+  "recipient_unknown",
+  "suppressed_email",
+  "suppressed_domain",
+] as const;
+
+export type ReplyGateBlockCode = (typeof REPLY_GATE_BLOCK_CODES)[number];
+
+export const vReplyGateBlockCode = v.union(
+  v.literal("opt_out_explicit"),
+  v.literal("opt_out_ambiguous"),
+  v.literal("conversation_unassigned"),
+  v.literal("conversation_closed"),
+  v.literal("human_takeover"),
+  v.literal("association_missing"),
+  v.literal("campaign_mismatch"),
+  v.literal("campaign_inactive"),
+  v.literal("workspace_paused"),
+  v.literal("inbox_unassigned"),
+  v.literal("inbox_mismatch"),
+  v.literal("recipient_unknown"),
+  v.literal("suppressed_email"),
+  v.literal("suppressed_domain"),
+);
+
+export const vReplyGateVerdict = v.union(
+  v.object({ start: v.literal(true) }),
+  v.object({ start: v.literal(false), blockedBy: vReplyGateBlockCode }),
+);
+
+export type ReplyGateVerdict = typeof vReplyGateVerdict.type;
+
+/* ------------------------------------------------------------------ */
 /* Outcome                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -119,6 +196,8 @@ export const vApplyInboundMessageResult = v.object({
   conversationId: v.optional(v.id("conversations")),
   /** The conversation version AFTER this message was applied. */
   contextVersion: v.optional(v.number()),
+  /** Whether reply automation was allowed to run, and if not, why not. */
+  replyWork: v.optional(vReplyGateVerdict),
   reason: v.optional(v.string()),
 });
 
@@ -242,17 +321,36 @@ async function matchConversation(
  *
  * STEP 3 — opt-out enforcement (`enforceOptOut`).
  *
- * Everything runs inside the caller's single transaction; `ctx.runMutation`
- * from a mutation is a sub-transaction of it, so either all of it commits or
- * none of it does. Nothing that could spend a model token exists above this
- * point, and later stages hang their dispatch strictly below it.
+ * STEP 4 — the reply-automation gate (`evaluateReplyAutomation`), read AFTER
+ * steps 1–3 so it sees the takeover an ambiguous opt-out just placed and the
+ * suppression an explicit one just wrote.
+ *
+ * STEP 5 — and only here, with every invalidation above already committed to
+ * this transaction, may reply work be started. Nothing above this line can
+ * reach a model, and nothing that reaches a model may be placed above it.
+ *
+ * WHY THE ORDER IS PROVABLE, not merely intended. Steps 1–4 and the dispatch
+ * at step 5 are one Convex transaction (`ctx.runMutation` from a mutation is a
+ * sub-transaction), so a dispatch cannot commit unless the invalidation
+ * committed with it. The only route to model work is
+ * `internal.workerOperations.dispatchWorkerRequest`, which refuses a mission
+ * with no `workflowId`; the mission does not exist until step 5; and a
+ * workflow started with `startAsync` enqueues rather than running its first
+ * step inside this transaction. The race in the other direction is closed too:
+ * an approval attempted between the bump and the start hits
+ * `approvals.resolveDraftDecision`, which re-checks both that the ask is still
+ * open and that `conversation.contextVersion === draft.basedOnContextVersion`.
+ *
+ * The reply mission and its workflow are the next slice. Until they land this
+ * returns the gate verdict, which is the value they will hang off — the
+ * ordering above it is complete and already testable.
  */
 async function applyToConversation(
   ctx: MutationCtx,
   receipt: Doc<"emailEventReceipts">,
   conversation: Doc<"conversations">,
   facts: InboundFacts,
-): Promise<Doc<"conversations">> {
+): Promise<{ conversation: Doc<"conversations">; replyWork: ReplyGateVerdict }> {
   // 1. Version bump, approval invalidation, parked follow-up cancellation.
   await ctx.runMutation(internal.drafts.applyInboundContext, {
     conversationId: conversation._id,
@@ -268,7 +366,10 @@ async function applyToConversation(
   //    reason a version bump did or did not happen.
   const current = await ctx.db.get("conversations", conversation._id);
   if (current === null) {
-    return conversation;
+    return {
+      conversation,
+      replyWork: { start: false, blockedBy: "association_missing" },
+    };
   }
   if (
     facts.fromAddress !== undefined &&
@@ -283,8 +384,32 @@ async function applyToConversation(
   // 3. Opt-out, before anything could propose a reply.
   await enforceOptOut(ctx, current, facts);
 
-  const updated = await ctx.db.get("conversations", current._id);
-  return updated ?? current;
+  // 4. Re-read, then gate. The read is deliberate: steps 1 and 3 may have
+  //    moved the very fields the gate tests.
+  const settled = (await ctx.db.get("conversations", current._id)) ?? current;
+  const replyWork = await evaluateReplyAutomation(
+    ctx,
+    settled,
+    facts.optOutSignal,
+  );
+
+  // 5. The dispatch point. Nothing is started yet — the reply mission and its
+  //    workflow are the next slice — but a policy refusal that would otherwise
+  //    leave no trace is recorded now, because a thread with no mission can
+  //    carry no activity row to explain itself (integrator decision D1).
+  if (
+    !replyWork.start &&
+    NOTED_REPLY_GATE_BLOCKS.has(replyWork.blockedBy)
+  ) {
+    await recordConversationNote(ctx, {
+      conversation: settled,
+      kind: "system",
+      actor: "system",
+      body: `Reply automation did not run for this message (${replyWork.blockedBy}). The reply is retained for human review; no draft and no send were produced.`,
+    });
+  }
+
+  return { conversation: settled, replyWork };
 }
 
 /* ------------------------------------------------------------------ */
@@ -336,13 +461,9 @@ async function enforceOptOut(
   const rule = facts.optOutRule ?? "unnamed_rule";
 
   if (facts.optOutSignal === "explicit") {
-    const latestDraft = await ctx.db
-      .query("drafts")
-      .withIndex("by_conversationId_and_revision", (q) =>
-        q.eq("conversationId", conversation._id),
-      )
-      .order("desc")
-      .first();
+    // The same helper `resume` and the gate use, so all three agree on what
+    // "the address we mail" means.
+    const { latestDraft } = await resolveOutboundRecipient(ctx, conversation);
     const verified =
       latestDraft !== null &&
       facts.fromAddress !== undefined &&
@@ -400,6 +521,119 @@ async function holdForReview(
     body: note,
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* The gate (its vocabulary is declared at the top of the file)        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * THE gate every path to model work on an inbound reply passes through.
+ *
+ * It is a pure read, so it can be re-run — and must be. Ingest runs it here;
+ * the reply workflow re-runs it before each dispatch, because a takeover, a
+ * close, a workspace pause or a suppression can land while a workflow is
+ * queued, and a stale wake must then spend nothing.
+ *
+ * Order matters only for which blocker gets REPORTED, and it is chosen so the
+ * operator sees the most specific cause of this particular message: the
+ * opt-out that just arrived before the takeover it caused, and the missing
+ * association before the policy checks that association would feed.
+ */
+export async function evaluateReplyAutomation(
+  ctx: AuthCtx,
+  conversation: Doc<"conversations">,
+  optOutSignal: OptOutSignal,
+): Promise<ReplyGateVerdict> {
+  const blocked = (blockedBy: ReplyGateBlockCode): ReplyGateVerdict => ({
+    start: false,
+    blockedBy,
+  });
+
+  if (optOutSignal === "explicit") {
+    return blocked("opt_out_explicit");
+  }
+  if (optOutSignal === "ambiguous") {
+    return blocked("opt_out_ambiguous");
+  }
+  if (conversation.state === "unassigned") {
+    return blocked("conversation_unassigned");
+  }
+  if (conversation.state === "closed") {
+    return blocked("conversation_closed");
+  }
+  if (conversation.humanTakeover) {
+    return blocked("human_takeover");
+  }
+  if (
+    conversation.prospectId === undefined ||
+    conversation.campaignId === undefined
+  ) {
+    return blocked("association_missing");
+  }
+  const prospect = await ctx.db.get("prospects", conversation.prospectId);
+  if (prospect === null || prospect.workspaceId !== conversation.workspaceId) {
+    return blocked("association_missing");
+  }
+  const campaign = await ctx.db.get("campaigns", conversation.campaignId);
+  if (campaign === null || campaign.workspaceId !== conversation.workspaceId) {
+    return blocked("association_missing");
+  }
+  // The campaign frozen on the conversation at association is the authority;
+  // a lead re-campaigned since must not silently retarget in-flight work.
+  if (prospect.campaignId !== conversation.campaignId) {
+    return blocked("campaign_mismatch");
+  }
+  if (campaign.status !== "active") {
+    return blocked("campaign_inactive");
+  }
+  const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
+  if (workspace === null || workspace.automationState !== "active") {
+    return blocked("workspace_paused");
+  }
+  if (workspace.inboxRef === undefined) {
+    return blocked("inbox_unassigned");
+  }
+  if (workspace.inboxRef !== conversation.inboxRef) {
+    return blocked("inbox_mismatch");
+  }
+  const { recipient } = await resolveOutboundRecipient(ctx, conversation);
+  if (recipient === null) {
+    return blocked("recipient_unknown");
+  }
+  // P10's matcher, not a second one: email key first, then the explicit
+  // domain key. An email suppression never implies its domain.
+  const suppression = await matchSuppression(
+    ctx,
+    conversation.workspaceId,
+    recipient,
+  );
+  if (suppression !== null) {
+    return blocked(
+      suppression.matchedBy === "domain" ? "suppressed_domain" : "suppressed_email",
+    );
+  }
+  return { start: true };
+}
+
+/**
+ * Blockers worth a note on the thread.
+ *
+ * The rest are already visible without one: an unassigned thread carries its
+ * intake note and its takeover reason, a hold wrote its own note as it was
+ * placed, and a closed thread is closed. Writing a note for those on every
+ * inbound message would bury the ones that say something new under repetition.
+ */
+const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<string> = new Set([
+  "association_missing",
+  "campaign_mismatch",
+  "campaign_inactive",
+  "workspace_paused",
+  "inbox_unassigned",
+  "inbox_mismatch",
+  "recipient_unknown",
+  "suppressed_email",
+  "suppressed_domain",
+]);
 
 /* ------------------------------------------------------------------ */
 /* Entry point                                                         */
@@ -487,8 +721,9 @@ export const applyInboundMessage = internalMutation({
     );
     return {
       outcome: queued ? ("queued" as const) : ("applied" as const),
-      conversationId: applied._id,
-      contextVersion: applied.contextVersion,
+      conversationId: applied.conversation._id,
+      contextVersion: applied.conversation.contextVersion,
+      replyWork: applied.replyWork,
     };
   },
 });
