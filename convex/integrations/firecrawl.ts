@@ -855,10 +855,20 @@ export const retrieveProspectPages = internalAction({
   },
 });
 
-/** The human-readable half of a refusal. `ConvexError.data` is read FIRST: a
- *  `ConvexError` is also an `Error` whose `.message` is the serialized
- *  `{code, message}` envelope, so reading `.message` first would put JSON
- *  where a reason belongs. */
+/**
+ * The human-readable half of a refusal.
+ *
+ * `ConvexError.data` is read FIRST: a `ConvexError` is also an `Error` whose
+ * `.message` is the serialized `{code, message}` envelope, so reading
+ * `.message` first would put JSON where a reason belongs.
+ *
+ * Crossing an ACTION boundary loses `data` entirely — `ctx.runAction` rethrows
+ * a plain `Error` whose text is `Uncaught ConvexError: {"code":…,"message":…}`,
+ * sometimes nested twice. So the envelope is unwrapped from the text as well;
+ * otherwise this reason reaches a branch's `outcomeReason` and a lead's
+ * `fitReason` as JSON with a stack-trace prefix, which is not a reason anybody
+ * can read.
+ */
 function refusalMessage(error: unknown): string {
   const data =
     typeof error === "object" && error !== null
@@ -867,8 +877,71 @@ function refusalMessage(error: unknown): string {
   if (data !== undefined && typeof data.message === "string") {
     return data.message.slice(0, 500);
   }
-  if (error instanceof Error) return error.message.slice(0, 500);
-  return "page could not be retrieved";
+  const raw = error instanceof Error ? error.message : String(error);
+  return unwrapConvexErrorText(raw).slice(0, 500);
+}
+
+/**
+ * Pull the innermost `{code, message}` envelope out of a rethrown
+ * `ConvexError`'s text. Returns the input unchanged when there is none.
+ *
+ * The envelope is followed by a stack trace, so the object's extent is found
+ * by scanning for its own balanced closing brace (string- and escape-aware)
+ * rather than by parsing to the end of the text, which never succeeds.
+ */
+function unwrapConvexErrorText(raw: string): string {
+  let text = raw;
+  for (let depth = 0; depth < 4; depth += 1) {
+    const start = text.indexOf('{"code":');
+    if (start === -1) break;
+    const end = balancedObjectEnd(text, start);
+    if (end === -1) break;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text.slice(start, end));
+    } catch {
+      break;
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as { message?: unknown }).message !== "string"
+    ) {
+      break;
+    }
+    text = (parsed as { message: string }).message;
+  }
+  return text;
+}
+
+/** Index just past the `}` that closes the object starting at `start`, or
+ *  -1 when the text never closes it. */
+function balancedObjectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
 }
 
 type BeginFirecrawlOperationResult =
@@ -916,7 +989,14 @@ function classifyFirecrawlFailure(error: unknown): {
   code: string;
   message: string;
 } {
-  const message = error instanceof Error ? error.message : String(error);
+  // A ConvexError rethrown across an action boundary arrives as
+  // `Uncaught ConvexError: {"code":…,"message":…}` followed by a stack trace,
+  // sometimes wrapped twice — and this text is STORED on
+  // `providerOperations.error.message` and read back into a lead's
+  // `fitReason`. The structured `data.message` is preferred, and the wrapper
+  // text is unwrapped when it is not. The classification below still matches
+  // on the provider's own wording, which survives either.
+  const message = refusalMessage(error);
   const data =
     typeof error === "object" && error !== null && "data" in error
       ? (error as { data?: unknown }).data
