@@ -39,13 +39,21 @@ import {
 } from "@/constants/sidebar-menu"
 import Logo from "./Logo"
 
-const searchGroups = [
+/**
+ * Palette groups. The footer items fold into the LAST category rather than
+ * opening a second group: the footer's only member is Settings, and a group of
+ * its own was headed "Workspace" too — so the palette showed two identical
+ * headings and React saw two children with the same key.
+ */
+const searchGroups: { heading: string | undefined; items: MenuItem[] }[] = [
   { heading: undefined, items: sidebarMainItems },
-  ...sidebarCategories.map((category) => ({
+  ...sidebarCategories.map((category, index) => ({
     heading: category.name,
-    items: category.items,
+    items:
+      index === sidebarCategories.length - 1
+        ? [...category.items, ...sidebarFooterItems]
+        : category.items,
   })),
-  { heading: "Workspace", items: sidebarFooterItems },
 ]
 
 const SEARCH_SHORTCUT = "k"
@@ -70,7 +78,11 @@ export function AppSidebar() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  const isActive = (item: MenuItem) => pathname === item.href
+  // Prefix match, so a nested route keeps its parent lit — `/overview` must
+  // stay the active item while a mission detail is open under it. The
+  // boundary check stops `/settings` matching a future `/settings-export`.
+  const isActive = (item: MenuItem) =>
+    pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   const goTo = (href: MenuItem["href"]) => {
     setSearchOpen(false)

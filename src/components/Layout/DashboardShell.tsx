@@ -16,7 +16,7 @@ export function DashboardShell({
     <TooltipProvider>
       <SidebarProvider className="bg-background">
         <AppSidebar />
-        <SidebarInset className="overflow-hidden">
+        <SidebarInset className="min-w-0">
           <DashboardHeader user={user} />
           <div className="flex min-w-0 flex-1 flex-col gap-6 px-4 py-3 sm:px-6 sm:py-3">
             {children}

@@ -11,6 +11,15 @@ import { routeTree } from "./routeTree.gen";
 
 const router = createRouter({ routeTree });
 
+/**
+ * First paint before the providers resolve. Deliberately just the page ground:
+ * anything with a spinner or a message is a guess about what is loading, and
+ * this fallback covers auth, Convex and the router alike.
+ */
+function AppBootFallback() {
+  return <div className="min-h-svh bg-background" aria-busy="true" />;
+}
+
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
@@ -19,7 +28,7 @@ declare module "@tanstack/react-router" {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<AppBootFallback />}>
       <HexclaveProvider app={hexclaveClientApp}>
         <ConvexClientProvider>
           <HexclaveTheme>
