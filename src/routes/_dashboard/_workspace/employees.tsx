@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
 import { EmployeesView } from "@/components/employees/EmployeesView"
 
-export const Route = createFileRoute("/_dashboard/employees")({
+export const Route = createFileRoute("/_dashboard/_workspace/employees")({
   component: EmployeesPage,
 })
 

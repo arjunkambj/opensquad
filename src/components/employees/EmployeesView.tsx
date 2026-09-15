@@ -35,21 +35,15 @@ export function EmployeesView() {
       : "skip",
   )
 
-  if (current === undefined) {
+  // `null` cannot reach this component — `_workspace` redirects a
+  // membership-less user to `/onboarding` — but the query still types as
+  // nullable, and a loading state is the only honest thing to render for a
+  // case that by construction resolves elsewhere.
+  if (current === undefined || current === null) {
     return (
       <LoadingState
         title="Loading employees"
         description="Reading your workspace's Scout, Researcher and Outreach."
-      />
-    )
-  }
-
-  if (current === null) {
-    return (
-      <EmptyState
-        title="No workspace yet"
-        description="Complete setup to provision Scout, Researcher and Outreach."
-        action={<Button render={<Link to="/onboarding" />}>Start setup</Button>}
       />
     )
   }

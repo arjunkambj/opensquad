@@ -12,47 +12,19 @@ import {
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 
 /**
- * Setup call-to-action shown on the dashboard while the workspace has not
- * completed onboarding. Disappears once automation is activated — and while
- * workspace data is still loading it renders nothing rather than flashing.
+ * Setup call-to-action shown on the dashboard while the workspace exists but
+ * has not completed onboarding. Disappears once automation is activated — and
+ * while workspace data is still loading it renders nothing rather than
+ * flashing.
+ *
+ * It has no "no workspace yet" branch: `_workspace` redirects that case to
+ * `/onboarding` before this renders.
  */
 export function SetupBanner() {
   const current = useCurrentWorkspace()
 
-  if (current === undefined) {
+  if (current === undefined || current === null) {
     return null
-  }
-
-  if (current === null) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HugeiconsIcon
-              icon={RocketIcon}
-              strokeWidth={2}
-              className="size-4"
-              aria-hidden="true"
-            />
-            Set up your workspace
-          </CardTitle>
-          <CardDescription>
-            Create your workspace and its three AI employees — Scout,
-            Researcher and Outreach — then tell them who to sell to.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button render={<Link to="/onboarding" />}>
-            Start setup
-            <HugeiconsIcon
-              icon={ArrowRight01Icon}
-              data-icon="inline-end"
-              strokeWidth={2}
-            />
-          </Button>
-        </CardContent>
-      </Card>
-    )
   }
 
   const { workspace } = current
