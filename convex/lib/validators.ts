@@ -3634,6 +3634,31 @@ export function assertNextAction(
   };
 }
 
+/**
+ * One candidate company a source produced, in the shape the pipeline importer
+ * accepts. Deliberately NOT a prospect row: `canonicalDomain`, `qualification`,
+ * `salesStage`, `ownerIdentityKey`, `version` and the timestamps are all
+ * backend facts derived at import, so a caller cannot state them.
+ *
+ * `websiteUrl` rather than a bare domain, because provenance arrives as a URL
+ * and `normalizeCanonicalDomain` extracts the host through the URL parser —
+ * a path, query or credential can never leak into the dedupe key.
+ */
+export const vProspectCandidate = v.object({
+  companyName: v.string(),
+  websiteUrl: v.string(),
+  sourceRefs: v.array(vProspectSourceRef),
+  fitReason: v.optional(v.string()),
+  contact: v.optional(vProspectContact),
+});
+
+export type ProspectCandidate = Infer<typeof vProspectCandidate>;
+
+/** Bound on one import batch, so a single call cannot buy unbounded work
+ *  inside the importing transaction. The campaign's own `leadLimit` (1..5) is
+ *  what decides how many of them can actually become leads. */
+export const PROSPECT_IMPORT_CANDIDATES_MAX = 50;
+
 /* ----- lead events ----------------------------------------------------- */
 
 /**
