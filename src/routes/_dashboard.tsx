@@ -28,9 +28,12 @@ function DashboardLayout() {
 
 function AuthedDashboard() {
   const user = useUser({ or: "redirect" })
-  // Reset the boundary on navigation: a failure on one page must not outlive
-  // the page. Without this, a caught error persists until a full reload.
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  // Reset the boundary on any location change, SEARCH INCLUDED — not just the
+  // pathname. Several failures here are caused by a search param rather than a
+  // route: a stale pagination cursor throws, and `reset` alone would re-render
+  // the same bad cursor forever. Keying on the full href means clearing the
+  // offending param is a real recovery.
+  const href = useRouterState({ select: (state) => state.location.href })
 
   return (
     <DashboardShell
@@ -41,7 +44,7 @@ function AuthedDashboard() {
       }}
     >
       <CatchBoundary
-        getResetKey={() => pathname}
+        getResetKey={() => href}
         errorComponent={DashboardRouteError}
       >
         <Outlet />
