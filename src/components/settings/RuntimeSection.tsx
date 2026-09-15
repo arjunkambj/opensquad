@@ -115,9 +115,15 @@ export function RuntimeSection({
     (conn.state === "ready" ||
       conn.state === "stopped" ||
       conn.state === "error")
+  // `ready` is reachable ONLY by completing a managed login, so gating sign-in
+  // on it deadlocked the owner. This mirrors what `runtimeControlRequests`
+  // actually accepts; a request enqueued while `provisioning` waits for the
+  // worker's first control poll, or expires with the control-request TTL.
   const canStartLogin =
     conn !== null &&
-    conn.state === "ready" &&
+    (conn.state === "provisioning" ||
+      conn.state === "connecting" ||
+      conn.state === "ready") &&
     conn.codexAccountSummary?.state !== "chatgpt"
   const signedIn = conn?.codexAccountSummary?.state === "chatgpt"
 
