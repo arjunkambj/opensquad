@@ -262,6 +262,8 @@ const vSettleResult = v.object({
  * replay; any other illegal transition is a `CONFLICT` and rolls the whole
  * batch back — a released reservation can never be re-committed, an
  * uncertain one can only commit or release.
+ *
+ * Rows left behind by an earlier bucket are the exception: see the skip below.
  */
 async function settleReservation(
   ctx: MutationCtx,
@@ -297,10 +299,27 @@ async function settleReservation(
     uncertain: ["committed", "released"],
   };
   const now = Date.now();
-  let first: Doc<"usageReservations"> | null = null;
+  // An attempt parked past its local day releases the stale-bucket row and
+  // re-reserves under today's bucket (`beginDispatch`), so one operationKey can
+  // own several rows. The newest is this operation's live reservation; every
+  // older row already moved its own bucket's counters and is settled history,
+  // so it is skipped instead of conflicting the whole settle. The newest row is
+  // never skipped — a live reservation that cannot reach the target is a
+  // genuine illegal transition and still throws.
+  const current = reservations.reduce((newest, row) =>
+    row._creationTime > newest._creationTime ? row : newest,
+  );
+  let settled: Doc<"usageReservations"> | null = null;
+  let replayed: Doc<"usageReservations"> | null = null;
   for (const reservation of reservations) {
     if (reservation.state === args.target) {
-      first ??= reservation;
+      replayed ??= reservation;
+      continue;
+    }
+    if (
+      reservation._id !== current._id &&
+      (reservation.state === "committed" || reservation.state === "released")
+    ) {
       continue;
     }
     if (!allowed[reservation.state].includes(args.target)) {
@@ -349,15 +368,15 @@ async function settleReservation(
         ? { providerReference: args.providerReference }
         : {}),
     });
-    first ??= await ctx.db.get("usageReservations", reservation._id);
+    settled ??= await ctx.db.get("usageReservations", reservation._id);
   }
+  // Prefer the row this call moved: a stale sibling must never stand in for
+  // the live reservation the caller settled.
+  const first = settled ?? replayed;
   if (first === null) {
     throw domainError("NOT_FOUND", "reservation not found after update");
   }
-  return {
-    reservation: first,
-    replayed: reservations.every((row) => row.state === args.target),
-  };
+  return { reservation: first, replayed: settled === null };
 }
 
 /** Commit — the debited capacity became a real provider-accepted send. */
