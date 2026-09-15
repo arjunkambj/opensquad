@@ -31,6 +31,7 @@ import { v } from "convex/values";
 import { requireWorkspaceMember } from "./lib/auth";
 import {
   boundedLimit,
+  MAX_LIST_LIMIT,
   PROVIDER_REF_MAX_LENGTH,
   THREAD_BODY_MAX_LENGTH,
   vCampaignStatus,
@@ -429,6 +430,76 @@ export const thread = query({
     return {
       items: entries.slice(0, limit),
       hasMore: entries.length > limit,
+    };
+  },
+});
+
+/**
+ * The bounded attention counts the sidebar Inbox badge and the `/overview`
+ * attention block both read (integrator decision D1).
+ *
+ * Unassigned mail can never appear in `decisions.listOpen`: a decision row
+ * requires a `missionId`, a mission requires a campaign, and a campaign
+ * requires an associated lead — so an unassigned conversation has no mission
+ * and can carry no decision, no activity row and no mission comment. It is
+ * therefore its own count here, never folded into the decision count. ONE
+ * call serves both surfaces; two numbers for one thing would be a defect
+ * (`plan/ux.md` §3).
+ *
+ * Both buckets are exact ranges on
+ * `by_workspaceId_and_state_and_humanTakeover`, and they are disjoint by
+ * construction: every unassigned thread is also under takeover, so summing
+ * the plain takeover index would double-count. Scoping the second bucket to
+ * `state: "open"` removes the overlap and also drops closed-but-frozen
+ * threads, which are not attention. Neither range post-filters a truncated
+ * page — that is the whole reason the third index exists.
+ *
+ * Counts are capped at `MAX_LIST_LIMIT` and paired with `hasMore` so the UI
+ * renders "50+". Architecture §5 forbids an exact unlimited counter.
+ */
+export const attentionCounts = query({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.object({
+    unassigned: v.number(),
+    unassignedHasMore: v.boolean(),
+    takeover: v.number(),
+    takeoverHasMore: v.boolean(),
+    needsAttention: v.number(),
+    needsAttentionHasMore: v.boolean(),
+    bound: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const unassignedRows = await ctx.db
+      .query("conversations")
+      .withIndex("by_workspaceId_and_state_and_humanTakeover", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("state", "unassigned"),
+      )
+      .take(MAX_LIST_LIMIT + 1);
+    const takeoverRows = await ctx.db
+      .query("conversations")
+      .withIndex("by_workspaceId_and_state_and_humanTakeover", (q) =>
+        q
+          .eq("workspaceId", args.workspaceId)
+          .eq("state", "open")
+          .eq("humanTakeover", true),
+      )
+      .take(MAX_LIST_LIMIT + 1);
+
+    const unassigned = Math.min(unassignedRows.length, MAX_LIST_LIMIT);
+    const unassignedHasMore = unassignedRows.length > MAX_LIST_LIMIT;
+    const takeover = Math.min(takeoverRows.length, MAX_LIST_LIMIT);
+    const takeoverHasMore = takeoverRows.length > MAX_LIST_LIMIT;
+    const total = unassigned + takeover;
+    return {
+      unassigned,
+      unassignedHasMore,
+      takeover,
+      takeoverHasMore,
+      needsAttention: Math.min(total, MAX_LIST_LIMIT),
+      needsAttentionHasMore:
+        unassignedHasMore || takeoverHasMore || total > MAX_LIST_LIMIT,
+      bound: MAX_LIST_LIMIT,
     };
   },
 });
