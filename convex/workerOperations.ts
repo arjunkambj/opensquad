@@ -24,6 +24,10 @@ import { insertRun, finishRun } from "./runs";
 import {
   assertWorkerRequestInput,
   boundedString,
+  deriveRequestCapabilities,
+  intersectCapabilities,
+  vCapabilityId,
+  HOST_CAPABILITY_POLICY,
   bridgeError,
   bridgeInvalid,
   domainError,
@@ -36,7 +40,7 @@ import {
   WORKER_INPUT_SCHEMA_VERSION,
   CONTROL_REQUEST_TTL_MS,
 } from "./lib/validators";
-import type { WorkerOperation } from "./lib/validators";
+import type { EmployeeTemplate, WorkerOperation } from "./lib/validators";
 import type { MutationCtx } from "./_generated/server";
 
 /* ------------------------------------------------------------------ */
@@ -86,7 +90,38 @@ export const dispatchWorkerRequest = internalMutation({
     alreadyExists: v.boolean(),
     state: v.string(),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => await dispatchWorkerRequestImpl(ctx, args),
+});
+
+/** The arguments of the ONE dispatch path. */
+type DispatchWorkerRequestArgs = {
+  missionId: Id<"missions">;
+  runId: Id<"runs">;
+  stepKey: string;
+  generation: number;
+  operation: WorkerOperation;
+  input: unknown;
+  outputSchemaVersion: number;
+  targetWorkflowId: string;
+  workflowGeneration: number;
+};
+
+/**
+ * The single dispatch implementation. It used to have a private twin that
+ * the dev seeders called, which skipped the `targetWorkflowId` ownership,
+ * `workflowGeneration`, terminal-mission and `outputSchemaVersion` checks —
+ * two paths that were already drifting and would have drifted again the
+ * moment capabilities and budgets landed on one of them. There is now one.
+ */
+async function dispatchWorkerRequestImpl(
+  ctx: MutationCtx,
+  args: DispatchWorkerRequestArgs,
+): Promise<{
+  workerRequestId: Id<"workerRequests">;
+  continuationEventId: string;
+  alreadyExists: boolean;
+  state: string;
+}> {
     const mission = await ctx.db.get("missions", args.missionId);
     if (mission === null) {
       throw domainError("NOT_FOUND", "mission not found");
@@ -135,6 +170,20 @@ export const dispatchWorkerRequest = internalMutation({
     if (args.outputSchemaVersion !== WORKER_INPUT_SCHEMA_VERSION) {
       throw bridgeInvalid("outputSchemaVersion must be 1");
     }
+    // The capability set is DERIVED, never supplied: a caller that could
+    // name its own capabilities is exactly the model-supplied request the
+    // card forbids. `assertWorkerRequestInput` accepts the key so the stored
+    // envelope can carry the backend's own mirror; the field is refused here,
+    // on the way in.
+    if (
+      typeof args.input === "object" &&
+      args.input !== null &&
+      (args.input as Record<string, unknown>)["capabilities"] !== undefined
+    ) {
+      throw bridgeInvalid(
+        "input.capabilities is derived at dispatch, not supplied by the caller",
+      );
+    }
     assertWorkerRequestInput(args.input);
 
     const existing = await ctx.db
@@ -176,6 +225,35 @@ export const dispatchWorkerRequest = internalMutation({
       throw domainError("NOT_FOUND", "run not found for mission");
     }
 
+    // The issued capability set comes from the run's OWN employee row, read
+    // here and narrowed by the host policy for its template. `run.employeeId`
+    // is a required column (insertRun defaults it to the mission's assigned
+    // employee), so there is always exactly one employee to ask.
+    const employee = await ctx.db.get("employees", run.employeeId);
+    if (employee === null || employee.workspaceId !== mission.workspaceId) {
+      throw domainError("NOT_FOUND", "run employee not found");
+    }
+    if (!employee.enabled) {
+      throw domainError(
+        "CONFLICT",
+        `employee ${employee.template} is disabled`,
+      );
+    }
+    const capabilities = deriveRequestCapabilities(
+      employee.template,
+      employee.allowedCapabilities,
+      args.operation,
+    );
+    // Mirror into the envelope the worker receives, then re-validate: the
+    // stored `inputRef.value` is exactly what the asserter accepts, mirror
+    // included, and can never exceed the envelope bound by a field the
+    // backend itself added.
+    const input = {
+      ...(args.input as Record<string, unknown>),
+      capabilities,
+    };
+    assertWorkerRequestInput(input);
+
     const continuationEventId = await createEvent(ctx, components.workflow, {
       name: `worker:${args.operation}:${stepKey}`,
       workflowId: args.targetWorkflowId as WorkflowId,
@@ -192,7 +270,8 @@ export const dispatchWorkerRequest = internalMutation({
       generation: args.generation,
       operation: args.operation,
       state: "pending",
-      inputRef: { kind: "inline", value: args.input },
+      inputRef: { kind: "inline", value: input },
+      capabilities,
       outputSchemaVersion: args.outputSchemaVersion,
       targetWorkflowId: args.targetWorkflowId,
       continuationEventId,
@@ -206,8 +285,7 @@ export const dispatchWorkerRequest = internalMutation({
       alreadyExists: false,
       state: "pending",
     };
-  },
-});
+}
 
 /** Read back a dispatched request — the continuation step calls this after
  *  its awaited event fires (or errors) to apply the recorded outcome. */
@@ -673,6 +751,22 @@ export async function issueCredentialRow(
 /* ------------------------------------------------------------------ */
 
 /**
+ * The employee template that owns each bounded operation — the dev seeders'
+ * copy, deliberately local to this developer-only section. The authority is
+ * `HOST_CAPABILITY_POLICY` plus `OPERATION_CAPABILITY_REQUIREMENT`, which
+ * `deriveRequestCapabilities` enforces at dispatch; this table only decides
+ * which seeded employee the fixture acts as.
+ */
+const FIXTURE_TEMPLATE_FOR: Readonly<Record<WorkerOperation, EmployeeTemplate>> =
+  {
+    discover: "scout",
+    contact: "scout",
+    research: "researcher",
+    draft: "outreach",
+    classify_reply: "outreach",
+  };
+
+/**
  * Seed a complete bridge fixture on an isolated deployment: workspace +
  * owner membership + confirmed campaign + active mission + run receipt +
  * runtimeConnection (state `connecting`) + scoped credential + one pending
@@ -683,6 +777,10 @@ export const devSeedFixture = internalMutation({
   args: {
     operation: v.optional(vWorkerOperation),
     workspaceName: v.optional(v.string()),
+    /** Narrow the acting employee's stored capabilities before dispatch, so
+     *  the FORBIDDEN half of the capability gate can be driven directly:
+     *  `[]` makes the dispatch refuse rather than issue a capability set. */
+    narrowEmployeeCapabilities: v.optional(v.array(vCapabilityId)),
   },
   returns: v.object({
     workspaceId: v.id("workspaces"),
@@ -694,6 +792,9 @@ export const devSeedFixture = internalMutation({
     continuationEventId: v.string(),
     workerToken: v.string(),
     missionWorkflowId: v.string(),
+    employeeId: v.id("employees"),
+    campaignId: v.id("campaigns"),
+    capabilities: v.array(vCapabilityId),
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -736,16 +837,35 @@ export const devSeedFixture = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    const scoutId = await ctx.db.insert("employees", {
-      workspaceId,
-      template: "scout",
-      name: "Scout",
-      instructions: "Fixture scout",
-      instructionVersion: 1,
-      enabled: true,
-      allowedCapabilities: [],
-      updatedAt: now,
-    });
+    // One employee per template, each seeded at the exact host policy — the
+    // fixture then dispatches as the employee that actually owns the
+    // operation. Seeding a capability-less employee (as this fixture used
+    // to) now makes every dispatch FORBIDDEN, which is the point: pass
+    // `narrowEmployeeCapabilities` to ask for that refusal deliberately.
+    const operation: WorkerOperation = args.operation ?? "research";
+    const actingTemplate = FIXTURE_TEMPLATE_FOR[operation];
+    const employeeIds: Record<EmployeeTemplate, Id<"employees">> = {
+      scout: null as unknown as Id<"employees">,
+      researcher: null as unknown as Id<"employees">,
+      outreach: null as unknown as Id<"employees">,
+    };
+    for (const template of ["scout", "researcher", "outreach"] as const) {
+      employeeIds[template] = await ctx.db.insert("employees", {
+        workspaceId,
+        template,
+        name: `Fixture ${template}`,
+        instructions: `Fixture ${template}`,
+        instructionVersion: 1,
+        enabled: true,
+        allowedCapabilities:
+          template === actingTemplate &&
+          args.narrowEmployeeCapabilities !== undefined
+            ? intersectCapabilities(template, args.narrowEmployeeCapabilities)
+            : [...HOST_CAPABILITY_POLICY[template]],
+        updatedAt: now,
+      });
+    }
+    const actingEmployeeId = employeeIds[actingTemplate];
     const campaignId = await ctx.db.insert("campaigns", {
       workspaceId,
       title: "Bridge fixture campaign",
@@ -774,9 +894,9 @@ export const devSeedFixture = internalMutation({
         sourcePlan,
         employeeInstructions: [
           {
-            employeeId: scoutId,
-            template: "scout",
-            name: "Scout",
+            employeeId: actingEmployeeId,
+            template: actingTemplate,
+            name: `Fixture ${actingTemplate}`,
             instructionVersion: 1,
           },
         ],
@@ -785,7 +905,7 @@ export const devSeedFixture = internalMutation({
       },
       inputVersion: 1,
       priority: "normal",
-      assignedEmployeeId: scoutId,
+      assignedEmployeeId: actingEmployeeId,
       progressSummary: "Fixture",
       requiredDecisionCount: 0,
       visibility: "visible",
@@ -838,10 +958,9 @@ export const devSeedFixture = internalMutation({
       generation: 1,
       inputVersion: 1,
       inputSummary: "Bridge fixture request",
-      employeeId: scoutId,
+      employeeId: actingEmployeeId,
     });
-    const operation: WorkerOperation = args.operation ?? "research";
-    const dispatch = await dispatchWorkerRequestHandler(ctx, {
+    const dispatch = await dispatchWorkerRequestImpl(ctx, {
       missionId,
       runId,
       stepKey: "fixture-step",
@@ -852,6 +971,10 @@ export const devSeedFixture = internalMutation({
       targetWorkflowId: missionWorkflowId,
       workflowGeneration: 1,
     });
+    const seeded = await ctx.db.get(
+      "workerRequests",
+      dispatch.workerRequestId,
+    );
     return {
       workspaceId,
       missionId,
@@ -862,6 +985,9 @@ export const devSeedFixture = internalMutation({
       continuationEventId: dispatch.continuationEventId,
       workerToken: token,
       missionWorkflowId,
+      employeeId: actingEmployeeId,
+      campaignId,
+      capabilities: seeded?.capabilities ?? [],
     };
   },
 });
@@ -874,86 +1000,6 @@ function fixtureInputFor(operation: WorkerOperation): Record<string, unknown> {
     constraints: { deadlineMs: 120_000, maxToolCalls: 4 },
     outputSchema: { type: "object" },
   };
-}
-
-async function dispatchWorkerRequestHandler(
-  ctx: MutationCtx,
-  args: {
-    missionId: Id<"missions">;
-    runId: Id<"runs">;
-    stepKey: string;
-    generation: number;
-    operation: WorkerOperation;
-    input: unknown;
-    outputSchemaVersion: number;
-    targetWorkflowId: string;
-    workflowGeneration: number;
-  },
-): Promise<{ workerRequestId: Id<"workerRequests">; continuationEventId: string }> {
-  const mission = await ctx.db.get("missions", args.missionId);
-  if (mission === null) {
-    throw domainError("NOT_FOUND", "mission not found");
-  }
-  assertWorkerRequestInput(args.input);
-  const connection = await ctx.db
-    .query("runtimeConnections")
-    .withIndex("by_workspaceId", (q) => q.eq("workspaceId", mission.workspaceId))
-    .unique();
-  if (connection === null) {
-    throw domainError("CONFLICT", "workspace has no runtime connection");
-  }
-  // A request pins `runtimeGeneration` at dispatch — on a terminal runtime
-  // it could never be claimed (revive bumps the generation, retiring it).
-  // Reject dispatch on a dead connection instead of parking forever.
-  if (
-    connection.state !== "provisioning" &&
-    connection.state !== "connecting" &&
-    connection.state !== "ready"
-  ) {
-    throw domainError(
-      "CONFLICT",
-      `runtime connection is ${connection.state}; dispatch requires a live runtime`,
-    );
-  }
-  const existing = await ctx.db
-    .query("workerRequests")
-    .withIndex("by_missionId_and_stepKey_and_generation", (q) =>
-      q
-        .eq("missionId", args.missionId)
-        .eq("stepKey", args.stepKey)
-        .eq("generation", args.generation),
-    )
-    .unique();
-  if (existing !== null) {
-    return {
-      workerRequestId: existing._id,
-      continuationEventId: existing.continuationEventId,
-    };
-  }
-  const continuationEventId = await createEvent(ctx, components.workflow, {
-    name: `worker:${args.operation}:${args.stepKey}`,
-    workflowId: args.targetWorkflowId as WorkflowId,
-  });
-  const now = Date.now();
-  const workerRequestId = await ctx.db.insert("workerRequests", {
-    workspaceId: mission.workspaceId,
-    runtimeConnectionId: connection._id,
-    runtimeGeneration: connection.generation,
-    missionId: args.missionId,
-    runId: args.runId,
-    stepKey: args.stepKey,
-    generation: args.generation,
-    operation: args.operation,
-    state: "pending",
-    inputRef: { kind: "inline", value: args.input },
-    outputSchemaVersion: args.outputSchemaVersion,
-    targetWorkflowId: args.targetWorkflowId,
-    continuationEventId,
-    workflowGeneration: args.workflowGeneration,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return { workerRequestId, continuationEventId };
 }
 
 /** Mint an additional credential (optionally scope-reduced) for scope-
@@ -1131,22 +1177,33 @@ export const devSeedWorkerRequest = internalMutation({
     if (mission === null) {
       throw domainError("NOT_FOUND", "mission not found");
     }
+    const operation: WorkerOperation = args.operation ?? "draft";
+    // Attribute the run to the employee that owns the operation: the
+    // dispatch derives its capability set from the run's employee, so a
+    // `draft` request attributed to the scout would now be refused.
+    const employee = await ctx.db
+      .query("employees")
+      .withIndex("by_workspaceId_and_template", (q) =>
+        q
+          .eq("workspaceId", mission.workspaceId)
+          .eq("template", FIXTURE_TEMPLATE_FOR[operation]),
+      )
+      .unique();
     const runId = await insertRun(ctx, {
       missionId: mission._id,
       stage: "bridge_fixture",
       generation: 1,
       inputVersion: mission.inputVersion,
       inputSummary: "Bridge fixture request",
-      employeeId: mission.assignedEmployeeId,
+      employeeId: employee?._id ?? mission.assignedEmployeeId,
     });
-    const operation: WorkerOperation = args.operation ?? "draft";
     if (mission.workflowId === undefined) {
       throw domainError(
         "CONFLICT",
         "mission has no dispatched workflow — seed a workflow-bound mission first",
       );
     }
-    const dispatch = await dispatchWorkerRequestHandler(ctx, {
+    const dispatch = await dispatchWorkerRequestImpl(ctx, {
       missionId: mission._id,
       runId,
       stepKey:
