@@ -605,7 +605,9 @@
         "convex/http.ts",
         "plan/evidence/P16.md"
       ],
-      "evidence": []
+      "evidence": [
+        "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort \u2014 treat it as a release action, not a task to schedule around."
+      ]
     },
     {
       "id": "P17",
@@ -623,7 +625,9 @@
       "files": [
         "plan/evidence/P17.md"
       ],
-      "evidence": []
+      "evidence": [
+        "2026-09-15 owner scoping: the VIDEO is produced externally and is not this repo's work. P17's remaining scope is the agency trial and the corrections it surfaces. The video must still exist for P18 \u2014 external ownership removes the effort, not the requirement."
+      ]
     },
     {
       "id": "P18",
