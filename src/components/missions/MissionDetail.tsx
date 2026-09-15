@@ -47,6 +47,14 @@ import {
 /** The layout that declared `validateSearch`, never this component's own leaf. */
 const OVERVIEW_ROUTE = "/_dashboard/_workspace/overview"
 
+/**
+ * `MAX_LIST_LIMIT`. `boundedLimit` THROWS outside [1, 50] rather than
+ * clamping, so this is a literal — and it is rendered into the card's own copy
+ * so the sentence on screen and the number sent to the server can never drift
+ * apart.
+ */
+const DRAFT_LIMIT = 50
+
 const TAB_LABEL: Record<MissionTab, string> = {
   summary: "Summary",
   prospects: "Prospects",
@@ -445,10 +453,16 @@ function SummaryTab({
 /**
  * Drafts produced under this mission.
  *
- * `drafts.listForMission` is a bare array with no `hasMore` — it takes at most
- * 50 rows and cannot say whether it truncated — so the section is labelled
- * "recent", never "all". Superseded revisions are returned too and are
- * labelled as such; a superseded draft must never read like a current one.
+ * `drafts.listForMission` is a bare array with no `hasMore` — it cannot say
+ * whether it truncated — so the printed bound is the only truncation
+ * information the operator gets, and it must be the number this component
+ * actually sends. `limit` is therefore passed explicitly rather than left to
+ * `boundedLimit`'s default of 25, which would have shown 25 rows under a
+ * heading promising 50 and let a mission's newest revisions vanish silently.
+ *
+ * The section is labelled "recent", never "all", for the same reason.
+ * Superseded revisions are returned too and are labelled as such; a superseded
+ * draft must never read like a current one.
  */
 function MissionOutput({
   workspaceId,
@@ -460,6 +474,7 @@ function MissionOutput({
   const drafts = useQuery(api.drafts.listForMission, {
     workspaceId,
     missionId,
+    limit: DRAFT_LIMIT,
   })
 
   return (
@@ -467,8 +482,8 @@ function MissionOutput({
       <CardHeader>
         <CardTitle>Output</CardTitle>
         <CardDescription>
-          The most recent drafts this mission produced, up to 50. Approving one
-          happens on its decision, never here.
+          The most recent drafts this mission produced, up to {DRAFT_LIMIT}.
+          Approving one happens on its decision, never here.
         </CardDescription>
       </CardHeader>
       <CardContent>
