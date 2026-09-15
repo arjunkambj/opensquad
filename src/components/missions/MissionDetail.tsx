@@ -293,6 +293,26 @@ function MissionHeader({
       <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
         {MISSION_STATE_SUMMARY[mission.state]}
       </p>
+      {/* `plan/ux.md` §4 J6 step 5: a runtime-blocked mission sits in Needs
+          you with a connection badge and **links to the runtime section**.
+          Without this the operator is told the runtime is unavailable and
+          offered only Pause and Cancel, and the board's badge renders no link
+          at all once the runtime recovers — so there would be no path on this
+          surface from the blocked mission to the control that unblocks it.
+          `?section=` is still unconsumed by `SettingsSections` (recorded as a
+          deferral), so this lands on the settings page without preselecting
+          the section until P13 wires it. */}
+      {mission.state === "waiting_for_runtime" ? (
+        <div>
+          <Button
+            variant="outline"
+            size="xs"
+            render={<Link to="/settings" search={{ section: "runtime" }} />}
+          >
+            Runtime settings
+          </Button>
+        </div>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         Version {mission.version} · last changed{" "}
         {formatInstant(mission.updatedAt, timezone)}
