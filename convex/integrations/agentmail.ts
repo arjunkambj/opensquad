@@ -39,6 +39,7 @@ import { recordReceipt } from "../sendAttempts";
 import {
   inboundApplicationKey,
   outboundApplicationKey,
+  parseInboundSender,
   PROVIDER_REF_MAX_LENGTH,
 } from "../lib/validators";
 
@@ -761,14 +762,18 @@ export const onEvent = internalMutation({
  * already persisted the inbound message and deduped by `event_id` before
  * this runs.
  *
- * P10 wiring: the inbound message is recorded in `emailEventReceipts`
- * (pending) with application-key dedupe `incoming:<inbox>:<message>` — a
- * provider re-delivery under a NEW event_id lands as a handled duplicate and
- * can never start a second response workflow.
+ * The inbound message is recorded in `emailEventReceipts` (pending) with
+ * application-key dedupe `incoming:<inbox>:<message>` — a provider
+ * re-delivery under a NEW event_id lands as a handled duplicate and can never
+ * start a second response workflow — and P11's `internal.inbox
+ * .applyInboundMessage` is then scheduled to do the business handling.
  *
- * P11 remainder (not this task): workspace→conversation association,
- * contextVersion advancement, draft/decision invalidation and the reply
- * workflow signal. The pending receipt is its durable input.
+ * This function deliberately does the smallest possible amount of work: it
+ * projects the payload, resolves the workspace from the saved inbox
+ * assignment, writes the receipt and schedules. Conversation matching,
+ * `contextVersion` advancement, approval invalidation and everything
+ * downstream live in `convex/inbox.ts`, where a throw costs a retry instead of
+ * the event.
  */
 export const onMessageReceived = internalMutation({
   args: { message: v.any(), thread: v.any(), eventId: v.string() },
@@ -809,14 +814,42 @@ export const onMessageReceived = internalMutation({
     if (workspace === null) {
       return null;
     }
-    await recordReceipt(ctx, {
-      workspaceId: workspace._id,
-      inboxRef,
-      providerEventId: eventId,
-      applicationKey,
-      providerMessageRef: messageRef,
-      eventType: "message.received",
-      ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
+    // The only projection of the payload that survives this function. The
+    // sender is stored as DATA — it never selects a workspace or conversation
+    // and never becomes a send recipient — and it rides on the receipt rather
+    // than in the scheduler argument so the drain can re-drive from the row
+    // alone. No subject, no body, no headers: §4.3 keeps receipts to the
+    // verified facts a business decision needs.
+    const fromAddress = parseInboundSender(message?.from);
+    const { receipt, duplicate, duplicateApplicationKey } = await recordReceipt(
+      ctx,
+      {
+        workspaceId: workspace._id,
+        inboxRef,
+        providerEventId: eventId,
+        applicationKey,
+        providerMessageRef: messageRef,
+        eventType: "message.received",
+        ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
+        providerFacts: {
+          ...(fromAddress !== undefined ? { fromAddress } : {}),
+        },
+      },
+    );
+    // `duplicate` — the same provider event id, already recorded; nothing was
+    // written. `duplicateApplicationKey` — the same MESSAGE under a second
+    // event id, recorded as `handled` so it stays auditable. Either way the
+    // business path has already run at most once and must not run again: this
+    // is the application-effect dedupe, and it sits above every write P11
+    // makes to a conversation.
+    if (duplicate || duplicateApplicationKey) {
+      return null;
+    }
+    // Scheduled, not inlined. The schedule commits with the receipt insert, so
+    // a throw in the business path cannot roll back the row that makes the
+    // event replayable, and the `pending` row is the drain's input.
+    await ctx.scheduler.runAfter(0, internal.inbox.applyInboundMessage, {
+      receiptId: receipt._id,
     });
     return null;
   },

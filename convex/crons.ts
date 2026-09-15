@@ -35,4 +35,16 @@ crons.interval(
   {},
 );
 
+// Inbound recovery: the AgentMail callback that schedules ingest cannot be
+// retried — Workpool does not retry mutations, and the component will not
+// re-dispatch an `event_id` it has already ingested — so one lost schedule
+// would strand a verified reply forever. This re-drives `pending` inbound
+// receipts and is the first consumer of `by_handlingState_and_receivedAt`.
+crons.interval(
+  "inbound-receipt-drain",
+  { minutes: 5 },
+  internal.inbox.drainPendingInboundReceipts,
+  {},
+);
+
 export default crons;

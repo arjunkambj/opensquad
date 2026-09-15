@@ -2261,6 +2261,52 @@ export function domainOfNormalizedEmail(normalizedEmail: string): string {
   return normalizedEmail.slice(normalizedEmail.lastIndexOf("@") + 1);
 }
 
+/** Longest inbound `From` header this will even look at. */
+export const INBOUND_SENDER_MAX_LENGTH = 1_000;
+
+/**
+ * Read a single normalized address out of an inbound `From` header, or
+ * nothing.
+ *
+ * The header is written by whoever sent the mail, so this is a parser for
+ * untrusted data and never an identity check. Two properties matter:
+ *
+ * - it NEVER throws, unlike `normalizeEmailAddress`. The inbound callbacks it
+ *   feeds cannot survive a throw (Workpool does not retry mutations), so a
+ *   malformed header must degrade to "unknown sender", not lose the event;
+ * - it REFUSES rather than guesses. A header listing several addresses, or one
+ *   whose address does not normalize, yields `undefined`. Downstream that is a
+ *   refusal — `conversations.resume` blocks on `sender_unverified` — so
+ *   refusing is always the safe answer.
+ *
+ * The result is stored as data. It never selects a workspace or conversation
+ * and never becomes a send recipient; at most it must MATCH an address the
+ * application already resolved, and a mismatch blocks.
+ */
+export function parseInboundSender(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > INBOUND_SENDER_MAX_LENGTH) {
+    return undefined;
+  }
+  // `Display Name <a@b.com>` — take the angle-bracket address when the header
+  // carries exactly one, else the whole trimmed header.
+  const angles = trimmed.match(/<[^<>]*>/g);
+  if (angles !== null && angles.length > 1) {
+    return undefined;
+  }
+  const candidate = (
+    angles === null ? trimmed : angles[0].slice(1, -1)
+  ).trim();
+  try {
+    return normalizeEmailAddress(candidate, "sender");
+  } catch {
+    return undefined;
+  }
+}
+
 /* ----- draft payload hashing ------------------------------------------ */
 
 export const DRAFT_SUBJECT_MAX_LENGTH = 200;
