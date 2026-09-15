@@ -409,12 +409,28 @@ export async function applyReceiptToAttempt(
             ? "rejectedAt"
             : undefined;
   const stamp = fieldFor(receipt.eventType);
+  // Out-of-order signed delivery is real, not theoretical: the P05 gate
+  // observed `message.delivered` arriving BEFORE `message.sent` for one
+  // message. So the summary pair advances only forward, and each per-type
+  // stamp records the FIRST verified occurrence of that fact and is never
+  // overwritten. Without this an older `message.sent` landing after a newer
+  // `message.bounced` would present the attempt as merely sent — exactly the
+  // regression V16 step 1 tests.
+  //
+  // The attempt's own `state` is never derived from these facts, so transport
+  // state proper was already safe; this is about the delivery summary the UI
+  // and the reconcile path read.
+  const advancesSummary =
+    existing.lastEventAt === undefined || eventAt >= existing.lastEventAt;
   await ctx.db.patch("sendAttempts", attemptId, {
     providerDeliveryFacts: {
       ...existing,
-      lastEventType: receipt.eventType,
-      lastEventAt: eventAt,
-      ...(stamp !== undefined ? { [stamp]: eventAt } : {}),
+      ...(advancesSummary
+        ? { lastEventType: receipt.eventType, lastEventAt: eventAt }
+        : {}),
+      ...(stamp !== undefined && existing[stamp] === undefined
+        ? { [stamp]: eventAt }
+        : {}),
       eventIds,
     },
     updatedAt: Date.now(),

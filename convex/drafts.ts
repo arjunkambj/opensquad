@@ -808,11 +808,25 @@ export const applyInboundContext = internalMutation({
       return conversation;
     }
     const at = args.at ?? Date.now();
+    // `lastMessageAt` backs the inbox ordering indexes, so it is MONOTONIC —
+    // the same guard `sending.linkConversationThread` applies on the outbound
+    // side. Signed provider deliveries arrive out of order (P05 observed
+    // `message.delivered` before `message.sent` for one message), and P11's
+    // receipt drain can re-drive an older inbound after a newer one has
+    // already landed; neither may rewind a thread's position in the list.
+    //
+    // `lastInboundAt` is deliberately NOT clamped: it is the arrival time of
+    // the message `lastInboundMessageRef` names, and the two must keep
+    // describing the same message.
+    const lastMessageAt =
+      conversation.lastMessageAt === undefined || conversation.lastMessageAt < at
+        ? at
+        : conversation.lastMessageAt;
     await ctx.db.patch("conversations", conversation._id, {
       contextVersion: conversation.contextVersion + 1,
       lastInboundMessageRef: messageRef,
       lastInboundAt: at,
-      lastMessageAt: at,
+      lastMessageAt,
       unreadCount:
         conversation.unreadCount + (args.markUnread === false ? 0 : 1),
       updatedAt: Date.now(),
