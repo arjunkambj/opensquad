@@ -86,6 +86,8 @@ function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFacts {
 export const vInboundOutcome = v.union(
   /** Matched an existing conversation; its context advanced. */
   v.literal("applied"),
+  /** Matched nothing; a new unassigned conversation now holds it. */
+  v.literal("queued"),
   /** Nothing to do — not pending, not inbound, or the row is gone. */
   v.literal("skipped"),
   /** Recorded on the receipt as `failed`; it will not be retried blindly. */
@@ -102,8 +104,34 @@ export const vApplyInboundMessageResult = v.object({
   reason: v.optional(v.string()),
 });
 
+/**
+ * Annotated explicitly, and every handler below that produces one says so.
+ * A Convex handler's return type is otherwise inferred, and these handlers
+ * reach other modules through the generated `internal` object — which is typed
+ * from this module too, so the inference would be circular (TS7022/TS7023).
+ * The same reason `drafts.retireConversationWork` returns `v.null()`.
+ */
+export type ApplyInboundMessageResult = typeof vApplyInboundMessageResult.type;
+
 /** Bound on the `error` string a receipt carries. */
 const RECEIPT_ERROR_MAX_LENGTH = 500;
+
+/**
+ * Record an unrecoverable condition on the receipt instead of throwing it.
+ *
+ * A throw would roll back the transaction, leave the row `pending`, and hand
+ * the drain something it will retry on every sweep for as long as the row
+ * lives. `failed` is terminal, visible in `sendAttempts.listReceipts`, and
+ * still replayable by hand.
+ */
+async function fail(
+  ctx: MutationCtx,
+  receipt: Doc<"emailEventReceipts">,
+  reason: string,
+): Promise<{ outcome: "failed"; reason: string }> {
+  await settleReceipt(ctx, receipt, "failed", reason);
+  return { outcome: "failed", reason };
+}
 
 async function settleReceipt(
   ctx: MutationCtx,
@@ -251,7 +279,7 @@ async function applyToConversation(
 export const applyInboundMessage = internalMutation({
   args: { receiptId: v.id("emailEventReceipts") },
   returns: vApplyInboundMessageResult,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<ApplyInboundMessageResult> => {
     const receipt = await ctx.db.get("emailEventReceipts", args.receiptId);
     if (receipt === null) {
       return { outcome: "skipped" as const, reason: "receipt not found" };
@@ -268,24 +296,50 @@ export const applyInboundMessage = internalMutation({
       return { outcome: "skipped" as const, reason: "receipt is not pending" };
     }
 
+    const facts = readInboundFacts(receipt);
     const { conversation, ambiguous } = await matchConversation(ctx, receipt);
-    if (conversation === null) {
-      // Verified mail on a known inbox that matches no thread. The
-      // workspace-scoped unassigned queue is the next slice; until it exists
-      // the receipt says so honestly rather than silently dropping the event.
-      await settleReceipt(ctx, receipt, "failed", "no conversation for thread");
-      return {
-        outcome: "failed" as const,
-        reason: "no conversation for thread",
-      };
+
+    let target = conversation;
+    let queued = false;
+    if (target === null) {
+      // Verified mail on a KNOWN inbox that matches no thread. It is not
+      // dropped and it is not guessed at: it enters this workspace's
+      // unassigned queue under human takeover, with no lead, no mission, no
+      // reply workflow, no draft and no send (architecture §8 step 4).
+      const threadRef = receipt.providerThreadRef;
+      if (threadRef === undefined) {
+        // Nothing to key a conversation on, so a row created here could never
+        // be matched again by a later message on the same thread. Recording
+        // the refusal beats minting an orphan.
+        return await fail(
+          ctx,
+          receipt,
+          "inbound message carries no provider thread reference",
+        );
+      }
+      const ensured = await ctx.runMutation(
+        internal.conversations.ensureUnassignedConversation,
+        {
+          workspaceId: receipt.workspaceId,
+          inboxRef: receipt.inboxRef,
+          providerThreadRef: threadRef,
+          messageRef: receipt.providerMessageRef,
+          at: receipt.receivedAt,
+          ...(facts.fromAddress !== undefined
+            ? { fromAddress: facts.fromAddress }
+            : {}),
+        },
+      );
+      if (!ensured.ok) {
+        // Unrecoverable, so it is recorded rather than thrown: a throw would
+        // leave the receipt `pending` and the drain would retry it forever.
+        return await fail(ctx, receipt, ensured.reason);
+      }
+      target = ensured.conversation;
+      queued = ensured.created;
     }
 
-    const applied = await applyToConversation(
-      ctx,
-      receipt,
-      conversation,
-      readInboundFacts(receipt),
-    );
+    const applied = await applyToConversation(ctx, receipt, target, facts);
 
     await settleReceipt(
       ctx,
@@ -294,7 +348,7 @@ export const applyInboundMessage = internalMutation({
       ambiguous ? "ambiguous_thread_mapping" : undefined,
     );
     return {
-      outcome: "applied" as const,
+      outcome: queued ? ("queued" as const) : ("applied" as const),
       conversationId: applied._id,
       contextVersion: applied.contextVersion,
     };
