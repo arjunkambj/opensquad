@@ -55,7 +55,18 @@ import type { QuarantineReason } from "../lib/validators";
  * only the component's own sender, which OpenSquad does not use.
  */
 export const agentmail = new AgentMail(components.agentmail, {
-  onMessageReceived: internal.integrations.agentmail.onMessageReceived,
+  // The cast covers one place where the component contradicts itself: its
+  // runtime event validator makes `thread` OPTIONAL
+  // (`shared.d.ts`: `thread: VAny<any, "optional", string>`) while this
+  // callback's declared type makes it REQUIRED. Honouring the type loses mail —
+  // a verified `message.received` with no thread object throws
+  // ArgumentValidationError in a Workpool that does not retry mutations, and
+  // the component's `by_eventId` ledger then refuses the provider's resend.
+  // `onMessageReceived` accepts the runtime shape and never reads the field.
+  onMessageReceived:
+    internal.integrations.agentmail.onMessageReceived as unknown as NonNullable<
+      ConstructorParameters<typeof AgentMail>[1]
+    >["onMessageReceived"],
   onEvent: internal.integrations.agentmail.onEvent,
 });
 
@@ -804,7 +815,16 @@ export const onEvent = internalMutation({
  * the event.
  */
 export const onMessageReceived = internalMutation({
-  args: { message: v.any(), thread: v.any(), eventId: v.string() },
+  // `thread` is optional in the component's own `vEvent`
+  // (`@agentmail/convex` shared.d.ts: `thread: VAny<any, "optional", string>`),
+  // and `v.any()` accepts any value but NOT a missing field. Requiring it here
+  // put a `message.received` that carries no thread object inside the
+  // provider's contract and outside ours: the callback threw
+  // ArgumentValidationError, the Workpool does not retry mutations, and the
+  // component's `by_eventId` ledger refuses the provider's resend — so the
+  // message was lost with no receipt to drain and no quarantine row to replay.
+  // Nothing here reads it; `threadRef` comes off `message.thread_id` below.
+  args: { message: v.any(), thread: v.optional(v.any()), eventId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const message = asRecord(args.message);
