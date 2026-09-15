@@ -64,6 +64,7 @@ import {
   TERMINAL_SALES_STAGES,
 } from "./lib/validators";
 import type {
+  LeadEventActor,
   LeadEventDetails,
   LeadEventKind,
   ProspectCandidate,
@@ -222,6 +223,12 @@ async function appendLeadEvent(
     missionId?: Id<"missions">;
     runId?: Id<"runs">;
     details?: LeadEventDetails;
+    /** Overrides the default `workflow` actor. The ONLY legitimate override
+     *  is a `human` carrying an identityKey the backend itself captured from
+     *  `ctx.auth` — today that is `decisions.resolvedBy`, recorded when the
+     *  reviewer answered. Model output and email content can never name an
+     *  actor. */
+    actor?: LeadEventActor;
   },
 ): Promise<Id<"leadEvents">> {
   const operationKey = boundedString(event.operationKey, "operationKey", {
@@ -241,10 +248,10 @@ async function appendLeadEvent(
     workspaceId: event.workspaceId,
     prospectId: event.prospectId,
     kind: event.kind,
-    // Every writer in this module is the internal pipeline. A `human` actor
-    // carries an identityKey from `ctx.auth` and belongs to P19's operator
-    // mutations; model output and email content can never name an actor.
-    actor: { source: "workflow" as const },
+    // The pipeline writes as `workflow` unless the caller can name the
+    // person the backend recorded — see the `actor` note above. Model output
+    // and email content can never name an actor.
+    actor: event.actor ?? { source: "workflow" as const },
     summary: boundedString(event.summary, "summary", { min: 1, max: 500 }),
     createdAt: Date.now(),
     operationKey,
@@ -665,6 +672,21 @@ export const applyResearchOutcome = internalMutation({
     qualification: vQualification,
     fitReason: v.string(),
     evidenceCount: v.number(),
+    /** Present when a PERSON settled the fit rather than the research run.
+     *  The lead history is keyed per operation and the fit ask is a SECOND
+     *  operation on the same run, so without its own key the reviewer's
+     *  answer collided with the research row this run already wrote and
+     *  `appendLeadEvent` returned that row instead of appending. The lead
+     *  then flipped qualification with no history of who decided, or that a
+     *  person decided at all. */
+    decidedBy: v.optional(
+      v.object({
+        decisionId: v.id("decisions"),
+        /** `decisions.resolvedBy` — an identityKey `decisions.resolve`
+         *  captured from `ctx.auth`, never model output. */
+        identityKey: v.optional(v.string()),
+      }),
+    ),
   },
   returns: vProspectDoc,
   handler: async (ctx, args) => {
@@ -686,7 +708,9 @@ export const applyResearchOutcome = internalMutation({
       args.qualification === "qualified" ? "qualified" : "researched";
     const nextStage = advancedStage(prospect.salesStage, target);
     const stageReason = boundedString(
-      `Research ${args.qualification} on ${args.evidenceCount} cited observation(s)`,
+      args.decidedBy === undefined
+        ? `Research ${args.qualification} on ${args.evidenceCount} cited observation(s)`
+        : `Reviewer answered ${args.qualification} on ${args.evidenceCount} cited observation(s)`,
       "stageReason",
       { min: 1, max: PROSPECT_STAGE_REASON_MAX_LENGTH },
     );
@@ -704,12 +728,27 @@ export const applyResearchOutcome = internalMutation({
       prospectId: prospect._id,
       kind: "research_applied",
       summary: stageReason,
-      operationKey: `prospect:${prospect._id}:research:${args.runId}`,
+      // The fit ask is a SECOND operation on the same run, so it needs its
+      // own identity or `appendLeadEvent` finds the research row under this
+      // run's key and returns it — dropping the human decision, the
+      // transition it caused and the person who made it from the history.
+      operationKey:
+        args.decidedBy === undefined
+          ? `prospect:${prospect._id}:research:${args.runId}`
+          : `prospect:${prospect._id}:fit:${args.decidedBy.decisionId}`,
       ...(nextStage === prospect.salesStage
         ? {}
         : { fromStage: prospect.salesStage, toStage: nextStage }),
       missionId: mission._id,
       runId: args.runId,
+      ...(args.decidedBy?.identityKey !== undefined
+        ? {
+            actor: {
+              source: "human" as const,
+              identityKey: args.decidedBy.identityKey,
+            },
+          }
+        : {}),
       details: {
         fromQualification: prospect.qualification,
         toQualification: args.qualification,

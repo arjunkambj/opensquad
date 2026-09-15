@@ -1071,6 +1071,15 @@ export const applyFitDecision = internalMutation({
       return { qualification: "needs_review", reason: "prospect not found" };
     }
     const reason = `Reviewer ${decision.resolvedBy ?? "unknown"} answered ${answered}.`;
+    // The run's OWN cited evidence, counted rather than assumed. A hard-coded
+    // zero here overwrote the lead's `stageReason` with "0 cited
+    // observation(s)" even when the research run had stored some.
+    const cited = await ctx.db
+      .query("evidence")
+      .withIndex("by_workspaceId_and_runId_and_createdAt", (q) =>
+        q.eq("workspaceId", mission.workspaceId).eq("runId", args.runId),
+      )
+      .take(RESEARCH_OBSERVATIONS_MAX);
     await ctx.runMutation(internal.prospects.applyResearchOutcome, {
       prospectId,
       missionId: mission._id,
@@ -1081,7 +1090,18 @@ export const applyFitDecision = internalMutation({
         min: 1,
         max: PROSPECT_FIT_REASON_MAX_LENGTH,
       }),
-      evidenceCount: 0,
+      evidenceCount: cited.filter((row) => row.prospectId === prospectId)
+        .length,
+      // The decision is a SECOND operation on this run. Naming it keeps the
+      // reviewer's answer, the identity `decisions.resolve` captured and the
+      // transition it caused in the lead's history, instead of colliding
+      // with the research row under this run's key and vanishing.
+      decidedBy: {
+        decisionId: args.decisionId,
+        ...(decision.resolvedBy !== undefined
+          ? { identityKey: decision.resolvedBy }
+          : {}),
+      },
     });
     return { qualification: answered, reason };
   },
