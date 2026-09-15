@@ -131,6 +131,18 @@ export function RuntimeBadge({
   )
 }
 
+/**
+ * The live region is the **state word** and nothing else.
+ *
+ * The announcement worth making is the transition — live becoming
+ * disconnected — and `heading` changes exactly then. The body carries
+ * `Last heard from …`, whose string steps at every whole-minute boundary
+ * because the 15-second tick keeps recomputing it. Inside the live region that
+ * rewrote the whole badge once a minute, for as long as the tab stayed open,
+ * announcing "Runtime disconnected. Last heard from 7 minutes ago…" over
+ * whatever the operator was reading on the board below, with no way to dismiss
+ * it. The timestamp is still on screen; it simply no longer interrupts.
+ */
 function Shell({
   heading,
   tone,
@@ -141,12 +153,10 @@ function Shell({
   children: ReactNode
 }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
-    >
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
       <span
+        role="status"
+        aria-live="polite"
         className={
           tone === "live"
             ? "font-medium text-chart-2"
@@ -157,7 +167,9 @@ function Shell({
       >
         {heading}
       </span>
-      <span className="text-muted-foreground">{children}</span>
+      <span aria-live="off" className="text-muted-foreground">
+        {children}
+      </span>
     </div>
   )
 }
