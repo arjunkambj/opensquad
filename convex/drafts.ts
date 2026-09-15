@@ -647,7 +647,7 @@ export const stageConversation = internalMutation({
     inboxRef: v.string(),
     employeeId: v.optional(v.id("employees")),
     providerThreadRef: v.optional(v.string()),
-    prospectId: v.optional(v.string()),
+    prospectId: v.optional(v.id("prospects")),
     state: v.optional(vConversationState),
     humanTakeover: v.optional(v.boolean()),
     /** Staging override — real bumps flow through applyInboundContext etc. */
@@ -667,10 +667,7 @@ export const stageConversation = internalMutation({
             min: 1,
             max: PROVIDER_REF_MAX_LENGTH,
           });
-    const prospectId =
-      args.prospectId === undefined
-        ? undefined
-        : boundedString(args.prospectId, "prospectId", { min: 1, max: 100 });
+    const prospectId = args.prospectId;
 
     if (args.conversationId !== undefined) {
       const existing = await ctx.db.get("conversations", args.conversationId);

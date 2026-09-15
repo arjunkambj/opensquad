@@ -63,7 +63,8 @@ export type ActivityInput = {
   actor: string;
   dedupeKey: string;
   runId?: Id<"runs">;
-  /** Forward reference — `Id<"prospects">` once P09/P19 lands it. */
+  /** Carries the `missionProspects` branch key, which is still a synthetic
+   *  string until P21 replaces the dev fixture; retyped with it, not here. */
   prospectId?: string;
   conversationId?: string;
   artifactId?: string;

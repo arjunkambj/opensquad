@@ -1,9 +1,10 @@
 /**
- * OpenSquad schema — §4.1 workspace/configuration tables (P02) and the §4.2
- * work/supervision tables (P06): missions, missionProspects, runs, decisions,
- * missionComments, activityEvents. Later tasks extend this file with the
- * §4.3/§4.4 tables (prospects, drafts, runtime transport, usage);
- * component-owned mail/crawl tables never enter this schema.
+ * OpenSquad schema — §4.1 workspace/configuration tables (P02), the §4.2
+ * work/supervision tables (P06), the §4.4 runtime transport and usage tables
+ * (P07/P10), the §4.3 correspondence tables (P10) and the §4.3 lead, booking
+ * and evidence tables (P20). Component-owned mail/crawl tables never enter
+ * this schema. Every table is declared exactly once: a task that writes rows
+ * imports the `*Fields` map, it does not re-declare the table.
  *
  * Notation: `ms` timestamps are integer UTC epoch milliseconds. Indexes use
  * application timestamp fields; uniqueness invariants are enforced inside the
@@ -56,6 +57,18 @@ import {
   vWorkerRequestState,
   vWorkerScope,
   vArtifactKind,
+  vBookingProposal,
+  vBookingState,
+  vConfirmationSource,
+  vEvidenceConfidence,
+  vLeadEventActor,
+  vLeadEventDetails,
+  vLeadEventKind,
+  vNextAction,
+  vProspectContact,
+  vProspectSourceRef,
+  vQualification,
+  vSalesStage,
 } from "./lib/validators";
 
 export const workspaceFields = {
@@ -199,9 +212,13 @@ export const missionProspectFields = {
   workspaceId: v.id("workspaces"),
   missionId: v.id("missions"),
   /**
-   * Becomes `v.id("prospects")` when P09/P19 lands that table. A bounded
-   * string key meanwhile; the dev fixture uses `dev-prospect-*` keys and
-   * registration validates the parent mission belongs to the workspace.
+   * Still a bounded string key after P20 declared `prospects`: the ONLY
+   * producer today is the dev fixture's synthetic `dev-prospect-*` keys,
+   * which are not document IDs, so `v.id("prospects")` would fail both
+   * statically and at insert validation. It also flows into the durable
+   * `vBranchCompletion` workflow event, which cannot change validator under
+   * an in-flight journal. P21 retypes it in the commit that replaces the
+   * fixture scan with real `prospects` rows.
    */
   prospectId: v.string(),
   /** Branch generation; bumped when a branch is legitimately re-dispatched. */
@@ -311,8 +328,13 @@ export const activityEventFields = {
   /** Unique per workspace; duplicates are dropped transactionally. */
   dedupeKey: v.string(),
   runId: v.optional(v.id("runs")),
-  /** §4.3 forward references — v.id(...) once those tables land. */
+  /** Mirrors `missionProspects.prospectId`, so it carries the same synthetic
+   *  fixture keys and is retyped with it in P21 — not here. */
   prospectId: v.optional(v.string()),
+  /* `conversations` and `artifacts` have landed, but retyping these two is
+   * P11's and P09's call at the modules that write them (`activity.ts`
+   * `ActivityInput` moves with them); `artifactId` has no writer at all yet.
+   * P20 touches only the four tables it declares. */
   conversationId: v.optional(v.string()),
   artifactId: v.optional(v.string()),
 };
@@ -556,6 +578,10 @@ export const artifactFields = {
   contentDigest: v.string(),
   operationKey: v.string(),
   createdAt: v.number(),
+  /** Externally supplied: the worker's `x-prospect-id` upload header, bounded
+   *  and validated at `workerBridge.uploadArtifact`. A value crossing the trust
+   *  boundary stays a validated string; the internally produced prospect
+   *  references on `evidence` and `leadEvents` are real `v.id`s. */
   prospectId: v.optional(v.string()),
   runId: v.optional(v.id("runs")),
   /** The worker request whose lease authorized this upload. */
@@ -563,10 +589,165 @@ export const artifactFields = {
 };
 
 /* ------------------------------------------------------------------ */
+/* §4.3 leads, bookings and evidence (P20)                             */
+/*                                                                     */
+/* THE single declaration site for `prospects`, `leadEvents`,          */
+/* `bookings` and `evidence`. P09 (sourcing), P11 (inbox), P19 (CRM    */
+/* and booking behavior) and P21 (pipeline) all write these rows and   */
+/* none of them re-declares a table or opens a second lead store.      */
+/* P20 declares contracts only — no mutation lives in this slice.      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Prospects — the lead/CRM entity (`prospects` is the backend name; the UI
+ * says Leads). Two facts stay deliberately orthogonal: `qualification` is
+ * whether the company fits, `salesStage` is how far the conversation has
+ * travelled, and `contact` is whether an address exists. A missing email
+ * therefore never erases fit evidence.
+ *
+ * One prospect per (campaignId, canonicalDomain) — the index is a lookup, so
+ * the inserting mutation enforces it transactionally. `sourceRefs` merges on
+ * re-discovery rather than being replaced, which is why provenance survives a
+ * second source finding the same company.
+ *
+ * `version` is optimistic concurrency: every CRM mutation takes an
+ * `expectedVersion` and fails CONFLICT rather than clobbering a concurrent
+ * stage change.
+ */
+export const prospectFields = {
+  workspaceId: v.id("workspaces"),
+  campaignId: v.id("campaigns"),
+  companyName: v.string(),
+  /** Dedupe key — normalized host, meaningful subdomains preserved. */
+  canonicalDomain: v.string(),
+  /** At most 10 distinct refs; merged, never overwritten, on re-discovery. */
+  sourceRefs: v.array(vProspectSourceRef),
+  qualification: vQualification,
+  fitReason: v.string(),
+  salesStage: vSalesStage,
+  /** identityKey of the owner; must resolve to an ACTIVE membership. */
+  ownerIdentityKey: v.string(),
+  /** Optimistic-concurrency version; bumped by every CRM mutation. */
+  version: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  /** The one selected business person (MVP), absent until enrichment. */
+  contact: v.optional(vProspectContact),
+  nextAction: v.optional(vNextAction),
+  /** UTC ms derived from the selected timezone. ABSENT means unscheduled —
+   *  an explicit state the CRM renders, never a far-future sentinel. */
+  nextActionDueAt: v.optional(v.number()),
+  /** Set from a send ACCEPTANCE fact, not from drafting. */
+  lastContactedAt: v.optional(v.number()),
+  /** Set from a verified inbound reply. */
+  lastReplyAt: v.optional(v.number()),
+  /** Stated basis for the current stage; required for human corrections. */
+  stageReason: v.optional(v.string()),
+};
+
+/**
+ * Lead events — the append-only CRM history (status, owner, note, next action
+ * and booking transitions). Rows are never edited or deleted: a stage
+ * correction appends a row preserving `fromStage`, it does not rewrite one.
+ * Every business update and its event are written in ONE transaction
+ * (§8 "CRM and booking transitions"),
+ * so the history can never disagree with the lead.
+ *
+ * `actor` is a discriminated union so "comes from auth or internal workflow"
+ * is structural — model output and email content can never name an actor.
+ * `operationKey` is unique per workspace, enforced in the inserting mutation.
+ */
+export const leadEventFields = {
+  workspaceId: v.id("workspaces"),
+  prospectId: v.id("prospects"),
+  kind: vLeadEventKind,
+  actor: vLeadEventActor,
+  summary: v.string(),
+  createdAt: v.number(),
+  /** Idempotency key; unique per workspace, enforced transactionally. */
+  operationKey: v.string(),
+  fromStage: v.optional(vSalesStage),
+  toStage: v.optional(vSalesStage),
+  bookingId: v.optional(v.id("bookings")),
+  missionId: v.optional(v.id("missions")),
+  runId: v.optional(v.id("runs")),
+  /** Closed previous/new payload §8 "CRM and booking transitions" requires
+   *  an event to preserve. */
+  details: v.optional(vLeadEventDetails),
+};
+
+/**
+ * Bookings — operator-authored meeting records. At most one `proposed` or
+ * `confirmed` booking per lead, checked transactionally through
+ * `by_prospectId_and_state`. A proposal implies NO confirmation: a sent link,
+ * an offered slot or a model's reading of a reply all leave the row
+ * `proposed`.
+ *
+ * `startsAt`/`endsAt`/`timezone` are REQUIRED once the state is `confirmed`,
+ * `completed` or `no_show`, together with `confirmationSource: manual`, an
+ * authenticated `confirmedBy`/`confirmedAt` and a short stated
+ * `confirmationNote`. `externalEventRef` is stored only when a real provider
+ * event exists — `confirmationSource: provider` stays unavailable until a
+ * validated calendar connector verifies one. None of this CRUD sends an
+ * invitation or alters a remote calendar.
+ */
+export const bookingFields = {
+  workspaceId: v.id("workspaces"),
+  prospectId: v.id("prospects"),
+  /** identityKey of the responsible member; must be an ACTIVE membership. */
+  ownerIdentityKey: v.string(),
+  state: vBookingState,
+  version: v.number(),
+  proposal: vBookingProposal,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  conversationId: v.optional(v.id("conversations")),
+  missionId: v.optional(v.id("missions")),
+  /** The exact proposal draft whose acceptance may advance the lead. */
+  draftId: v.optional(v.id("drafts")),
+  startsAt: v.optional(v.number()),
+  endsAt: v.optional(v.number()),
+  /** IANA zone of the CONFIRMED meeting — distinct from the zone a `slots`
+   *  proposal offered, which a reschedule does not rewrite. */
+  timezone: v.optional(v.string()),
+  confirmationSource: v.optional(vConfirmationSource),
+  /** identityKey of the authenticated human who asserted the agreed time. */
+  confirmedBy: v.optional(v.string()),
+  confirmedAt: v.optional(v.number()),
+  externalEventRef: v.optional(v.string()),
+  /** Short basis, e.g. "prospect confirmed by reply". */
+  confirmationNote: v.optional(v.string()),
+  cancellationReason: v.optional(v.string()),
+};
+
+/**
+ * Evidence — one observation with the source it came from (§4.3/§4.5).
+ * Excerpts are bounded to 2,000 characters and at most 12 observations are
+ * accepted per research result; the full output lives in storage behind
+ * `artifactId`. `retrievedAt` is the worker's source-retrieval timestamp —
+ * evidence metadata, never a permission or accounting timestamp (§4.5).
+ * Drafts may link only evidence from the same workspace AND prospect.
+ */
+export const evidenceFields = {
+  workspaceId: v.id("workspaces"),
+  prospectId: v.id("prospects"),
+  /** The run that produced this observation — always an execution receipt. */
+  runId: v.id("runs"),
+  /** Validated public http/https source. */
+  sourceUrl: v.string(),
+  retrievedAt: v.number(),
+  excerpt: v.string(),
+  observation: v.string(),
+  confidence: vEvidenceConfidence,
+  createdAt: v.number(),
+  artifactId: v.optional(v.id("artifacts")),
+};
+
+/* ------------------------------------------------------------------ */
 /* §4.3 correspondence (P10) — conversations, immutable drafts,         */
 /* approvals, send attempts, suppressions and provider-event receipts.  */
-/* `prospects`/`leadEvents`/`bookings`/`evidence`/`artifacts` belong to */
-/* P09/P19 and are intentionally NOT declared here.                     */
+/* `artifacts` is declared in the §4.4 block above (P07 needs it);      */
+/* `prospects`/`leadEvents`/`bookings`/`evidence` in the block above.   */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -593,8 +774,10 @@ export const conversationFields = {
   unreadCount: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
-  /** Forward reference — `v.id("prospects")` once P09/P19 lands it. */
-  prospectId: v.optional(v.string()),
+  /** Association target for §5 `conversations.associateProspect` (P11).
+   *  Internally produced — the association is made by an authorized operator
+   *  against a lead already in this workspace, never from a provider payload. */
+  prospectId: v.optional(v.id("prospects")),
   /** Per-inbox provider thread id (AgentMail thread ids are per-inbox). */
   providerThreadRef: v.optional(v.string()),
   currentDraftId: v.optional(v.id("drafts")),
@@ -629,7 +812,12 @@ export const draftFields = {
   basedOnContextVersion: v.number(),
   campaignBriefVersion: v.number(),
   policyVersion: v.number(),
-  /** §4.3 evidence links — `v.id("evidence")` once P09 lands the table. */
+  /**
+   * §4.3 evidence links. Still `v.string()` after P20 declared `evidence`:
+   * the values arrive as `vDraftResult.evidenceRefs` label/artifact/storage
+   * strings from the worker, so they are externally supplied until a backend
+   * step resolves them to rows. P21 owns that resolution and the retype.
+   */
   evidenceIds: v.array(v.string()),
   /** identityKey for human edits; `workflow` for pipeline-proposed drafts. */
   createdBy: v.string(),
@@ -637,6 +825,13 @@ export const draftFields = {
   /** Parent provider message id — makes the attempt a `reply` operation. */
   replyToMessageRef: v.optional(v.string()),
   supersededAt: v.optional(v.number()),
+  /* Booking-invitation drafts only (§4.3): the proposal this content offers
+   * and the booking version it was written against. Both are re-validated on
+   * approval AND on dispatch, so a rescheduled or cancelled booking can never
+   * go out under the old approval. P19 writes them; P20 declares them here
+   * because `bookings` and `drafts` share this one declaration site. */
+  bookingId: v.optional(v.id("bookings")),
+  bookingVersion: v.optional(v.number()),
   /** Client retry key — `revise`/`createRevision` dedupe on
    *  (workspaceId, requestId) transactionally. */
   requestId: v.optional(v.string()),
@@ -953,6 +1148,81 @@ export default defineSchema({
     .index("by_prospectId", ["prospectId"])
     // One artifact per (workspace, operationKey) — deduplicated uploads.
     .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
+
+  /* §4.3 — leads, bookings and evidence (P20) */
+
+  prospects: defineTable(prospectFields)
+    // Pipeline mode: one stage at a time, most recently updated first.
+    .index("by_workspaceId_and_salesStage_and_updatedAt", [
+      "workspaceId",
+      "salesStage",
+      "updatedAt",
+    ])
+    .index("by_workspaceId_and_campaignId_and_salesStage", [
+      "workspaceId",
+      "campaignId",
+      "salesStage",
+    ])
+    // Due-action mode, scoped to one owner…
+    .index("by_workspaceId_and_ownerIdentityKey_and_nextActionDueAt", [
+      "workspaceId",
+      "ownerIdentityKey",
+      "nextActionDueAt",
+    ])
+    // …and across the workspace. Rows with no due time sort together, which
+    // is how the unscheduled state stays visible instead of being filtered.
+    .index("by_workspaceId_and_nextActionDueAt", [
+      "workspaceId",
+      "nextActionDueAt",
+    ])
+    // One prospect per (campaignId, canonicalDomain) — a lookup, not a
+    // constraint; the inserting mutation enforces uniqueness.
+    .index("by_workspaceId_and_campaignId_and_canonicalDomain", [
+      "workspaceId",
+      "campaignId",
+      "canonicalDomain",
+    ])
+    // Company-name search. Equality filters are applied INSIDE
+    // `withSearchIndex`; search mode never combines with due ranges or date
+    // sorting, and empty text falls back to the ordinary list (§4.3).
+    .searchIndex("search_company_name", {
+      searchField: "companyName",
+      filterFields: [
+        "workspaceId",
+        "salesStage",
+        "campaignId",
+        "ownerIdentityKey",
+      ],
+    }),
+
+  leadEvents: defineTable(leadEventFields)
+    .index("by_prospectId_and_createdAt", ["prospectId", "createdAt"])
+    // Unique (workspaceId, operationKey) — the idempotency lookup a replayed
+    // CRM mutation reads before writing; uniqueness is enforced in that same
+    // transaction.
+    .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
+
+  bookings: defineTable(bookingFields)
+    .index("by_prospectId_and_createdAt", ["prospectId", "createdAt"])
+    // The at-most-one-active check: `proposed` and `confirmed` rows for one
+    // lead, read inside the proposing/confirming transaction.
+    .index("by_prospectId_and_state", ["prospectId", "state"])
+    .index("by_workspaceId_and_state_and_startsAt", [
+      "workspaceId",
+      "state",
+      "startsAt",
+    ])
+    .index("by_workspaceId_and_ownerIdentityKey_and_startsAt", [
+      "workspaceId",
+      "ownerIdentityKey",
+      "startsAt",
+    ]),
+
+  evidence: defineTable(evidenceFields).index("by_prospectId_and_createdAt", [
+    "prospectId",
+    "createdAt",
+  ]),
+
   /* §4.3 — correspondence (P10) */
 
   conversations: defineTable(conversationFields)

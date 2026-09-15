@@ -141,6 +141,17 @@ export function boundedInt(
   return value;
 }
 
+/* Calendar window for stored application timestamps. A seconds-resolution
+ * value or a provider-supplied garbage number is out of range here, so it
+ * cannot be stored as a due date, retrieval time or meeting start. */
+export const EPOCH_MS_MIN = 1_000_000_000_000;
+export const EPOCH_MS_MAX = 4_102_444_800_000;
+
+/** Validate an integer UTC epoch-millisecond timestamp (§4 notation). */
+export function assertEpochMs(value: number, field: string): number {
+  return boundedInt(value, field, { min: EPOCH_MS_MIN, max: EPOCH_MS_MAX });
+}
+
 export const DEFAULT_LIST_LIMIT = 25;
 export const MAX_LIST_LIMIT = 50;
 
@@ -2419,3 +2430,685 @@ export function readReplacementAnswer(
     reason,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Leads, bookings and evidence (P20 — §4.3/§4.5/§8 CRM and booking)   */
+/*                                                                     */
+/* Contract only: these validators and bounds are the single           */
+/* definition P09, P11, P19 and P21 import. Widening a union here is a  */
+/* deliberate edit at one site — none of those cards may re-declare a   */
+/* parallel vocabulary.                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The ordered sales pipeline (§4.3). Order is load-bearing twice: a later
+ * scrape may never move a lead backwards, and cancelling a booking falls back
+ * to "the last supported earlier stage". `won`/`lost` close the pipeline and
+ * are never inferred from mail acceptance or a booked meeting.
+ */
+export const SALES_STAGES = [
+  "discovered",
+  "researched",
+  "qualified",
+  "contact_needed",
+  "draft_ready",
+  "contacted",
+  "replied",
+  "booking_proposed",
+  "booked",
+  "won",
+  "lost",
+] as const;
+
+export const vSalesStage = v.union(
+  v.literal("discovered"),
+  v.literal("researched"),
+  v.literal("qualified"),
+  v.literal("contact_needed"),
+  v.literal("draft_ready"),
+  v.literal("contacted"),
+  v.literal("replied"),
+  v.literal("booking_proposed"),
+  v.literal("booked"),
+  v.literal("won"),
+  v.literal("lost"),
+);
+
+export type SalesStage = (typeof SALES_STAGES)[number];
+
+/** Closed outcomes — an automatic transition never leaves or enters these. */
+export const TERMINAL_SALES_STAGES: readonly SalesStage[] = ["won", "lost"];
+
+/** Position in `SALES_STAGES`; the basis for the no-regression comparison. */
+export function salesStageRank(stage: SalesStage): number {
+  return SALES_STAGES.indexOf(stage);
+}
+
+/**
+ * Qualification is orthogonal to `salesStage` and to contact availability: a
+ * missing email must not erase fit evidence, and a qualified lead with no
+ * address is `contact_needed`, not `rejected` (§4.3).
+ */
+export const vQualification = v.union(
+  v.literal("pending"),
+  v.literal("qualified"),
+  v.literal("rejected"),
+  v.literal("needs_review"),
+);
+
+export type Qualification =
+  | "pending"
+  | "qualified"
+  | "rejected"
+  | "needs_review";
+
+/**
+ * Provenance origin of a source reference or contact — the §4.1 source-plan
+ * vocabulary, because a prospect exists only because a confirmed source
+ * produced it (§4.5 `discover`: selected/confirmed sources only). Manual
+ * operator entry would be a deliberate widening here.
+ */
+export const vProspectSource = v.union(
+  v.literal("apollo"),
+  v.literal("yc"),
+  v.literal("trustmrr"),
+);
+
+/** Derived, never restated: a source a campaign can confirm is a source a
+ *  prospect can cite. Widening `vSourceConfig` without widening
+ *  `vProspectSource` is then a compile error here rather than a runtime
+ *  INVALID on a valid discover result. */
+export type ProspectSource = SourceConfig["source"];
+
+const _prospectSourceCoversSourcePlan: ProspectSource =
+  null as unknown as Infer<typeof vProspectSource>;
+void _prospectSourceCoversSourcePlan;
+
+/**
+ * Observed metric metadata carried on a source reference. Always explicit
+ * name/currency/period like the §4.1 TrustMRR bounds — a bare number would
+ * let "$40k" and "40k signups" merge. `currency`/`period` stay optional so a
+ * non-revenue metric is not forced to invent them (§4.5: no invented metrics).
+ */
+export const vObservedMetric = v.object({
+  name: v.string(),
+  value: v.number(),
+  currency: v.optional(v.string()),
+  period: v.optional(v.union(v.literal("monthly"), v.literal("annual"))),
+});
+
+/**
+ * One source reference: which source, the profile URL it was read from, the
+ * provider record ID where the provider exposes one, when it was retrieved
+ * and any observed metric. Re-discovery MERGES these; provenance is never
+ * overwritten, and companies are never merged by display name alone (§4.3).
+ */
+export const vProspectSourceRef = v.object({
+  source: vProspectSource,
+  profileUrl: v.string(),
+  providerRecordId: v.optional(v.string()),
+  retrievedAt: v.number(),
+  metric: v.optional(vObservedMetric),
+});
+
+export type ProspectSourceRef = Infer<typeof vProspectSourceRef>;
+
+export const PROSPECT_SOURCE_REFS_MAX = 10;
+export const PROSPECT_COMPANY_NAME_MAX_LENGTH = 200;
+export const PROSPECT_FIT_REASON_MAX_LENGTH = 2_000;
+export const PROSPECT_STAGE_REASON_MAX_LENGTH = 500;
+export const PROVIDER_RECORD_ID_MAX_LENGTH = 200;
+export const CANONICAL_DOMAIN_MAX_LENGTH = 253;
+
+/**
+ * Canonical dedupe domain for `by_workspaceId_and_campaignId_and_canonicalDomain`.
+ * Accepts a bare host or an http(s) URL and extracts the host through the URL
+ * parser (so a path, query or credentials cannot leak into the key),
+ * lowercases, drops a trailing root dot and drops a leading `www.` — the one
+ * subdomain that never identifies a different business. Every OTHER subdomain
+ * is preserved, per §4.3.
+ *
+ * ASCII hosts only: the shared dotted-domain floor ends in `[a-z]{2,63}`, so a
+ * punycode TLD (`xn--p1ai`) is rejected rather than stored. IDN support is part
+ * of the same P09 deepening as the public-suffix work below.
+ *
+ * This is a syntax-and-host floor, NOT public-suffix awareness: no suffix list
+ * is bundled, so `a.co.uk` and `b.co.uk` stay distinct (correct) but a registrable
+ * base cannot be computed. P09 owns deepening this when it implements Apollo
+ * dedupe; deepen it HERE so both writers share one key.
+ */
+export function normalizeCanonicalDomain(
+  value: string,
+  field = "canonicalDomain",
+): string {
+  const trimmed = boundedString(value, field, { min: 1, max: 2048 });
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed);
+  // Reject a non-http(s) scheme outright rather than parsing it for a host —
+  // `ftp://evil.com` is not a company website and must not become a dedupe key.
+  if (scheme !== null && !/^https?$/i.test(scheme[1])) {
+    throw invalid(`${field} must be a domain or an http(s) URL`);
+  }
+  const withScheme = scheme === null ? `https://${trimmed}` : trimmed;
+  let host: string;
+  try {
+    host = new URL(withScheme).hostname;
+  } catch {
+    throw invalid(`${field} must be a domain or an http(s) URL`);
+  }
+  const normalized = host
+    .toLowerCase()
+    .replace(/\.+$/, "")
+    .replace(/^www\./, "");
+  if (!EMAIL_DOMAIN.test(normalized)) {
+    throw invalid(`${field} must be a valid dotted public domain`);
+  }
+  return boundedString(normalized, field, {
+    min: 3,
+    max: CANONICAL_DOMAIN_MAX_LENGTH,
+  });
+}
+
+/**
+ * Bound and de-duplicate a prospect's source references. Distinctness is by
+ * (source, provider record ID) and falls back to the normalized profile URL
+ * when the provider exposes no ID, so re-discovering the same Apollo record
+ * merges instead of consuming one of the ten slots. Returns the normalized
+ * list to store.
+ */
+export function assertSourceRefs(
+  refs: ProspectSourceRef[],
+  field = "sourceRefs",
+): ProspectSourceRef[] {
+  if (refs.length === 0) {
+    throw invalid(`${field} must carry at least one actual source reference`);
+  }
+  // Cheap guard before the normalize/dedupe pass: distinctness can only shrink
+  // the list, so anything past the cap in RAW length can never fit, and paying
+  // a URL parse per element first lets an oversized payload buy unbounded work
+  // inside the caller's transaction.
+  if (refs.length > PROSPECT_SOURCE_REFS_MAX) {
+    throw invalid(
+      `${field} allows at most ${PROSPECT_SOURCE_REFS_MAX} source references`,
+    );
+  }
+  const seen = new Set<string>();
+  const normalized = refs.map((ref, index) => {
+    const at = `${field}[${index}]`;
+    const profileUrl = normalizeHttpUrl(ref.profileUrl, `${at}.profileUrl`);
+    const providerRecordId =
+      ref.providerRecordId === undefined
+        ? undefined
+        : boundedString(ref.providerRecordId, `${at}.providerRecordId`, {
+            min: 1,
+            max: PROVIDER_RECORD_ID_MAX_LENGTH,
+          });
+    const identity = `${ref.source}:${providerRecordId ?? profileUrl}`;
+    if (seen.has(identity)) {
+      return null;
+    }
+    seen.add(identity);
+    return {
+      source: ref.source,
+      profileUrl,
+      ...(providerRecordId === undefined ? {} : { providerRecordId }),
+      retrievedAt: assertEpochMs(ref.retrievedAt, `${at}.retrievedAt`),
+      ...(ref.metric === undefined
+        ? {}
+        : { metric: assertObservedMetric(ref.metric, `${at}.metric`) }),
+    } satisfies ProspectSourceRef;
+  });
+  const distinct = normalized.filter(
+    (ref): ref is ProspectSourceRef => ref !== null,
+  );
+  if (distinct.length > PROSPECT_SOURCE_REFS_MAX) {
+    throw invalid(
+      `${field} allows at most ${PROSPECT_SOURCE_REFS_MAX} distinct source references`,
+    );
+  }
+  return distinct;
+}
+
+/** Bound one observed metric; `name` is always explicit (§4.1). */
+export function assertObservedMetric(
+  metric: Infer<typeof vObservedMetric>,
+  field: string,
+): Infer<typeof vObservedMetric> {
+  if (!Number.isFinite(metric.value)) {
+    throw invalid(`${field}.value must be a finite number`);
+  }
+  return {
+    name: boundedString(metric.name, `${field}.name`, { min: 1, max: 100 }),
+    value: metric.value,
+    ...(metric.currency === undefined
+      ? {}
+      : {
+          currency: boundedString(metric.currency, `${field}.currency`, {
+            min: 3,
+            max: 3,
+          }).toUpperCase(),
+        }),
+    ...(metric.period === undefined ? {} : { period: metric.period }),
+  };
+}
+
+/**
+ * The provider's own assessment of the address it returned. Deliberately NOT
+ * the worker wire vocabulary (`vContactResult.emailConfidence`) and
+ * deliberately NOT send eligibility: suppressions and sending policy decide
+ * whether OpenSquad may write to an address (§4.3). `unknown` is the honest
+ * value when the provider states nothing.
+ */
+export const vProviderEmailStatus = v.union(
+  v.literal("verified"),
+  v.literal("guessed"),
+  v.literal("unavailable"),
+  v.literal("unknown"),
+);
+
+export type ProviderEmailStatus =
+  | "verified"
+  | "guessed"
+  | "unavailable"
+  | "unknown";
+
+export const CONTACT_SELECTION_REASON_MAX_LENGTH = 500;
+
+/**
+ * MVP `contact` — exactly one selected business person, not a list (§4.3).
+ * `email` is absent unless the provider returned one; an address is never
+ * manufactured, so absence plus a preserved `providerEmailStatus` is the
+ * correct representation of "we could not get one".
+ */
+export const vProspectContact = v.object({
+  source: vProspectSource,
+  providerRef: v.string(),
+  fullName: v.string(),
+  role: v.optional(v.string()),
+  email: v.optional(v.string()),
+  providerEmailStatus: vProviderEmailStatus,
+  retrievedAt: v.number(),
+  selectionReason: v.string(),
+});
+
+export type ProspectContact = Infer<typeof vProspectContact>;
+
+/** Bound and normalize a selected contact before storing it. */
+export function assertProspectContact(
+  contact: ProspectContact,
+  field = "contact",
+): ProspectContact {
+  const email =
+    contact.email === undefined
+      ? undefined
+      : normalizeEmailAddress(contact.email, `${field}.email`);
+  if (email === undefined && contact.providerEmailStatus === "verified") {
+    throw invalid(
+      `${field}.providerEmailStatus cannot be "verified" without a provider-returned address`,
+    );
+  }
+  if (email !== undefined && contact.providerEmailStatus === "unavailable") {
+    throw invalid(
+      `${field}.providerEmailStatus "unavailable" contradicts the supplied address`,
+    );
+  }
+  return {
+    source: contact.source,
+    providerRef: boundedString(contact.providerRef, `${field}.providerRef`, {
+      min: 1,
+      max: PROVIDER_RECORD_ID_MAX_LENGTH,
+    }),
+    fullName: boundedString(contact.fullName, `${field}.fullName`, {
+      min: 1,
+      max: 200,
+    }),
+    ...(contact.role === undefined
+      ? {}
+      : {
+          role: boundedString(contact.role, `${field}.role`, {
+            min: 1,
+            max: 200,
+          }),
+        }),
+    ...(email === undefined ? {} : { email }),
+    providerEmailStatus: contact.providerEmailStatus,
+    retrievedAt: assertEpochMs(contact.retrievedAt, `${field}.retrievedAt`),
+    selectionReason: boundedString(
+      contact.selectionReason,
+      `${field}.selectionReason`,
+      { min: 1, max: CONTACT_SELECTION_REASON_MAX_LENGTH },
+    ),
+  };
+}
+
+/**
+ * Next-action kinds. §4.3 requires "a bounded description plus action kind"
+ * but enumerates no members, so this list is derived from the §5 CRM/booking
+ * entry points and the §8 "CRM and booking transitions" rules. P19's picker
+ * renders exactly these;
+ * a new kind is a deliberate widening here, never a free-form string.
+ */
+export const NEXT_ACTION_KINDS = [
+  "follow_up_email",
+  "call",
+  "await_reply",
+  "research",
+  "enrich_contact",
+  "propose_booking",
+  "confirm_booking",
+  "review",
+] as const;
+
+export const vNextActionKind = v.union(
+  v.literal("follow_up_email"),
+  v.literal("call"),
+  v.literal("await_reply"),
+  v.literal("research"),
+  v.literal("enrich_contact"),
+  v.literal("propose_booking"),
+  v.literal("confirm_booking"),
+  v.literal("review"),
+);
+
+export type NextActionKind = (typeof NEXT_ACTION_KINDS)[number];
+
+export const NEXT_ACTION_DESCRIPTION_MAX_LENGTH = 500;
+
+/**
+ * `nextAction` is the work itself; `prospects.nextActionDueAt` is a separate
+ * optional UTC epoch-ms field. An absent due time is the explicit
+ * "unscheduled" state — never a far-future sentinel date (§4.3).
+ */
+export const vNextAction = v.object({
+  kind: vNextActionKind,
+  description: v.string(),
+});
+
+export type NextAction = Infer<typeof vNextAction>;
+
+/** Bound a next action's free text before storing it. */
+export function assertNextAction(
+  action: NextAction,
+  field = "nextAction",
+): NextAction {
+  return {
+    kind: action.kind,
+    description: boundedString(action.description, `${field}.description`, {
+      min: 1,
+      max: NEXT_ACTION_DESCRIPTION_MAX_LENGTH,
+    }),
+  };
+}
+
+/* ----- lead events ----------------------------------------------------- */
+
+/**
+ * Append-only CRM history kinds (§4.3: status / owner / note / next-action /
+ * booking history, plus the §8 research and enrichment updates). Unlike
+ * `activityEvents.kind` — a bounded string feeding a receipts timeline — this
+ * is a closed union, because a lead event is the audit record a human stage
+ * correction and a booking transition are proved by.
+ */
+export const LEAD_EVENT_KINDS = [
+  "stage_changed",
+  "owner_assigned",
+  "note_added",
+  "next_action_set",
+  "next_action_cleared",
+  "research_applied",
+  "contact_enriched",
+  "booking_proposed",
+  "booking_confirmed",
+  "booking_rescheduled",
+  "booking_cancelled",
+  "booking_outcome_recorded",
+] as const;
+
+export const vLeadEventKind = v.union(
+  v.literal("stage_changed"),
+  v.literal("owner_assigned"),
+  v.literal("note_added"),
+  v.literal("next_action_set"),
+  v.literal("next_action_cleared"),
+  v.literal("research_applied"),
+  v.literal("contact_enriched"),
+  v.literal("booking_proposed"),
+  v.literal("booking_confirmed"),
+  v.literal("booking_rescheduled"),
+  v.literal("booking_cancelled"),
+  v.literal("booking_outcome_recorded"),
+);
+
+export type LeadEventKind = (typeof LEAD_EVENT_KINDS)[number];
+
+/**
+ * Who caused the event. A discriminated union rather than
+ * `activityEvents.actor`'s bare string, because §4.3 makes the provenance
+ * structural: only a `human` actor carries an `identityKey`, and it comes from
+ * `ctx.auth` — never from model output or email content. `workflow` is the
+ * internal pipeline; `system` is a backend sweep with no human behind it. The
+ * originating run stays in `leadEvents.runId`.
+ */
+export const vLeadEventActor = v.union(
+  v.object({ source: v.literal("human"), identityKey: v.string() }),
+  v.object({ source: v.literal("workflow") }),
+  v.object({ source: v.literal("system") }),
+);
+
+export type LeadEventActor = Infer<typeof vLeadEventActor>;
+
+export const LEAD_EVENT_SUMMARY_MAX_LENGTH = 500;
+export const LEAD_EVENT_NOTE_MAX_LENGTH = 4_000;
+export const LEAD_EVENT_REASON_MAX_LENGTH = 1_000;
+
+/**
+ * Structured previous/new values §8 "CRM and booking transitions" requires
+ * an event to preserve. Every
+ * member is optional because one event kind uses a few of them, but the shape
+ * is closed — a lead event never carries an open bag of model-chosen keys.
+ * `fromStage`/`toStage` are top-level columns and are deliberately absent here.
+ */
+export const vLeadEventDetails = v.object({
+  fromOwnerIdentityKey: v.optional(v.string()),
+  toOwnerIdentityKey: v.optional(v.string()),
+  fromQualification: v.optional(vQualification),
+  toQualification: v.optional(vQualification),
+  fromNextAction: v.optional(vNextAction),
+  toNextAction: v.optional(vNextAction),
+  fromNextActionDueAt: v.optional(v.number()),
+  toNextActionDueAt: v.optional(v.number()),
+  previousStartsAt: v.optional(v.number()),
+  previousEndsAt: v.optional(v.number()),
+  previousTimezone: v.optional(v.string()),
+  /** Stated basis for a human correction, cancellation or won/lost call. */
+  reason: v.optional(v.string()),
+  /** Body of a `note_added` event — a note, never a synthesized message. */
+  note: v.optional(v.string()),
+});
+
+export type LeadEventDetails = Infer<typeof vLeadEventDetails>;
+
+/* ----- bookings -------------------------------------------------------- */
+
+export const vBookingState = v.union(
+  v.literal("proposed"),
+  v.literal("confirmed"),
+  v.literal("cancelled"),
+  v.literal("completed"),
+  v.literal("no_show"),
+);
+
+export type BookingState =
+  | "proposed"
+  | "confirmed"
+  | "cancelled"
+  | "completed"
+  | "no_show";
+
+/** States that occupy the at-most-one-active slot per lead (§4.3). */
+export const BOOKING_ACTIVE_STATES: readonly BookingState[] = [
+  "proposed",
+  "confirmed",
+];
+
+/** States that REQUIRE `startsAt`, `endsAt` and `timezone` (§4.3). */
+export const BOOKING_TIMED_STATES: readonly BookingState[] = [
+  "confirmed",
+  "completed",
+  "no_show",
+];
+
+/**
+ * How a meeting time became authoritative. `manual` is an authenticated
+ * human's assertion. `provider` keeps a typed contract but is UNAVAILABLE
+ * until a validated calendar connector verifies the event — the same
+ * declared-but-gated shape as `ENABLED_SOURCES`; no model may fabricate an
+ * external event ID (§4.3, §8 "CRM and booking transitions").
+ */
+export const vConfirmationSource = v.union(
+  v.literal("manual"),
+  v.literal("provider"),
+);
+
+export type ConfirmationSource = "manual" | "provider";
+
+/** Confirmation sources currently permitted on a write. */
+export const ENABLED_CONFIRMATION_SOURCES = ["manual"] as const;
+
+/**
+ * Reject a confirmation basis whose verification path does not exist yet.
+ * `provider` stays declared but unwritable until a validated calendar
+ * connector can supply a real event — §4.3 forbids standing one in for a
+ * human assertion, and §8 forbids fabricating external event IDs.
+ */
+export function assertConfirmationSourceEnabled(
+  source: ConfirmationSource,
+): void {
+  const enabled = new Set<string>(ENABLED_CONFIRMATION_SOURCES);
+  if (!enabled.has(source)) {
+    throw invalid(
+      `confirmationSource ${source} is not available; a validated calendar connector must verify the event first`,
+    );
+  }
+}
+
+export const BOOKING_SLOTS_MAX = 3;
+export const BOOKING_CONFIRMATION_NOTE_MAX_LENGTH = 300;
+export const BOOKING_CANCELLATION_REASON_MAX_LENGTH = 500;
+
+/**
+ * `bookings.proposal` (§4.3): a booking link, or up to three future intervals
+ * under one IANA timezone. A proposal implies NO confirmation — neither a sent
+ * link nor an offered slot nor a model classification confirms a meeting.
+ */
+export const vBookingProposal = v.union(
+  v.object({ kind: v.literal("booking_link"), url: v.string() }),
+  v.object({
+    kind: v.literal("slots"),
+    timezone: v.string(),
+    slots: v.array(v.object({ startsAt: v.number(), endsAt: v.number() })),
+  }),
+);
+
+export type BookingProposal = Infer<typeof vBookingProposal>;
+
+/**
+ * Validate a proposal at proposal time: a public http(s) link, or 1–3 valid
+ * future intervals under a canonical IANA zone. Returns the normalized value.
+ */
+export function assertBookingProposal(
+  proposal: BookingProposal,
+  options: { now: number },
+  field = "proposal",
+): BookingProposal {
+  if (proposal.kind === "booking_link") {
+    return {
+      kind: "booking_link",
+      url: normalizeHttpUrl(proposal.url, `${field}.url`),
+    };
+  }
+  if (proposal.slots.length === 0) {
+    throw invalid(`${field}.slots must offer at least one interval`);
+  }
+  if (proposal.slots.length > BOOKING_SLOTS_MAX) {
+    throw invalid(
+      `${field}.slots allows at most ${BOOKING_SLOTS_MAX} intervals`,
+    );
+  }
+  return {
+    kind: "slots",
+    timezone: assertIanaTimezone(proposal.timezone, `${field}.timezone`),
+    slots: proposal.slots.map((slot, index) => {
+      const at = `${field}.slots[${index}]`;
+      const startsAt = assertEpochMs(slot.startsAt, `${at}.startsAt`);
+      const endsAt = assertEpochMs(slot.endsAt, `${at}.endsAt`);
+      if (endsAt <= startsAt) {
+        throw invalid(`${at}.endsAt must be after startsAt`);
+      }
+      if (startsAt <= options.now) {
+        throw invalid(`${at}.startsAt must be in the future`);
+      }
+      return { startsAt, endsAt };
+    }),
+  };
+}
+
+/**
+ * Enforce the §4.3 precondition "times required for confirmed/completed/
+ * no-show", returning the normalized triple for those states only.
+ *
+ * NOT a way to derive what to STORE. `undefined` here means "this state does
+ * not require times", never "this row has none": a booking cancelled from
+ * `confirmed` still carries the agreed start/end/timezone, and §8 "CRM and
+ * booking transitions" requires keeping it — writing the triple back as
+ * undefined on cancel would destroy the record of what was actually agreed.
+ * The row-level timezone is the CONFIRMED meeting's zone; a `slots` proposal's
+ * own timezone records what was offered and is not rewritten by a reschedule.
+ */
+export function assertRequiredBookingTimes(
+  state: BookingState,
+  times: { startsAt?: number; endsAt?: number; timezone?: string },
+  field = "booking",
+): { startsAt: number; endsAt: number; timezone: string } | undefined {
+  if (!BOOKING_TIMED_STATES.includes(state)) {
+    return undefined;
+  }
+  if (
+    times.startsAt === undefined ||
+    times.endsAt === undefined ||
+    times.timezone === undefined
+  ) {
+    throw invalid(
+      `${field} in state ${state} requires startsAt, endsAt and timezone`,
+    );
+  }
+  const startsAt = assertEpochMs(times.startsAt, `${field}.startsAt`);
+  const endsAt = assertEpochMs(times.endsAt, `${field}.endsAt`);
+  if (endsAt <= startsAt) {
+    throw invalid(`${field}.endsAt must be after startsAt`);
+  }
+  return {
+    startsAt,
+    endsAt,
+    timezone: assertIanaTimezone(times.timezone, `${field}.timezone`),
+  };
+}
+
+/* ----- evidence -------------------------------------------------------- */
+
+/**
+ * §4.3/§4.5 research confidence. `hypothesis` must be labeled rather than
+ * asserted — an unlabeled guess stored as `supported` is the failure this
+ * union exists to prevent.
+ */
+export const vEvidenceConfidence = v.union(
+  v.literal("supported"),
+  v.literal("hypothesis"),
+  v.literal("unknown"),
+);
+
+export type EvidenceConfidence = "supported" | "hypothesis" | "unknown";
+
+/** §4.5 research caps. The full output lives in storage behind `artifactId`. */
+export const EVIDENCE_EXCERPT_MAX_LENGTH = 2_000;
+export const EVIDENCE_OBSERVATION_MAX_LENGTH = 1_000;
+export const RESEARCH_OBSERVATIONS_MAX = 12;
