@@ -385,7 +385,7 @@ cards submit the edit-base version. Verified: lint, build, root + worker
 tsc, `pnpm plan check` clean.
 Evidence: `plan/evidence/review-round3.md`.
 
-### 2026-09-15 - 30f45c9
+### 2026-09-15 - 3a78202
 
 Shipped Mission Control with a four-column board, deep-linked mission details,
 lifecycle actions, receipts, comments and a human-approval queue, exercised in a
@@ -401,7 +401,7 @@ turn for this pipeline and outbound sending remained deferred. Evidence:
 `plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P20.md`,
 `plan/evidence/P21.md`.
 
-### 2026-09-16 - 1a9cfc4
+### 2026-09-16 - 4572b2d
 
 Shipped the round's three cards: the Mission Control board (P12, accepted), the
 shared inbox and reply backend (P11), and the sales pipeline with its capability

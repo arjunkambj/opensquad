@@ -10,12 +10,12 @@ typography — visual design is the owner's.
 
 On citations: symbol names (`missions.listBoard`, `decisions.listOpen`,
 `conversationFields.prospectId`) are authoritative and stable. Line numbers were
-taken against commit `79856a2` and will drift; trust the name, not the number.
+taken against commit `a986aa7` and will drift; trust the name, not the number.
 `convex/schema.ts` and `convex/lib/validators.ts` in particular moved during the
 P20 review pass after most of these citations were written.
 
 The §4.3 `prospects`, `leadEvents`, `bookings` and `evidence` tables and all
-their indexes DO now exist (P20, commit `79856a2`), so P19 is behaviour on a
+their indexes DO now exist (P20, commit `a986aa7`), so P19 is behaviour on a
 settled schema rather than schema-plus-behaviour, and `/leads` is closer than it
 looks. What does not exist is any of `convex/prospects.ts`,
 `convex/leadEvents.ts`, `convex/bookings.ts` or `convex/conversations.ts`.
