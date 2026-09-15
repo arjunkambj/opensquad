@@ -59,7 +59,11 @@ import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { boundedString, OPT_OUT_SIGNALS } from "./lib/validators";
+import {
+  boundedString,
+  domainError,
+  OPT_OUT_SIGNALS,
+} from "./lib/validators";
 import type { OptOutSignal } from "./lib/validators";
 import type { AuthCtx } from "./lib/auth";
 import {
@@ -92,9 +96,13 @@ type InboundFacts = {
 };
 
 function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFacts {
-  const fromAddress = receipt.providerFacts.fromAddress;
-  const signal = receipt.providerFacts.optOutSignal;
-  const rule = receipt.providerFacts.optOutRule;
+  // `providerFacts` is `v.record(v.string(), v.any())`, so read it as
+  // `unknown` and narrow — the column is a projection of provider data and
+  // nothing here may trust its shape.
+  const stored: Record<string, unknown> = receipt.providerFacts;
+  const fromAddress = stored.fromAddress;
+  const rawSignal = stored.optOutSignal;
+  const rule = stored.optOutRule;
   return {
     ...(typeof fromAddress === "string" && fromAddress.length > 0
       ? { fromAddress }
@@ -103,11 +111,11 @@ function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFacts {
     // path, carries no verdict. `none` is the only safe default: it can never
     // manufacture a suppression, only fail to stop one, and the next message
     // on the thread re-evaluates.
-    optOutSignal: (OPT_OUT_SIGNALS as readonly string[]).includes(
-      typeof signal === "string" ? signal : "",
-    )
-      ? (signal as OptOutSignal)
-      : "none",
+    optOutSignal:
+      typeof rawSignal === "string"
+        ? (OPT_OUT_SIGNALS.find((candidate) => candidate === rawSignal) ??
+          "none")
+        : "none",
     ...(typeof rule === "string" && rule.length > 0 ? { optOutRule: rule } : {}),
   };
 }
@@ -366,10 +374,10 @@ async function applyToConversation(
   //    reason a version bump did or did not happen.
   const current = await ctx.db.get("conversations", conversation._id);
   if (current === null) {
-    return {
-      conversation,
-      replyWork: { start: false, blockedBy: "association_missing" },
-    };
+    // Unreachable inside this transaction — step 1 already throws NOT_FOUND
+    // when the row is gone, and nothing on this path deletes a conversation.
+    // Refusing beats inventing a gate blocker that would misreport why.
+    throw domainError("NOT_FOUND", "conversation not found");
   }
   if (
     facts.fromAddress !== undefined &&
@@ -623,7 +631,9 @@ export async function evaluateReplyAutomation(
  * placed, and a closed thread is closed. Writing a note for those on every
  * inbound message would bury the ones that say something new under repetition.
  */
-const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<string> = new Set([
+const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<ReplyGateBlockCode> = new Set<
+  ReplyGateBlockCode
+>([
   "association_missing",
   "campaign_mismatch",
   "campaign_inactive",
