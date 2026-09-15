@@ -185,6 +185,7 @@ export function NewMissionDialog({
         confirmDisabled={
           noneEligible || trimmed.length === 0 || trimmed.length > TITLE_MAX
         }
+        confirmDescribedBy="new-mission-title-bound"
         busy={busy}
         error={error}
         onConfirm={() => void submit()}
@@ -203,11 +204,16 @@ export function NewMissionDialog({
               value={title}
               disabled={busy}
               placeholder="What is this mission for?"
+              aria-describedby="new-mission-title-bound"
               onChange={(event) => setTitle(event.target.value)}
             />
+            {/* Described, not announced. As a live region this re-spoke the
+                count after every keystroke, filling the pauses between words
+                with "17 of 200 characters" — and still said nothing on the
+                path that needs it, focusing a disabled confirm control whose
+                bound was never violated. */}
             <p
               id="new-mission-title-bound"
-              role="status"
               className="text-xs text-muted-foreground"
             >
               {trimmed.length > TITLE_MAX

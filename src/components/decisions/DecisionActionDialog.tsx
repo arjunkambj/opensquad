@@ -34,6 +34,7 @@ export function DecisionActionDialog({
   confirmLabel,
   confirmVariant = "default",
   confirmDisabled = false,
+  confirmDescribedBy,
   busy,
   error,
   onConfirm,
@@ -46,6 +47,14 @@ export function DecisionActionDialog({
   confirmLabel: string
   confirmVariant?: "default" | "destructive"
   confirmDisabled?: boolean
+  /**
+   * The id of the element stating why the confirm control is unavailable.
+   * A disabled button announces its label and nothing else, and a live region
+   * near it only speaks when its text changes — so a bound that was never
+   * violated is never read. `plan/ux.md` §6: a disabled control always carries
+   * a reason a hovering or screen-reader user can reach.
+   */
+  confirmDescribedBy?: string
   busy: boolean
   error: string | null
   onConfirm: () => void
@@ -80,6 +89,7 @@ export function DecisionActionDialog({
           <Button
             variant={confirmVariant}
             disabled={busy || confirmDisabled}
+            aria-describedby={confirmDescribedBy}
             onClick={onConfirm}
           >
             {busy ? <Spinner data-icon="inline-start" /> : null}

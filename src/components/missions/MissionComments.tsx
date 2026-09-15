@@ -89,6 +89,7 @@ export function MissionComments({
               placeholder="What should the next person know?"
               value={body}
               disabled={busy}
+              aria-describedby="mission-comment-bound"
               onChange={(event) => setBody(event.target.value)}
             />
             <div className="flex flex-wrap items-center gap-2">
@@ -100,9 +101,14 @@ export function MissionComments({
               >
                 Add note
               </Button>
+              {/* Described, not announced. `aria-describedby` on the button
+                  already reads the bound on focus, which is the mechanism
+                  that is wanted; `role="status"` on the same paragraph made
+                  it a live region whose text changes on every keystroke, so
+                  the count was queued for announcement over the typing echo
+                  of a 300-character note. */}
               <p
                 id="mission-comment-bound"
-                role="status"
                 className="text-xs text-muted-foreground"
               >
                 {tooLong
