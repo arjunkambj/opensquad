@@ -1638,11 +1638,16 @@ const DISPOSITION_HANDLING: Readonly<
  * a step boundary — this mutation reads and re-validates it in place. An
  * answer that is missing, unparseable or from a request that did not succeed
  * becomes `needs_review`: the pipeline never guesses a disposition.
+ *
+ * It takes `messageRef` for the same reason every other reply stage does: the
+ * conversation-level writes here describe the LATEST reply, and a newer
+ * inbound can land while this mission's classify request is outstanding.
  */
 export const applyReplyDisposition = internalMutation({
   args: {
     missionId: v.id("missions"),
     conversationId: v.id("conversations"),
+    messageRef: v.string(),
     workerRequestId: v.id("workerRequests"),
   },
   returns: vReplyDispositionResult,
@@ -1690,14 +1695,10 @@ export const applyReplyDisposition = internalMutation({
         : replyDispositionFromClassification(classification);
     const handling = DISPOSITION_HANDLING[disposition];
 
-    const now = Date.now();
-    await ctx.db.patch("conversations", conversation._id, {
-      lastDisposition: disposition,
-      lastDispositionAt: now,
-      updatedAt: now,
-    });
     // A reply mission exists here, so an activity row is legal — unlike the
-    // unassigned queue, which can carry none (integrator decision D1).
+    // unassigned queue, which can carry none (integrator decision D1). It is
+    // written before the staleness check because the answer is a fact about
+    // THIS mission and stays true whichever branch follows.
     await recordActivityEvent(ctx, {
       workspaceId: conversation.workspaceId,
       missionId: mission._id,
@@ -1706,6 +1707,41 @@ export const applyReplyDisposition = internalMutation({
       actor: "workflow",
       dedupeKey: `reply:${mission._id}:classified`,
       conversationId: conversation._id,
+    });
+
+    // THE SAME STALENESS GUARD `prepareReplyDispatch` AND `installReplyDraft`
+    // APPLY, and for the same reason. This mission answers ONE message.
+    // Nothing cancels an outstanding worker request when a newer inbound
+    // lands, so a classification dispatched for message A arrives here after
+    // message B has already bumped the context, superseded the open asks and
+    // started its own mission.
+    //
+    // Every write below is conversation-level and describes "the latest
+    // reply": `lastDisposition`/`lastDispositionAt` would present the older
+    // message's verdict as current with a newer timestamp, and — for
+    // `unsubscribe` or `needs_review` — `holdForReview` would set
+    // `humanTakeover` from a classification of a message the thread has moved
+    // past. That takeover halts B's mission at its next gate, and because a
+    // reply mission is one per message forever, a later `resume` answers
+    // `a reply mission already exists for this message` and B is never
+    // answered by any backend path.
+    //
+    // So the mission records its answer and stops; the conversation is left
+    // to the message that actually is the latest.
+    if (conversation.lastInboundMessageRef !== args.messageRef) {
+      return {
+        disposition,
+        next: "stop" as const,
+        outcome: "skipped" as const,
+        summary: `The reply was classified as ${disposition}, but a newer message arrived on this conversation first; nothing was drafted.`,
+      };
+    }
+
+    const now = Date.now();
+    await ctx.db.patch("conversations", conversation._id, {
+      lastDisposition: disposition,
+      lastDispositionAt: now,
+      updatedAt: now,
     });
     if (handling.hold) {
       await holdForReview(ctx, conversation, "needs_review", handling.note);

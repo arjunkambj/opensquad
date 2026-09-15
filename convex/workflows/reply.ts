@@ -183,8 +183,7 @@ export const replyMissionWorkflow = workflow
     const classified = await step.runMutation(
       internal.inbox.applyReplyDisposition,
       {
-        missionId: args.missionId,
-        conversationId: args.conversationId,
+        ...stageArgs,
         workerRequestId: classify.workerRequestId,
       },
       { name: "applyDisposition" },
