@@ -491,11 +491,13 @@ async function applyToConversation(
 /**
  * Act on the deterministic opt-out verdict the callback computed.
  *
- * WHAT GETS SUPPRESSED, AND BY WHOM. The address suppressed is always one the
- * APPLICATION resolved — the `normalizedRecipient` of the conversation's most
- * recent draft revision, i.e. the address we actually mailed. It is never read
- * out of the inbound payload, so a message cannot nominate its own suppression
- * target. Suppression is `kind: "email"`; an individual opt-out never implies
+ * WHAT GETS SUPPRESSED, AND BY WHOM. Every address suppressed is one the
+ * APPLICATION resolved: the `normalizedRecipient` of the conversation's most
+ * recent draft revision (the address we actually mailed) and, when it differs,
+ * the address `resolveOutboundRecipient` says this thread's automation would
+ * mail next — the linked lead's contact. Neither is ever read out of the
+ * inbound payload, so a message cannot nominate its own suppression target.
+ * Suppression is `kind: "email"` for each; an individual opt-out never implies
  * the domain (`suppressions.ts` keeps that rule and P11 does not weaken it).
  *
  * AND THE SENDER MUST BE THE PERSON WE MAILED. An explicit opt-out from some
@@ -533,26 +535,62 @@ async function enforceOptOut(
   const rule = facts.optOutRule ?? "unnamed_rule";
 
   if (facts.optOutSignal === "explicit") {
-    // The same helper `resume` and the gate use, so all three agree on what
-    // "the address we mail" means.
-    const { latestDraft } = await resolveOutboundRecipient(ctx, conversation);
+    // TWO addresses, and they are not always the same one.
+    //
+    // The SPEAKER must be the person we mailed — `latestDraft
+    // .normalizedRecipient`, the address the last revision was actually
+    // authorized against. An explicit opt-out from anyone else is a claim
+    // made on someone else's behalf, so it is only ever the verification
+    // target.
+    //
+    // The address automation would mail NEXT is `resolveOutboundRecipient`'s
+    // `recipient`, which prefers the LINKED LEAD'S CONTACT and falls back to
+    // that revision only when the lead has none. The two genuinely diverge,
+    // because `drafts.revise` lets an operator redirect a revision to the
+    // real buyer while the lead row still carries the generic contact — and
+    // `recipient` is the value `evaluateReplyAutomation` feeds to
+    // `matchSuppression` and the value `installReplyDraft` addresses a draft
+    // to. Suppressing only the revision's address therefore left the gate
+    // checking an address nothing had suppressed, and the next inbound on the
+    // thread drafted a reply to the company that had just asked to be removed.
+    const { recipient, latestDraft } = await resolveOutboundRecipient(
+      ctx,
+      conversation,
+    );
     const verified =
       latestDraft !== null &&
       facts.fromAddress !== undefined &&
       facts.fromAddress === latestDraft.normalizedRecipient;
     if (verified) {
-      await ctx.runMutation(internal.suppressions.recordSuppression, {
-        workspaceId: conversation.workspaceId,
-        kind: "email",
-        value: latestDraft.normalizedRecipient,
-        reason: "unsubscribe",
-        sourceConversationId: conversation._id,
-      });
+      // Both, when they differ. Both are the APPLICATION'S own addresses —
+      // one from a revision it authorized, one from the linked lead's
+      // contact record — and neither is ever read out of the inbound
+      // payload, so a message still cannot nominate its own suppression
+      // target. Still `kind: "email"` for each: an individual opt-out never
+      // implies the domain, and `suppressions.ts` keeps that rule.
+      const targets = new Set<string>([latestDraft.normalizedRecipient]);
+      if (recipient !== null) {
+        targets.add(recipient);
+      }
+      for (const value of targets) {
+        await ctx.runMutation(internal.suppressions.recordSuppression, {
+          workspaceId: conversation.workspaceId,
+          kind: "email",
+          value,
+          reason: "unsubscribe",
+          sourceConversationId: conversation._id,
+        });
+      }
       await recordConversationNote(ctx, {
         conversation,
         kind: "system",
         actor: "system",
-        body: `Opt-out honoured: the verified sender asked to be removed (rule ${rule}). This address is suppressed for the workspace; remove the suppression to contact them again.`,
+        body:
+          `Opt-out honoured: the verified sender asked to be removed (rule ${rule}). ` +
+          (targets.size === 1
+            ? "This address is suppressed for the workspace"
+            : "The address that asked and this thread's outbound contact address are both suppressed for the workspace") +
+          "; remove the suppression to contact them again.",
       });
       return;
     }
