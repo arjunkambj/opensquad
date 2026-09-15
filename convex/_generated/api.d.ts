@@ -12,6 +12,7 @@ import type * as activity from "../activity.js";
 import type * as approvals from "../approvals.js";
 import type * as businessProfiles from "../businessProfiles.js";
 import type * as campaigns from "../campaigns.js";
+import type * as conversations from "../conversations.js";
 import type * as crons from "../crons.js";
 import type * as decisions from "../decisions.js";
 import type * as drafts from "../drafts.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   approvals: typeof approvals;
   businessProfiles: typeof businessProfiles;
   campaigns: typeof campaigns;
+  conversations: typeof conversations;
   crons: typeof crons;
   decisions: typeof decisions;
   drafts: typeof drafts;
