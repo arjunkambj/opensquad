@@ -70,25 +70,6 @@ export function MissionLifecycleActions({
     )
   }
 
-  if (stale) {
-    return (
-      <div className="flex flex-col items-start gap-2 rounded-2xl border border-dashed border-border px-4 py-3">
-        <p className="text-sm text-foreground">
-          This mission changed while you had it open — it is now version{" "}
-          {mission.version}, not {reviewedVersion}. Load it before acting, so
-          you are acting on what is actually here.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setReviewedVersion(mission.version)}
-        >
-          Load the current version
-        </Button>
-      </div>
-    )
-  }
-
   const close = () => {
     if (busy) {
       return
@@ -152,6 +133,38 @@ export function MissionLifecycleActions({
     mission.state === "completed" ||
     mission.state === "cancelled" ||
     mission.state === "failed"
+
+  if (stale) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col items-start gap-2 rounded-2xl border border-dashed border-border px-4 py-3">
+          <p className="text-sm text-foreground">
+            This mission changed while you had it open — it is now version{" "}
+            {mission.version}, not {reviewedVersion}. Load it before acting, so
+            you are acting on what is actually here.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            // Loading the current version also drops the half-made intent it
+            // interrupted. Without this, a version bump — which
+            // `closeAskOnMission` performs routinely on any live mission —
+            // hid an open Cancel confirmation rather than closing it, and
+            // this control brought it straight back, unrequested, armed with
+            // the NEW expected version and with focus moved into it. An
+            // irreversible confirmation must cost a fresh click.
+            onClick={() => {
+              setPending(null)
+              setError(null)
+              setReviewedVersion(mission.version)
+            }}
+          >
+            Load the current version
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -225,7 +238,10 @@ export function MissionLifecycleActions({
       ) : null}
 
       <DecisionActionDialog
-        open={pending !== null}
+        // `!stale` is belt to the braces above: a version bump closes this
+        // rather than hiding it, so nothing an operator half-started can be
+        // handed back to them by a later render.
+        open={pending !== null && !stale}
         onOpenChange={(next) => {
           if (!next) {
             close()
