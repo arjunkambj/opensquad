@@ -888,6 +888,23 @@ export type StartReplyResult = typeof vStartReplyResult.type;
 const CLASSIFY_DEADLINE_MS = 2 * 60 * 1000;
 
 /**
+ * Longest lead name a mission title will carry. The title is bounded to 200 in
+ * storage, so the name is clipped to leave room for the prefix and an ellipsis
+ * rather than throwing on a legal-but-long value.
+ */
+const MISSION_TITLE_NAME_MAX_LENGTH = 150;
+
+function clipName(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return "an unnamed lead";
+  }
+  return trimmed.length > MISSION_TITLE_NAME_MAX_LENGTH
+    ? `${trimmed.slice(0, MISSION_TITLE_NAME_MAX_LENGTH)}…`
+    : trimmed;
+}
+
+/**
  * Create the reply mission for ONE inbound message and dispatch its workflow.
  *
  * DEDUPE. `missions.by_workspaceId_and_requestId` keyed on
@@ -914,6 +931,12 @@ const CLASSIFY_DEADLINE_MS = 2 * 60 * 1000;
  * enforces the one-non-terminal-`sales_campaign`-per-campaign rule that a
  * reply mission must not trip. The frozen input snapshot is built the same way
  * it builds one, so a reply run records the same provenance as an outreach run.
+ *
+ * AND IT CANNOT THROW ON A LENGTH. It runs inside the ingest transaction, so a
+ * throw here rolls the receipt back to `pending` and the drain retries it on
+ * every sweep for as long as the row lives. A long company name or an oversized
+ * campaign brief are perfectly legal data, so every bound that a caller does not
+ * control is CLIPPED or reported, never asserted.
  */
 async function startReplyMission(
   ctx: MutationCtx,
@@ -983,6 +1006,11 @@ async function startReplyMission(
     };
   }
 
+  // Clipped, never asserted: a lead name is provider- or operator-supplied and
+  // its length is nobody's contract. `boundedString` would throw, and a throw
+  // on the ingest path wedges the receipt.
+  const companyName = clipName(prospect.companyName);
+
   const profile = await ctx.db
     .query("businessProfiles")
     .withIndex("by_workspaceId", (q) =>
@@ -1026,10 +1054,19 @@ async function startReplyMission(
       })),
     policyVersion: workspace.policyVersion,
     requestedOutcome:
-      `Classify the latest inbound reply from ${prospect.companyName} and, ` +
+      `Classify the latest inbound reply from ${companyName} and, ` +
       `where it warrants one, propose a single response draft for human approval.`,
   };
-  assertInputSnapshotSize(inputSnapshot);
+  try {
+    assertInputSnapshotSize(inputSnapshot);
+  } catch {
+    // A campaign brief large enough to blow the 64 KiB bound is legal data, not
+    // a bug in this path. Reported so the thread says why nobody answered.
+    return {
+      started: false,
+      reason: "the campaign's frozen inputs exceed the mission snapshot bound",
+    };
+  }
 
   // The originating outreach mission, when this thread has one. Nothing set
   // `parentMissionId` before P11; a reply is the first mission that has a
@@ -1045,10 +1082,7 @@ async function startReplyMission(
     latestDraft === null ? undefined : latestDraft.missionId;
 
   const now = Date.now();
-  const title = boundedString(`Reply — ${prospect.companyName}`, "title", {
-    min: 1,
-    max: 200,
-  });
+  const title = `Reply — ${companyName}`;
   const missionId = await ctx.db.insert("missions", {
     workspaceId: conversation.workspaceId,
     campaignId: conversation.campaignId,
@@ -1096,7 +1130,7 @@ async function startReplyMission(
     workspaceId: conversation.workspaceId,
     missionId,
     kind: "mission_created",
-    summary: `Reply mission created for an inbound reply from ${prospect.companyName}`,
+    summary: `Reply mission created for an inbound reply from ${companyName}`,
     actor: "workflow",
     dedupeKey: `mission:${missionId}:created`,
     conversationId: conversation._id,
