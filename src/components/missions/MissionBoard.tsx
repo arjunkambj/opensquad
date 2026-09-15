@@ -188,7 +188,12 @@ export function MissionBoard() {
           {archived ? "Showing the archive" : "Show the archive"}
         </Button>
 
-        {search.column === undefined ? null : (
+        {/* Only where four columns can actually appear. At phone width
+            `singleColumn` stays true after the click, so clearing `?column=`
+            would drop the operator into the default column instead — a
+            control that does not do what it says, and that loses the column
+            they were reading. The selector above is the phone's way back. */}
+        {search.column !== undefined && !isMobile ? (
           <Button
             variant="ghost"
             size="sm"
@@ -201,7 +206,7 @@ export function MissionBoard() {
           >
             Show all four columns
           </Button>
-        )}
+        ) : null}
 
         <div className="ml-auto">
           <NewMissionDialog
