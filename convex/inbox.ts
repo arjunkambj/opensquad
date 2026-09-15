@@ -402,6 +402,19 @@ async function applyToConversation(
 
   // 2. The sender, as data. Written after step 1 so it can never be the
   //    reason a version bump did or did not happen.
+  //
+  //    TOTAL over the message, not conditional on it parsing. `lastInboundFrom`
+  //    is documented as the sender of the message `lastInboundMessageRef`
+  //    names, and `conversations.resume` treats it as the authority for the
+  //    §8 verified-sender check: an undefined value lands on
+  //    `sender_unverified`, a present one is compared against the address we
+  //    mail. Writing it only when the new sender parsed left the PREVIOUS
+  //    message's sender standing beside the new message's reference, so a
+  //    message whose `From` carries two addresses (or any header
+  //    `parseInboundSender` refuses) would be resumed on the strength of the
+  //    one before it. Clearing the field is the honest answer — a Convex
+  //    patch with `undefined` removes it — and `sender_unverified` is then
+  //    reached for exactly the messages that cannot be verified.
   const current = await ctx.db.get("conversations", conversation._id);
   if (current === null) {
     // Unreachable inside this transaction — step 1 already throws NOT_FOUND
@@ -409,10 +422,7 @@ async function applyToConversation(
     // Refusing beats inventing a gate blocker that would misreport why.
     throw domainError("NOT_FOUND", "conversation not found");
   }
-  if (
-    facts.fromAddress !== undefined &&
-    facts.fromAddress !== current.lastInboundFrom
-  ) {
+  if (facts.fromAddress !== current.lastInboundFrom) {
     await ctx.db.patch("conversations", current._id, {
       lastInboundFrom: facts.fromAddress,
       updatedAt: Date.now(),
