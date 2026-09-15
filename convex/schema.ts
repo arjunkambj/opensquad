@@ -53,6 +53,7 @@ import {
   vSourcePlan,
   vSuppressionKind,
   vSuppressionReason,
+  vProviderOperationSettlement,
   vProviderOperationState,
   vUsageMetric,
   vUsageReservationState,
@@ -1155,6 +1156,12 @@ export const providerOperationFields = {
   /** The usage reservations this operation took, settled together. */
   reservationIds: v.array(v.id("usageReservations")),
   state: vProviderOperationState,
+  /** How the reservation this row owns was settled. Absent while the
+   *  operation is still in flight. `state` does not imply it: a post-fetch
+   *  redirect refusal is `failed` and `commit`-settled, because the fetch
+   *  happened and was billed even though its page is refused. The
+   *  per-prospect page cap counts by this, not by `state`. */
+  settlement: v.optional(vProviderOperationSettlement),
   createdAt: v.number(),
   updatedAt: v.number(),
   prospectId: v.optional(v.id("prospects")),

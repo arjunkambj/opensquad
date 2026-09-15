@@ -44,6 +44,7 @@ import type { FunctionReference } from "convex/server";
 import {
   assertEpochMs,
   computeResultDigest,
+  consumesPageAllowance,
   domainError,
   invalid,
   normalizeHttpUrl,
@@ -384,6 +385,18 @@ export const diagnosticFirecrawlState = internalAction({
  *  calls its outcome unknown and blocks its allowance until reconciled. */
 const PROVIDER_OPERATION_STALE_MS = 10 * 60 * 1000;
 
+/**
+ * How many of a prospect's operation receipts the cap scan reads.
+ *
+ * `operationKey` is `research:<campaignId>:<prospectId>:sha256(url)` and is
+ * unique per workspace, so a prospect accumulates at most one row per
+ * distinct URL ever attempted for it — across every mission on the campaign.
+ * The scan window has to stay comfortably above that, because the index is
+ * (workspaceId, prospectId, state) and a short `.take` would sort released
+ * rows ahead of the live ones and undercount.
+ */
+const PROSPECT_OPERATION_SCAN_MAX = 64;
+
 /** The page body recorded on a completed operation (no self-reference). */
 const vScrapedPageRecord = v.object({
   url: v.string(),
@@ -518,8 +531,11 @@ export const beginFirecrawlOperation = internalMutation({
     }
 
     // §G2 Firecrawl route item 2 — homepage plus at most two other pages.
-    // `failed` rows do not count: a page that was never billed must not
-    // consume a prospect's share.
+    // The cap counts BILLED retrievals, not non-`failed` rows. A released
+    // reservation is the only proof the provider was never reached (a
+    // missing API key, a transport failure that never left Convex); every
+    // other outcome either paid or may have paid, and a `failed` row can be
+    // both — a post-fetch redirect refusal is billed and refused.
     const priorForProspect = await ctx.db
       .query("providerOperations")
       .withIndex("by_workspaceId_and_prospectId_and_state", (q) =>
@@ -527,10 +543,8 @@ export const beginFirecrawlOperation = internalMutation({
           .eq("workspaceId", mission.workspaceId)
           .eq("prospectId", args.prospectId),
       )
-      .take(32);
-    const counted = priorForProspect.filter(
-      (row) => row.state !== "failed",
-    ).length;
+      .take(PROSPECT_OPERATION_SCAN_MAX);
+    const counted = priorForProspect.filter(consumesPageAllowance).length;
     if (counted >= RESEARCH_PAGES_PER_PROSPECT) {
       throw domainError(
         "CONFLICT",
@@ -632,6 +646,10 @@ export const settleFirecrawlOperation = internalMutation({
     }
     await ctx.db.patch("providerOperations", row._id, {
       state: args.state,
+      // Recorded because `state` does not imply it: a post-fetch redirect
+      // refusal is `failed` AND `commit`-settled. The per-prospect page cap
+      // reads this, so a billed retrieval can never be free.
+      settlement: args.settlement,
       updatedAt: Date.now(),
       ...(args.page !== undefined
         ? {
@@ -670,6 +688,10 @@ export const settleFirecrawlOperation = internalMutation({
  *                                            was not billed.
  *   process death mid-call        (none)   — left `requested`; the sweep
  *                                            below moves it to `uncertain`.
+ *
+ * The settlement, not the resulting state, is what the per-prospect page cap
+ * counts — `release` is the only row in this table that proves the provider
+ * was never reached, and it is the only one a prospect gets for free.
  */
 export const retrieveProspectPage = internalAction({
   args: {

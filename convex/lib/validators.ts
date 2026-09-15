@@ -2703,6 +2703,40 @@ export type ProviderOperationState =
   (typeof PROVIDER_OPERATION_STATES)[number];
 
 /**
+ * How ONE provider operation's reservation was settled — recorded on the
+ * operation row itself, because the row's `state` does not imply it.
+ *
+ * A post-fetch URL-policy refusal is the case that forces this: Firecrawl
+ * fetched the page and billed us, and the redirect target is then refused,
+ * so the operation is `failed` AND `commit`-settled. Counting a prospect's
+ * spend by `state !== "failed"` let that billed retrieval escape the
+ * per-prospect page cap. Counting by settlement cannot: `release` is the
+ * only outcome that proves the provider was never reached.
+ */
+export const vProviderOperationSettlement = v.union(
+  v.literal("commit"),
+  v.literal("release"),
+  v.literal("markUncertain"),
+);
+export type ProviderOperationSettlement = Infer<
+  typeof vProviderOperationSettlement
+>;
+
+/**
+ * Does this operation's receipt consume the prospect's page allowance?
+ *
+ * Everything except a released reservation does. A row with no recorded
+ * settlement is still in flight (`requested`/`accepted`) and its
+ * reservation is live, so it counts too — an unsettled operation must never
+ * be free.
+ */
+export function consumesPageAllowance(row: {
+  settlement?: ProviderOperationSettlement;
+}): boolean {
+  return row.settlement !== "release";
+}
+
+/**
  * §G2 Firecrawl route item 2: homepage plus at most two relevant pages per
  * prospect. Three is the per-prospect cap AND the per-prospect share of the
  * campaign's page allowance.
