@@ -3,6 +3,7 @@ import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { MissionColumn } from "@/components/missions/MissionColumn"
+import { NewMissionDialog } from "@/components/missions/NewMissionDialog"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -161,6 +162,15 @@ export function MissionBoard() {
             Show all four columns
           </Button>
         )}
+
+        <div className="ml-auto">
+          <NewMissionDialog
+            workspaceId={current.workspace._id}
+            role={current.role}
+            campaigns={campaigns?.items ?? []}
+            campaignsLoading={campaigns === undefined}
+          />
+        </div>
       </div>
 
       {archived ? (

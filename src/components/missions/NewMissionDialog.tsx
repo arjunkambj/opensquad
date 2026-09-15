@@ -1,0 +1,222 @@
+import { Link } from "@tanstack/react-router"
+import { useMutation } from "convex/react"
+import { useState } from "react"
+import type { Doc, Id } from "../../../convex/_generated/dataModel"
+import { api } from "../../../convex/_generated/api"
+import { DecisionActionDialog } from "@/components/decisions/DecisionActionDialog"
+import { PermissionNote } from "@/components/states/states"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { NativeSelect } from "@/components/ui/native-select"
+import { toast } from "@/components/ui/toast"
+import { errorMessage } from "@/lib/convex-error"
+import type { WorkspaceRole } from "@/lib/workspace-role"
+import { canEdit } from "@/lib/workspace-role"
+
+/** `boundedString(title, "title", { min: 1, max: 200 })` in `missions.ts`. */
+const TITLE_MAX = 200
+
+/**
+ * Start a sales mission — or say exactly why you cannot.
+ *
+ * `missions.create` refuses without an **active** campaign whose source plan
+ * someone has confirmed. That precondition is checked here, before the click,
+ * and the refusal replaces the button with the reason and a link to the step
+ * that fixes it. A dead button whose failure only appears after you press it
+ * is the thing this avoids.
+ *
+ * One `requestId` is minted per opened form and reused on every retry of that
+ * form. It is the only thing standing between a double-click and two missions
+ * when the first response is lost: `create` looks the id up on
+ * `by_workspaceId_and_requestId` and returns the existing row instead of
+ * inserting a second one.
+ *
+ * The other refusal — one live sales mission per campaign — cannot be checked
+ * from here without reading every mission on the campaign, so it renders in
+ * place in the dialog, quoting the backend's own sentence.
+ */
+export function NewMissionDialog({
+  workspaceId,
+  role,
+  campaigns,
+  campaignsLoading,
+}: {
+  workspaceId: Id<"workspaces">
+  role: WorkspaceRole
+  campaigns: Doc<"campaigns">[]
+  campaignsLoading: boolean
+}) {
+  const create = useMutation(api.missions.create)
+
+  const [open, setOpen] = useState(false)
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [title, setTitle] = useState("")
+  const [campaignId, setCampaignId] = useState("")
+  const [priority, setPriority] = useState<"normal" | "high">("normal")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const eligible = campaigns.filter(
+    (campaign) =>
+      campaign.status === "active" &&
+      campaign.sourcePlan.confirmedBy !== undefined,
+  )
+
+  if (!canEdit(role)) {
+    return <PermissionNote role={role} action="start a mission" />
+  }
+
+  if (campaignsLoading) {
+    return (
+      <Button size="sm" disabled aria-describedby="new-mission-loading">
+        New mission
+        <span id="new-mission-loading" className="sr-only">
+          Checking whether a confirmed campaign exists.
+        </span>
+      </Button>
+    )
+  }
+
+  if (eligible.length === 0) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm text-muted-foreground">
+          A mission needs an active campaign whose source plan someone has
+          confirmed. There is none yet.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          render={<Link to="/onboarding" search={{ step: "campaign" }} />}
+        >
+          Set up a campaign
+        </Button>
+      </div>
+    )
+  }
+
+  const trimmed = title.trim()
+  const chosen = campaignId === "" ? eligible[0]._id : campaignId
+
+  const openForm = () => {
+    // One id per opened form. Minted here rather than per click, so pressing
+    // the button twice is one logical intent, and re-minted on the next open
+    // so a second deliberate mission is a second intent.
+    setRequestId(crypto.randomUUID())
+    setTitle("")
+    setCampaignId(eligible[0]._id)
+    setPriority("normal")
+    setError(null)
+    setOpen(true)
+  }
+
+  const submit = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const mission = await create({
+        workspaceId,
+        campaignId: chosen as Id<"campaigns">,
+        kind: "sales_campaign",
+        title: trimmed,
+        priority,
+        ...(requestId === null ? {} : { requestId }),
+      })
+      toast.add({
+        title: "Mission created",
+        description: `"${mission.title}" is in Backlog, waiting to start.`,
+        type: "success",
+      })
+      setOpen(false)
+    } catch (cause) {
+      setError(
+        `${errorMessage(cause, "The mission was not created.")} Nothing was written, and what you typed is still here.`,
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" onClick={openForm}>
+        New mission
+      </Button>
+
+      <DecisionActionDialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) {
+            setOpen(false)
+            setError(null)
+          }
+        }}
+        title="Start a sales mission"
+        description="The squad discovers and researches prospects, then asks you to approve every email before it leaves. Nothing is sent without a decision from someone here."
+        confirmLabel="Start the mission"
+        confirmDisabled={trimmed.length === 0 || trimmed.length > TITLE_MAX}
+        busy={busy}
+        error={error}
+        onConfirm={() => void submit()}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="new-mission-title">Title</Label>
+            <Input
+              id="new-mission-title"
+              value={title}
+              disabled={busy}
+              placeholder="What is this mission for?"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+            <p
+              id="new-mission-title-bound"
+              role="status"
+              className="text-xs text-muted-foreground"
+            >
+              {trimmed.length > TITLE_MAX
+                ? `${trimmed.length} characters — the limit is ${TITLE_MAX}.`
+                : `1 to ${TITLE_MAX} characters.`}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="new-mission-campaign">Campaign</Label>
+            <NativeSelect
+              id="new-mission-campaign"
+              value={chosen}
+              disabled={busy}
+              onChange={(event) => setCampaignId(event.target.value)}
+            >
+              {eligible.map((campaign) => (
+                <option key={campaign._id} value={campaign._id}>
+                  {campaign.title}
+                </option>
+              ))}
+            </NativeSelect>
+            <p className="text-xs text-muted-foreground">
+              Only active campaigns with a confirmed source plan are listed,
+              and a campaign can hold one live sales mission at a time.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="new-mission-priority">Priority</Label>
+            <NativeSelect
+              id="new-mission-priority"
+              value={priority}
+              disabled={busy}
+              onChange={(event) =>
+                setPriority(event.target.value === "high" ? "high" : "normal")
+              }
+            >
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+            </NativeSelect>
+          </div>
+        </div>
+      </DecisionActionDialog>
+    </>
+  )
+}
