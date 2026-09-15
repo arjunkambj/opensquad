@@ -482,9 +482,13 @@ function topicLabel(topic: string): string {
   return topic.trim().slice(0, 120);
 }
 
-/** The stated reason behind a per-observation refusal. */
+/**
+ * The stated reason behind a per-observation refusal. `ConvexError.data` is
+ * read FIRST: a `ConvexError` is also an `Error`, and its `.message` is the
+ * serialized `{code, message}` envelope, so reading `.message` first would put
+ * JSON where a human-readable reason belongs.
+ */
 function reasonOf(error: unknown): string {
-  if (error instanceof Error) return error.message.slice(0, 200);
   const data =
     typeof error === "object" && error !== null
       ? (error as { data?: { message?: unknown } }).data
@@ -492,6 +496,7 @@ function reasonOf(error: unknown): string {
   if (data !== undefined && typeof data.message === "string") {
     return data.message.slice(0, 200);
   }
+  if (error instanceof Error) return error.message.slice(0, 200);
   return "observation could not be stored";
 }
 
