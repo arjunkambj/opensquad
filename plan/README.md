@@ -60,6 +60,7 @@ This `plan/` handoff is self-contained and trackable without those ignored files
 | [skills.md](skills.md) | Repository skill entrypoint, specialist routing and portable execution rules |
 | [tasks.json](tasks.json) | Machine-readable dependencies, status, ownership and evidence |
 | [worktrees.md](worktrees.md) | Parallel agents, worktree setup, ownership, isolated backends and integration |
+| [ux.md](ux.md) | Route map, navigation, the six operator journeys, screen contracts and frontend build order |
 
 ```bash
 pnpm plan check
