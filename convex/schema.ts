@@ -1396,10 +1396,17 @@ export default defineSchema({
       "startsAt",
     ]),
 
-  evidence: defineTable(evidenceFields).index("by_prospectId_and_createdAt", [
-    "prospectId",
-    "createdAt",
-  ]),
+  evidence: defineTable(evidenceFields)
+    .index("by_prospectId_and_createdAt", ["prospectId", "createdAt"])
+    // The run receipt's own evidence trace (V12-3), and the idempotency read
+    // `recordResearchEvidence` performs before it writes: one research result
+    // per run, so a replayed synthesis returns the rows it already wrote
+    // instead of doubling them.
+    .index("by_workspaceId_and_runId_and_createdAt", [
+      "workspaceId",
+      "runId",
+      "createdAt",
+    ]),
 
   /* §4.3 — correspondence (P10) */
 

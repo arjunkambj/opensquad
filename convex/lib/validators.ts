@@ -3907,3 +3907,118 @@ export type EvidenceConfidence = "supported" | "hypothesis" | "unknown";
 export const EVIDENCE_EXCERPT_MAX_LENGTH = 2_000;
 export const EVIDENCE_OBSERVATION_MAX_LENGTH = 1_000;
 export const RESEARCH_OBSERVATIONS_MAX = 12;
+
+/**
+ * The reserved host marker a role template instructs the Researcher to put in
+ * front of a topic when the finding is a guess rather than something the page
+ * states. §4.5 requires "hypotheses labeled"; this is the label, and it is the
+ * ONLY way an observation can be stored as `hypothesis`.
+ *
+ * Matched case-insensitively on the trimmed topic. Nothing else about the
+ * model's wording contributes to `confidence` — see `evidence.ts`.
+ */
+export const EVIDENCE_HYPOTHESIS_MARKER = "hypothesis:";
+
+/**
+ * How many observations one research result may hand the synthesis site
+ * before the payload itself is refused. Distinct from
+ * `RESEARCH_OBSERVATIONS_MAX`, which bounds how many become evidence ROWS:
+ * a chatty model must not fail the whole research result, so the overflow is
+ * reported as rejected rather than thrown, and only a payload past this bound
+ * (which would buy unbounded work inside the caller's transaction) is refused.
+ */
+export const RESEARCH_OBSERVATION_INPUT_MAX = 50;
+
+/**
+ * One observation as the worker reports it — exactly
+ * `vResearchResult.observations[]`, restated here so the synthesis site's
+ * argument validator and the worker result contract cannot drift apart.
+ * `sourceUrl` stays optional because the worker's shape has it optional; an
+ * observation without one is not evidence (§4.5), which is a rule about what
+ * gets STORED, not about what may be reported.
+ */
+export const vResearchObservation = v.object({
+  topic: v.string(),
+  finding: v.string(),
+  sourceUrl: v.optional(v.string()),
+});
+
+export type ResearchObservation = Infer<typeof vResearchObservation>;
+
+export const EVIDENCE_TOPIC_MAX_LENGTH = 200;
+
+/**
+ * Bound one stored `evidence.observation`. The first caller of
+ * `EVIDENCE_OBSERVATION_MAX_LENGTH`, which P20 declared with no enforcement.
+ * The topic is carried into the observation rather than dropped, so a stored
+ * row still says what the finding is ABOUT; the hypothesis marker is stripped
+ * because it is a host control token, not part of the observation's text.
+ */
+export function assertEvidenceObservation(
+  topic: string,
+  finding: string,
+  field = "observation",
+): string {
+  const bare = stripHypothesisMarker(topic);
+  const boundedTopic = boundedString(bare, `${field}.topic`, {
+    min: 1,
+    max: EVIDENCE_TOPIC_MAX_LENGTH,
+  });
+  const boundedFinding = boundedString(finding, `${field}.finding`, {
+    min: 1,
+    max: EVIDENCE_OBSERVATION_MAX_LENGTH,
+  });
+  return boundedString(`${boundedTopic}: ${boundedFinding}`, field, {
+    min: 1,
+    max: EVIDENCE_OBSERVATION_MAX_LENGTH,
+  });
+}
+
+/** True when the model labelled this observation a hypothesis (§4.5). */
+export function isHypothesisTopic(topic: string): boolean {
+  return topic.trimStart().toLowerCase().startsWith(EVIDENCE_HYPOTHESIS_MARKER);
+}
+
+/** The topic with the host's hypothesis marker removed. */
+export function stripHypothesisMarker(topic: string): string {
+  const trimmed = topic.trim();
+  return isHypothesisTopic(trimmed)
+    ? trimmed.slice(EVIDENCE_HYPOTHESIS_MARKER.length).trim()
+    : trimmed;
+}
+
+/**
+ * Bound one stored `evidence.excerpt` — a span of the page the BACKEND
+ * retrieved, re-sliced from the Firecrawl wrapper's 4,000-char excerpt down
+ * to `EVIDENCE_EXCERPT_MAX_LENGTH`. Writing `markdownExcerpt` straight
+ * through is out of bounds (§4.5), and so is storing an empty excerpt: a page
+ * that yielded no text is a page there is nothing to cite, which must surface
+ * as a rejected observation rather than as evidence with nothing behind it.
+ */
+export function assertEvidenceExcerpt(
+  pageExcerpt: string,
+  field = "excerpt",
+): string {
+  return boundedString(pageExcerpt.slice(0, EVIDENCE_EXCERPT_MAX_LENGTH), field, {
+    min: 1,
+    max: EVIDENCE_EXCERPT_MAX_LENGTH,
+  });
+}
+
+/**
+ * Optimistic-concurrency check for a versioned row. `missions.ts` keeps its
+ * own mission-shaped copy; this one is the shared form the lead/CRM mutations
+ * use, which is why it takes the numbers rather than a document.
+ */
+export function assertExpectedVersion(
+  current: number,
+  expected: number,
+  label: string,
+): void {
+  if (current !== expected) {
+    throw domainError(
+      "CONFLICT",
+      `${label} version is ${current}, not ${expected}`,
+    );
+  }
+}

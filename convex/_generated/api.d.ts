@@ -17,6 +17,7 @@ import type * as crons from "../crons.js";
 import type * as decisions from "../decisions.js";
 import type * as drafts from "../drafts.js";
 import type * as employees from "../employees.js";
+import type * as evidence from "../evidence.js";
 import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   decisions: typeof decisions;
   drafts: typeof drafts;
   employees: typeof employees;
+  evidence: typeof evidence;
   http: typeof http;
   inbox: typeof inbox;
   "integrations/agentmail": typeof integrations_agentmail;
