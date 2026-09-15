@@ -24,6 +24,12 @@ import { OVERVIEW_DEFAULTS } from "@/routes/_dashboard/_workspace/overview"
 
 const OVERVIEW_ROUTE = "/_dashboard/_workspace/overview"
 
+/**
+ * No `timeZone` option, deliberately. `picker.value` holds **civil days** —
+ * browser-local midnights standing for wall-calendar dates that
+ * `date-ranges.ts` already derived in the workspace's zone. Converting them
+ * again here would shift the label off the day whose bounds were sent.
+ */
 const dateFormatter = new Intl.DateTimeFormat("en", {
   month: "short",
   day: "numeric",
@@ -56,8 +62,17 @@ export function ActivityFeed({
   const navigate = useNavigate()
 
   const range = search.range ?? OVERVIEW_DEFAULTS.range
-  const bounds = activityRangeToBounds(range, search.from, search.to)
-  const picker = activityRangeToCalendar(range, search.from, search.to)
+  // The window is the WORKSPACE's day, not the browser's. Every row below is
+  // stamped with `formatInstant(…, timezone)` and every send allowance in this
+  // product is bucketed by the workspace zone, so a window derived from the
+  // browser would head one day and list another's receipts.
+  const bounds = activityRangeToBounds(range, search.from, search.to, timezone)
+  const picker = activityRangeToCalendar(
+    range,
+    search.from,
+    search.to,
+    timezone,
+  )
 
   const page = useQuery(api.activity.list, {
     workspaceId,
@@ -84,8 +99,13 @@ export function ActivityFeed({
           <OverviewDateRangePicker
             value={picker.value}
             preset={picker.preset}
+            timezone={timezone}
             onChange={(nextRange, nextPreset) => {
-              const chosen = calendarRangeToSearch(nextRange, nextPreset)
+              const chosen = calendarRangeToSearch(
+                nextRange,
+                nextPreset,
+                timezone,
+              )
               void navigate({
                 to: "/overview",
                 // A range change is a filter change, so the cursor goes with

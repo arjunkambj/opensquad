@@ -23,10 +23,17 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 type Props = {
   value: CalendarDateRange
   preset: DateRangePreset | null
+  /** The workspace's IANA zone — whose calendar "today" and "last 7 days" mean. */
+  timezone: string
   onChange: (range: CalendarDateRange, preset: DateRangePreset | null) => void
 }
 
-export function OverviewDateRangePicker({ value, preset, onChange }: Props) {
+export function OverviewDateRangePicker({
+  value,
+  preset,
+  timezone,
+  onChange,
+}: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const label = preset
     ? DATE_RANGE_PRESETS[preset].label
@@ -71,6 +78,7 @@ export function OverviewDateRangePicker({ value, preset, onChange }: Props) {
           <OverviewDateRangeContent
             value={value}
             preset={preset}
+            timezone={timezone}
             onChange={onChange}
             onClose={() => setIsOpen(false)}
           />

@@ -11,11 +11,14 @@ import {
   type CalendarDateRange,
   type DateRangePreset,
   getPresetRange,
+  todayInZone,
 } from "@/lib/date-ranges"
 
 type Props = {
   value: CalendarDateRange
   preset: DateRangePreset | null
+  /** The workspace's IANA zone — whose calendar the presets and the ceiling use. */
+  timezone: string
   onChange: (range: CalendarDateRange, preset: DateRangePreset | null) => void
   onClose: () => void
 }
@@ -48,6 +51,7 @@ function rangeSelection(range: CalendarDateRange): DateRange {
 export function OverviewDateRangeContent({
   value,
   preset,
+  timezone,
   onChange,
   onClose,
 }: Props) {
@@ -56,7 +60,10 @@ export function OverviewDateRangeContent({
     rangeSelection(value),
   )
   const [visibleMonth, setVisibleMonth] = useState(() => monthFromRangeEnd(value))
-  const maxJsDate = startOfDay(new Date())
+  // The ceiling is the workspace's today, not the browser's: a traveller
+  // whose browser is already on the next day must not be able to select a
+  // calendar day the workspace has not reached.
+  const maxJsDate = todayInZone(timezone)
   const maxMonth = startOfMonthDate(maxJsDate)
   const canGoNext = !isAfter(addMonths(visibleMonth, 2), maxMonth)
 
@@ -73,7 +80,7 @@ export function OverviewDateRangeContent({
   }
 
   const selectPreset = (nextPreset: DateRangePreset) => {
-    commitRange(getPresetRange(nextPreset), nextPreset, true)
+    commitRange(getPresetRange(nextPreset, timezone), nextPreset, true)
   }
 
   const selectRange = (range: DateRange | undefined) => {
