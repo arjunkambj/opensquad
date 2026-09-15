@@ -327,8 +327,8 @@
       "id": "P20",
       "title": "Lead, booking and evidence schema contract",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "done",
+      "owner": "integrator",
       "dependsOn": [
         "P02"
       ],
@@ -341,7 +341,13 @@
         "convex/lib/validators.ts",
         "plan/evidence/P20.md"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P20.md: integrated at 79856a2; four \u00a74.3 tables (prospects, leadEvents, bookings, evidence) declared once in convex/schema.ts with every specified index, plus 16 domain unions/bounded shapes in convex/lib/validators.ts (ordered 11-member salesStage, bookings.proposal discriminated union, bounded sourceRefs/contact). drafts gains optional bookingId/bookingVersion \u2014 \u00a74.3 places them on booking-invitation drafts and P19 adds behavior only, so this was their only declaration site.",
+        "GATE MET: pushed to dev:flexible-grasshopper-949 on 2026-09-15 \u2014 13 new indexes accepted server-side including the search index prospects.search_company_name (searchField companyName; filters workspaceId, salesStage, campaignId, ownerIdentityKey). lint silent, convex+app tsc clean, vite build passes.",
+        "Retype decisions recorded per site. conversations.prospectId is now v.id(\"prospects\") so P11's associateProspect has a typed target. Everything chained to the dev fixture's synthetic dev-prospect-* literals (missionProspects.prospectId, activityEvents.prospectId, vBranchCompletion.prospectId) stays a validated string until P21 replaces the fixture; artifacts.prospectId stays a string because it arrives as the worker's x-prospect-id header.",
+        "Three adversarial review lenses ran; findings applied. Substantive: an uncalled assertExpectedVersion export colliding by name with the differently-signed convex/missions.ts local was dropped; assertBookingTimes renamed to assertRequiredBookingTimes with its contract restated so P19's cancel path cannot read it as \"compute the times to store\" and erase an agreed meeting; ProspectSource derived from SourceConfig instead of restating the literals; assertConfirmationSourceEnabled added to back the rule that provider confirmation is unavailable.",
+        "HONEST DEFERRALS: normalizeCanonicalDomain is a syntax/host floor, NOT public-suffix aware \u2014 P09 must deepen it in place before Apollo dedupe or acme.com and shop.acme.com become two prospects in one campaign. The evidence table's required retrievedAt/excerpt/confidence have no producer in vResearchResult (\u00a74.5 worker envelope) \u2014 P21 must close that or state what it synthesizes. Eleven bound constants still have no enforcing helper; P19 adds them with their first call sites."
+      ]
     },
     {
       "id": "P21",
@@ -532,7 +538,10 @@
         "src/components/bookings/",
         "src/hexclave/client.ts"
       ],
-      "evidence": []
+      "evidence": [
+        "2026-09-15 PRE-BUILT, DO NOT REBUILD: P13 \u00a73's decision queue already ships at 4d2289a \u2014 /decisions and /decisions/$decisionId (src/routes/_dashboard/_workspace/decisions*, src/components/decisions/*), all four vDecisionKind panels, exact-draft rendering, approvals.approve/requestChanges/reject wiring, the delivery-uncertain reconcile-before-replace flow, and the Decisions sidebar item. Pulled forward because it needed no new Convex code. P13 owns the REMAINING \u00a73 work: inbox list/thread UI and the CRM/booking surfaces, plus reusing these decision components rather than writing a second implementation.",
+        "Known gaps left for P13 in that surface: no Edit draft (drafts.revise with expectedRevision and the withdraw-approval affordance); no list-beside-detail split at \u22651280px; no j/k queue navigation; no sidebar count badge (the nav number and the home attention block must come from one decisions.listOpen call or they will disagree); no kind filter or resolved-history view until an index supports them."
+      ]
     },
     {
       "id": "P14",
