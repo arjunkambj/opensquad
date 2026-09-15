@@ -23,6 +23,22 @@ export const ACTIVITY_RANGES = ["today", "7d", "30d", "custom"] as const
 export type ActivityRange = (typeof ACTIVITY_RANGES)[number]
 
 /**
+ * Mission detail's tabs, declared here rather than on the detail route so the
+ * whole `/overview` subtree has one search declaration. Absent means
+ * `summary`; a stale or misspelled value falls back to it rather than throwing,
+ * so an old bookmark still opens the mission.
+ */
+export const MISSION_TABS = [
+  "summary",
+  "prospects",
+  "decisions",
+  "receipts",
+  "comments",
+] as const
+
+export type MissionTab = (typeof MISSION_TABS)[number]
+
+/**
  * Every member is optional, and a value equal to its default is written as
  * `undefined` so it never reaches the URL. Two consequences, both wanted: the
  * clean state of the board is the bare `/overview`, and a `<Link to="/overview">`
@@ -36,13 +52,17 @@ export type OverviewSearch = {
   column?: BoardColumn
   archived?: boolean
   range?: ActivityRange
+  tab?: MissionTab
   cursor?: string
 }
 
 export const OVERVIEW_DEFAULTS = {
   archived: false,
   range: "today",
-} as const satisfies Required<Pick<OverviewSearch, "archived" | "range">>
+  tab: "summary",
+} as const satisfies Required<
+  Pick<OverviewSearch, "archived" | "range" | "tab">
+>
 
 /** The search with defaults applied — total, for rendering. */
 export function overviewDefaults(search: OverviewSearch) {
@@ -50,6 +70,7 @@ export function overviewDefaults(search: OverviewSearch) {
     ...search,
     archived: search.archived ?? OVERVIEW_DEFAULTS.archived,
     range: search.range ?? OVERVIEW_DEFAULTS.range,
+    tab: search.tab ?? OVERVIEW_DEFAULTS.tab,
   }
 }
 
@@ -75,6 +96,7 @@ export const Route = createFileRoute("/_dashboard/_workspace/overview")({
     column: optionalOneOf(BOARD_COLUMNS, search.column),
     archived: flag(search.archived) ? true : undefined,
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
+    tab: optionalOneOf(MISSION_TABS, search.tab),
     cursor: optionalCursor(search.cursor),
   }),
   component: OverviewLayout,

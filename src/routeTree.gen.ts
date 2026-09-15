@@ -25,6 +25,7 @@ import { Route as DashboardWorkspaceOverviewRouteImport } from './routes/_dashbo
 import { Route as DashboardWorkspaceDecisionsIndexRouteImport } from './routes/_dashboard/_workspace/decisions/index'
 import { Route as DashboardWorkspaceDecisionsDecisionIdRouteImport } from './routes/_dashboard/_workspace/decisions/$decisionId'
 import { Route as DashboardWorkspaceOverviewIndexRouteImport } from './routes/_dashboard/_workspace/overview/index'
+import { Route as DashboardWorkspaceOverviewMissionsMissionIdRouteImport } from './routes/_dashboard/_workspace/overview/missions.$missionId'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/_dashboard',
@@ -109,6 +110,12 @@ const DashboardWorkspaceOverviewIndexRoute =
     path: '/',
     getParentRoute: () => DashboardWorkspaceOverviewRoute,
   } as any)
+const DashboardWorkspaceOverviewMissionsMissionIdRoute =
+  DashboardWorkspaceOverviewMissionsMissionIdRouteImport.update({
+    id: '/missions/$missionId',
+    path: '/missions/$missionId',
+    getParentRoute: () => DashboardWorkspaceOverviewRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
   '/decisions/': typeof DashboardWorkspaceDecisionsIndexRoute
   '/overview/': typeof DashboardWorkspaceOverviewIndexRoute
+  '/overview/missions/$missionId': typeof DashboardWorkspaceOverviewMissionsMissionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
@@ -137,6 +145,7 @@ export interface FileRoutesByTo {
   '/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
   '/decisions': typeof DashboardWorkspaceDecisionsIndexRoute
   '/overview': typeof DashboardWorkspaceOverviewIndexRoute
+  '/overview/missions/$missionId': typeof DashboardWorkspaceOverviewMissionsMissionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -156,6 +165,7 @@ export interface FileRoutesById {
   '/_dashboard/_workspace/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
   '/_dashboard/_workspace/decisions/': typeof DashboardWorkspaceDecisionsIndexRoute
   '/_dashboard/_workspace/overview/': typeof DashboardWorkspaceOverviewIndexRoute
+  '/_dashboard/_workspace/overview/missions/$missionId': typeof DashboardWorkspaceOverviewMissionsMissionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/decisions/$decisionId'
     | '/decisions/'
     | '/overview/'
+    | '/overview/missions/$missionId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/decisions/$decisionId'
     | '/decisions'
     | '/overview'
+    | '/overview/missions/$missionId'
   id:
     | '__root__'
     | '/_dashboard'
@@ -204,6 +216,7 @@ export interface FileRouteTypes {
     | '/_dashboard/_workspace/decisions/$decisionId'
     | '/_dashboard/_workspace/decisions/'
     | '/_dashboard/_workspace/overview/'
+    | '/_dashboard/_workspace/overview/missions/$missionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -327,6 +340,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardWorkspaceOverviewIndexRouteImport
       parentRoute: typeof DashboardWorkspaceOverviewRoute
     }
+    '/_dashboard/_workspace/overview/missions/$missionId': {
+      id: '/_dashboard/_workspace/overview/missions/$missionId'
+      path: '/missions/$missionId'
+      fullPath: '/overview/missions/$missionId'
+      preLoaderRoute: typeof DashboardWorkspaceOverviewMissionsMissionIdRouteImport
+      parentRoute: typeof DashboardWorkspaceOverviewRoute
+    }
   }
 }
 
@@ -350,11 +370,14 @@ const DashboardWorkspaceDecisionsRouteWithChildren =
 
 interface DashboardWorkspaceOverviewRouteChildren {
   DashboardWorkspaceOverviewIndexRoute: typeof DashboardWorkspaceOverviewIndexRoute
+  DashboardWorkspaceOverviewMissionsMissionIdRoute: typeof DashboardWorkspaceOverviewMissionsMissionIdRoute
 }
 
 const DashboardWorkspaceOverviewRouteChildren: DashboardWorkspaceOverviewRouteChildren =
   {
     DashboardWorkspaceOverviewIndexRoute: DashboardWorkspaceOverviewIndexRoute,
+    DashboardWorkspaceOverviewMissionsMissionIdRoute:
+      DashboardWorkspaceOverviewMissionsMissionIdRoute,
   }
 
 const DashboardWorkspaceOverviewRouteWithChildren =
