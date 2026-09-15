@@ -62,4 +62,17 @@ crons.interval(
   {},
 );
 
+// Artifact row→blob reconcile. `sweepOrphanArtifacts` has existed since the
+// bridge landed and was on no schedule, because nothing uploaded an artifact:
+// `BridgeClient.uploadArtifact` had zero callers. The sales pipeline
+// dispatches research turns whose contract carries `artifactIds`, so a
+// research brief can now be uploaded and its row and blob can now drift —
+// which is what makes this sweep worth running rather than merely declared.
+crons.interval(
+  "orphan-artifact-sweep",
+  { minutes: 30 },
+  internal.workerBridge.sweepOrphanArtifacts,
+  {},
+);
+
 export default crons;
