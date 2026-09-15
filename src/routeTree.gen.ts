@@ -24,6 +24,7 @@ import { Route as DashboardWorkspaceEmployeesRouteImport } from './routes/_dashb
 import { Route as DashboardWorkspaceOverviewRouteImport } from './routes/_dashboard/_workspace/overview'
 import { Route as DashboardWorkspaceDecisionsIndexRouteImport } from './routes/_dashboard/_workspace/decisions/index'
 import { Route as DashboardWorkspaceDecisionsDecisionIdRouteImport } from './routes/_dashboard/_workspace/decisions/$decisionId'
+import { Route as DashboardWorkspaceOverviewIndexRouteImport } from './routes/_dashboard/_workspace/overview/index'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/_dashboard',
@@ -102,6 +103,12 @@ const DashboardWorkspaceDecisionsDecisionIdRoute =
     path: '/$decisionId',
     getParentRoute: () => DashboardWorkspaceDecisionsRoute,
   } as any)
+const DashboardWorkspaceOverviewIndexRoute =
+  DashboardWorkspaceOverviewIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DashboardWorkspaceOverviewRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
@@ -113,9 +120,10 @@ export interface FileRoutesByFullPath {
   '/handler/$': typeof HandlerSplatRoute
   '/decisions': typeof DashboardWorkspaceDecisionsRouteWithChildren
   '/employees': typeof DashboardWorkspaceEmployeesRoute
-  '/overview': typeof DashboardWorkspaceOverviewRoute
+  '/overview': typeof DashboardWorkspaceOverviewRouteWithChildren
   '/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
   '/decisions/': typeof DashboardWorkspaceDecisionsIndexRoute
+  '/overview/': typeof DashboardWorkspaceOverviewIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
@@ -126,9 +134,9 @@ export interface FileRoutesByTo {
   '/squads': typeof DashboardSquadsRoute
   '/handler/$': typeof HandlerSplatRoute
   '/employees': typeof DashboardWorkspaceEmployeesRoute
-  '/overview': typeof DashboardWorkspaceOverviewRoute
   '/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
   '/decisions': typeof DashboardWorkspaceDecisionsIndexRoute
+  '/overview': typeof DashboardWorkspaceOverviewIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -144,9 +152,10 @@ export interface FileRoutesById {
   '/_marketing/': typeof MarketingIndexRoute
   '/_dashboard/_workspace/decisions': typeof DashboardWorkspaceDecisionsRouteWithChildren
   '/_dashboard/_workspace/employees': typeof DashboardWorkspaceEmployeesRoute
-  '/_dashboard/_workspace/overview': typeof DashboardWorkspaceOverviewRoute
+  '/_dashboard/_workspace/overview': typeof DashboardWorkspaceOverviewRouteWithChildren
   '/_dashboard/_workspace/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
   '/_dashboard/_workspace/decisions/': typeof DashboardWorkspaceDecisionsIndexRoute
+  '/_dashboard/_workspace/overview/': typeof DashboardWorkspaceOverviewIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
     | '/overview'
     | '/decisions/$decisionId'
     | '/decisions/'
+    | '/overview/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -173,9 +183,9 @@ export interface FileRouteTypes {
     | '/squads'
     | '/handler/$'
     | '/employees'
-    | '/overview'
     | '/decisions/$decisionId'
     | '/decisions'
+    | '/overview'
   id:
     | '__root__'
     | '/_dashboard'
@@ -193,6 +203,7 @@ export interface FileRouteTypes {
     | '/_dashboard/_workspace/overview'
     | '/_dashboard/_workspace/decisions/$decisionId'
     | '/_dashboard/_workspace/decisions/'
+    | '/_dashboard/_workspace/overview/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -309,6 +320,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardWorkspaceDecisionsDecisionIdRouteImport
       parentRoute: typeof DashboardWorkspaceDecisionsRoute
     }
+    '/_dashboard/_workspace/overview/': {
+      id: '/_dashboard/_workspace/overview/'
+      path: '/'
+      fullPath: '/overview/'
+      preLoaderRoute: typeof DashboardWorkspaceOverviewIndexRouteImport
+      parentRoute: typeof DashboardWorkspaceOverviewRoute
+    }
   }
 }
 
@@ -330,17 +348,31 @@ const DashboardWorkspaceDecisionsRouteWithChildren =
     DashboardWorkspaceDecisionsRouteChildren,
   )
 
+interface DashboardWorkspaceOverviewRouteChildren {
+  DashboardWorkspaceOverviewIndexRoute: typeof DashboardWorkspaceOverviewIndexRoute
+}
+
+const DashboardWorkspaceOverviewRouteChildren: DashboardWorkspaceOverviewRouteChildren =
+  {
+    DashboardWorkspaceOverviewIndexRoute: DashboardWorkspaceOverviewIndexRoute,
+  }
+
+const DashboardWorkspaceOverviewRouteWithChildren =
+  DashboardWorkspaceOverviewRoute._addFileChildren(
+    DashboardWorkspaceOverviewRouteChildren,
+  )
+
 interface DashboardWorkspaceRouteChildren {
   DashboardWorkspaceDecisionsRoute: typeof DashboardWorkspaceDecisionsRouteWithChildren
   DashboardWorkspaceEmployeesRoute: typeof DashboardWorkspaceEmployeesRoute
-  DashboardWorkspaceOverviewRoute: typeof DashboardWorkspaceOverviewRoute
+  DashboardWorkspaceOverviewRoute: typeof DashboardWorkspaceOverviewRouteWithChildren
 }
 
 const DashboardWorkspaceRouteChildren: DashboardWorkspaceRouteChildren = {
   DashboardWorkspaceDecisionsRoute:
     DashboardWorkspaceDecisionsRouteWithChildren,
   DashboardWorkspaceEmployeesRoute: DashboardWorkspaceEmployeesRoute,
-  DashboardWorkspaceOverviewRoute: DashboardWorkspaceOverviewRoute,
+  DashboardWorkspaceOverviewRoute: DashboardWorkspaceOverviewRouteWithChildren,
 }
 
 const DashboardWorkspaceRouteWithChildren =

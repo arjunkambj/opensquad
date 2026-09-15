@@ -1,6 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { Outlet, createFileRoute } from "@tanstack/react-router"
 import { SetupBanner } from "@/components/onboarding/SetupBanner"
-import { OverviewDashboard } from "@/components/overview/OverviewDashboard"
 import {
   flag,
   optionalCursor,
@@ -63,6 +62,12 @@ export function overviewDefaults(search: OverviewSearch) {
  *
  * `column` is optional because the wide board shows all four at once; it names
  * the single visible column at phone width, where four columns cannot fit.
+ *
+ * This file is the LAYOUT: `/overview` itself renders through
+ * `overview/index.tsx`, and `overview/missions.$missionId.tsx` renders under
+ * the same declaration. A child reads the search with
+ * `useSearch({ from: "/_dashboard/_workspace/overview" })` — the id of whoever
+ * declared `validateSearch`, never the child's own id.
  */
 export const Route = createFileRoute("/_dashboard/_workspace/overview")({
   validateSearch: (search): OverviewSearch => ({
@@ -72,14 +77,20 @@ export const Route = createFileRoute("/_dashboard/_workspace/overview")({
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
     cursor: optionalCursor(search.cursor),
   }),
-  component: OverviewPage,
+  component: OverviewLayout,
 })
 
-function OverviewPage() {
+/**
+ * The setup banner belongs to the layout rather than the board, so it stays on
+ * screen while a mission detail is open: an unfinished onboarding is exactly
+ * the reason a mission is stuck, and hiding the banner one click deep would
+ * hide the fix from the person looking for it.
+ */
+function OverviewLayout() {
   return (
     <>
       <SetupBanner />
-      <OverviewDashboard />
+      <Outlet />
     </>
   )
 }
