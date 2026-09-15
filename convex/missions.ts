@@ -280,12 +280,14 @@ export const create = mutation({
       ...(requestId !== undefined ? { requestId } : {}),
     });
 
-    // P06 machinery gate: the development-fixture pipeline proves the
-    // durable contract (stages → branches → decision → wait → continuation).
-    // P09 replaces the stage body with real discovery/research/draft steps.
+    // The real sales pipeline: confirmed campaign → per-prospect branches →
+    // backend page retrieval → Researcher evidence → fit decision → Outreach
+    // draft proposal → human approval. It replaces the P06 development
+    // fixture, which stays in the tree only for the bridge seeders that still
+    // need a durable workflow to bind a continuation event to.
     const workflowId = await start(
       ctx,
-      internal.workflows.devFixture.devFixtureMissionWorkflow,
+      internal.workflows.sales.salesMissionWorkflow,
       { missionId },
       {
         startAsync: true,

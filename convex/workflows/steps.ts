@@ -337,7 +337,7 @@ export const registerBranches = internalMutation({
       if (branch.childWorkflowId === undefined) {
         const childWorkflowId = await start(
           ctx,
-          internal.workflows.devFixture.devFixtureProspectWorkflow,
+          internal.workflows.sales.salesProspectWorkflow,
           { branchId: branch._id, missionId: mission._id },
           {
             startAsync: true,
