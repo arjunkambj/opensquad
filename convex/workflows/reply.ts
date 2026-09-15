@@ -49,19 +49,28 @@
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import type { EventId } from "@convex-dev/workflow";
+import type { Infer } from "convex/values";
 import { vMissionOutcome, vWorkerRequestCompletion } from "../lib/validators";
 import type { MissionOutcome } from "../lib/validators";
+import { vDecisionContinuation } from "../decisions";
 import { workflow } from "./manager";
 import { resumeEvent } from "./events";
 
 /**
- * How many times the classify stage may park and retry while the workspace
+ * How many times a dispatching stage may park and retry while the workspace
  * has no dispatchable runtime connection. A reply that arrives while the
  * runtime is reconnecting is worth waiting a few minutes for; waiting
  * forever would pin a workflow on a box nobody is going to start.
  */
 const MAX_RUNTIME_WAITS = 10;
 const RUNTIME_WAIT_MS = 60_000;
+
+/**
+ * How many drafts one reply mission may propose. A reviewer who asks for
+ * changes gets one rewrite; a second refusal is a sign the thread needs a
+ * person, not another model call.
+ */
+const MAX_DRAFT_ATTEMPTS = 2;
 
 export const replyMissionWorkflow = workflow
   .define({
@@ -126,7 +135,7 @@ export const replyMissionWorkflow = workflow
       { name: "classify:0" },
     );
     let runtimeWaits = 0;
-    let attempt = 0;
+    let reclassify = 0;
     while (classify.action === "wait" || classify.action === "unavailable") {
       if (classify.action === "wait") {
         // Paused mid-pipeline: park on the resume event, never throw.
@@ -142,11 +151,11 @@ export const replyMissionWorkflow = workflow
         runtimeWaits += 1;
         await step.sleep(RUNTIME_WAIT_MS, { name: `runtimeWait:${runtimeWaits}` });
       }
-      attempt += 1;
+      reclassify += 1;
       classify = await step.runMutation(
         internal.inbox.classifyReplyStage,
         { ...stageArgs, targetWorkflowId: step.workflowId },
-        { name: `classify:${attempt}` },
+        { name: `classify:${reclassify}` },
       );
     }
     if (classify.action === "abandon") {
@@ -183,9 +192,181 @@ export const replyMissionWorkflow = workflow
 
     // 5. Dispositions that must not be answered stop here — no draft, no
     //    send, no second model call.
-    return await finish(
-      classified.outcome,
-      classified.summary,
-      "finish:disposition",
-    );
+    if (classified.next === "stop") {
+      return await finish(
+        classified.outcome,
+        classified.summary,
+        "finish:disposition",
+      );
+    }
+
+    // 6. Propose a response draft. Each attempt re-runs the gate, dispatches
+    //    one bounded drafting turn, installs the result as an immutable
+    //    revision through `drafts.createRevision` and parks on the required
+    //    `draft_approval` ask that it opens.
+    let attempt = 1;
+    let guidance: string | undefined;
+    for (;;) {
+      let redispatch = 0;
+      let proposed = await step.runMutation(
+        internal.inbox.proposeReplyDraftStage,
+        {
+          ...stageArgs,
+          attempt,
+          targetWorkflowId: step.workflowId,
+          ...(guidance === undefined ? {} : { guidance }),
+        },
+        { name: `draft:${attempt}:${redispatch}` },
+      );
+      while (proposed.action === "wait" || proposed.action === "unavailable") {
+        if (proposed.action === "wait") {
+          await step.awaitEvent(resumeEvent);
+        } else {
+          if (runtimeWaits >= MAX_RUNTIME_WAITS) {
+            return await finish(
+              "contact_needed",
+              "No runtime connection was available to draft a response; the reply is waiting for a human.",
+              "finish:draftRuntimeUnavailable",
+            );
+          }
+          runtimeWaits += 1;
+          await step.sleep(RUNTIME_WAIT_MS, {
+            name: `draftRuntimeWait:${runtimeWaits}`,
+          });
+        }
+        redispatch += 1;
+        proposed = await step.runMutation(
+          internal.inbox.proposeReplyDraftStage,
+          {
+            ...stageArgs,
+            attempt,
+            targetWorkflowId: step.workflowId,
+            ...(guidance === undefined ? {} : { guidance }),
+          },
+          { name: `draft:${attempt}:${redispatch}` },
+        );
+      }
+      if (proposed.action === "abandon") {
+        return { outcome: "cancelled" as const };
+      }
+      if (proposed.action === "halt") {
+        return await finish(
+          "contact_needed",
+          `No response was drafted (${proposed.reason}); the reply is waiting for a human.`,
+          `finish:draftHalted:${attempt}`,
+        );
+      }
+
+      await step.awaitEvent({
+        id: proposed.continuationEventId as EventId,
+        validator: vWorkerRequestCompletion,
+      });
+
+      const installed = await step.runMutation(
+        internal.inbox.installReplyDraft,
+        {
+          ...stageArgs,
+          attempt,
+          workerRequestId: proposed.workerRequestId,
+          targetWorkflowId: step.workflowId,
+        },
+        { name: `install:${attempt}` },
+      );
+      if (installed.action === "halt") {
+        return await finish(
+          "contact_needed",
+          `The proposed response was not installed (${installed.reason}); the reply is waiting for a human.`,
+          `finish:installHalted:${attempt}`,
+        );
+      }
+
+      // 7. Park on the human. The worker request is already terminal, so the
+      //    workspace execution slot the worker held is released before this
+      //    wait begins; the mission is out of `waiting_for_runtime` and reads
+      //    Needs you instead. Nothing here can send — only
+      //    `approvals.approve` can, and only a human can call it.
+      await step.runMutation(
+        internal.workflows.steps.markAwaitingUser,
+        { missionId: args.missionId },
+        { name: `markAwaitingUser:${attempt}` },
+      );
+      let resolution: Infer<typeof vDecisionContinuation>;
+      try {
+        resolution = await step.awaitEvent({
+          id: installed.continuationEventId as EventId,
+          validator: vDecisionContinuation,
+        });
+      } catch {
+        // The ask was superseded or cancelled underneath us — a newer inbound
+        // message, a revision, or a mission termination. Finish honestly
+        // rather than returning `cancelled`, which `onMissionWorkflowComplete`
+        // would reconcile into a misleading `failed`.
+        return await finish(
+          "skipped",
+          "The approval ask was retired before it was answered; nothing was sent.",
+          `finish:askRetired:${attempt}`,
+        );
+      }
+
+      // 8. The delivered payload is a hint; the recorded decision row is
+      //    re-validated (resolved, at exactly this version, same workflow
+      //    generation) before anything acts on it.
+      let check = await step.runMutation(
+        internal.workflows.steps.checkContinuation,
+        {
+          missionId: args.missionId,
+          decisionId: installed.decisionId,
+          decisionVersion: resolution.version,
+        },
+        { name: `checkContinuation:${attempt}` },
+      );
+      while (check.action === "wait") {
+        await step.awaitEvent(resumeEvent);
+        check = await step.runMutation(
+          internal.workflows.steps.checkContinuation,
+          {
+            missionId: args.missionId,
+            decisionId: installed.decisionId,
+            decisionVersion: resolution.version,
+          },
+          { name: `checkContinuation:${attempt}` },
+        );
+      }
+      if (check.action === "abandon") {
+        return { outcome: "cancelled" as const };
+      }
+
+      // `changes_requested` and `rejected` BOTH carry `approved: false`, so
+      // the branch reads `fields.draftResolution` and never `answer.approved`.
+      const draftResolution = resolution.answer.fields?.draftResolution;
+      if (draftResolution === "approved") {
+        // `approvals.approve` already scheduled the send boundary, which
+        // re-runs every gate fresh. This workflow deliberately does not also
+        // journal a send: a second dispatcher on one attempt row produces only
+        // `in_flight`/`already_resolved` noise, and a parked attempt outside
+        // the send window is re-driven by the existing sweep.
+        return await finish(
+          "completed",
+          `The reviewer approved response revision ${installed.revision}; the send boundary owns the dispatch.`,
+          `finish:approved:${attempt}`,
+        );
+      }
+      if (draftResolution === "changes_requested") {
+        if (attempt < MAX_DRAFT_ATTEMPTS) {
+          guidance = resolution.answer.body;
+          attempt += 1;
+          continue;
+        }
+        return await finish(
+          "contact_needed",
+          "The reviewer asked for changes again; the reply is waiting for a human to write it.",
+          "finish:changesExhausted",
+        );
+      }
+      return await finish(
+        "skipped",
+        "The reviewer rejected the proposed response; nothing was sent.",
+        `finish:rejected:${attempt}`,
+      );
+    }
   });
