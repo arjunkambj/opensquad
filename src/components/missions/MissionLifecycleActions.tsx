@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { DecisionActionDialog } from "@/components/decisions/DecisionActionDialog"
+import { MISSION_STATE_LABEL } from "@/components/missions/mission-presentation"
 import { PermissionNote } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -210,8 +211,9 @@ export function MissionLifecycleActions({
           disabled one, so the reason is where the operator is looking. */}
       {archived || canArchive ? null : (
         <p className="text-sm text-muted-foreground">
-          This mission is {mission.state.replace(/_/g, " ")}. Active or waiting
-          work cannot be archived — cancel or complete it first.
+          This mission is {MISSION_STATE_LABEL[mission.state].toLowerCase()}.
+          Active or waiting work cannot be archived — cancel or complete it
+          first.
         </p>
       )}
 
