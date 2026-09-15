@@ -353,8 +353,8 @@
       "id": "P21",
       "title": "Sales pipeline execution and source-backed research",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P21",
       "dependsOn": [
         "P07",
         "P08",
@@ -374,7 +374,13 @@
         "worker/src/",
         "plan/evidence/P21.md"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P21.md: the capability transport - derived server-side from the run's employee row, carried on the worker request envelope, validated fail-closed element by element in parseClaimedWork and re-checked at the lease - plus the filtered tool router, a providerOperations dedupe store, bounded Firecrawl with a page allowance reserved before the paid call, convex/prospects.ts, convex/evidence.ts, the three role templates, and convex/workflows/sales.ts replacing the dev fixture. 15 planned commits plus review fixes.",
+        "EXERCISED LIVE against dev:flexible-grasshopper-949 with real Firecrawl calls and backend receipts: the per-prospect page cap and the allowance refusal before the provider is reached - G2 acceptance step 3, which was previously impossible for any research or model operation since only sends had a reservation; providerOperations replay costing nothing on a repeat; evidence admissibility, where only a page THIS run retrieved can become an evidence row; canonical-domain dedupe with provenance merge; and the independent per-prospect branches driven over the real /worker/* bridge with real leases.",
+        "NOT DONE. This deployment has no connected Codex runtime and no managed Codex login, so NO MODEL EXECUTES A REQUEST. Every worker request was claimed over the real bridge by a driver script standing in for the daemon, with the model's own words supplied explicitly and labelled as such wherever they appear. V12 step 1's full Scout to Researcher to Outreach chain therefore remains deferred, as does any claim that the role templates make a real model behave well. What is proven is the complete backend path on either side of the model.",
+        "IN SCOPE FOR P09 AND DEFERRED - P04 is blocked on the owner-deferred Apollo OAuth grant: every discover and enrich step. No tools/list has ever been observed against the Apollo MCP server, so G2 item 2's permitted Apollo tool names cannot be pinned, and writing guessed names into an allowlist would be a fabricated gate. The seams ship and are exercised: prospects.importCampaignProspects accepts a candidate array from any confirmed source, and prospects.applyContactEnrichment already refuses everything the gate requires it to refuse.",
+        "REPORTED NOT TAKEN, outside the declared write surface: the vBranchCompletion.prospectId and ActivityInput.prospectId retype, with the four-step sequencing a later card must follow recorded in the evidence file - vBranchCompletion is a durable workflow event validator, so changing it while a parent is parked on awaitEvent invalidates that journal. artifacts.prospectId stays a string permanently because it crosses the worker trust boundary as the x-prospect-id upload header."
+      ]
     },
     {
       "id": "P09",
@@ -464,27 +470,19 @@
         "convex/webhooks.ts",
         "convex/workflows/reply.ts"
       ],
-      "evidence": [],
-      "branch": "main",
-      "baseRef": "1f1c598",
-      "reservedFiles": [
-        "convex/schema.ts",
-        "convex/lib/validators.ts",
-        "convex/http.ts",
-        "convex/integrations/agentmail.ts",
-        "convex/drafts.ts",
-        "convex/conversations.ts",
-        "convex/inbox.ts",
-        "convex/workflows/reply.ts",
-        "plan/architecture.md",
-        "plan/evidence/P11.md"
+      "evidence": [
+        "plan/evidence/P11.md: convex/conversations.ts, convex/inbox.ts, convex/quarantine.ts, convex/workflows/reply.ts, the conversationFields delta committed together with its plan/architecture.md section 4.3 update, and the workspace-scoped unassigned queue. All live on dev:flexible-grasshopper-949.",
+        "EXERCISED LIVE: signature rejection returns 401 for unsigned, forged-header and corrupt-digest; a duplicate event_id produces zero new rows and no second contextVersion bump; an out-of-order late inbound settles late_inbound_superseded leaving contextVersion, lastInboundMessageRef and lastInboundAt untouched; unknown-inbox quarantine holds via both callbacks and replays idempotently; the ordering rule observed end to end with contextVersion 2 to 3, the open ask moved to superseded and missions.requiredDecisionCount 2 to 1, with no model work before or after; all three opt-out verdicts including a benign reply quoting our own unsubscribe footer.",
+        "NOT DONE. The reply path - associateProspect, resume, the reply workflow end to end, and V16.3 - is still unrun. Its recorded blocker was FALSE: an audit demonstrated that `npx convex run --identity` authenticates against this deployment today, returning real output from conversations.attentionCounts on the same fixture workspace the evidence file used. An unattempted gate must not be recorded as a blocked one. The authenticated re-exercise was launched and stopped before completing; resume it there.",
+        "INTEGRATOR ERROR, recorded so it is not repeated: `npx convex codegen` does NOT push functions - its own help says so. P11 and P12 were both instructed to use it and forbidden from deploying, so neither track could exercise anything against a deployment until `npx convex dev --once` was run afterwards. That cost Wave A its gate evidence and is not a track failure.",
+        "BUG FOUND AND FIXED at b6d716d: onMessageReceived declared thread: v.any(), which accepts any value but NOT a missing field, while the component's own vEvent declares thread optional. A verified message.received carrying no thread object therefore threw ArgumentValidationError inside a Workpool that does not retry mutations, and the component's by_eventId ledger then refused the provider's resend - the mail was lost with no receipt to drain and no quarantine row to replay. Verified fixed against a signed no-thread event that previously produced zero rows and now produces a handled inbound receipt."
       ]
     },
     {
       "id": "P12",
       "title": "Mission Control board and detail",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P12",
       "dependsOn": [
         "P06",
@@ -500,12 +498,12 @@
         "src/components/activity/",
         "src/routes/_dashboard/"
       ],
-      "evidence": [],
-      "branch": "main",
-      "baseRef": "1f1c598",
-      "reservedFiles": [
-        "src/",
-        "plan/evidence/P12.md"
+      "evidence": [
+        "plan/evidence/P12.md: four-column board at /overview, mission detail nested at /overview/missions/$missionId, attention block, degrading runtime badge, lifecycle actions with expectedVersion and in-place CONFLICT. 26 feature-wise commits from 64cf7a6.",
+        "GATE MET: V08-V11 exercised in a real browser against dev:flexible-grasshopper-949, every on-screen number cross-checked against `npx convex data <table>`. V09 step 3 archive->restore round-trips - reachable only because missions.listBoard gained its optional visibility argument at 1f1c598; both index branches had pinned visibility to visible, so restore was unreachable from any UI.",
+        "Three adversarial review lenses produced 18 findings, all triaged and fixed feature-wise. Substantive: a Load-the-current-version action resurrected a destructive confirmation dialog; the activity window was computed in the browser timezone while every timestamp it filtered was workspace-local; the runtime badge was a polite live region re-announcing itself every minute.",
+        "An independent audit re-ran every checkable claim and found no overclaim. The file also volunteered a correction against its own earlier overstatement, downgrading the run-receipt usage rendering to NOT EXERCISED because all six runs report usage.",
+        "HONEST DEFERRALS: j/k queue navigation and the 1280px list-beside-detail split accepted as recorded limits, not built. Residual V-steps blocked by genuine workspace constraints - one live sales mission per campaign, and no runtimeConnection row exists. BUG REPORTED NOT FIXED: convex/missions.ts archive/restore use version-free activity dedupe keys and recordActivityEvent returns the existing row on a workspaceId+dedupeKey hit, so only the FIRST archive and the FIRST restore of any mission is ever recorded in the activity feed."
       ]
     },
     {

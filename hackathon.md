@@ -400,3 +400,53 @@ development probes covered the inbound and Firecrawl paths; Apollo, a live Codex
 turn for this pipeline and outbound sending remained deferred. Evidence:
 `plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P20.md`,
 `plan/evidence/P21.md`.
+
+### 2026-09-16 - 1a9cfc4
+
+Shipped the round's three cards: the Mission Control board (P12, accepted), the
+shared inbox and reply backend (P11), and the sales pipeline with its capability
+boundary (P21). Ran as two waves - P11 with P12, then P21 - because `tsc -b`
+covers only `src/` while `convex/` has its own tsconfig, so a frontend and a
+backend track can self-verify concurrently but two backend tracks cannot.
+
+**P12 (done).** Four-column board at `/overview` from real `missions.listBoard`,
+per-column bounded counts (`5` / `50+`, never a computed total), a mandatory
+per-card state chip because Backlog is three states wide and Needs-you is three,
+mission detail nested at `/overview/missions/$missionId` so closing it preserves
+the filters by construction, and a runtime badge that degrades instead of
+animating a runtime that is gone. V08-V11 exercised in a real browser with every
+on-screen number cross-checked against the deployment. Archive/restore round-trips
+only because `missions.listBoard` gained an optional `visibility` argument -
+both index branches had pinned it to `visible`, so `missions.restore` was
+unreachable from any UI and V09 step 3 could not pass.
+
+**P11 (in progress).** Signed AgentMail ingest with application-effect dedupe
+distinct from the component's `event_id` dedupe, a workspace-scoped unassigned
+queue under human takeover, unknown-inbox quarantine with idempotent replay,
+immediate explicit opt-out with ambiguous cases held rather than guessed, and a
+reply workflow that proposes a draft for its own exact approval. The ordering
+rule is observed live: an inbound reply bumps `contextVersion`, supersedes the
+open ask and decrements `requiredDecisionCount` before any model work exists.
+The reply path itself is still unrun and the card stays open.
+
+**P21 (in progress).** The capability set is now derived server-side from the
+run's employee row, carried on the request envelope, validated fail-closed on
+the worker and re-checked at the lease - the model is never asked what it may
+do. A filtered tool router replaces a blanket refusal, a `providerOperations`
+ledger makes a repeated invocation cost nothing, and a page allowance is
+reserved transactionally before Firecrawl is ever called, which finally makes
+G2's "exhaust a small allowance and show the next call refused before it reaches
+the provider" demonstrable. Evidence rows are admissible only from a page that
+run actually retrieved, with confidence defaulting to `unknown`.
+
+Verified: lint silent, `tsc -b`, convex and worker typechecks, `vite build`,
+`plan check`. Honest limits: no Codex runtime is connected to this deployment, so
+no model executes a request and V12's full role chain is deferred; Apollo
+discovery and enrichment remain P09's behind the owner-deferred OAuth grant.
+
+Fixed a data-loss defect found by the gate pass: `onMessageReceived` required a
+`thread` field the provider's own contract makes optional, so a reply arriving
+without one threw inside a Workpool that does not retry mutations, and the
+`by_eventId` ledger then refused the resend - the mail was lost with nothing to
+drain and nothing to replay.
+Evidence: `plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P21.md`.
