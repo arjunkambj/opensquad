@@ -40,6 +40,7 @@ import {
   domainError,
   invalid,
   MAX_LIST_LIMIT,
+  normalizeEmailAddress,
   PROVIDER_REF_MAX_LENGTH,
   THREAD_BODY_MAX_LENGTH,
   vCampaignStatus,
@@ -52,6 +53,7 @@ import {
 import type { ConversationNoteKind } from "./lib/validators";
 import { getConversationInWorkspace, vConversationDoc } from "./drafts";
 import { sendResultCode, vSendResultCode } from "./sending";
+import { matchSuppression } from "./suppressions";
 import { conversationNoteFields } from "./schema";
 
 /* ------------------------------------------------------------------ */
@@ -990,5 +992,300 @@ export const markRead = mutation({
       throw domainError("NOT_FOUND", "conversation not found");
     }
     return updated;
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Association and resume                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Why a resume refused to re-arm automation. These are returned, not thrown:
+ * the operator needs to see which gate is closed, and every one of them
+ * leaves takeover ON, so a refusal is always safe.
+ *
+ * Names line up with `SEND_BLOCK_CODES` wherever the same gate exists, so the
+ * inbox and the send preflight speak one vocabulary.
+ */
+export const RESUME_BLOCK_CODES = [
+  "association_missing",
+  "campaign_mismatch",
+  "campaign_inactive",
+  "workspace_paused",
+  "inbox_unassigned",
+  "inbox_mismatch",
+  "recipient_unknown",
+  "sender_unverified",
+  "sender_contact_mismatch",
+  "suppressed_email",
+  "suppressed_domain",
+] as const;
+
+export type ResumeBlockCode = (typeof RESUME_BLOCK_CODES)[number];
+
+/**
+ * Link an unassigned thread to a lead and campaign already in this workspace
+ * (§5 `associateProspect`).
+ *
+ * Association is HUMAN-ONLY: email content can never choose a lead, and this
+ * mutation takes ids from an authenticated editor only. It validates that the
+ * lead is in this workspace and that it belongs to the named campaign — a
+ * caller asserting which campaign it believes it is binding turns a
+ * disagreement into a CONFLICT instead of a silent bind.
+ *
+ * It DISPATCHES NOTHING. §8: "advance context, set state to open and keep
+ * takeover enabled." No mission, no workflow, no draft, no send — re-arming
+ * automation is the separate, checked act of `resume` (V16 step 3).
+ *
+ * `requestId` is accepted because §5 names it, and it is bounded; association
+ * needs no receipt store because it is once-per-conversation by construction
+ * (only an `unassigned` conversation can be associated, and the first
+ * association makes it `open`). A retry of the same association returns the
+ * doc unchanged.
+ */
+export const associateProspect = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+    prospectId: v.id("prospects"),
+    campaignId: v.id("campaigns"),
+    requestId: v.string(),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    boundedString(args.requestId, "requestId", { min: 1, max: 100 });
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    // Idempotent retry, checked before the version so a replayed request
+    // returns the doc rather than a spurious CONFLICT.
+    if (
+      conversation.prospectId === args.prospectId &&
+      conversation.campaignId === args.campaignId
+    ) {
+      return conversation;
+    }
+    if (conversation.state !== "unassigned") {
+      throw domainError(
+        "CONFLICT",
+        "association accepts only an unassigned conversation",
+      );
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+    const prospect = await ctx.db.get("prospects", args.prospectId);
+    // The same message for a missing lead and one in another workspace —
+    // never reveal another workspace's rows.
+    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "prospect not found");
+    }
+    const campaign = await ctx.db.get("campaigns", args.campaignId);
+    if (campaign === null || campaign.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "campaign not found");
+    }
+    if (prospect.campaignId !== args.campaignId) {
+      throw domainError(
+        "CONFLICT",
+        "prospect belongs to a different campaign",
+      );
+    }
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      {
+        prospectId: args.prospectId,
+        campaignId: args.campaignId,
+        state: "open",
+        // Deliberately kept: association proves who the thread is about, not
+        // that automation may speak for us again.
+        humanTakeover: true,
+        takeoverReason: "awaiting_resume",
+        takeoverBy: identityKey,
+        takeoverAt: Date.now(),
+      },
+      "the conversation was associated with a lead",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body: `Associated with ${prospect.companyName} on campaign "${campaign.title}". Takeover stays on until resume.`,
+    });
+    return updated;
+  },
+});
+
+/**
+ * Re-arm automation on a frozen thread — the ONLY path that clears
+ * `humanTakeover` (V16 step 3).
+ *
+ * Architecture §8 requires an explicit resume to validate the association,
+ * the verified sender/contact match, the campaign and the current policy.
+ * Each of those is re-run here, in order, and a failure RETURNS its block
+ * code with takeover left on rather than throwing — the operator needs to see
+ * which gate is closed, and a refusal is always the safe outcome.
+ *
+ * The verified sender/contact match is what stops a stranger's reply on an
+ * associated thread from re-arming outreach to that lead: the stored
+ * `lastInboundFrom` must match the address we actually mail. It can only
+ * refuse, never grant — the send recipient is always resolved by the
+ * application, never from the inbound payload.
+ */
+export const resume = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+    requestId: v.string(),
+  },
+  returns: v.object({
+    conversation: vConversationDoc,
+    dispatched: v.boolean(),
+    missionId: v.optional(v.id("missions")),
+    blockedBy: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const { identityKey, workspace } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    boundedString(args.requestId, "requestId", { min: 1, max: 100 });
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    // Idempotent retry: an already-resumed thread returns rather than
+    // CONFLICTing on a version that the first call advanced.
+    if (!conversation.humanTakeover) {
+      return { conversation, dispatched: false };
+    }
+    if (conversation.state !== "open") {
+      throw domainError(
+        "CONFLICT",
+        `conversation is ${conversation.state}; only an open conversation can resume`,
+      );
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+
+    const blocked = (
+      code: ResumeBlockCode,
+    ): {
+      conversation: Doc<"conversations">;
+      dispatched: boolean;
+      blockedBy: string;
+    } => ({ conversation, dispatched: false, blockedBy: code });
+
+    if (
+      conversation.prospectId === undefined ||
+      conversation.campaignId === undefined
+    ) {
+      return blocked("association_missing");
+    }
+    const prospect = await ctx.db.get("prospects", conversation.prospectId);
+    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+      return blocked("association_missing");
+    }
+    const campaign = await ctx.db.get("campaigns", conversation.campaignId);
+    if (campaign === null || campaign.workspaceId !== args.workspaceId) {
+      return blocked("association_missing");
+    }
+    if (prospect.campaignId !== conversation.campaignId) {
+      return blocked("campaign_mismatch");
+    }
+    if (campaign.status !== "active") {
+      return blocked("campaign_inactive");
+    }
+    if (workspace.automationState !== "active") {
+      return blocked("workspace_paused");
+    }
+    if (workspace.inboxRef === undefined) {
+      return blocked("inbox_unassigned");
+    }
+    if (workspace.inboxRef !== conversation.inboxRef) {
+      return blocked("inbox_mismatch");
+    }
+
+    // The address we would actually mail, resolved by the application: the
+    // lead's contact, else the address the last revision was authorized
+    // against. Never the inbound `from`.
+    const latestDraft = await ctx.db
+      .query("drafts")
+      .withIndex("by_conversationId_and_revision", (q) =>
+        q.eq("conversationId", conversation._id),
+      )
+      .order("desc")
+      .first();
+    let recipient: string | null = null;
+    if (prospect.contact?.email !== undefined) {
+      try {
+        recipient = normalizeEmailAddress(prospect.contact.email, "recipient");
+      } catch {
+        recipient = null;
+      }
+    }
+    if (recipient === null && latestDraft !== null) {
+      recipient = latestDraft.normalizedRecipient;
+    }
+    if (recipient === null) {
+      return blocked("recipient_unknown");
+    }
+
+    if (conversation.lastInboundMessageRef !== undefined) {
+      if (conversation.lastInboundFrom === undefined) {
+        // Mail arrived but its sender never parsed as a single address, so
+        // there is nothing to verify against. Refuse rather than guess.
+        return blocked("sender_unverified");
+      }
+      const matchesContact = conversation.lastInboundFrom === recipient;
+      const matchesLastDraft =
+        latestDraft !== null &&
+        conversation.lastInboundFrom === latestDraft.normalizedRecipient;
+      if (!matchesContact && !matchesLastDraft) {
+        return blocked("sender_contact_mismatch");
+      }
+    }
+
+    const suppression = await matchSuppression(
+      ctx,
+      args.workspaceId,
+      recipient,
+    );
+    if (suppression !== null) {
+      return blocked(
+        suppression.matchedBy === "domain"
+          ? "suppressed_domain"
+          : "suppressed_email",
+      );
+    }
+
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      {
+        humanTakeover: false,
+        takeoverReason: undefined,
+        takeoverBy: undefined,
+        takeoverAt: undefined,
+      },
+      "an operator resumed automation on the conversation",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body: "Automation resumed; association, campaign, sender and policy checks passed.",
+    });
+    // The reply-workflow dispatch this hands off to is owned by the inbound
+    // module, which keys it on `incoming:<inbox>:<message>` so that resume and
+    // ingest can never start two reply missions for one message. Until that
+    // module lands, resume re-arms automation and reports `dispatched: false`.
+    return { conversation: updated, dispatched: false };
   },
 });
