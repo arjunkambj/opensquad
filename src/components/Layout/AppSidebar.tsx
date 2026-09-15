@@ -125,9 +125,15 @@ export function AppSidebar() {
             arguments, so Convex serves one subscription and the two numbers
             cannot disagree. A zero is shown as the digit — "nothing is
             waiting" is a real state and worth seeing. */}
+        {/* The wording is in the DOM, not in an attribute. `SidebarMenuBadge`
+            is a bare `<div>` with no role, and ARIA does not name a generic
+            element: an `aria-label` there is silently discarded, so the count
+            reached a screen reader as a bare "3" — the one number the sidebar
+            exists to surface, stripped of what it counts. */}
         {item.href === "/decisions" && openDecisions !== undefined ? (
-          <SidebarMenuBadge aria-label={`${openDecisions} open decisions`}>
+          <SidebarMenuBadge>
             {openDecisions}
+            <span className="sr-only"> open decisions</span>
           </SidebarMenuBadge>
         ) : null}
       </SidebarMenuItem>
