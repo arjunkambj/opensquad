@@ -43,7 +43,15 @@ import type { MutationCtx } from "./_generated/server";
 /* Dispatch — called by workflow steps (and the dev seeder)              */
 /* ------------------------------------------------------------------ */
 
-const DISPATCHABLE_RUNTIME_STATES = new Set([
+/**
+ * Runtime-connection states a dispatch may be created against. Exported so a
+ * workflow step can ask the question BEFORE calling `dispatchWorkerRequest`:
+ * a `ctx.runMutation` throw inside a mutation shares the caller's
+ * transaction, so a step that wants to park and retry instead of failing must
+ * pre-check rather than catch. One definition, so the pre-check and the
+ * dispatch can never disagree about what "dispatchable" means.
+ */
+export const DISPATCHABLE_RUNTIME_STATES: ReadonlySet<string> = new Set([
   "provisioning",
   "connecting",
   "ready",

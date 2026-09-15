@@ -36,6 +36,7 @@ import type * as workerOperations from "../workerOperations.js";
 import type * as workflows_devFixture from "../workflows/devFixture.js";
 import type * as workflows_events from "../workflows/events.js";
 import type * as workflows_manager from "../workflows/manager.js";
+import type * as workflows_reply from "../workflows/reply.js";
 import type * as workflows_send from "../workflows/send.js";
 import type * as workflows_steps from "../workflows/steps.js";
 import type * as workspaces from "../workspaces.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   "workflows/devFixture": typeof workflows_devFixture;
   "workflows/events": typeof workflows_events;
   "workflows/manager": typeof workflows_manager;
+  "workflows/reply": typeof workflows_reply;
   "workflows/send": typeof workflows_send;
   "workflows/steps": typeof workflows_steps;
   workspaces: typeof workspaces;

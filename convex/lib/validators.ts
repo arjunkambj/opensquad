@@ -2610,6 +2610,94 @@ export function outboundApplicationKey(
   return `outbound:${messageRef}:${eventType}`;
 }
 
+/** `missions.create` bounds `requestId` to 100; reply missions match it. */
+export const MISSION_REQUEST_ID_MAX_LENGTH = 100;
+
+/**
+ * The reply mission's dedupe key for ONE inbound message — the second gate
+ * on the same stable identity the receipt's `applicationKey` already uses.
+ *
+ * The receipt key stops a second event ID for one message from advancing the
+ * conversation twice; this one stops a second *caller* — ingest and an
+ * operator's `conversations.resume` both reach the same message — from
+ * starting a second reply mission for it.
+ *
+ * `missions.requestId` is a 100-character key and a provider inbox plus a
+ * Message-ID can exceed that, so an over-long natural key degrades to a
+ * digest of the SAME string. Both forms are deterministic per message and
+ * their prefixes differ, so one message always maps to exactly one key.
+ */
+export async function replyMissionRequestId(
+  inboxRef: string,
+  messageRef: string,
+): Promise<string> {
+  const natural = inboundApplicationKey(inboxRef, messageRef);
+  if (natural.length <= MISSION_REQUEST_ID_MAX_LENGTH) {
+    return natural;
+  }
+  return `incoming#${(await sha256Hex(natural)).slice(0, 48)}`;
+}
+
+/* ----- structured-output schemas handed to the model -------------------- */
+
+/**
+ * The JSON Schema for a `classify_reply` turn, built from
+ * `CLASSIFY_REPLY_CLASSIFICATIONS` so the enum the model is given and the
+ * enum `parseWorkerResult` accepts can never disagree. This is the producer
+ * path integrator decision D2 relies on: widening the const widens the
+ * schema handed to Codex with no `worker/src` change, because the worker
+ * relays `input.outputSchema` verbatim.
+ *
+ * P21 owns the role template that makes the model *choose well*; this owns
+ * only what it is allowed to say.
+ */
+export function classifyReplyOutputSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "schemaVersion",
+      "operation",
+      "classification",
+      "confidence",
+      "rationale",
+    ],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      operation: { type: "string", enum: ["classify_reply"] },
+      classification: {
+        type: "string",
+        enum: [...CLASSIFY_REPLY_CLASSIFICATIONS],
+      },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      rationale: { type: "string", maxLength: 1000 },
+      suggestedNextStep: { type: "string", maxLength: 500 },
+    },
+  };
+}
+
+/**
+ * The JSON Schema for a `draft` turn. It deliberately has NO recipient
+ * field: the address a draft is written to is resolved by the application
+ * (`conversations.resolveOutboundRecipient`) and never by the model, so
+ * there is nothing for a hostile inbound body to redirect.
+ */
+export function draftOutputSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["schemaVersion", "operation", "subject", "body"],
+    properties: {
+      schemaVersion: { type: "integer", enum: [1] },
+      operation: { type: "string", enum: ["draft"] },
+      subject: { type: "string", maxLength: DRAFT_SUBJECT_MAX_LENGTH },
+      body: { type: "string", maxLength: DRAFT_BODY_MAX_LENGTH },
+      tone: { type: "string", maxLength: 100 },
+      callToAction: { type: "string", maxLength: 500 },
+    },
+  };
+}
+
 /* ----- send window / local-day helpers (IANA timezone) ------------------ */
 
 /**
