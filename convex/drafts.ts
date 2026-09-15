@@ -890,6 +890,16 @@ export const assignWorkspaceInbox = internalMutation({
       inboxRef,
       updatedAt: Date.now(),
     });
+    // The assignment is what the quarantine was waiting for. An AgentMail
+    // inbox is provisioned before this mutation commits, so a verified event
+    // can arrive in the window between the two and find no workspace to
+    // belong to; it is held rather than dropped, and this is the moment it
+    // becomes replayable. Scheduled, not inlined: the replay reads the mail
+    // component and re-drives ingest, and none of that may roll back an
+    // assignment an operator asked for.
+    await ctx.scheduler.runAfter(0, internal.quarantine.replayForInbox, {
+      inboxRef,
+    });
     return null;
   },
 });

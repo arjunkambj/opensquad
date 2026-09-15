@@ -35,6 +35,7 @@ import { components, internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
+import { recordQuarantinedEvent } from "../quarantine";
 import { recordReceipt } from "../sendAttempts";
 import {
   evaluateOptOutText,
@@ -43,6 +44,7 @@ import {
   parseInboundSender,
   PROVIDER_REF_MAX_LENGTH,
 } from "../lib/validators";
+import type { QuarantineReason } from "../lib/validators";
 
 /**
  * Shared component client handle. Credentials are read from deployment env
@@ -648,29 +650,36 @@ function providerRef(
  * a violated invariant — on the one code path that cannot survive a throw.
  *
  * Zero rows is an unknown inbox; more than one is an ambiguity no callback may
- * resolve by guessing. Both return `null`, logged with provider IDs only.
+ * resolve by guessing. Both return the reason rather than a bare `null`, so
+ * the caller can QUARANTINE the event instead of dropping it: the component
+ * has already marked the `event_id` ingested, so a provider retry returns
+ * before enqueueing anything, and an unrecorded event is lost for good.
+ * Logged with provider IDs only.
  */
 async function resolveWorkspaceByInbox(
   ctx: MutationCtx,
   inboxRef: string,
   context: string,
-): Promise<Doc<"workspaces"> | null> {
+): Promise<
+  | { workspace: Doc<"workspaces"> }
+  | { workspace: null; reason: QuarantineReason }
+> {
   const rows = await ctx.db
     .query("workspaces")
     .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
     .collect();
   if (rows.length === 0) {
     console.info(`${context}: event for unassigned inbox`, { inboxRef });
-    return null;
+    return { workspace: null, reason: "inbox_unassigned" };
   }
   if (rows.length > 1) {
     console.info(`${context}: inbox claimed by multiple workspaces`, {
       inboxRef,
       claims: rows.length,
     });
-    return null;
+    return { workspace: null, reason: "inbox_ambiguous" };
   }
-  return rows[0];
+  return { workspace: rows[0] };
 }
 
 /**
@@ -693,8 +702,10 @@ async function resolveWorkspaceByInbox(
  * `recordSendOutcome` folds it. Verified bounce/complaint facts suppress the
  * exact email via `applyReceiptToAttempt`.
  *
- * P11 remainder (not this task): conversation/context updates,
- * unsubscribe-driven handling, and the unassigned-inbox quarantine path.
+ * An event whose inbox no workspace claims — or which two claim — has no
+ * workspace to file a receipt under, so it is held in
+ * `quarantinedEmailEvents` and replayed by `internal.quarantine.replayForInbox`
+ * once the assignment exists (§G3 "Unknown inboxes are quarantined").
  */
 export const onEvent = internalMutation({
   args: { event: v.any() },
@@ -731,15 +742,31 @@ export const onEvent = internalMutation({
       });
       return null;
     }
-    const workspace = await resolveWorkspaceByInbox(
+    const payloadTimestamp = numberField(event, "timestamp");
+    const resolved = await resolveWorkspaceByInbox(
       ctx,
       inboxRef,
       "agentmail.onEvent",
     );
-    if (workspace === null) {
+    if (resolved.workspace === null) {
+      // Held, not dropped. `emailEventReceipts.workspaceId` is required and
+      // there is no workspace to put on one, so the event goes to the
+      // quarantine table until an assignment exists to replay it into.
+      await recordQuarantinedEvent(ctx, {
+        inboxRef,
+        providerEventId: eventId,
+        applicationKey,
+        providerMessageRef: messageRef,
+        ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
+        eventType,
+        reason: resolved.reason,
+        ...(payloadTimestamp !== undefined
+          ? { providerTimestamp: payloadTimestamp }
+          : {}),
+      });
       return null;
     }
-    const payloadTimestamp = numberField(event, "timestamp");
+    const workspace = resolved.workspace;
     await recordReceipt(ctx, {
       workspaceId: workspace._id,
       inboxRef,
@@ -807,14 +834,32 @@ export const onMessageReceived = internalMutation({
       );
       return null;
     }
-    const workspace = await resolveWorkspaceByInbox(
+    const resolved = await resolveWorkspaceByInbox(
       ctx,
       inboxRef,
       "agentmail.onMessageReceived",
     );
-    if (workspace === null) {
+    if (resolved.workspace === null) {
+      // Held, not dropped — the customer's reply is the thing this whole path
+      // exists for. Provider identifiers only: the message itself is already
+      // in the component's own `inboundMessages` row, which is what makes the
+      // replay possible without a second copy of it. The sender and the
+      // opt-out verdict are deliberately NOT projected here; they are
+      // recomputed at replay from that row by the same two functions used
+      // below, so a held message is judged by the rules in force when it is
+      // finally processed.
+      await recordQuarantinedEvent(ctx, {
+        inboxRef,
+        providerEventId: eventId,
+        applicationKey,
+        providerMessageRef: messageRef,
+        ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
+        eventType: "message.received",
+        reason: resolved.reason,
+      });
       return null;
     }
+    const workspace = resolved.workspace;
     // The only projection of the payload that survives this function. The
     // sender is stored as DATA — it never selects a workspace or conversation
     // and never becomes a send recipient — and it rides on the receipt rather

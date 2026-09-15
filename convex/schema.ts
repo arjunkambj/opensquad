@@ -29,6 +29,8 @@ import {
   vDecisionState,
   vEmailEventDirection,
   vEmailEventHandlingState,
+  vQuarantineReason,
+  vQuarantineState,
   vEmployeeTemplate,
   vEndpointOperation,
   vInputSnapshot,
@@ -1034,6 +1036,45 @@ export const emailEventReceiptFields = {
   error: v.optional(v.string()),
 };
 
+/**
+ * Quarantined provider events (§4.3, integrations.md §G3 "Unknown inboxes are
+ * quarantined").
+ *
+ * `emailEventReceipts.workspaceId` is required, and it should stay required —
+ * every consumer of that table reads it inside a workspace. But a verified
+ * event for an inbox no workspace claims has no workspace to be filed under,
+ * and dropping it loses the mail permanently: the component has already
+ * marked the `event_id` ingested, so the provider's retry returns before
+ * enqueueing any callback, and nothing else records that the message existed.
+ *
+ * So the unattributable ones land here instead — PROVIDER IDENTIFIERS ONLY,
+ * the same discipline as the receipt table and the log lines. The body stays
+ * where it already is, in the component's own `inboundMessages` row, which is
+ * what makes a replay possible once the assignment is corrected without this
+ * table becoming the second message store §4.3 forbids.
+ */
+export const quarantinedEmailEventFields = {
+  inboxRef: v.string(),
+  providerEventId: v.string(),
+  applicationKey: v.string(),
+  providerMessageRef: v.string(),
+  providerThreadRef: v.optional(v.string()),
+  eventType: v.string(),
+  reason: vQuarantineReason,
+  receivedAt: v.number(),
+  state: vQuarantineState,
+  /**
+   * The provider's own `timestamp`, carried so a replayed delivery fact keeps
+   * the stamp it arrived with. Never an ordering authority — the component's
+   * parse silently degrades to `Date.now()`.
+   */
+  providerTimestamp: v.optional(v.number()),
+  releasedAt: v.optional(v.number()),
+  releasedTo: v.optional(v.id("workspaces")),
+  /** A bounded reason written by the application; never provider text. */
+  note: v.optional(v.string()),
+};
+
 /* ------------------------------------------------------------------ */
 /* §4.4 usage (P10) — send bucket + reservations. The §4.4 runtime      */
 /* transport tables (runtimeConnections, workerRequests, …) belong to   */
@@ -1396,6 +1437,14 @@ export default defineSchema({
       "handlingState",
       "receivedAt",
     ]),
+
+  quarantinedEmailEvents: defineTable(quarantinedEmailEventFields)
+    // One row per provider event, enforced transactionally.
+    .index("by_providerEventId", ["providerEventId"])
+    // The replay range: everything still held for one inbox, oldest first.
+    .index("by_inboxRef_and_state", ["inboxRef", "state"])
+    // Bounded operator listing across inboxes.
+    .index("by_state_and_receivedAt", ["state", "receivedAt"]),
 
   /* §4.4 — usage (P10) */
 

@@ -2647,6 +2647,39 @@ export function outboundApplicationKey(
   return `outbound:${messageRef}:${eventType}`;
 }
 
+/* ----- quarantined provider events -------------------------------------- */
+
+/**
+ * Why a verified event could not be attributed to a workspace.
+ *
+ * Both are resolvable conditions, not corruption: an inbox assignment that
+ * has not committed yet (or is being rotated), and two workspaces
+ * transiently claiming one `inboxRef`. Neither may be guessed at by the
+ * callback — §8 step 2 resolves a workspace from the saved assignment alone —
+ * and neither may drop the event, because the provider will not resend an
+ * `event_id` the component has already ingested.
+ */
+export const vQuarantineReason = v.union(
+  v.literal("inbox_unassigned"),
+  v.literal("inbox_ambiguous"),
+);
+
+export type QuarantineReason = "inbox_unassigned" | "inbox_ambiguous";
+
+/**
+ * `quarantined` — held, replayable. `released` — replayed into the normal
+ * receipt path once the inbox assignment existed. `discarded` — it can never
+ * be replayed and somebody said so; the row stays as the record that it
+ * arrived.
+ */
+export const vQuarantineState = v.union(
+  v.literal("quarantined"),
+  v.literal("released"),
+  v.literal("discarded"),
+);
+
+export type QuarantineState = "quarantined" | "released" | "discarded";
+
 /** `missions.create` bounds `requestId` to 100; reply missions match it. */
 export const MISSION_REQUEST_ID_MAX_LENGTH = 100;
 

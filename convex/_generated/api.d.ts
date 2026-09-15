@@ -24,6 +24,7 @@ import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as missions from "../missions.js";
+import type * as quarantine from "../quarantine.js";
 import type * as runs from "../runs.js";
 import type * as runtimeConnections from "../runtimeConnections.js";
 import type * as runtimeControlRequests from "../runtimeControlRequests.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/validators": typeof lib_validators;
   missions: typeof missions;
+  quarantine: typeof quarantine;
   runs: typeof runs;
   runtimeConnections: typeof runtimeConnections;
   runtimeControlRequests: typeof runtimeControlRequests;
