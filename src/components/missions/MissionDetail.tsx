@@ -15,6 +15,7 @@ import {
   formatWaited,
 } from "@/components/decisions/decision-presentation"
 import { MissionComments } from "@/components/missions/MissionComments"
+import { MissionLifecycleActions } from "@/components/missions/MissionLifecycleActions"
 import { MissionReceipts } from "@/components/missions/MissionReceipts"
 import {
   MissionKindChip,
@@ -105,6 +106,12 @@ export function MissionDetail({ missionId }: { missionId: string }) {
       <BackToBoard />
 
       <MissionHeader mission={mission} timezone={timezone} />
+
+      <MissionLifecycleActions
+        workspaceId={current.workspace._id}
+        mission={mission}
+        role={current.role}
+      />
 
       <Tabs
         value={tab}
