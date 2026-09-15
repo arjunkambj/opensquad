@@ -33,7 +33,14 @@ import { AgentMail } from "@agentmail/convex";
 import { v, type Infer } from "convex/values";
 import { components, internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
+import type { Doc } from "../_generated/dataModel";
 import { recordReceipt } from "../sendAttempts";
+import {
+  inboundApplicationKey,
+  outboundApplicationKey,
+  PROVIDER_REF_MAX_LENGTH,
+} from "../lib/validators";
 
 /**
  * Shared component client handle. Credentials are read from deployment env
@@ -596,6 +603,74 @@ function extractEventIndexFields(event: unknown): {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Callback totality helpers                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * THE rule both callbacks below obey: **never throw**.
+ *
+ * `@convex-dev/workpool` does not retry mutations, and the component's
+ * `event_id` ledger means a provider resend of the same event returns before
+ * enqueueing anything. So a deterministic throw here — a rejected validator,
+ * a `ConvexError`, a `.unique()` that met two rows — loses the verified event
+ * permanently with nothing left to replay. Every guard in this section exists
+ * to turn a would-be throw into a logged `return null`.
+ */
+
+/** Longest `emailEventReceipts.applicationKey` `recordReceipt` accepts. */
+const APPLICATION_KEY_MAX_LENGTH = 500;
+
+/**
+ * A provider identifier, trimmed and proven to fit the bound `recordReceipt`
+ * enforces with `boundedString` — which THROWS. Checking here instead means an
+ * over-long or blank id degrades to a dropped-and-logged event rather than a
+ * lost one.
+ */
+function providerRef(
+  value: string | undefined,
+  max: number = PROVIDER_REF_MAX_LENGTH,
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 || trimmed.length > max ? undefined : trimmed;
+}
+
+/**
+ * Resolve the owning workspace from the saved inbox assignment alone
+ * (architecture §8 step 2: never guess a workspace from a body or a display
+ * address). `.collect()` rather than `.unique()`: the assignment's uniqueness
+ * is transactional, not a database constraint, and `.unique()` would throw on
+ * a violated invariant — on the one code path that cannot survive a throw.
+ *
+ * Zero rows is an unknown inbox; more than one is an ambiguity no callback may
+ * resolve by guessing. Both return `null`, logged with provider IDs only.
+ */
+async function resolveWorkspaceByInbox(
+  ctx: MutationCtx,
+  inboxRef: string,
+  context: string,
+): Promise<Doc<"workspaces"> | null> {
+  const rows = await ctx.db
+    .query("workspaces")
+    .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
+    .collect();
+  if (rows.length === 0) {
+    console.info(`${context}: event for unassigned inbox`, { inboxRef });
+    return null;
+  }
+  if (rows.length > 1) {
+    console.info(`${context}: inbox claimed by multiple workspaces`, {
+      inboxRef,
+      claims: rows.length,
+    });
+    return null;
+  }
+  return rows[0];
+}
+
 /**
  * Component callback: invoked once per verified webhook event whose
  * `event_id` the component has not already ingested (dispatch happens through
@@ -624,11 +699,14 @@ export const onEvent = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const event = asRecord(args.event);
-    const eventId = stringField(event, "event_id");
-    const eventType = stringField(event, "event_type");
-    const ids = extractEventIndexFields(args.event);
+    const rawIds = extractEventIndexFields(args.event);
+    const eventId = providerRef(stringField(event, "event_id"), 200);
+    const eventType = providerRef(stringField(event, "event_type"), 100);
+    const inboxRef = providerRef(rawIds.inboxId);
+    const messageRef = providerRef(rawIds.messageId);
+    const threadRef = providerRef(rawIds.threadId);
     // Provider IDs only — never log addresses or bodies.
-    console.info("agentmail.onEvent", { eventId, eventType, ...ids });
+    console.info("agentmail.onEvent", { eventId, eventType, ...rawIds });
 
     // `message.received` is delivered through onMessageReceived — the
     // component fires BOTH callbacks for it; never record twice.
@@ -636,36 +714,38 @@ export const onEvent = internalMutation({
       eventType === "message.received" ||
       eventId === undefined ||
       eventType === undefined ||
-      ids.inboxId === undefined ||
-      ids.messageId === undefined
+      inboxRef === undefined ||
+      messageRef === undefined
     ) {
       return null;
     }
-    const workspace = await ctx.db
-      .query("workspaces")
-      .withIndex("by_inboxRef", (q) => q.eq("inboxRef", ids.inboxId))
-      .unique();
-    if (workspace === null) {
-      // Unknown inbox — quarantined for P11; no workspace to own a receipt.
-      console.info("agentmail.onEvent: event for unassigned inbox", {
+    // One business effect per (message, event type): provider re-delivery
+    // under a NEW event_id must not re-apply the same fact.
+    const applicationKey = outboundApplicationKey(messageRef, eventType);
+    if (applicationKey.length > APPLICATION_KEY_MAX_LENGTH) {
+      console.info("agentmail.onEvent: application key exceeds its bound", {
         eventId,
-        inboxId: ids.inboxId,
+        eventType,
       });
+      return null;
+    }
+    const workspace = await resolveWorkspaceByInbox(
+      ctx,
+      inboxRef,
+      "agentmail.onEvent",
+    );
+    if (workspace === null) {
       return null;
     }
     const payloadTimestamp = numberField(event, "timestamp");
     await recordReceipt(ctx, {
       workspaceId: workspace._id,
-      inboxRef: ids.inboxId,
+      inboxRef,
       providerEventId: eventId,
-      // One business effect per (message, event type): provider re-delivery
-      // under a NEW event_id must not re-apply the same fact.
-      applicationKey: `outbound:${ids.messageId}:${eventType}`,
-      providerMessageRef: ids.messageId,
+      applicationKey,
+      providerMessageRef: messageRef,
       eventType,
-      ...(ids.threadId !== undefined
-        ? { providerThreadRef: ids.threadId }
-        : {}),
+      ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
       providerFacts: {
         ...(payloadTimestamp !== undefined
           ? { timestamp: payloadTimestamp }
@@ -695,38 +775,48 @@ export const onMessageReceived = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const message = asRecord(args.message);
-    const inboxId = stringField(message, "inbox_id");
-    const threadId = stringField(message, "thread_id");
-    const messageId = stringField(message, "message_id");
+    const eventId = providerRef(args.eventId, 200);
+    const inboxRef = providerRef(stringField(message, "inbox_id"));
+    const threadRef = providerRef(stringField(message, "thread_id"));
+    const messageRef = providerRef(stringField(message, "message_id"));
     // Provider IDs only — never log addresses or bodies.
     console.info("agentmail.onMessageReceived", {
       eventId: args.eventId,
-      inboxId,
-      threadId,
-      messageId,
+      inboxRef,
+      threadRef,
+      messageRef,
     });
-    if (inboxId === undefined || messageId === undefined) {
+    if (
+      eventId === undefined ||
+      inboxRef === undefined ||
+      messageRef === undefined
+    ) {
       return null;
     }
-    const workspace = await ctx.db
-      .query("workspaces")
-      .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxId))
-      .unique();
+    const applicationKey = inboundApplicationKey(inboxRef, messageRef);
+    if (applicationKey.length > APPLICATION_KEY_MAX_LENGTH) {
+      console.info(
+        "agentmail.onMessageReceived: application key exceeds its bound",
+        { eventId },
+      );
+      return null;
+    }
+    const workspace = await resolveWorkspaceByInbox(
+      ctx,
+      inboxRef,
+      "agentmail.onMessageReceived",
+    );
     if (workspace === null) {
-      console.info("agentmail.onMessageReceived: unassigned inbox", {
-        eventId: args.eventId,
-        inboxId,
-      });
       return null;
     }
     await recordReceipt(ctx, {
       workspaceId: workspace._id,
-      inboxRef: inboxId,
-      providerEventId: args.eventId,
-      applicationKey: `incoming:${inboxId}:${messageId}`,
-      providerMessageRef: messageId,
+      inboxRef,
+      providerEventId: eventId,
+      applicationKey,
+      providerMessageRef: messageRef,
       eventType: "message.received",
-      ...(threadId !== undefined ? { providerThreadRef: threadId } : {}),
+      ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
     });
     return null;
   },
