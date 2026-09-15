@@ -94,8 +94,9 @@ function campaignMatchesForm(
  * Step 4 — review and explicit confirmation. Renders the interpreted source
  * plan, prospect cap, enrichment allowance and send policy exactly as stored,
  * then on confirmation: create the draft campaign (idempotent requestId),
- * stamp `confirmSourcePlan`, and only then activate workspace automation
- * (which clears `pauseReason: "onboarding_pending"`).
+ * stamp `confirmSourcePlan`, move the campaign to `active`, and only then
+ * activate workspace automation (which clears `pauseReason:
+ * "onboarding_pending"`).
  */
 export function ReviewStep({
   workspace,
@@ -112,6 +113,7 @@ export function ReviewStep({
 }) {
   const createCampaign = useMutation(api.campaigns.create)
   const confirmSourcePlan = useMutation(api.campaigns.confirmSourcePlan)
+  const setCampaignState = useMutation(api.campaigns.setState)
   const setAutomationState = useMutation(api.workspaces.setAutomationState)
 
   const requestIdRef = useRef<string>(crypto.randomUUID())
@@ -168,6 +170,20 @@ export function ReviewStep({
             throw cause
           }
         }
+      }
+
+      // Nothing else in the product leaves `draft` — `create` inserts one and
+      // `confirmSourcePlan` only freezes scope — while `missions.create`
+      // rejects a draft campaign, so without this the wizard finishes and no
+      // work can ever start. Ordered before automation so dispatch can never
+      // observe an automated workspace whose campaign still refuses missions.
+      // `setState` no-ops on the same state, so a retry is safe.
+      if (campaign.status !== "active") {
+        await setCampaignState({
+          workspaceId: workspace._id,
+          campaignId: campaign._id,
+          state: "active",
+        })
       }
 
       await setAutomationState({
