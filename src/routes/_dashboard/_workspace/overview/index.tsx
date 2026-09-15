@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { MissionBoard } from "@/components/missions/MissionBoard"
 import { OverviewDashboard } from "@/components/overview/OverviewDashboard"
 
 /**
@@ -11,5 +12,13 @@ export const Route = createFileRoute("/_dashboard/_workspace/overview/")({
 })
 
 function OverviewPage() {
-  return <OverviewDashboard />
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Still carrying the page title and the date picker for one more
+          slice; the receipts feed replaces its placeholder card, and the
+          board moves above it, when the feed lands. */}
+      <OverviewDashboard />
+      <MissionBoard />
+    </div>
+  )
 }

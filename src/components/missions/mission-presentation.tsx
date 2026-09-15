@@ -1,5 +1,6 @@
 import type { Doc } from "../../../convex/_generated/dataModel"
 import type {
+  BoardColumn,
   MissionKind,
   MissionOutcome,
   MissionProspectOutcome,
@@ -154,4 +155,65 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
   failed: "Failed",
   cancelled: "Cancelled",
   uncertain: "Uncertain — the outcome is unknown",
+}
+
+/**
+ * The four columns' copy.
+ *
+ * A column's subtitle has to cover **every** state the column can hold, or it
+ * misdescribes most of the cards under it. Read off `MISSION_STATE_BOARD` and
+ * `boardColumnForMission` in `convex/lib/validators.ts`:
+ *
+ * - Backlog holds `queued`, `paused` and `cancelled`.
+ * - Needs you holds `waiting_for_user`, `waiting_for_runtime` and `failed` —
+ *   **and** anything `queued` or `active` whose `requiredDecisionCount` is
+ *   above zero, which the subtitle has to say or the column looks wrong.
+ * - In flight holds `active` with no required ask open.
+ * - Done holds `completed`, and only `completed`. `failed` maps to Needs you,
+ *   so a failure can never pose as a completion.
+ *
+ * This is a **label** source only. `boardColumn` is a stored field that three
+ * backend writers keep in sync; the UI renders whatever column returned a card
+ * and never recomputes its placement.
+ */
+export const BOARD_COLUMN_META: Record<
+  BoardColumn,
+  {
+    label: string
+    subtitle: string
+    emptyTitle: string
+    emptyDescription: string
+  }
+> = {
+  backlog: {
+    label: "Backlog",
+    subtitle:
+      "Not running: waiting to start, paused by someone here, or cancelled.",
+    emptyTitle: "Nothing waiting to start",
+    emptyDescription:
+      "A confirmed mission waits here before it runs. New mission puts one here.",
+  },
+  needs_you: {
+    label: "Needs you",
+    subtitle:
+      "Nothing moves until a person acts: an open ask, a runtime to reconnect, or a failure to close out — including missions that are otherwise queued or running.",
+    emptyTitle: "Nothing is waiting on you",
+    emptyDescription:
+      "A mission appears here when the squad needs a decision, when the runtime has to be reconnected, or when something failed and needs closing out.",
+  },
+  in_flight: {
+    label: "In flight",
+    subtitle: "Running now, with nothing waiting on you.",
+    emptyTitle: "Nothing is running right now",
+    emptyDescription:
+      "A mission moves here once the runtime picks it up and no required ask is open.",
+  },
+  done: {
+    label: "Done",
+    subtitle:
+      "Completed. Archiving one hides it from the board without claiming anything about the outcome.",
+    emptyTitle: "No mission has completed yet",
+    emptyDescription:
+      "A mission lands here when it finishes and produces what it promised. A failed mission never reaches this column.",
+  },
 }
