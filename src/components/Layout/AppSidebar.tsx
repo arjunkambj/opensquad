@@ -2,6 +2,7 @@ import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
+import { useOpenDecisionCount } from "@/components/overview/AttentionBlock"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -22,6 +23,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -37,6 +39,7 @@ import {
   sidebarFooterItems,
   sidebarMainItems,
 } from "@/constants/sidebar-menu"
+import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 import Logo from "./Logo"
 
 /**
@@ -63,6 +66,17 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const { setOpenMobile } = useSidebar()
   const [searchOpen, setSearchOpen] = useState(false)
+
+  // The nav lives outside the `_workspace` gate too — `/settings` and
+  // `/onboarding` are deliberately reachable without a workspace — so a
+  // missing workspace skips the query and renders no badge at all, rather
+  // than a zero that would claim the queue is empty.
+  const current = useCurrentWorkspace()
+  const openDecisions = useOpenDecisionCount(
+    current !== undefined && current !== null
+      ? current.workspace._id
+      : undefined,
+  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -103,6 +117,15 @@ export function AppSidebar() {
           <HugeiconsIcon icon={item.icon} />
           <span>{item.name}</span>
         </SidebarMenuButton>
+        {/* The same call the home attention block makes, with byte-identical
+            arguments, so Convex serves one subscription and the two numbers
+            cannot disagree. A zero is shown as the digit — "nothing is
+            waiting" is a real state and worth seeing. */}
+        {item.href === "/decisions" && openDecisions !== undefined ? (
+          <SidebarMenuBadge aria-label={`${openDecisions} open decisions`}>
+            {openDecisions}
+          </SidebarMenuBadge>
+        ) : null}
       </SidebarMenuItem>
     ))
 

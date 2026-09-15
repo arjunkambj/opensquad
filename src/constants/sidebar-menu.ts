@@ -27,12 +27,10 @@ export type MenuCategory = {
 // their routes do not exist yet, and an item is added in the same change as
 // its route — never before, or the nav promises a page that 404s.
 //
-// No count badge on Decisions. §3 allows one, fed by `decisions.listOpen` and
-// rendered as `50+` past the page bound; the badge itself lives in
-// `AppSidebar.tsx`, which this change does not own. A number here would also
-// have to be the same number the home attention block shows, from the same
-// query call — two sources for one count is a defect, so it waits for the
-// change that can do both.
+// The Decisions count badge is NOT declared here, and deliberately so: it
+// lives in `AppSidebar.tsx`, which reads it through the same
+// `useOpenDecisionCount` hook the home attention block uses, with identical
+// arguments. Two sources for one count is a defect, so there is one call.
 export const sidebarMainItems: MenuItem[] = [
   {
     name: "Decisions",
