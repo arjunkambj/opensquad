@@ -283,7 +283,8 @@
         "Checks: convex tsc clean; convex dev push OK; worker tsc+build clean; pnpm lint 0 errors; pnpm build (tsc -b && vite build && worker build) passes; git diff --check clean.",
         "Honest deferral: owner connect/reconnect/disconnect/getStatus compile but need a Hexclave session (not curl-able); ASCII lifecycle action implemented + ASCII_API_KEY set on the isolated deployment, but no disposable Box created this round; no live Codex turn run (no managed login on isolated workspace) \u2014 daemon turn executor composes P03-proven methods; the full daemon-in-Box loop is the P07 live gate.",
         "Integrated at 7dbac79 into main alongside P10 (schema/validators section conflicts resolved by union; artifacts table is P07-owned \u2014 P09 must not re-add). Combined main pushed to dev:flexible-grasshopper-949 \u2014 all \u00a74.4 tables, /worker/* routes and the 1-min lease sweep cron live; lint/build/tsc clean.",
-        "2026-09-14 review-orch: boundedString crashed with TypeError on non-string fields carved from v.any() worker envelopes, mapping to 503 instead of the documented 400 INVALID \u2014 fixed at the shared validator (commit 86babfc). Slot/lease/result contract re-verified; cancelMissionWorkerRequests noted as dead code that must NOT be wired in without slot release (spec-safe \u00a77.7 path is sweep\u2192uncertain\u2192interrupt-confirm). See plan/evidence/review-orch.md."
+        "2026-09-14 review-orch: boundedString crashed with TypeError on non-string fields carved from v.any() worker envelopes, mapping to 503 instead of the documented 400 INVALID \u2014 fixed at the shared validator (commit 86babfc). Slot/lease/result contract re-verified; cancelMissionWorkerRequests noted as dead code that must NOT be wired in without slot release (spec-safe \u00a77.7 path is sweep\u2192uncertain\u2192interrupt-confirm). See plan/evidence/review-orch.md.",
+        "2026-09-15 integrator correction: P07's card required the allowed tool router/capability transport, and it was NOT delivered \u2014 the daemon spawns no MCP server, every turn starts readOnly with networkAccess:false (worker/src/codex/methods.ts:332) and vWorkerRequestInput carries no capability field (convex/lib/validators.ts). The deferral list omitted this. Ownership moves to P21, which is the first task that needs it. Also undocumented: OPENSQUAD_WORKER_IMAGE, OPENSQUAD_WORKER_SETUP (convex/runtimeConnections.ts:444-449) and OPENSQUAD_WORKER_SEAL_KEY (convex/workerOperations.ts:540) are read by convex/ but appear in neither .env.example, so a bootstrap with setup unset records a completed create with no daemon installed."
       ]
     },
     {
@@ -323,15 +324,35 @@
       ]
     },
     {
-      "id": "P09",
-      "title": "Five-prospect sales pipeline",
+      "id": "P20",
+      "title": "Lead, booking and evidence schema contract",
       "tier": "core",
       "status": "pending",
       "owner": "",
       "dependsOn": [
-        "P04",
+        "P02"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:convex-expert"
+      ],
+      "files": [
+        "convex/schema.ts",
+        "convex/lib/validators.ts",
+        "plan/evidence/P20.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P21",
+      "title": "Sales pipeline execution and source-backed research",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
         "P07",
-        "P08"
+        "P08",
+        "P20"
       ],
       "skills": [
         "opensquad-build",
@@ -340,10 +361,36 @@
         "convex-file-storage"
       ],
       "files": [
-        "convex/campaigns.ts",
         "convex/prospects.ts",
         "convex/evidence.ts",
-        "convex/workflows/sales.ts"
+        "convex/workflows/sales.ts",
+        "convex/integrations/firecrawl.ts",
+        "worker/src/",
+        "plan/evidence/P21.md"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "P09",
+      "title": "Apollo discovery and contact enrichment",
+      "tier": "core",
+      "status": "pending",
+      "owner": "",
+      "dependsOn": [
+        "P04",
+        "P21"
+      ],
+      "skills": [
+        "opensquad-build",
+        "convex:workflow",
+        "convex:convex-expert",
+        "convex-file-storage"
+      ],
+      "files": [
+        "convex/integrations/apollo.ts",
+        "convex/prospects.ts",
+        "convex/workflows/sales.ts",
+        "plan/evidence/P09.md"
       ],
       "evidence": []
     },
@@ -442,8 +489,8 @@
       "status": "pending",
       "owner": "",
       "dependsOn": [
-        "P02",
-        "P11"
+        "P11",
+        "P20"
       ],
       "skills": [
         "opensquad-build",
@@ -453,7 +500,10 @@
         "convex/prospects.ts",
         "convex/leadEvents.ts",
         "convex/bookings.ts",
-        "convex/schema.ts"
+        "convex/drafts.ts",
+        "convex/approvals.ts",
+        "convex/sending.ts",
+        "plan/evidence/P19.md"
       ],
       "evidence": []
     },
@@ -464,10 +514,10 @@
       "status": "pending",
       "owner": "",
       "dependsOn": [
-        "P09",
         "P11",
         "P12",
-        "P19"
+        "P19",
+        "P21"
       ],
       "skills": [
         "opensquad-build",
@@ -491,6 +541,7 @@
       "status": "pending",
       "owner": "",
       "dependsOn": [
+        "P09",
         "P13"
       ],
       "skills": [

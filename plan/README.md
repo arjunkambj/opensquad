@@ -128,22 +128,26 @@ flowchart LR
   P03 --> P07[Worker bridge]
   P06 --> P07
   P02 --> P08[Onboarding and employees]
-  P04 --> P09[Five-prospect pipeline]
-  P07 --> P09
-  P08 --> P09
+  P02 --> P20[Lead and booking schema]
+  P07 --> P21[Pipeline and research]
+  P08 --> P21
+  P20 --> P21
+  P04 --> P09[Apollo discovery and enrichment]
+  P21 --> P09
   P05 --> P10[Approval and send]
   P06 --> P10
   P10 --> P11[Inbox and replies]
   P07 --> P11
-  P02 --> P19[Lead CRM and booking backend]
+  P20 --> P19[Lead CRM and booking backend]
   P11 --> P19
   P06 --> P12[Mission board]
   P08 --> P12
-  P09 --> P13[CRM, booking and supervision UI]
+  P21 --> P13[CRM, booking and supervision UI]
   P11 --> P13
   P12 --> P13
   P19 --> P13
   P13 --> P14[Recovery and full rehearsal]
+  P09 --> P14
   P14 --> P15[Optional schedule]
   P14 --> P16[Public release]
   P16 --> P17[Agency feedback and video]
@@ -155,7 +159,12 @@ and mail (P05). P04/P05 are provider feasibility probes; full authorization,
 budgets, leases and approval behavior are accepted by their later owning cards.
 Frontend P08/P12 can advance when foundation contracts land. P02 includes campaign
 CRUD/source confirmation so P08 does not depend on the later execution pipeline.
-P19 can follow P11 alongside pipeline/board completion and must land before P13.
+P20 declares the §4.3 lead/booking/evidence tables once, so P21, P09, P11 and P19
+write to one lead store instead of racing to define it. P21 owns every pipeline
+behavior that does not call Apollo and P09 adds only the two Apollo-sourced
+stages, so a deferred OAuth grant blocks one card rather than the release chain;
+full acceptance in P14 still requires the real Apollo path. P19 can follow P11
+alongside pipeline/board completion and must land before P13.
 Task numbers are stable identifiers, not a numeric execution order.
 Use one agent per task worktree and one integrator for shared contracts,
 canonical task status and the build log. Dependency completion means the reviewed

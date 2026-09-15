@@ -16,9 +16,11 @@ updates canonical task status and updates `hackathon.md` using its skill. Follow
 [integrations.md](integrations.md) for provider protocols and
 [verification.md](verification.md) for V-scenarios. No test files.
 
-Task numbers are identifiers, not an execution order: P19 must precede P13.
+Task numbers are identifiers, not an execution order: P20 must precede P21, P19
+and the P11 lead association; P21 and P19 must precede P13. P09 carries the Apollo
+grant alone, so only P14 waits on it.
 Early probes accept only the explicitly named gate portions below. Full G1/G2/G3
-and V-scenarios remain acceptance work for P07/P09/P11/P13/P14; a later UI or
+and V-scenarios remain acceptance work for P07/P21/P09/P11/P13/P14; a later UI or
 business-control requirement cannot silently become a prerequisite of its own
 provider spike. Record the passed subset and its later owning task as evidence.
 The authoritative auth helper is `convex/lib/auth.ts`; runtime API exports live
@@ -116,7 +118,7 @@ Skills: Convex expert; Hexclave concepts adapted to `@hexclave/react`.
 5. Implement campaign `create`, `get`, indexed `list`, `confirmSourcePlan` and
    `setState` now, including source/filter validation, 1–5 lead cap, enrichment
    allowance, version conflicts and immutable confirmed-scope metadata. These
-   are the real APIs consumed by P08; P09 adds execution rather than creating
+   are the real APIs consumed by P08; P21 adds execution rather than creating
    a second campaign setup implementation.
 
 Files: `convex/schema.ts`, `convex/lib/{auth,validators}.ts`,
@@ -172,7 +174,7 @@ Skills: Convex HTTP actions/file storage as needed; G2 in integration runbook.
    provider status or “Contact needed”; never synthesize an address. Save sanitized
    probe receipts, not pretend production prospect/usage records.
 4. Inspect the enforceable allowlist, OAuth refresh/callback route and duplicate
-   paid-operation behavior; document gateway constraints for P07/P09. Remove the
+   paid-operation behavior; document gateway constraints for P07/P21. Remove the
    diagnostic raw connection from the employee image. Keep YC/TrustMRR disabled.
 
 Files: research adapter spike, component registration only for selected route,
@@ -181,7 +183,7 @@ one component-backed website result, one contact-or-unknown and reconnection
 probes pass. P04 depends only on P03 and uses an internal diagnostic adapter;
 it does not require P02/P07 production records. The scoped gateway, atomic quota
 reservations, no-bypass policy and persisted multi-workspace G2 checks belong to
-P07/P09, then full P14. No email send occurs. Handoff: capability IDs, output
+P07/P21, then full P14. No email send occurs. Handoff: capability IDs, output
 schemas, provider facts and source limits; do not call the production gate passed.
 
 ## P05 — Prove AgentMail transport and webhook behavior
@@ -260,8 +262,8 @@ Files: `worker/`, `convex/{runtimeConnections,workerBridge,workerOperations}.ts`
 HTTP routes and workflow external-step adapter; manifest/config by assigned
 integrator. Gate: remaining G1 bridge/recovery checks, V04–V07 runtime portions,
 backend and worker checks. Implement the filtered tool router/capability transport
-here; P09 supplies real qualification and atomic provider-allowance operations
-before full G2 acceptance. Observe runtime results with diagnostics until P13
+here; it was not delivered and P21 now owns it, with P09 supplying real
+qualification and atomic provider-allowance operations before full G2 acceptance. Observe runtime results with diagnostics until P13
 finishes the connection UI. No administrator key or AgentMail credential may
 be available in a Box.
 
@@ -286,38 +288,99 @@ Skills: shadcn; respect current Base UI/Hugeicons styles.
 Files: `src/routes/_dashboard/`, `src/components/{onboarding,employees,settings}/`,
 sidebar constants and profile queries. Gate: frontend checks, V03's campaign
 form/persistence/validation subset against P02 APIs, and V11's setup empty/loading
-states. Contact/source execution belongs to P09; V04's functioning runtime
+states. Research execution belongs to P21 and Apollo sourcing to P09; V04's
+functioning runtime
 controls and complete provider error recovery are accepted in P13 after P07.
 
-## P09 — Execute the five-prospect sales pipeline
+## P20 — Declare the lead, booking and evidence schema contract
 
-Dependencies: P04, P07, P08. Owner: pipeline/backend.
+Dependencies: P02. Owner: CRM/backend.
+Skills: Convex expert.
+
+1. Declare the §4.3 `prospects`, `leadEvents`, `bookings` and `evidence` tables in
+   `convex/schema.ts` exactly as the architecture specifies them, with every listed
+   index. This card is the single declaration site: P21, P09, P11 and P19 all write
+   these rows, and none of them may redefine a table or open a second lead store.
+2. Add the matching domain unions and shared validators to `convex/lib/validators.ts`:
+   `salesStage`, `qualification`, the bounded `sourceRefs` and `contact` shapes, the
+   `leadEvents` kind/actor unions and the `bookings.proposal` discriminated union.
+   Reuse the existing bounded-string and version helpers rather than starting a
+   parallel validation style.
+3. Add `prospects.search_company_name` with `searchField: companyName` and
+   `filterFields: [workspaceId, salesStage, campaignId, ownerIdentityKey]`, and
+   `bookings.by_prospectId_and_state` for the at-most-one-active check. Declare an
+   index only where the specification names it; P19 adds another before enabling a
+   further filter combination.
+4. Retype the forward references that were left as bounded strings pending these
+   tables, per site and deliberately. An internally produced reference becomes an
+   `Id`; an externally supplied one — worker-bridge payloads, the `x-prospect-id`
+   header — stays a validated string. Record which sites you changed and why.
+
+Files: `convex/schema.ts`, `convex/lib/validators.ts`, `plan/evidence/P20.md`.
+Gate: the schema pushes cleanly, existing lint/typecheck/build pass, and every
+§4.3 field and index named in this card exists under the specified name. No
+business mutation belongs here — that behavior is P19's and those writers are
+P21's and P09's. Handoff: the declared tables plus the validator names that P11,
+P19 and P21 import.
+
+## P21 — Execute the sales pipeline and source-backed research
+
+Dependencies: P07, P08, P20. Owner: pipeline/backend.
 Skills: Workflow + Convex expert + file storage.
 
-1. Confirm campaign → Scout discovery → domain/source normalization → Researcher
-   evidence → fit decision → qualified Scout contact enrichment → Outreach draft
-   proposal. Pass persisted IDs between steps and bound every operation.
-2. Enforce up to five accepted prospects, candidate/tool/page caps and paid
-   enrichment reservations. Deduplicate by canonical domain/provider identity;
-   retain provenance and distinguish revenue metric/currency/period if used.
-3. Implement the three role instruction templates and typed output contracts.
-   Enforce tool restrictions at the host/backend; treat website/email text as
-   data. Save concise briefs with evidence references and optional storage blobs.
-4. Support partial success, exhausted credit, rejected leads and missing contacts.
-   Preserve each branch's terminal reason and return safe retry/attention actions.
-5. Create independent per-prospect workflow branches that share the one-model-run
-   slot. Serialize model work, never human waits: one prospect's pending decision
-   cannot stop siblings from reaching drafts or eligible sends. Bind each decision
-   and output to its own branch, then aggregate explicit terminal outcomes.
+1. Replace the dev fixture with the real mission workflow in
+   `convex/workflows/sales.ts`: confirmed campaign → prospect branches →
+   Researcher evidence → fit decision → Outreach draft proposal. Pass persisted IDs
+   between steps and bound every operation. Company discovery and contact
+   enrichment are Apollo stages owned by P09; this card defines the stage seams
+   they plug into and must run end to end on prospects from an operator-confirmed
+   or already-persisted source.
+2. Implement the filtered tool router and capability transport that P07's card
+   named and did not deliver. Restrict tools at the host and backend, treat every
+   website and email string as data, and carry the capability set on the worker
+   request envelope instead of trusting a model-supplied request.
+3. Implement the three role instruction templates and their typed output contracts,
+   and persist concise briefs as `evidence` rows with optional storage blobs.
+   Enforce candidate, tool and page caps, and deduplicate by canonical domain with
+   retained provenance.
+4. Support partial success, rejected leads and missing contacts. Preserve each
+   branch's terminal reason and return safe retry/attention actions. Independent
+   per-prospect branches share the one-model-run slot: serialize model work, never
+   human waits, and one prospect's pending decision must not stop siblings from
+   reaching drafts.
 
-Files: `convex/{campaigns,prospects,evidence}.ts`, `convex/workflows/sales.ts`,
-`convex/integrations/firecrawl.ts`, role templates and worker tools.
-Gate: full G2 capability/qualification/budget boundary, V03/V07/V12 research
-portions, and V14's independent draft/contact-needed/partial-result branches.
-Use real integrations and backend receipts; acceptance does not require P10 send
-or P13 UI. Those gates complete together in P13/P14. No auto-send tool is
-introduced. Handoff: real draft proposals and evidence IDs; P19 adds the CRM and
-booking mutations to the same `prospects` records, without a second lead store.
+Files: `convex/{prospects,evidence}.ts`, `convex/workflows/sales.ts`,
+`convex/integrations/firecrawl.ts`, `worker/src/`, role templates,
+`plan/evidence/P21.md`.
+Gate: the G2 capability/budget boundary, the V03/V07/V12 research portions and
+V14's independent draft/contact-needed/partial-result branches, exercised against
+the real Firecrawl integration with backend receipts. Apollo-sourced discovery and
+enrichment are explicitly out of scope and complete in P09. Acceptance does not
+require P10 send or P13 UI. No auto-send tool is introduced.
+
+## P09 — Add Apollo discovery and contact enrichment
+
+Dependencies: P04, P21. Owner: pipeline/backend.
+Skills: Workflow + Convex expert.
+
+1. Plug Apollo company discovery into P21's Scout stage and Apollo contact
+   enrichment into its qualified-contact stage. Do not restructure the workflow,
+   redefine a §4.3 table or open a second lead store — P20 owns the schema and P21
+   owns the stage seams.
+2. Enforce up to five accepted prospects, candidate caps and paid enrichment
+   reservations through the existing usage boundary. Deduplicate by canonical
+   domain and provider identity, retain provenance, and distinguish revenue metric,
+   currency and period where one is used.
+3. Handle exhausted credit and missing contacts honestly: a qualified prospect with
+   no reusable valid contact becomes `contact_needed` with a clear next action, and
+   never a manufactured address.
+
+Files: `convex/integrations/apollo.ts`, `convex/prospects.ts`,
+`convex/workflows/sales.ts`, `plan/evidence/P09.md`.
+Gate: the Apollo half of G2 — real discovery plus one bounded enrichment through
+the controlled capability, with backend receipts. This is the only card that needs
+the P04 OAuth grant; every other pipeline behavior is accepted in P21. Handoff:
+real sourced prospects and contact facts written to the P20 tables.
 
 ## P10 — Exact drafts, approval and safe sending
 
@@ -401,7 +464,7 @@ second board state store. `/overview` is the execution surface supporting Leads.
 
 ## P13 — Connect the Leads CRM, booking and supervision UI
 
-Dependencies: P09, P11, P12, P19. Owner: frontend/integrator.
+Dependencies: P11, P12, P19, P21. Owner: frontend/integrator.
 Skills: shadcn; review auth of every new query.
 
 1. Build `/leads` as the working CRM home: pipeline/list and due-action modes,
@@ -438,7 +501,7 @@ recovery accessible without developer tools.
 
 ## P14 — Recovery, budget enforcement and full acceptance
 
-Dependencies: P13. Owner: independent reviewer + implementers.
+Dependencies: P09, P13. Owner: independent reviewer + implementers.
 Skills: Convex reviewer, relevant runtime/HTTP skills.
 
 1. Run V01–V19 and V23–V24 applicable core scenarios, including direct tenant attacks,
@@ -533,12 +596,14 @@ submission receipt before the published deadline and an independently usable app
 
 ## P19 — Lead CRM and booking backend
 
-Dependencies: P02, P11. Owner: CRM/backend.
+Dependencies: P11, P20. Owner: CRM/backend.
 Skills: Convex expert + HTTP actions/Workflow where the existing send flow is used.
 This is core and must land before P13; its higher number does not make it later
-than release. Coordinate `convex/prospects.ts` and schema edits with P09's owner.
+than release. P20 declares the tables and P21/P09 write pipeline rows to them;
+this card adds behavior only, and coordinates `convex/prospects.ts` with P21.
 
-1. Extend the existing `prospects` contract, without a second lead database:
+1. Implement the CRM contract on P20's `prospects` table, without a second lead
+   database:
    active-member `ownerIdentityKey`, full `salesStage`, reason/version, dated next
    action and contacted/replied timestamps. Implement indexed `list`/`getDetail`,
    `updateStage`, `assign`, `setNextAction` and `addNote` using expected versions,
@@ -570,7 +635,8 @@ than release. Coordinate `convex/prospects.ts` and schema edits with P09's owner
    prior agreement details. Rescheduling requires a new agreed time; merely sending
    proposed alternatives does not modify the confirmed meeting.
 
-Files: `convex/{prospects,leadEvents,bookings}.ts`, shared validators/schema/indexes,
+Files: `convex/{prospects,leadEvents,bookings}.ts`, the P10/P11 draft, approval
+and send functions a booking proposal reuses,
 existing conversation/send integration and `plan/evidence/P19.md`. Gate: backend
 checks and V23/V24 backend operations with controlled records and authenticated
 API/subscription clients, including role/workspace denial, stale versions,
