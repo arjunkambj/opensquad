@@ -888,6 +888,12 @@ export const applyResearchResult = internalMutation({
       }),
       evidenceCount: recorded.written,
     });
+    // When a worker turn ran, the BRIDGE already finished this receipt at
+    // the request's terminal transition, and `finishRun` is idempotent on a
+    // terminal run — so this call lands only on the path where no turn was
+    // dispatched at all (nothing retrievable), which is exactly the path
+    // that would otherwise leave a run `running` forever. The counts a
+    // person reads are on the activity row below either way.
     await finishRun(ctx, run, "succeeded", {
       outputRefs: [
         `research:pages:${pages.length}`,
@@ -900,7 +906,10 @@ export const applyResearchResult = internalMutation({
       workspaceId: mission.workspaceId,
       missionId: mission._id,
       kind: "prospect_research_applied",
-      summary: `${prospect.companyName}: ${fit.qualification} on ${recorded.written} cited observation(s)`,
+      summary:
+        `${prospect.companyName}: ${fit.qualification} on ${recorded.written} ` +
+        `cited observation(s) from ${pages.length} retrieved page(s), ` +
+        `${recorded.unsourced} unsourced`,
       actor: "workflow",
       dedupeKey: `branch:${branch._id}:research:${args.runId}`,
       runId: args.runId,
@@ -1369,6 +1378,9 @@ export const installDraft = internalMutation({
       expectedVersion: prospect.version,
       draftId: draft._id,
     });
+    // Idempotent: the bridge finished this receipt when the drafting turn
+    // reached `succeeded`. It stays here so a future non-model drafting path
+    // cannot leave a run `running`.
     await finishRun(ctx, run, "succeeded", {
       outputRefs: [`draft:${draft._id}:r${draft.revision}`],
       usage: { toolCalls: 0, modelCalls: 1 },
