@@ -2118,6 +2118,9 @@ export type ActivityKindP10 = (typeof ACTIVITY_KINDS_P10)[number];
  * instead.
  */
 export const ACTIVITY_KINDS_P11 = ["reply_classified"] as const;
+/** P21 — one receipt per accepted capability tool call, written by the
+ *  BACKEND (the worker names neither the kind nor the summary). */
+export const ACTIVITY_KINDS_P21 = ["worker_tool_call"] as const;
 
 export type ActivityKindP11 = (typeof ACTIVITY_KINDS_P11)[number];
 

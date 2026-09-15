@@ -40,6 +40,7 @@ import {
   CONTROL_REQUEST_TTL_MS,
   HEARTBEAT_MIN_INTERVAL_MS,
   LOGIN_CHALLENGE_TTL_MS,
+  RESEARCH_PAGES_PER_PROSPECT,
   WORKER_ACTIVITY_KINDS,
   WORKER_ACTIVITY_MIN_INTERVAL_MS,
   WORKER_LEASE_TTL_MS,
@@ -581,6 +582,280 @@ export const heartbeat = internalMutation({
     };
   },
 });
+
+/* ------------------------------------------------------------------ */
+/* The lease-bound capability tool channel (P21)                        */
+/*                                                                     */
+/* `POST /worker/tool` is the ONLY way a model turn can reach a backend  */
+/* operation, and it reaches exactly two: retrieve one research page,    */
+/* and read back the pages this run already retrieved. Both require the  */
+/* `opensquad.web_research` capability, which `assertLiveLease` checks   */
+/* against the request's OWN column — not against anything the worker    */
+/* sent, and not against the mirror inside `inputRef.value`.             */
+/*                                                                      */
+/* There is no send tool here, in any form, and no route that could      */
+/* become one: the tool name is matched against a closed map, and every  */
+/* entry in it is a bounded read.                                        */
+/* ------------------------------------------------------------------ */
+
+/** Tool name → the capability a request must carry to call it. Closed by
+ *  construction: an unlisted name is 400, never a default-allow. */
+const TOOL_CAPABILITY: Readonly<Record<string, CapabilityId>> = {
+  "opensquad.research.request_page": "opensquad.web_research",
+  "opensquad.research.read_pages": "opensquad.web_research",
+};
+
+const vToolArgs = {
+  credentialHash: v.string(),
+  workerRequestId: v.string(),
+  generation: v.number(),
+  leaseToken: v.string(),
+  runtimeGeneration: v.number(),
+  callId: v.string(),
+  tool: v.string(),
+  prospectId: v.string(),
+  url: v.optional(v.string()),
+};
+
+/**
+ * Authorize one tool call and consume one of the request's tool-call budget.
+ *
+ * `constraints.maxToolCalls` has been validated 0..200 by the backend and
+ * discarded by the worker since P07. The worker now counts too, but the
+ * worker is untrusted: THIS counter, incremented inside the authorizing
+ * transaction, is the budget. An absent constraint is zero, not unlimited.
+ *
+ * `read_pages` is answered here — it is a bounded read of operations this
+ * run already paid for, so it needs no action and no second transaction.
+ */
+export const beginWorkerToolCall = internalMutation({
+  args: vToolArgs,
+  returns: v.union(
+    v.object({
+      decision: v.literal("retrieve"),
+      missionId: v.id("missions"),
+      prospectId: v.id("prospects"),
+      runId: v.id("runs"),
+      url: v.string(),
+    }),
+    v.object({
+      decision: v.literal("answer"),
+      payload: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const { credential } = await authenticateWorker(
+      ctx,
+      args.credentialHash,
+      // Deliberately the existing `claim` scope. A seventh WORKER_SCOPES
+      // member would be additive in validators.ts, but the mint sites are
+      // runtimeConnections.connect/reconnect, so every credential already
+      // issued would lack it and every tool call would 403 until an operator
+      // reconnected every runtime. `claim` is already the scope that means
+      // "this credential may receive and execute model work", and a tool call
+      // is execution under a lease that same credential was issued.
+      "claim",
+    );
+    assertGeneration(credential, args.runtimeGeneration);
+    const request = await loadScopedRequest(
+      ctx,
+      credential,
+      args.workerRequestId,
+    );
+    if (request.runtimeGeneration !== credential.runtimeGeneration) {
+      throw bridgeError("CONFLICT", "request belongs to a retired generation");
+    }
+    if (request.state !== "leased" && request.state !== "running") {
+      throw bridgeError(
+        "CONFLICT",
+        `request is ${request.state}; tool calls require a live lease`,
+      );
+    }
+    const tool = boundedString(args.tool, "tool", { min: 1, max: 200 });
+    const capability = TOOL_CAPABILITY[tool];
+    if (capability === undefined) {
+      throw bridgeInvalid(`tool ${tool} is not an allowed capability tool`);
+    }
+    boundedString(args.callId, "callId", { min: 1, max: 100 });
+    const leaseHash = await sha256Hex(
+      boundedString(args.leaseToken, "leaseToken", { min: 8, max: 200 }),
+    );
+    const slot = await ctx.db
+      .query("workspaceExecutionSlots")
+      .withIndex("by_workspaceId", (q) =>
+        q.eq("workspaceId", credential.workspaceId),
+      )
+      .unique();
+    assertLiveLease(request, slot, args.generation, leaseHash, capability);
+
+    // Same rule as an unknown workerRequestId: unknown, foreign-workspace and
+    // wrong-mission prospects are the SAME 400, so a workspace can never use
+    // this route to learn whether another workspace's row exists.
+    const prospectId = ctx.db.normalizeId("prospects", args.prospectId);
+    const prospect =
+      prospectId === null ? null : await ctx.db.get("prospects", prospectId);
+    const mission = await ctx.db.get("missions", request.missionId);
+    if (
+      prospect === null ||
+      mission === null ||
+      prospect.workspaceId !== request.workspaceId ||
+      prospect.campaignId !== mission.campaignId
+    ) {
+      throw bridgeInvalid("prospectId is not valid in this scope");
+    }
+
+    const budget = toolCallBudget(request);
+    const used = request.toolCallsUsed ?? 0;
+    if (used + 1 > budget) {
+      throw bridgeError(
+        "CONFLICT",
+        "tool call budget exhausted for this request",
+      );
+    }
+    await ctx.db.patch("workerRequests", request._id, {
+      toolCallsUsed: used + 1,
+      updatedAt: Date.now(),
+    });
+
+    if (tool === "opensquad.research.read_pages") {
+      const retrieved = await ctx.db
+        .query("providerOperations")
+        .withIndex("by_workspaceId_and_prospectId_and_state", (q) =>
+          q
+            .eq("workspaceId", request.workspaceId)
+            .eq("prospectId", prospect._id)
+            .eq("state", "completed"),
+        )
+        .take(RESEARCH_PAGES_PER_PROSPECT);
+      const pages = retrieved.map((row) => {
+        const page =
+          row.resultRef?.kind === "inline"
+            ? (row.resultRef.value as {
+                url?: unknown;
+                retrievedAt?: unknown;
+                excerpt?: unknown;
+                statusCode?: unknown;
+                truncated?: unknown;
+              })
+            : {};
+        return {
+          url: typeof page.url === "string" ? page.url : "",
+          retrievedAt:
+            typeof page.retrievedAt === "number" ? page.retrievedAt : 0,
+          statusCode:
+            typeof page.statusCode === "number" ? page.statusCode : null,
+          truncated: page.truncated === true,
+          excerpt:
+            typeof page.excerpt === "string"
+              ? page.excerpt.slice(0, TOOL_EXCERPT_MAX_LENGTH)
+              : "",
+        };
+      });
+      return {
+        decision: "answer" as const,
+        payload: JSON.stringify({ status: "ok", pages }),
+      };
+    }
+
+    if (args.url === undefined) {
+      throw bridgeInvalid("url is required for opensquad.research.request_page");
+    }
+    return {
+      decision: "retrieve" as const,
+      missionId: request.missionId,
+      prospectId: prospect._id,
+      runId: request.runId,
+      url: boundedString(args.url, "url", { min: 1, max: 2048 }),
+    };
+  },
+});
+
+/**
+ * Close one tool call: re-verify the lease is STILL live after a retrieval
+ * that may have taken most of a minute, and record the backend's own receipt
+ * for it. The worker names neither the activity kind nor its summary.
+ */
+export const settleWorkerToolCall = internalMutation({
+  args: {
+    credentialHash: v.string(),
+    workerRequestId: v.string(),
+    generation: v.number(),
+    leaseToken: v.string(),
+    runtimeGeneration: v.number(),
+    callId: v.string(),
+    tool: v.string(),
+    prospectId: v.string(),
+    outcome: v.union(v.literal("result"), v.literal("unavailable")),
+    detail: v.optional(v.string()),
+  },
+  returns: v.object({ recorded: v.boolean() }),
+  handler: async (ctx, args) => {
+    const { credential } = await authenticateWorker(
+      ctx,
+      args.credentialHash,
+      "claim",
+    );
+    assertGeneration(credential, args.runtimeGeneration);
+    const request = await loadScopedRequest(
+      ctx,
+      credential,
+      args.workerRequestId,
+    );
+    const tool = boundedString(args.tool, "tool", { min: 1, max: 200 });
+    const capability = TOOL_CAPABILITY[tool];
+    if (capability === undefined) {
+      throw bridgeInvalid(`tool ${tool} is not an allowed capability tool`);
+    }
+    const leaseHash = await sha256Hex(
+      boundedString(args.leaseToken, "leaseToken", { min: 8, max: 200 }),
+    );
+    const slot = await ctx.db
+      .query("workspaceExecutionSlots")
+      .withIndex("by_workspaceId", (q) =>
+        q.eq("workspaceId", credential.workspaceId),
+      )
+      .unique();
+    assertLiveLease(request, slot, args.generation, leaseHash, capability);
+    const callId = boundedString(args.callId, "callId", { min: 1, max: 100 });
+    const prospectId = ctx.db.normalizeId("prospects", args.prospectId);
+    if (prospectId === null) {
+      throw bridgeInvalid("prospectId is not valid in this scope");
+    }
+    await recordActivityEvent(ctx, {
+      workspaceId: request.workspaceId,
+      missionId: request.missionId,
+      kind: "worker_tool_call",
+      summary:
+        args.outcome === "result"
+          ? `${tool} returned a scoped result`
+          : `${tool} was unavailable: ${(args.detail ?? "no detail").slice(0, 200)}`,
+      actor: "worker",
+      dedupeKey: `wtool:${request._id}:${callId}`,
+      runId: request.runId,
+      prospectId,
+    });
+    return { recorded: true };
+  },
+});
+
+/** Excerpt length handed to a MODEL turn. Deliberately shorter than the
+ *  2000-char evidence excerpt: evidence is written by the backend from its
+ *  own retrieval and needs the fuller span; a prompt does not. */
+const TOOL_EXCERPT_MAX_LENGTH = 1_200;
+
+/** The request's tool-call budget. Absent means ZERO — fail closed. */
+function toolCallBudget(request: Doc<"workerRequests">): number {
+  if (request.inputRef.kind !== "inline") {
+    return 0;
+  }
+  const value = request.inputRef.value as {
+    constraints?: { maxToolCalls?: unknown };
+  };
+  const budget = value.constraints?.maxToolCalls;
+  return typeof budget === "number" && Number.isSafeInteger(budget) && budget > 0
+    ? budget
+    : 0;
+}
 
 const vActivityArgs = {
   credentialHash: v.string(),

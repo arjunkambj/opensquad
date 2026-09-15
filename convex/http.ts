@@ -394,6 +394,113 @@ http.route({
   }),
 });
 
+// POST /worker/tool — the lease-bound capability tool channel (P21).
+//
+// Its own httpAction rather than `workerRoute`, because `workerRoute` runs
+// exactly one mutation and this is mutation → action → mutation: the
+// authorizing transaction must consume the tool-call budget BEFORE the paid
+// retrieval, and the receipt must be written after it. Modelled on
+// /worker/artifact, which already has that shape.
+//
+// Every refusal is a status, never a leak: an unknown or foreign
+// workerRequestId, an unknown or foreign prospectId and an unknown tool name
+// are all 400 with no existence signal; a request that does not carry the
+// capability is 403; a spent tool budget or a dead lease is 409.
+http.route({
+  path: "/worker/tool",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const credentialHash = await workerCredentialHash(request);
+      const body = await boundedJson(request);
+      const common = {
+        credentialHash,
+        workerRequestId: stringField(body, "workerRequestId"),
+        generation: numberField(body, "generation"),
+        leaseToken: stringField(body, "leaseToken"),
+        runtimeGeneration: numberField(body, "runtimeGeneration"),
+        callId: stringField(body, "callId"),
+        tool: stringField(body, "tool"),
+        prospectId: stringField(body, "prospectId"),
+      };
+      const url = optionalStringField(body, "url");
+      const begin = (await ctx.runMutation(
+        internal.workerBridge.beginWorkerToolCall,
+        { ...common, ...(url !== undefined ? { url } : {}) },
+      )) as
+        | {
+            decision: "retrieve";
+            missionId: Id<"missions">;
+            prospectId: Id<"prospects">;
+            runId: Id<"runs">;
+            url: string;
+          }
+        | { decision: "answer"; payload: string };
+
+      let payload: string;
+      let outcome: "result" | "unavailable";
+      let detail: string | undefined;
+      if (begin.decision === "answer") {
+        payload = begin.payload;
+        outcome = "result";
+      } else {
+        const retrieved = (await ctx.runAction(
+          internal.integrations.firecrawl.retrieveProspectPage,
+          {
+            missionId: begin.missionId,
+            prospectId: begin.prospectId,
+            runId: begin.runId,
+            url: begin.url,
+          },
+        )) as {
+          state: string;
+          page?: { url: string; retrievedAt: number; excerpt: string; statusCode?: number; truncated: boolean };
+          error?: { code: string; message: string };
+        };
+        if (retrieved.page === undefined) {
+          // A permitted tool whose backend call did not produce a page. The
+          // model is told the content is UNKNOWN rather than being left to
+          // fill the gap by guessing — that is §G2's "missing or truncated
+          // content stays explicitly unknown", not a policy denial.
+          outcome = "unavailable";
+          detail = retrieved.error?.code ?? retrieved.state;
+          payload = JSON.stringify({
+            status: "unavailable",
+            reason: detail,
+          });
+        } else {
+          outcome = "result";
+          payload = JSON.stringify({
+            status: "ok",
+            page: {
+              url: retrieved.page.url,
+              retrievedAt: retrieved.page.retrievedAt,
+              statusCode: retrieved.page.statusCode ?? null,
+              truncated: retrieved.page.truncated,
+              excerpt: retrieved.page.excerpt.slice(0, TOOL_EXCERPT_MAX_LENGTH),
+            },
+          });
+        }
+      }
+
+      await ctx.runMutation(internal.workerBridge.settleWorkerToolCall, {
+        ...common,
+        outcome,
+        ...(detail !== undefined ? { detail } : {}),
+      });
+      return bridgeOk({ status: outcome, payload });
+    } catch (error) {
+      if (error instanceof Response) {
+        return error;
+      }
+      return bridgeErrorResponse(error);
+    }
+  }),
+});
+
+/** Excerpt length handed to a model turn — mirrors the bridge's own bound. */
+const TOOL_EXCERPT_MAX_LENGTH = 1_200;
+
 // POST /worker/artifact — raw bounded bytes with metadata headers; the server
 // scopes, verifies the digest/type, stores the blob and links its own
 // storage ID (the worker never supplies a storage reference).

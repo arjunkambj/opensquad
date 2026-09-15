@@ -77,6 +77,15 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** A permitted tool that produced no result. Bounded, machine-readable and
+ *  explicitly unknown — never an empty string a turn could read as content. */
+function unavailable(reason: string): ToolCallOutcome {
+  return {
+    kind: "unavailable",
+    text: JSON.stringify({ status: "unavailable", reason }),
+  };
+}
+
 /** Runtime-reported phases never exceed the bridge enum. */
 function bridgePhaseFor(
   phase: "boot" | "ready" | "running" | "degraded" | "stopping",
@@ -166,24 +175,51 @@ export class WorkerDaemon {
   }
 
   /**
-   * Execute a permitted tool through the backend. No provider credential
-   * exists inside the Box (envcheck refuses to start with one), so every
-   * paid call runs Convex-side; until the bridge carries a tool channel
-   * there is nothing to call, and a permitted tool reports an explicit
-   * unknown rather than a fabricated result.
+   * Execute a permitted tool through the bridge. No provider credential
+   * exists inside the Box (envcheck refuses to start with one), so the call
+   * necessarily executes Convex-side; the worker carries the lease, not a
+   * key. The backend re-checks the capability and the tool budget, so a
+   * router bug can only ever be more restrictive than the server, never
+   * less.
+   *
+   * A refusal or a failed retrieval becomes an explicit `unavailable` for
+   * the turn — bounded, machine-readable, and never a fabricated page.
    */
   async #invokeTool(
-    _work: ClaimedWork,
+    work: ClaimedWork,
     call: ParsedToolCall,
   ): Promise<ToolCallOutcome> {
-    log("tool_unavailable", { tool: call.tool, reason: "no_backend_channel" });
-    return {
-      kind: "unavailable",
-      text: JSON.stringify({
-        status: "unavailable",
-        reason: "the research channel is not available on this build",
-      }),
-    };
+    const prospectId = call.arguments["prospectId"];
+    if (typeof prospectId !== "string" || prospectId.length === 0) {
+      return unavailable("prospectId is required");
+    }
+    const url = call.arguments["url"];
+    if (url !== undefined && typeof url !== "string") {
+      return unavailable("url must be a string");
+    }
+    try {
+      const reply = await this.#bridge.callTool(work, {
+        callId: call.callId,
+        tool: call.tool,
+        prospectId,
+        ...(typeof url === "string" ? { url } : {}),
+      });
+      return reply.status === "result"
+        ? { kind: "result", text: reply.payload }
+        : { kind: "unavailable", text: reply.payload };
+    } catch (error) {
+      this.#isFatal(error);
+      log("tool_call_error", {
+        tool: call.tool,
+        error: errorMessage(error),
+      });
+      // A 400/403/409 is authoritative and is never retried by the client;
+      // a transport failure is not retried here either, because the turn is
+      // holding a lease and the honest answer is "unknown", not a stall.
+      return unavailable(
+        error instanceof BridgeError ? error.code : "tool_call_failed",
+      );
+    }
   }
 
   /** Signal handler hook — stop accepting work, let the lease lapse. */

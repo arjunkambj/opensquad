@@ -24,6 +24,9 @@ import type {
 import { mintBridgeId } from "./ids.js";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+/** Tool calls execute a provider round trip backend-side; they get their own
+ *  budget rather than raising the shared one. */
+const TOOL_TIMEOUT_MS = 60_000;
 
 export class BridgeError extends Error {
   readonly status: number;
@@ -256,6 +259,98 @@ export class BridgeClient {
       retrySafety: args.retrySafety,
       summary: args.summary.slice(0, 500),
     });
+  }
+
+  /**
+   * Call one capability tool through the bridge. The backend re-checks the
+   * request's capability set, consumes its tool-call budget and executes the
+   * operation itself — no provider credential exists inside the Box, so
+   * every paid call runs Convex-side by construction, not by policy.
+   *
+   * Its own 60 s controller, copied from `uploadArtifact`. The shared
+   * `REQUEST_TIMEOUT_MS` stays 15 s deliberately: it protects
+   * claim/heartbeat/result, where fast failure detection is what keeps a
+   * lease honest, and a synchronous provider round trip can exceed it.
+   * Aborting at 15 s would abort a call that may already have been paid for,
+   * manufacturing the ambiguous outcome the reservation ledger then has to
+   * carry as `uncertain`.
+   */
+  async callTool(
+    work: ClaimedWork,
+    args: {
+      callId: string;
+      tool: string;
+      prospectId: string;
+      url?: string;
+    },
+  ): Promise<{ status: "result" | "unavailable"; payload: string }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(`${this.#base}/worker/tool`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.#config.workerToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workerRequestId: work.workerRequestId,
+          generation: work.generation,
+          leaseToken: work.leaseToken,
+          runtimeGeneration: this.#config.runtimeGeneration,
+          callId: args.callId,
+          tool: args.tool,
+          prospectId: args.prospectId,
+          ...(args.url !== undefined ? { url: args.url } : {}),
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw new BridgeRetryableError(
+        0,
+        "TRANSPORT",
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    const text = await response.text();
+    if (!response.ok) {
+      let code = "UNKNOWN";
+      let message = text.slice(0, 200);
+      try {
+        const parsed = JSON.parse(text) as {
+          error?: { code?: string; message?: string };
+        };
+        if (parsed.error?.code !== undefined) code = parsed.error.code;
+        if (parsed.error?.message !== undefined) message = parsed.error.message;
+      } catch {
+        // keep raw excerpt
+      }
+      if (response.status === 401) {
+        throw new BridgeAuthError(response.status, code, message);
+      }
+      if (
+        response.status === 409 ||
+        response.status === 400 ||
+        response.status === 403
+      ) {
+        throw new BridgeConflictError(response.status, code, message);
+      }
+      throw new BridgeRetryableError(response.status, code, message);
+    }
+    const parsed = JSON.parse(text) as {
+      status?: unknown;
+      payload?: unknown;
+    };
+    if (
+      (parsed.status !== "result" && parsed.status !== "unavailable") ||
+      typeof parsed.payload !== "string"
+    ) {
+      throw new BridgeRetryableError(200, "BAD_JSON", "tool reply is malformed");
+    }
+    return { status: parsed.status, payload: parsed.payload };
   }
 
   /** Upload bounded artifact bytes; deduped on operationKey server-side. */
