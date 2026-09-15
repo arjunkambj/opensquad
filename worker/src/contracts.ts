@@ -18,6 +18,18 @@ export const WORKER_OPERATIONS = [
 ] as const;
 export type WorkerOperation = (typeof WORKER_OPERATIONS)[number];
 
+/** Host capability IDs — mirrors `CAPABILITY_IDS` in convex/lib/validators.ts.
+ *  The server is authoritative; this copy exists so the worker can refuse a
+ *  tool locally without a round trip, never so it can grant one. */
+export const CAPABILITY_IDS = [
+  "apollo.company_search",
+  "apollo.contact_enrichment",
+  "opensquad.web_research",
+  "opensquad.draft_compose",
+  "opensquad.reply_classify",
+] as const;
+export type CapabilityId = (typeof CAPABILITY_IDS)[number];
+
 export type WorkerPhase =
   | "boot"
   | "ready"
@@ -50,6 +62,9 @@ export type WorkerRequestInput = {
   readonly context?: readonly WorkerInputContextBlock[];
   readonly constraints: WorkerInputConstraints;
   readonly outputSchema: unknown;
+  /** Mirror of `ClaimedWork.capabilities`. Present for symmetry with the
+   *  server envelope; `ClaimedWork.capabilities` is what the router reads. */
+  readonly capabilities: readonly CapabilityId[];
   readonly session?: {
     readonly scopeKey: string;
     readonly codexThreadRef?: string;
@@ -65,6 +80,9 @@ export type ClaimedWork = {
   readonly leaseExpiresAt: number;
   readonly operation: WorkerOperation;
   readonly outputSchemaVersion: number;
+  /** The capability set Convex issued for this request. Absent on the wire
+   *  means NONE — the router denies every tool. */
+  readonly capabilities: readonly CapabilityId[];
   readonly input: WorkerRequestInput;
 };
 
@@ -107,6 +125,65 @@ function reqInt(obj: Record<string, unknown>, key: string): number {
   return value;
 }
 
+/**
+ * Parse an issued capability set element by element. Fail-closed by
+ * construction: an absent field is handled by the caller as `[]`, and a
+ * malformed one THROWS rather than degrading — a capability field the worker
+ * and the bridge disagree about means the contract is broken, and the safe
+ * move is to run no work at all.
+ */
+function parseCapabilities(value: unknown): CapabilityId[] {
+  if (!Array.isArray(value)) {
+    throw new Error("bridge payload: capabilities must be an array");
+  }
+  if (value.length > CAPABILITY_IDS.length) {
+    throw new Error("bridge payload: capabilities has too many entries");
+  }
+  const parsed: CapabilityId[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      throw new Error("bridge payload: capabilities entry must be a string");
+    }
+    if (!(CAPABILITY_IDS as readonly string[]).includes(entry)) {
+      throw new Error(`bridge payload: unknown capability ${entry}`);
+    }
+    if (parsed.includes(entry as CapabilityId)) {
+      throw new Error("bridge payload: capabilities contains a duplicate");
+    }
+    parsed.push(entry as CapabilityId);
+  }
+  return parsed;
+}
+
+/** Parse bounded context blocks. Previously these were CAST rather than
+ *  checked; a cast is not a parse, and the pattern is removed here so it is
+ *  not the template the capability set gets copied from. */
+function parseContextBlocks(value: unknown): WorkerInputContextBlock[] {
+  if (!Array.isArray(value)) {
+    throw new Error("bridge payload: input.context must be an array");
+  }
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) {
+      throw new Error(
+        `bridge payload: input.context[${index}] must be an object`,
+      );
+    }
+    const label = entry["label"];
+    const text = entry["text"];
+    if (typeof label !== "string" || label.length === 0) {
+      throw new Error(
+        `bridge payload: input.context[${index}].label must be a non-empty string`,
+      );
+    }
+    if (typeof text !== "string") {
+      throw new Error(
+        `bridge payload: input.context[${index}].text must be a string`,
+      );
+    }
+    return { label, text };
+  });
+}
+
 /** Validate an untrusted claimed-work payload before trusting any field. */
 export function parseClaimedWork(value: unknown): ClaimedWork {
   if (!isRecord(value) || value["claimed"] !== true) {
@@ -144,10 +221,15 @@ export function parseClaimedWork(value: unknown): ClaimedWork {
       ? { model: constraintsRaw["model"] }
       : {}),
   };
-  const context = input["context"];
-  if (context !== undefined && !Array.isArray(context)) {
-    throw new Error("bridge payload: input.context must be an array");
-  }
+  const context =
+    input["context"] === undefined
+      ? undefined
+      : parseContextBlocks(input["context"]);
+  // Absent ⇒ no capabilities ⇒ every tool denied. Malformed ⇒ throw.
+  const capabilities =
+    value["capabilities"] === undefined
+      ? []
+      : parseCapabilities(value["capabilities"]);
   const session = input["session"];
   if (session !== undefined && !isRecord(session)) {
     throw new Error("bridge payload: input.session must be an object");
@@ -170,14 +252,14 @@ export function parseClaimedWork(value: unknown): ClaimedWork {
     leaseExpiresAt: reqInt(value, "leaseExpiresAt"),
     operation,
     outputSchemaVersion: reqInt(value, "outputSchemaVersion"),
+    capabilities,
     input: {
       schemaVersion: 1,
       operation,
       prompt,
-      ...(context !== undefined
-        ? { context: context as WorkerInputContextBlock[] }
-        : {}),
+      ...(context !== undefined ? { context } : {}),
       constraints,
+      capabilities,
       outputSchema: input["outputSchema"],
       ...(sessionOut !== undefined ? { session: sessionOut } : {}),
     },
