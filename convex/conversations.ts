@@ -23,14 +23,22 @@
  * Reads take `requireWorkspaceMember`; state changes take
  * `requireWorkspaceEditor`, which is what refuses a viewer.
  */
-import { query } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
-import { components } from "./_generated/api";
+import { mutation, query } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { requireWorkspaceMember } from "./lib/auth";
+import {
+  getActiveMembership,
+  requireWorkspaceEditor,
+  requireWorkspaceMember,
+} from "./lib/auth";
 import {
   boundedLimit,
+  boundedString,
+  CONVERSATION_NOTE_BODY_MAX_LENGTH,
+  domainError,
+  invalid,
   MAX_LIST_LIMIT,
   PROVIDER_REF_MAX_LENGTH,
   THREAD_BODY_MAX_LENGTH,
@@ -41,8 +49,10 @@ import {
   vSalesStage,
   vTakeoverReason,
 } from "./lib/validators";
+import type { ConversationNoteKind } from "./lib/validators";
 import { getConversationInWorkspace, vConversationDoc } from "./drafts";
 import { sendResultCode, vSendResultCode } from "./sending";
+import { conversationNoteFields } from "./schema";
 
 /* ------------------------------------------------------------------ */
 /* DTOs — projections the inbox screens need, never raw provider rows  */
@@ -501,5 +511,484 @@ export const attentionCounts = query({
         unassignedHasMore || takeoverHasMore || total > MAX_LIST_LIMIT,
       bound: MAX_LIST_LIMIT,
     };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Internal notes                                                      */
+/* ------------------------------------------------------------------ */
+
+export const vConversationNoteDoc = v.object({
+  _id: v.id("conversationNotes"),
+  _creationTime: v.number(),
+  ...conversationNoteFields,
+});
+
+/**
+ * Append one note. `system` rows are the lifecycle trail a thread with no
+ * mission is otherwise denied; `note` rows are human annotations.
+ *
+ * Notes deliberately do NOT advance `contextVersion`: architecture §8 limits
+ * bumps to inbound replies, takeover/assignment/closure and explicit context
+ * changes, and a private annotation must not invalidate every live approval
+ * on the thread. And — keeping `activity.ts`'s invariant for
+ * `missionComments` verbatim — a note can never resolve a business approval;
+ * there is no path from this table to decision state.
+ */
+async function recordConversationNote(
+  ctx: MutationCtx,
+  args: {
+    conversation: Doc<"conversations">;
+    kind: ConversationNoteKind;
+    actor: string;
+    body: string;
+  },
+): Promise<Doc<"conversationNotes">> {
+  const body = boundedString(args.body, "body", {
+    min: 1,
+    max: CONVERSATION_NOTE_BODY_MAX_LENGTH,
+  });
+  const noteId = await ctx.db.insert("conversationNotes", {
+    workspaceId: args.conversation.workspaceId,
+    conversationId: args.conversation._id,
+    kind: args.kind,
+    actor: boundedString(args.actor, "actor", { min: 1, max: 300 }),
+    body,
+    createdAt: Date.now(),
+  });
+  const note = await ctx.db.get("conversationNotes", noteId);
+  if (note === null) {
+    throw domainError("NOT_FOUND", "conversation note not found");
+  }
+  return note;
+}
+
+/** Internal notes on one thread, newest first, cursor-paginated. */
+export const listNotes = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({
+    items: v.array(vConversationNoteDoc),
+    cursor: v.union(v.string(), v.null()),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    const limit = boundedLimit(args.limit);
+    const result = await ctx.db
+      .query("conversationNotes")
+      .withIndex("by_conversationId_and_createdAt", (q) =>
+        q.eq("conversationId", args.conversationId),
+      )
+      .order("desc")
+      .paginate({ numItems: limit, cursor: args.cursor ?? null });
+    return {
+      items: result.page,
+      cursor: result.isDone ? null : result.continueCursor,
+      hasMore: !result.isDone,
+    };
+  },
+});
+
+/** Add a human note to a thread. Never advances the conversation version. */
+export const addNote = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    body: v.string(),
+  },
+  returns: vConversationNoteDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    return await recordConversationNote(ctx, {
+      conversation,
+      kind: "note",
+      actor: identityKey,
+      body: args.body,
+    });
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Ownership, takeover and lifecycle                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The optimistic-concurrency check every versioned mutation shares. It runs
+ * AFTER the target-state check, following the `missions.pause` precedent: a
+ * retried request that already committed returns the doc rather than a
+ * spurious CONFLICT.
+ */
+function assertContextVersion(
+  conversation: Doc<"conversations">,
+  expected: number,
+): void {
+  if (conversation.contextVersion !== expected) {
+    throw domainError(
+      "CONFLICT",
+      `conversation context is v${conversation.contextVersion}, not v${expected}`,
+    );
+  }
+}
+
+/**
+ * Apply a context-changing patch: advance `contextVersion` by exactly one and
+ * retire the work that was authorized against the old one.
+ *
+ * Both halves are mandatory together. The bump is what makes a live approval
+ * stale at preflight (`context_changed`); retiring is what stops the now
+ * permanently unresolvable ask from pinning `requiredDecisionCount` on its
+ * mission, and what releases a `reserved` attempt's usage reservation. Doing
+ * only the first leaves a thread that can never be worked again.
+ */
+async function advanceContext(
+  ctx: MutationCtx,
+  conversation: Doc<"conversations">,
+  patch: Partial<Doc<"conversations">>,
+  reason: string,
+): Promise<Doc<"conversations">> {
+  await ctx.db.patch("conversations", conversation._id, {
+    ...patch,
+    contextVersion: conversation.contextVersion + 1,
+    updatedAt: Date.now(),
+  });
+  await ctx.runMutation(internal.drafts.retireConversationWork, {
+    conversationId: conversation._id,
+    reason,
+  });
+  const updated = await ctx.db.get("conversations", conversation._id);
+  if (updated === null) {
+    throw domainError("NOT_FOUND", "conversation not found");
+  }
+  return updated;
+}
+
+/**
+ * Freeze automation on a thread (§5 `setTakeover`).
+ *
+ * `enabled: false` is REFUSED. Architecture §8 requires an unfreeze to
+ * validate the association, the verified sender/contact match, the campaign
+ * and the current policy; a boolean that skipped all four would be a hole, so
+ * there is exactly one unfreeze path and it is the checked one —
+ * `conversations.resume`.
+ */
+export const setTakeover = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+    enabled: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    if (!args.enabled) {
+      throw invalid(
+        "clearing takeover re-runs the policy checks — call conversations.resume",
+      );
+    }
+    // Idempotent retry: already frozen returns the doc, because checking the
+    // version first would CONFLICT a retried request.
+    if (conversation.humanTakeover) {
+      return conversation;
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+    const reason =
+      args.reason === undefined
+        ? undefined
+        : boundedString(args.reason, "reason", { min: 1, max: 500 });
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      {
+        humanTakeover: true,
+        takeoverReason: "operator",
+        takeoverBy: identityKey,
+        takeoverAt: Date.now(),
+      },
+      "an operator took the conversation over",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body:
+        reason === undefined
+          ? "Human takeover enabled; automation is frozen."
+          : `Human takeover enabled; automation is frozen. ${reason}`,
+    });
+    return updated;
+  },
+});
+
+/**
+ * Assign the MACHINE that works this thread (§5 `assignEmployee`).
+ * `assignOwner` assigns the human; the two are separate facts.
+ */
+export const assignEmployee = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+    employeeId: v.id("employees"),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    const employee = await ctx.db.get("employees", args.employeeId);
+    if (employee === null || employee.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "employee not found");
+    }
+    if (conversation.employeeId === args.employeeId) {
+      return conversation;
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      { employeeId: args.employeeId },
+      "the assigned employee changed",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body: `Assigned employee changed to ${employee.name}.`,
+    });
+    return updated;
+  },
+});
+
+/**
+ * Assign the HUMAN who owns this thread, or clear the assignment by omitting
+ * `assigneeIdentityKey`.
+ *
+ * The assignee must resolve to an active membership before it is stored —
+ * the same rule `prospects.ownerIdentityKey` carries. An identity that is not
+ * an active member is a bad argument, not a hidden row, so it is INVALID
+ * rather than NOT_FOUND.
+ */
+export const assignOwner = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+    assigneeIdentityKey: v.optional(v.string()),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    const next =
+      args.assigneeIdentityKey === undefined
+        ? undefined
+        : boundedString(args.assigneeIdentityKey, "assigneeIdentityKey", {
+            min: 1,
+            max: 300,
+          });
+    if (next !== undefined) {
+      const membership = await getActiveMembership(
+        ctx,
+        args.workspaceId,
+        next,
+      );
+      if (membership === null) {
+        throw invalid("assignee must be an active member of this workspace");
+      }
+    }
+    if (conversation.assigneeIdentityKey === next) {
+      return conversation;
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      { assigneeIdentityKey: next },
+      "the conversation owner changed",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body:
+        next === undefined
+          ? "Conversation owner cleared."
+          : "Conversation owner assigned.",
+    });
+    return updated;
+  },
+});
+
+/** Close a thread. Automation refuses a non-open conversation outright. */
+export const close = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    if (conversation.state === "closed") {
+      return conversation;
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      { state: "closed" },
+      "the conversation was closed",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body: "Conversation closed.",
+    });
+    return updated;
+  },
+});
+
+/**
+ * Reopen a closed thread.
+ *
+ * Without this a closed conversation that receives new mail is a dead end —
+ * architecture §8 forbids auto-reopening, because state changes are human, so
+ * the human needs the door. Reopening keeps takeover ON: re-arming automation
+ * is a separate act, and it is `resume`, which re-runs the policy checks.
+ */
+export const reopen = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    expectedContextVersion: v.number(),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(
+      ctx,
+      args.workspaceId,
+    );
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    if (conversation.state === "open") {
+      return conversation;
+    }
+    if (conversation.state !== "closed") {
+      throw domainError(
+        "CONFLICT",
+        `conversation is ${conversation.state}; only a closed conversation can reopen`,
+      );
+    }
+    assertContextVersion(conversation, args.expectedContextVersion);
+    const updated = await advanceContext(
+      ctx,
+      conversation,
+      {
+        state: "open",
+        humanTakeover: true,
+        takeoverReason: "awaiting_resume",
+        takeoverBy: identityKey,
+        takeoverAt: Date.now(),
+      },
+      "the conversation was reopened",
+    );
+    await recordConversationNote(ctx, {
+      conversation,
+      kind: "system",
+      actor: identityKey,
+      body:
+        "Conversation reopened under human takeover; resume re-arms automation.",
+    });
+    return updated;
+  },
+});
+
+/**
+ * Clear the unread counter (§5 `markRead`).
+ *
+ * MEMBER-level on purpose, and the one write here that does NOT advance
+ * `contextVersion`: `unreadCount` is a single shared workspace counter, and
+ * having read a thread is not a fact that invalidates a draft. Bumping the
+ * version here would make every open approval stale each time someone opened
+ * the inbox.
+ */
+export const markRead = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+  },
+  returns: vConversationDoc,
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const conversation = await getConversationInWorkspace(
+      ctx,
+      args.workspaceId,
+      args.conversationId,
+    );
+    if (conversation.unreadCount === 0) {
+      return conversation;
+    }
+    await ctx.db.patch("conversations", conversation._id, {
+      unreadCount: 0,
+      updatedAt: Date.now(),
+    });
+    const updated = await ctx.db.get("conversations", conversation._id);
+    if (updated === null) {
+      throw domainError("NOT_FOUND", "conversation not found");
+    }
+    return updated;
   },
 });
