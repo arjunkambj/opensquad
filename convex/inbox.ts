@@ -2001,3 +2001,42 @@ export const installReplyDraft = internalMutation({
     };
   },
 });
+
+/**
+ * Start reply work for the conversation's LATEST inbound message — the seam
+ * `conversations.resume` hands off to once its policy checks pass.
+ *
+ * "Latest" and not "the one that was held": resuming a thread means answering
+ * where the conversation actually is. And because the mission key is the
+ * message, resuming twice starts at most one reply workflow (V16 step 3) —
+ * the second call finds the first mission and reports it.
+ *
+ * The gate runs here too. `resume` has already cleared takeover and re-checked
+ * association, campaign, sender and policy, but this mutation is internal and
+ * must be safe for any caller, so it never assumes its caller checked.
+ */
+export const startReplyForLatestInbound = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    actor: v.string(),
+  },
+  returns: vStartReplyResult,
+  handler: async (ctx, args): Promise<StartReplyResult> => {
+    const conversation = await ctx.db.get("conversations", args.conversationId);
+    if (conversation === null) {
+      return { started: false, reason: "conversation not found" };
+    }
+    const messageRef = conversation.lastInboundMessageRef;
+    if (messageRef === undefined) {
+      return {
+        started: false,
+        reason: "the conversation has no inbound message to answer",
+      };
+    }
+    const verdict = await evaluateReplyAutomation(ctx, conversation, "none");
+    if (!verdict.start) {
+      return { started: false, reason: verdict.blockedBy };
+    }
+    return await startReplyMission(ctx, conversation, messageRef, args.actor);
+  },
+});
