@@ -197,10 +197,18 @@ export function MissionColumn({
 }
 
 /**
- * Three distinct empties, in the contract's order: an empty page behind a
- * cursor says nothing about the column, a filter-empty names the filter
- * responsible and offers to clear it, and only an unfiltered first page may
- * claim the true empty — whose job is to say what will put a card here.
+ * Distinct empties, in the contract's order: an empty page behind a cursor
+ * says nothing about the column, a filter-empty names **every** filter
+ * responsible and offers to clear each of them, and only an unfiltered first
+ * page may claim the true empty — whose job is to say what will put a card
+ * here.
+ *
+ * The two filters compose rather than compete. Archive and campaign can both
+ * be on, and the branch that fires first must not wear the other's words:
+ * "Nothing archived in Backlog" while a campaign filter is what produced the
+ * zero is the filtered-to-zero state posing as the true empty, and its single
+ * "Back to the board" escape leaves the campaign filter on — moving the
+ * operator further from what they were looking for.
  */
 function ColumnEmpty({
   column,
@@ -234,25 +242,58 @@ function ColumnEmpty({
     )
   }
 
+  const showAllCampaigns = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() =>
+        void navigate({
+          to: "/overview",
+          search: withFilters(search, { campaign: undefined }),
+        })
+      }
+    >
+      Show all campaigns
+    </Button>
+  )
+
+  const backToTheBoard = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() =>
+        void navigate({
+          to: "/overview",
+          search: withFilters(search, { archived: undefined }),
+        })
+      }
+    >
+      Back to the board
+    </Button>
+  )
+
+  if (archived && filteredToCampaign) {
+    return (
+      <EmptyState
+        title={`Nothing archived in ${meta.label} for this campaign`}
+        description="Two filters are on: the archive, and one campaign. Another campaign may still have archived missions in this column, and the board itself is a separate view."
+        action={
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {showAllCampaigns}
+            {backToTheBoard}
+          </div>
+        }
+        className="py-8"
+      />
+    )
+  }
+
   if (archived) {
     return (
       <EmptyState
         title={`Nothing archived in ${meta.label}`}
         description="This is the archive, not the board. Archived missions keep their column."
-        action={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void navigate({
-                to: "/overview",
-                search: withFilters(search, { archived: undefined }),
-              })
-            }
-          >
-            Back to the board
-          </Button>
-        }
+        action={backToTheBoard}
         className="py-8"
       />
     )
@@ -263,20 +304,7 @@ function ColumnEmpty({
       <EmptyState
         title={`Nothing in ${meta.label} for this campaign`}
         description="This column is filtered to one campaign. Other campaigns may still have missions here."
-        action={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void navigate({
-                to: "/overview",
-                search: withFilters(search, { campaign: undefined }),
-              })
-            }
-          >
-            Show all campaigns
-          </Button>
-        }
+        action={showAllCampaigns}
         className="py-8"
       />
     )
