@@ -2261,6 +2261,215 @@ export function domainOfNormalizedEmail(normalizedEmail: string): string {
   return normalizedEmail.slice(normalizedEmail.lastIndexOf("@") + 1);
 }
 
+/* ----- deterministic opt-out detection -------------------------------- */
+
+/**
+ * How strongly an inbound message asks to be left alone (architecture §8
+ * step 6: "evaluate an explicit deterministic opt-out rule before any new
+ * send; ambiguous opt-out intent pauses outreach for review. Do not wait for
+ * an optional model classification to stop a clear unsubscribe.").
+ *
+ * Three values, and the middle one is the point of the whole design:
+ *
+ * - `explicit` — an unambiguous opt-out sentence. Suppresses immediately,
+ *   without waiting for any model.
+ * - `ambiguous` — the words are there but the request is not. Automation
+ *   STOPS and a human decides. It writes NO suppression row:
+ *   `vSuppressionReason` is a closed union of `unsubscribe | manual | bounce
+ *   | provider` and there is deliberately no "something guessed so".
+ * - `none` — no opt-out language at all.
+ *
+ * This is a rule over text, never a classifier. It runs on the reply's own
+ * words and it errs toward `ambiguous`, because an `explicit` false positive
+ * silently ends a real conversation while an `ambiguous` false positive only
+ * asks a human to look.
+ */
+export const OPT_OUT_SIGNALS = ["none", "ambiguous", "explicit"] as const;
+
+export const vOptOutSignal = v.union(
+  v.literal("none"),
+  v.literal("ambiguous"),
+  v.literal("explicit"),
+);
+
+export type OptOutSignal = (typeof OPT_OUT_SIGNALS)[number];
+
+/** Rank so the strongest signal across subject and body wins. */
+const OPT_OUT_RANK: Record<OptOutSignal, number> = {
+  none: 0,
+  ambiguous: 1,
+  explicit: 2,
+};
+
+/**
+ * Cut an inbound body down to the reply's OWN words, dropping quoted history
+ * and the sender's signature block.
+ *
+ * Without this, every reply that quotes our outbound footer would read as an
+ * unsubscribe request and suppress the recipient we had just mailed — the
+ * scan would be matching our own text. Cutting at the signature delimiter
+ * matters for the same reason in the other direction: a corporate auto-footer
+ * is boilerplate, not a request.
+ *
+ * Deliberately conservative. Cutting too early can only WEAKEN a signal, and a
+ * weakened signal means a human looks at the message.
+ */
+export function stripQuotedReply(text: string): string {
+  const kept: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (
+      // A quoted line, in every client that marks them.
+      trimmed.startsWith(">") ||
+      // RFC 3676 signature delimiter.
+      trimmed === "--" ||
+      // "On <date>, <someone> wrote:" — the attribution above a quote.
+      /\bwrote:\s*$/i.test(trimmed) ||
+      /^-{2,}\s*original message\s*-{2,}$/i.test(trimmed) ||
+      /^-{3,}\s*forwarded message\s*-{3,}$/i.test(trimmed) ||
+      // Outlook's horizontal rule above the quoted header block.
+      /^_{10,}$/.test(trimmed)
+    ) {
+      break;
+    }
+    kept.push(line);
+  }
+  return kept.join("\n");
+}
+
+/** Lowercase, collapse whitespace, fold smart quotes — nothing else. */
+function normalizeScanText(value: string): string {
+  return value
+    .slice(0, INBOUND_BODY_SCAN_MAX_LENGTH)
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** The whole message, once trailing punctuation is discounted. */
+function bareText(scan: string): string {
+  return scan.replace(/[.!?,;:\s]+$/, "");
+}
+
+type OptOutRule = { rule: string; matches: (scan: string) => boolean };
+
+/**
+ * Unambiguous opt-out sentences. Each one is a request addressed to us; none
+ * of them can be satisfied by a passing mention of the word.
+ *
+ * `opt out` on its own is NOT here — "we decided to opt out of the
+ * conference" is a normal sentence — so it ranks ambiguous instead.
+ */
+const EXPLICIT_OPT_OUT_RULES: readonly OptOutRule[] = [
+  { rule: "unsubscribe_me", matches: (s) => s.includes("unsubscribe me") },
+  {
+    rule: "please_unsubscribe",
+    matches: (s) => s.includes("please unsubscribe"),
+  },
+  { rule: "unsubscribe_bare", matches: (s) => bareText(s) === "unsubscribe" },
+  {
+    rule: "remove_from_list",
+    matches: (s) =>
+      /\bremove (?:me|us) from (?:your|this|the|our)[a-z ]{0,24}\blist\b/.test(s),
+  },
+  {
+    rule: "take_off_list",
+    matches: (s) =>
+      /\btake (?:me|us) off (?:of )?(?:your|this|the|our)[a-z ]{0,24}\blist\b/.test(
+        s,
+      ),
+  },
+  {
+    rule: "stop_emailing",
+    matches: (s) =>
+      /\bstop (?:emailing|e-mailing|contacting|messaging) (?:me|us)\b/.test(s) ||
+      /\bstop sending (?:me|us)\b/.test(s),
+  },
+  {
+    rule: "do_not_contact",
+    matches: (s) =>
+      /\b(?:do not|don't|dont) (?:contact|email|e-mail|message) (?:me|us)\b/.test(
+        s,
+      ),
+  },
+  { rule: "opt_me_out", matches: (s) => /\bopt (?:me|us) out\b/.test(s) },
+];
+
+/**
+ * Language that MIGHT be an opt-out. Every one of these stops automation and
+ * asks a human; none of them writes a suppression row.
+ *
+ * `not interested` and `no thanks` are deliberately absent. They are
+ * classifications, not opt-outs — freezing them here would take the reply away
+ * from the classifier that exists to handle them.
+ */
+const AMBIGUOUS_OPT_OUT_RULES: readonly OptOutRule[] = [
+  { rule: "mentions_unsubscribe", matches: (s) => s.includes("unsubscribe") },
+  { rule: "opt_out_phrase", matches: (s) => /\bopt(?:ing|ed)? out\b/.test(s) },
+  { rule: "remove_me", matches: (s) => /\bremove (?:me|us)\b/.test(s) },
+  { rule: "take_me_off", matches: (s) => /\btake (?:me|us) off\b/.test(s) },
+  { rule: "bare_stop", matches: (s) => bareText(s) === "stop" },
+];
+
+function scanOptOut(scan: string): { signal: OptOutSignal; rule?: string } {
+  if (scan.length === 0) {
+    return { signal: "none" };
+  }
+  for (const candidate of EXPLICIT_OPT_OUT_RULES) {
+    if (candidate.matches(scan)) {
+      return { signal: "explicit", rule: candidate.rule };
+    }
+  }
+  for (const candidate of AMBIGUOUS_OPT_OUT_RULES) {
+    if (candidate.matches(scan)) {
+      return { signal: "ambiguous", rule: candidate.rule };
+    }
+  }
+  return { signal: "none" };
+}
+
+/**
+ * The deterministic opt-out rule, run over an inbound message's own text.
+ *
+ * Body text is `extracted_text` when AgentMail supplied it (its own
+ * reply extraction) and `stripQuotedReply(text)` otherwise. `html` is never
+ * scanned — markup would let the same words hide behind tags.
+ *
+ * An inbound `List-Unsubscribe` header is NOT consulted, here or anywhere: it
+ * is the sender's own footer advertising how to leave THEIR list, not a
+ * request addressed to us. Nothing in the return value is derived from a
+ * header.
+ *
+ * The result travels onward as an enum plus the name of the rule that fired —
+ * never a slice of the message. The operator reads the message itself in the
+ * thread view; a second copy of it in an app table is what §4.3 rules out.
+ */
+export function evaluateOptOutText(args: {
+  subject?: unknown;
+  text?: unknown;
+  extractedText?: unknown;
+}): { signal: OptOutSignal; rule?: string } {
+  const body =
+    typeof args.extractedText === "string" && args.extractedText.length > 0
+      ? args.extractedText
+      : typeof args.text === "string"
+        ? stripQuotedReply(args.text)
+        : "";
+  const scans = [
+    typeof args.subject === "string" ? normalizeScanText(args.subject) : "",
+    normalizeScanText(body),
+  ];
+  let best: { signal: OptOutSignal; rule?: string } = { signal: "none" };
+  for (const scan of scans) {
+    const found = scanOptOut(scan);
+    if (OPT_OUT_RANK[found.signal] > OPT_OUT_RANK[best.signal]) {
+      best = found;
+    }
+  }
+  return best;
+}
+
 /** Longest inbound `From` header this will even look at. */
 export const INBOUND_SENDER_MAX_LENGTH = 1_000;
 

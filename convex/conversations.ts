@@ -537,7 +537,7 @@ export const vConversationNoteDoc = v.object({
  * `missionComments` verbatim — a note can never resolve a business approval;
  * there is no path from this table to decision state.
  */
-async function recordConversationNote(
+export async function recordConversationNote(
   ctx: MutationCtx,
   args: {
     conversation: Doc<"conversations">;

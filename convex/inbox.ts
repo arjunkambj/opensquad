@@ -44,7 +44,9 @@ import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { boundedString } from "./lib/validators";
+import { boundedString, OPT_OUT_SIGNALS } from "./lib/validators";
+import type { OptOutSignal } from "./lib/validators";
+import { recordConversationNote } from "./conversations";
 
 /* ------------------------------------------------------------------ */
 /* Receipt facts                                                       */
@@ -63,14 +65,30 @@ import { boundedString } from "./lib/validators";
 type InboundFacts = {
   /** Normalized `From`, when the header named exactly one parseable address. */
   fromAddress?: string;
+  /** Verdict of the deterministic opt-out rule, computed at the callback. */
+  optOutSignal: OptOutSignal;
+  /** Which rule fired — a rule NAME, never a slice of the message. */
+  optOutRule?: string;
 };
 
 function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFacts {
   const fromAddress = receipt.providerFacts.fromAddress;
+  const signal = receipt.providerFacts.optOutSignal;
+  const rule = receipt.providerFacts.optOutRule;
   return {
     ...(typeof fromAddress === "string" && fromAddress.length > 0
       ? { fromAddress }
       : {}),
+    // A receipt written before the opt-out rule existed, or by any other
+    // path, carries no verdict. `none` is the only safe default: it can never
+    // manufacture a suppression, only fail to stop one, and the next message
+    // on the thread re-evaluates.
+    optOutSignal: (OPT_OUT_SIGNALS as readonly string[]).includes(
+      typeof signal === "string" ? signal : "",
+    )
+      ? (signal as OptOutSignal)
+      : "none",
+    ...(typeof rule === "string" && rule.length > 0 ? { optOutRule: rule } : {}),
   };
 }
 
@@ -222,6 +240,8 @@ async function matchConversation(
  *
  * STEP 2 — the inbound facts P11 owns that step 1 does not touch.
  *
+ * STEP 3 — opt-out enforcement (`enforceOptOut`).
+ *
  * Everything runs inside the caller's single transaction; `ctx.runMutation`
  * from a mutation is a sub-transaction of it, so either all of it commits or
  * none of it does. Nothing that could spend a model token exists above this
@@ -259,8 +279,126 @@ async function applyToConversation(
       updatedAt: Date.now(),
     });
   }
+
+  // 3. Opt-out, before anything could propose a reply.
+  await enforceOptOut(ctx, current, facts);
+
   const updated = await ctx.db.get("conversations", current._id);
   return updated ?? current;
+}
+
+/* ------------------------------------------------------------------ */
+/* Opt-out                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Act on the deterministic opt-out verdict the callback computed.
+ *
+ * WHAT GETS SUPPRESSED, AND BY WHOM. The address suppressed is always one the
+ * APPLICATION resolved — the `normalizedRecipient` of the conversation's most
+ * recent draft revision, i.e. the address we actually mailed. It is never read
+ * out of the inbound payload, so a message cannot nominate its own suppression
+ * target. Suppression is `kind: "email"`; an individual opt-out never implies
+ * the domain (`suppressions.ts` keeps that rule and P11 does not weaken it).
+ *
+ * AND THE SENDER MUST BE THE PERSON WE MAILED. An explicit opt-out from some
+ * other address — a colleague on cc, an assistant, an unparseable header — is
+ * a claim made on someone else's behalf. Honouring it would let a third party
+ * suppress an address in a workspace they have nothing to do with, so it is
+ * downgraded to the ambiguous hold: automation still stops, but a human
+ * decides whether to add the suppression through `suppressions.add`.
+ *
+ * WHAT AMBIGUOUS DOES, MECHANICALLY. Human takeover on, with
+ * `takeoverReason: "ambiguous_opt_out"` — so `evaluateSendGates` returns
+ * `human_takeover` on the very next preflight, the reply gate refuses, and
+ * `conversations.resume` is the only way back. No suppression row is written:
+ * `vSuppressionReason` is a closed union and there is no member meaning "a
+ * rule was unsure". Step 1 already superseded every open approval and
+ * cancelled every parked attempt for this message, so there is nothing left to
+ * retire here, and the version is deliberately not bumped a second time — the
+ * inbound bump already carried exactly this invalidation.
+ *
+ * A VERIFIED EXPLICIT OPT-OUT DOES NOT TAKE THE THREAD OVER. The suppression
+ * row is the durable block, and it is honoured in both directions that matter:
+ * `sending.evaluateSendGates` refuses dispatch with `suppressed_email`, and
+ * both `conversations.resume` and the reply gate re-run `matchSuppression`. A
+ * takeover flag on top would add a hold an operator has to clear by hand for
+ * no additional protection.
+ */
+async function enforceOptOut(
+  ctx: MutationCtx,
+  conversation: Doc<"conversations">,
+  facts: InboundFacts,
+): Promise<void> {
+  if (facts.optOutSignal === "none") {
+    return;
+  }
+  const rule = facts.optOutRule ?? "unnamed_rule";
+
+  if (facts.optOutSignal === "explicit") {
+    const latestDraft = await ctx.db
+      .query("drafts")
+      .withIndex("by_conversationId_and_revision", (q) =>
+        q.eq("conversationId", conversation._id),
+      )
+      .order("desc")
+      .first();
+    const verified =
+      latestDraft !== null &&
+      facts.fromAddress !== undefined &&
+      facts.fromAddress === latestDraft.normalizedRecipient;
+    if (verified) {
+      await ctx.runMutation(internal.suppressions.recordSuppression, {
+        workspaceId: conversation.workspaceId,
+        kind: "email",
+        value: latestDraft.normalizedRecipient,
+        reason: "unsubscribe",
+        sourceConversationId: conversation._id,
+      });
+      await recordConversationNote(ctx, {
+        conversation,
+        kind: "system",
+        actor: "system",
+        body: `Opt-out honoured: the verified sender asked to be removed (rule ${rule}). This address is suppressed for the workspace; remove the suppression to contact them again.`,
+      });
+      return;
+    }
+    // Explicit words, unverified speaker. Hold, do not suppress.
+    await holdForReview(
+      ctx,
+      conversation,
+      `Possible opt-out held for review: the request (rule ${rule}) did not come from the address this thread was sent to, so nothing was suppressed. Review the message and use Suppressions if it is genuine.`,
+    );
+    return;
+  }
+
+  await holdForReview(
+    ctx,
+    conversation,
+    `Possible opt-out held for review (rule ${rule}). Automation is frozen and nothing was suppressed — a human decides whether this is an opt-out.`,
+  );
+}
+
+/** Freeze automation pending review and say why, on the row and in a note. */
+async function holdForReview(
+  ctx: MutationCtx,
+  conversation: Doc<"conversations">,
+  note: string,
+): Promise<void> {
+  const now = Date.now();
+  await ctx.db.patch("conversations", conversation._id, {
+    humanTakeover: true,
+    takeoverReason: "ambiguous_opt_out",
+    takeoverBy: "system",
+    takeoverAt: now,
+    updatedAt: now,
+  });
+  await recordConversationNote(ctx, {
+    conversation,
+    kind: "system",
+    actor: "system",
+    body: note,
+  });
 }
 
 /* ------------------------------------------------------------------ */

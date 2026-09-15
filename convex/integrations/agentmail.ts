@@ -37,6 +37,7 @@ import type { MutationCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { recordReceipt } from "../sendAttempts";
 import {
+  evaluateOptOutText,
   inboundApplicationKey,
   outboundApplicationKey,
   parseInboundSender,
@@ -821,6 +822,16 @@ export const onMessageReceived = internalMutation({
     // alone. No subject, no body, no headers: §4.3 keeps receipts to the
     // verified facts a business decision needs.
     const fromAddress = parseInboundSender(message?.from);
+    // The deterministic opt-out rule runs HERE, while the raw payload is in
+    // memory — it is the only place the unprojected body exists without a
+    // provider round trip. Only the enum and the name of the rule that fired
+    // travel onward; the body itself never reaches an app table, a scheduler
+    // argument or a log line.
+    const optOut = evaluateOptOutText({
+      subject: message?.subject,
+      text: message?.text,
+      extractedText: message?.extracted_text,
+    });
     const { receipt, duplicate, duplicateApplicationKey } = await recordReceipt(
       ctx,
       {
@@ -833,6 +844,8 @@ export const onMessageReceived = internalMutation({
         ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
         providerFacts: {
           ...(fromAddress !== undefined ? { fromAddress } : {}),
+          optOutSignal: optOut.signal,
+          ...(optOut.rule !== undefined ? { optOutRule: optOut.rule } : {}),
         },
       },
     );
