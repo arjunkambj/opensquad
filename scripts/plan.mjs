@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,33 @@ function cardFor(id) {
   const index = taskStarts.findIndex((match) => match[1] === id);
   if (index === -1) return null;
   return cards.slice(taskStarts[index].index, taskStarts[index + 1]?.index).trim();
+}
+
+/**
+ * Commit SHAs an evidence string cites that this repository does not contain.
+ * Git-optional by design: outside a checkout (the portable handoff case) there
+ * is nothing to resolve against, so the check yields nothing rather than
+ * failing a plan that is fine.
+ */
+function resolvableShas(text) {
+  // At least one digit: it keeps English words that happen to be hex
+  // ("defaced", "effaced") out of the candidate set. A genuine all-letter SHA
+  // goes unchecked, which costs a missed check rather than a false alarm.
+  const candidates = [...new Set(text.match(/\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/g) ?? [])];
+  if (!candidates.length) return [];
+  let known;
+  try {
+    known = execFileSync("git", ["cat-file", "--batch-check"], {
+      cwd: root,
+      input: `${candidates.join("\n")}\n`,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+  } catch {
+    return [];
+  }
+  const lines = known.trimEnd().split("\n");
+  return candidates.filter((_, index) => / missing$/.test(lines[index] ?? " missing"));
 }
 
 function check() {
@@ -54,8 +82,18 @@ function check() {
         errors.push(`${task.id}: ${task.status} task requires completed ${dependency}.`);
       }
     }
-    if (task.status === "done" && !task.evidence?.some((item) => typeof item === "string" && item.trim())) {
-      errors.push(`${task.id}: completion requires acceptance evidence.`);
+    if (task.status === "done") {
+      const evidence = (task.evidence ?? []).filter((item) => typeof item === "string" && item.trim());
+      if (!evidence.length) {
+        errors.push(`${task.id}: completion requires acceptance evidence.`);
+      } else if (!existsSync(resolve(root, `plan/evidence/${task.id}.md`))) {
+        // A citation the reviewer cannot open is not evidence. This is the
+        // cheapest guard against a completed task whose record is a sentence.
+        errors.push(`${task.id}: completion requires plan/evidence/${task.id}.md.`);
+      }
+      for (const sha of resolvableShas(evidence.join(" "))) {
+        errors.push(`${task.id}: evidence cites unknown commit ${sha}.`);
+      }
     }
     if (task.status === "in_progress" && !task.owner?.trim()) {
       errors.push(`${task.id}: in-progress task requires an owner.`);
