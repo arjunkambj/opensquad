@@ -22,6 +22,7 @@ import {
   vCapabilityId,
   vControlCommand,
   vControlRequestState,
+  vConversationNoteKind,
   vConversationState,
   vDecisionAnswer,
   vDecisionKind,
@@ -68,7 +69,9 @@ import {
   vProspectContact,
   vProspectSourceRef,
   vQualification,
+  vReplyDisposition,
   vSalesStage,
+  vTakeoverReason,
 } from "./lib/validators";
 
 export const workspaceFields = {
@@ -778,12 +781,75 @@ export const conversationFields = {
    *  Internally produced — the association is made by an authorized operator
    *  against a lead already in this workspace, never from a provider payload. */
   prospectId: v.optional(v.id("prospects")),
+  /**
+   * The campaign this thread's reply work runs under, FROZEN at association.
+   * `missionFields.campaignId` is required, so a reply mission needs one; and
+   * recording what was agreed when the lead was linked means a later
+   * re-campaigning of that lead cannot silently retarget in-flight reply
+   * work. Written only by `conversations.associateProspect`, which refuses a
+   * campaign the prospect does not belong to.
+   */
+  campaignId: v.optional(v.id("campaigns")),
+  /**
+   * Human owner of this thread (identityKey). Must resolve to an ACTIVE
+   * membership before it is stored — the same rule `prospects.ownerIdentityKey`
+   * carries. Distinct from `employeeId`, which assigns the MACHINE.
+   */
+  assigneeIdentityKey: v.optional(v.string()),
+  /** Why automation is frozen. Present whenever `humanTakeover` is true. */
+  takeoverReason: v.optional(vTakeoverReason),
+  /** identityKey of the operator who froze it, or `"system"`. */
+  takeoverBy: v.optional(v.string()),
+  /** When the current hold started — "held since", and stale-hold ordering. */
+  takeoverAt: v.optional(v.number()),
+  /**
+   * Product-level meaning of the most recent inbound reply, so the inbox row
+   * can show its classification tag (`plan/ux.md` §165) without reading a
+   * `workerRequests` transport row per listed conversation.
+   */
+  lastDisposition: v.optional(vReplyDisposition),
+  lastDispositionAt: v.optional(v.number()),
+  /**
+   * Normalized sender of the most recent inbound message, when it parsed as
+   * one address. Stored as DATA: it never selects a workspace or a
+   * conversation and never becomes a send recipient. `conversations.resume`
+   * compares it against the associated lead's contact, where a mismatch
+   * BLOCKS the resume — it can refuse, never grant.
+   */
+  lastInboundFrom: v.optional(v.string()),
   /** Per-inbox provider thread id (AgentMail thread ids are per-inbox). */
   providerThreadRef: v.optional(v.string()),
   currentDraftId: v.optional(v.id("drafts")),
   lastInboundMessageRef: v.optional(v.string()),
   lastInboundAt: v.optional(v.number()),
   lastMessageAt: v.optional(v.number()),
+};
+
+/**
+ * Internal notes on a conversation (P11) — the audit trail a thread with no
+ * mission is otherwise denied. `activityEventFields.missionId`,
+ * `decisionFields.missionId` and `missionCommentFields.missionId` are all
+ * required `v.id("missions")`, and an unassigned conversation has no mission
+ * (a mission needs a campaign, which needs an associated lead), so none of
+ * those three can record its intake, takeover, association or closure.
+ *
+ * `kind: "system"` rows are those lifecycle records; `kind: "note"` rows are
+ * human annotations. Rows are append-only, and — keeping `activity.ts`'s
+ * invariant for `missionComments` verbatim — a note can NEVER resolve a
+ * business approval: this table has no path to decision state.
+ *
+ * Notes do not bump `conversations.contextVersion`. Architecture §8 limits
+ * bumps to inbound replies, takeover/assignment/closure and explicit context
+ * changes; a private annotation must not invalidate every live approval.
+ */
+export const conversationNoteFields = {
+  workspaceId: v.id("workspaces"),
+  conversationId: v.id("conversations"),
+  kind: vConversationNoteKind,
+  /** identityKey of the author, or `"system"`. */
+  actor: v.string(),
+  body: v.string(),
+  createdAt: v.number(),
 };
 
 /**
@@ -1242,7 +1308,22 @@ export default defineSchema({
       "inboxRef",
       "providerThreadRef",
     ])
+    // Two DISJOINT exact ranges for the bounded attention count: unassigned
+    // threads, and open threads under takeover. Summing the plain takeover
+    // index would double-count, because every unassigned thread is also under
+    // takeover; scoping the second bucket to `state: "open"` removes the
+    // overlap without post-filtering a truncated page (§5).
+    .index("by_workspaceId_and_state_and_humanTakeover", [
+      "workspaceId",
+      "state",
+      "humanTakeover",
+    ])
     .index("by_prospectId", ["prospectId"]),
+
+  conversationNotes: defineTable(conversationNoteFields).index(
+    "by_conversationId_and_createdAt",
+    ["conversationId", "createdAt"],
+  ),
 
   drafts: defineTable(draftFields)
     // Unique (conversationId, revision) pair, enforced transactionally.
