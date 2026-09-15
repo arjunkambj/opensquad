@@ -100,7 +100,7 @@ import {
   renderWorkerInput,
 } from "../lib/roleTemplates";
 import type { PromptBlock } from "../lib/roleTemplates";
-import { DISPATCHABLE_RUNTIME_STATES } from "../workerOperations";
+import { dispatchRefusalFor } from "../workerOperations";
 import { finishRun, insertRun } from "../runs";
 import { recordActivityEvent } from "../activity";
 import { vDecisionContinuation } from "../decisions";
@@ -699,27 +699,25 @@ export const dispatchResearch = internalMutation({
       // guess; the branch reports the gap instead (§G2 Firecrawl item 5).
       return { action: "halt", reason: "no page could be retrieved" };
     }
-    // The runtime pre-check. `dispatchWorkerRequest` THROWS when no runtime
-    // is dispatchable, and a `ctx.runMutation` throw shares this
-    // transaction — so a stage that wants to park and retry has to ask
-    // first. `DISPATCHABLE_RUNTIME_STATES` is exported for exactly this, so
-    // the pre-check and the dispatch can never disagree.
-    const connection = await ctx.db
-      .query("runtimeConnections")
-      .withIndex("by_workspaceId", (q) =>
-        q.eq("workspaceId", mission.workspaceId),
-      )
-      .unique();
-    if (connection === null) {
-      return { action: "unavailable", reason: "no runtime connection" };
-    }
-    if (!DISPATCHABLE_RUNTIME_STATES.has(connection.state)) {
-      return {
-        action: "unavailable",
-        reason: `runtime connection is ${connection.state}`,
-      };
-    }
+    // The dispatch pre-check. `dispatchWorkerRequest` THROWS for every
+    // refusal it makes — no dispatchable runtime, a full `model_runs` day, a
+    // disabled employee, a withdrawn capability — and a `ctx.runMutation`
+    // throw shares this transaction, so a stage that wants to park and
+    // retry, or to finish with a reason a person can act on, has to ask
+    // first. `dispatchRefusalFor` mirrors those checks in dispatch order
+    // against the same rows, so the pre-check and the dispatch can never
+    // disagree.
     const employeeId = await employeeFor(ctx, mission, "researcher");
+    const refusal = await dispatchRefusalFor(ctx, {
+      mission,
+      employeeId,
+      operation: "research",
+      stepKey: `research:${branch._id}`,
+      generation: branch.generation,
+    });
+    if (refusal !== null) {
+      return { action: refusal.kind, reason: refusal.reason };
+    }
     const input = renderWorkerInput({
       operation: "research",
       employeeInstructions: await instructionsFor(ctx, mission, employeeId),
@@ -830,6 +828,11 @@ export const applyResearchResult = internalMutation({
     /** Set when the retrieval produced nothing, so the lead records the gap
      *  instead of the pipeline pretending the model was never asked. */
     retrievalFailure: v.optional(v.string()),
+    /** Set when no model turn could be DISPATCHED at all — a full
+     *  `model_runs` day, a disabled employee, a withdrawn capability. The
+     *  lead records that reason rather than reading as though the model had
+     *  been asked and had nothing to say. */
+    dispatchFailure: v.optional(v.string()),
   },
   returns: vApplyResearchResult,
   handler: async (ctx, args): Promise<ApplyResearchResult> => {
@@ -848,7 +851,10 @@ export const applyResearchResult = internalMutation({
       return { action: "failed", reason: "run not found" };
     }
     let status: "complete" | "pending" = "pending";
-    let summary = args.retrievalFailure ?? "No research result was recorded.";
+    let summary =
+      args.retrievalFailure ??
+      args.dispatchFailure ??
+      "No research result was recorded.";
     let observations: { topic: string; finding: string; sourceUrl?: string }[] =
       [];
     let artifactRefs: string[] = [];
@@ -1183,20 +1189,20 @@ export const dispatchDraft = internalMutation({
     if (prospect === null || prospectId === null) {
       return { action: "halt", reason: "prospect not found" };
     }
-    const connection = await ctx.db
-      .query("runtimeConnections")
-      .withIndex("by_workspaceId", (q) =>
-        q.eq("workspaceId", mission.workspaceId),
-      )
-      .unique();
-    if (connection === null) {
-      return { action: "unavailable", reason: "no runtime connection" };
-    }
-    if (!DISPATCHABLE_RUNTIME_STATES.has(connection.state)) {
-      return {
-        action: "unavailable",
-        reason: `runtime connection is ${connection.state}`,
-      };
+    // The same pre-check `dispatchResearch` makes, for the same reason: a
+    // refusal must arrive as a step result this branch can act on, never as
+    // a throw that fails the child workflow and replaces the lead's terminal
+    // reason with a serialized error envelope.
+    const employeeId = await employeeFor(ctx, mission, "outreach");
+    const refusal = await dispatchRefusalFor(ctx, {
+      mission,
+      employeeId,
+      operation: "draft",
+      stepKey: `draft:${branch._id}`,
+      generation: branch.generation,
+    });
+    if (refusal !== null) {
+      return { action: refusal.kind, reason: refusal.reason };
     }
     // This branch's OWN evidence, newest first, capped at the reconciled
     // 12 — never another prospect's, which is the §4.3 invariant
@@ -1214,7 +1220,6 @@ export const dispatchDraft = internalMutation({
         reason: "no stored evidence to write from",
       };
     }
-    const employeeId = await employeeFor(ctx, mission, "outreach");
     const runId = await insertRun(ctx, {
       missionId: mission._id,
       stage: "outreach_draft",
@@ -1773,6 +1778,7 @@ export const salesProspectWorkflow = workflow
     //    case there is nothing to research and a model call would buy a
     //    guess.
     let researchRequestId: Id<"workerRequests"> | undefined;
+    let researchHalt: string | undefined;
     if (retrieved.pages.length > 0) {
       let dispatched = await step.runMutation(
         internal.workflows.sales.dispatchResearch,
@@ -1809,7 +1815,7 @@ export const salesProspectWorkflow = workflow
           if (runtimeWaits >= MAX_RUNTIME_WAITS) {
             return await finish(
               "failed",
-              `No runtime connection was available to research this lead (${dispatched.reason}).`,
+              `Model work could not be dispatched to research this lead (${dispatched.reason}).`,
               "finish:researchRuntimeUnavailable",
             );
           }
@@ -1836,7 +1842,13 @@ export const salesProspectWorkflow = workflow
           "finish:researchAbandoned",
         );
       }
-      if (dispatched.action !== "halt") {
+      if (dispatched.action === "halt") {
+        // No model turn will be dispatched for this lead. The reason is
+        // carried into `applyResearchResult` so it lands on the lead's own
+        // `fitReason`, rather than the lead reading as though the model had
+        // been asked and had nothing to say.
+        researchHalt = dispatched.reason;
+      } else {
         researchRequestId = dispatched.workerRequestId;
         // The completion event is always delivered — `succeeded`, `failed`,
         // `cancelled` and `uncertain` alike — so this cannot hang on a
@@ -1871,6 +1883,11 @@ export const salesProspectWorkflow = workflow
           ? { workerRequestId: researchRequestId }
           : {}),
         ...(retrievalFailure !== undefined ? { retrievalFailure } : {}),
+        ...(researchHalt !== undefined
+          ? {
+              dispatchFailure: `No research turn could be dispatched for this lead: ${researchHalt}`,
+            }
+          : {}),
       },
       { name: "applyResearch" },
     );
@@ -1981,7 +1998,7 @@ export const salesProspectWorkflow = workflow
         if (draftRuntimeWaits >= MAX_RUNTIME_WAITS) {
           return await finish(
             "contact_needed",
-            `No runtime connection was available to draft outreach (${proposed.reason}); the lead is waiting for a person.`,
+            `Model work could not be dispatched to draft outreach (${proposed.reason}); the lead is waiting for a person.`,
             "finish:draftRuntimeUnavailable",
           );
         }

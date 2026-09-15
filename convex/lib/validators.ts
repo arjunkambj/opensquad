@@ -1147,18 +1147,35 @@ export function deriveRequestCapabilities(
   allowed: readonly CapabilityId[],
   operation: WorkerOperation,
 ): CapabilityId[] {
+  const granted = tryDeriveRequestCapabilities(template, allowed, operation);
+  if (granted === null) {
+    throw domainError(
+      "FORBIDDEN",
+      `employee ${template} lacks ${OPERATION_CAPABILITY_REQUIREMENT[operation]} for operation ${operation}`,
+    );
+  }
+  return granted;
+}
+
+/**
+ * The same derivation, answering instead of throwing.
+ *
+ * A caller that wants to PARK rather than fail needs to ask before it
+ * dispatches: `dispatchWorkerRequest` runs inside the caller's transaction,
+ * and a nested mutation's throw cannot be caught. Both forms share this one
+ * body so a pre-check and the dispatch it precedes can never disagree.
+ */
+export function tryDeriveRequestCapabilities(
+  template: EmployeeTemplate,
+  allowed: readonly CapabilityId[],
+  operation: WorkerOperation,
+): CapabilityId[] | null {
   const policy = new Set<CapabilityId>(HOST_CAPABILITY_POLICY[template]);
   const granted = [...new Set(allowed)]
     .filter((capability) => policy.has(capability))
     .sort();
   const required = OPERATION_CAPABILITY_REQUIREMENT[operation];
-  if (!granted.includes(required)) {
-    throw domainError(
-      "FORBIDDEN",
-      `employee ${template} lacks ${required} for operation ${operation}`,
-    );
-  }
-  return granted;
+  return granted.includes(required) ? granted : null;
 }
 
 export const ARTIFACT_KINDS = [

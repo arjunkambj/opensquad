@@ -32,7 +32,9 @@ import {
   intersectCapabilities,
   localDayKey,
   modelRunOperationKey,
+  tryDeriveRequestCapabilities,
   MODEL_RUN_DAILY_LIMIT_DEFAULT,
+  OPERATION_CAPABILITY_REQUIREMENT,
   vCapabilityId,
   HOST_CAPABILITY_POLICY,
   bridgeError,
@@ -71,6 +73,161 @@ export const DISPATCHABLE_RUNTIME_STATES: ReadonlySet<string> = new Set([
   "connecting",
   "ready",
 ]);
+
+/**
+ * Why a dispatch would be refused, and whether re-asking could ever help.
+ *
+ * `unavailable` is a condition that clears on its own — a runtime comes
+ * back, a local day rolls over. `halt` is a policy refusal: an operator
+ * disabled the employee or withdrew the capability, and no amount of
+ * sleeping changes that.
+ */
+export type DispatchRefusal = {
+  kind: "unavailable" | "halt";
+  reason: string;
+};
+
+/**
+ * Would `dispatchWorkerRequest` refuse this dispatch, and why?
+ *
+ * `dispatchWorkerRequestImpl` THROWS for every refusal it makes, and it runs
+ * through `ctx.runMutation` inside the caller's transaction, so a caller can
+ * neither catch it nor survive it: the throw propagates out of the step, the
+ * child workflow fails, and the branch is finalized `failed` carrying a raw
+ * serialized error envelope instead of the terminal reason it owes a person.
+ *
+ * `DISPATCHABLE_RUNTIME_STATES` already existed for the runtime half of this
+ * question. The other two refusals — a `model_runs` day that is full, and an
+ * employee whose row no longer carries the operation's capability — had no
+ * such seam, so a workspace hitting its ceiling part-way through a mission
+ * failed every remaining branch one at a time, and so did disabling the
+ * researcher mid-mission.
+ *
+ * Every check below mirrors one in `dispatchWorkerRequestImpl`, in the same
+ * order, reading the same rows, so the two cannot disagree. `null` means the
+ * dispatch is admissible right now.
+ */
+export async function dispatchRefusalFor(
+  ctx: MutationCtx,
+  args: {
+    mission: Doc<"missions">;
+    employeeId: Id<"employees">;
+    operation: WorkerOperation;
+    stepKey: string;
+    generation: number;
+  },
+): Promise<DispatchRefusal | null> {
+  const stepKey = boundedString(args.stepKey, "stepKey", { min: 1, max: 200 });
+  // A step whose request row already exists takes the `alreadyExists` early
+  // return, BEFORE any of these checks and before the debit — so a redispatch
+  // is admissible however full the day is.
+  const existing = await ctx.db
+    .query("workerRequests")
+    .withIndex("by_missionId_and_stepKey_and_generation", (q) =>
+      q
+        .eq("missionId", args.mission._id)
+        .eq("stepKey", stepKey)
+        .eq("generation", args.generation),
+    )
+    .unique();
+  if (existing !== null) return null;
+
+  const connection = await ctx.db
+    .query("runtimeConnections")
+    .withIndex("by_workspaceId", (q) =>
+      q.eq("workspaceId", args.mission.workspaceId),
+    )
+    .unique();
+  if (connection === null) {
+    return { kind: "unavailable", reason: "no runtime connection" };
+  }
+  if (!DISPATCHABLE_RUNTIME_STATES.has(connection.state)) {
+    return {
+      kind: "unavailable",
+      reason: `runtime connection is ${connection.state}`,
+    };
+  }
+
+  const employee = await ctx.db.get("employees", args.employeeId);
+  if (employee === null || employee.workspaceId !== args.mission.workspaceId) {
+    return { kind: "halt", reason: "run employee not found" };
+  }
+  if (!employee.enabled) {
+    return { kind: "halt", reason: `employee ${employee.template} is disabled` };
+  }
+  if (
+    tryDeriveRequestCapabilities(
+      employee.template,
+      employee.allowedCapabilities,
+      args.operation,
+    ) === null
+  ) {
+    return {
+      kind: "halt",
+      reason:
+        `employee ${employee.template} no longer holds ` +
+        `${OPERATION_CAPABILITY_REQUIREMENT[args.operation]}`,
+    };
+  }
+
+  const workspace = await ctx.db.get("workspaces", args.mission.workspaceId);
+  if (workspace === null) {
+    return { kind: "halt", reason: "workspace not found for mission" };
+  }
+  const periodKey = localDayKey(Date.now(), workspace.timezone);
+  const limit = workspace.modelRunDailyLimit ?? MODEL_RUN_DAILY_LIMIT_DEFAULT;
+  const bucket = await ctx.db
+    .query("usageBuckets")
+    .withIndex("by_workspaceId_and_scopeKey_and_metric_and_periodKey", (q) =>
+      q
+        .eq("workspaceId", args.mission.workspaceId)
+        .eq("scopeKey", "workspace")
+        .eq("metric", "model_runs")
+        .eq("periodKey", periodKey),
+    )
+    .unique();
+  if (bucket === null) {
+    return limit >= 1
+      ? null
+      : {
+          kind: "unavailable",
+          reason: `model_runs limit reached for period ${periodKey} (0/${limit})`,
+        };
+  }
+  // `usage.reserve` returns the recorded reservation instead of debiting
+  // again when this operation key already holds one, so a live reservation
+  // is admissible at any occupancy. Same rule, same index.
+  const prior = await ctx.db
+    .query("usageReservations")
+    .withIndex("by_workspaceId_and_operationKey_and_bucketId", (q) =>
+      q
+        .eq("workspaceId", args.mission.workspaceId)
+        .eq(
+          "operationKey",
+          modelRunOperationKey({
+            missionId: args.mission._id,
+            stepKey,
+            generation: args.generation,
+          }),
+        )
+        .eq("bucketId", bucket._id),
+    )
+    .unique();
+  if (
+    prior !== null &&
+    (prior.state === "reserved" || prior.state === "uncertain")
+  ) {
+    return null;
+  }
+  const taken = bucket.reserved + bucket.committed + bucket.uncertain;
+  if (taken + 1 > limit) {
+    return {
+      kind: "unavailable",
+      reason: `model_runs limit reached for period ${periodKey} (${taken}/${limit})`,
+    };
+  }
+  return null;
+}
 
 /**
  * Settle the model-run debit a dispatch took for this request.
