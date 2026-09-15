@@ -722,6 +722,11 @@ const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<ReplyGateBlockCode> = new Set<
  * Idempotent by construction: it refuses a receipt that is not `pending`, and
  * `recordReceipt` already refused to create a second pending row for a message
  * this workspace has seen.
+ *
+ * And ORDER-SAFE by construction: a receipt older than the inbound the
+ * conversation already carries is settled without being applied, so the drain
+ * — the one path that can deliver an older message after a newer one — can
+ * never rewind the thread.
  */
 export const applyInboundMessage = internalMutation({
   args: { receiptId: v.id("emailEventReceipts") },
@@ -784,6 +789,38 @@ export const applyInboundMessage = internalMutation({
       }
       target = ensured.conversation;
       queued = ensured.created;
+    }
+
+    // A LATE inbound must never rewind the conversation.
+    //
+    // The drain exists precisely so a receipt whose callback schedule was
+    // lost is re-driven minutes or hours later — by which time a NEWER
+    // message on the same thread may already have been applied. Everything
+    // `applyToConversation` writes describes "the latest inbound":
+    // `lastInboundMessageRef`, `lastInboundAt`, `lastInboundFrom`, a
+    // `contextVersion` bump that supersedes every open ask, and a reply
+    // mission keyed on the message. Replaying an older message through it
+    // would rewind all four — retiring the ask an operator is looking at for
+    // the newer message, answering the older one, and stranding the newer
+    // mission at `superseded_by_newer_inbound` with no path back, because a
+    // reply mission is one-per-message forever.
+    //
+    // `drafts.applyInboundContext` already clamps `lastMessageAt` for exactly
+    // this reason and says so; its own guard compares only the LAST applied
+    // message, so it cannot see a late A behind an applied B. This is that
+    // same clamp for everything the late message would otherwise carry.
+    // Settled `handled`, not `failed`: nothing went wrong — the message is
+    // real, it simply arrived after the thread had moved past it, and the
+    // reason makes that readable in `sendAttempts.listReceipts`.
+    const lastInboundAt = target.lastInboundAt;
+    if (lastInboundAt !== undefined && receipt.receivedAt < lastInboundAt) {
+      await settleReceipt(ctx, receipt, "handled", "late_inbound_superseded");
+      return {
+        outcome: "skipped" as const,
+        conversationId: target._id,
+        contextVersion: target.contextVersion,
+        reason: "late_inbound_superseded",
+      };
     }
 
     const applied = await applyToConversation(ctx, receipt, target, facts);
