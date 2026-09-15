@@ -407,10 +407,6 @@ export type RenderWorkerInputArgs = {
   /** Data blocks, in the order they should appear. Labels are host constants
    *  and bodies are untrusted text; both are enforced here. */
   readonly blocks: readonly PromptBlock[];
-  /** The capability set Convex issued for this request, mirrored onto the
-   *  envelope. The `workerRequests.capabilities` COLUMN remains the authority;
-   *  this copy exists so the worker's router can refuse without a round trip. */
-  readonly capabilities: readonly CapabilityId[];
   /** Codex session scope — one saved thread per (mission, prospect, role). */
   readonly scopeKey: string;
   readonly codexThreadRef?: string;
@@ -508,7 +504,12 @@ export function renderWorkerInput(
         ? { codexThreadRef: args.codexThreadRef }
         : {}),
     },
+    // NO `capabilities` KEY. `dispatchWorkerRequestImpl` REFUSES an envelope
+    // that carries one ("input.capabilities is derived at dispatch, not
+    // supplied by the caller") and mirrors the set it derived from the run's
+    // own employee row afterwards. A renderer that could name its own
+    // capability set would be precisely the model-supplied request the card
+    // forbids, so this one cannot.
     outputSchema: schema,
-    capabilities: [...args.capabilities],
   };
 }
