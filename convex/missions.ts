@@ -37,6 +37,7 @@ import {
   vBoardColumn,
   vMissionKind,
   vMissionPriority,
+  vMissionVisibility,
 } from "./lib/validators";
 import type { InputSnapshot, MissionState } from "./lib/validators";
 import { recordActivityEvent } from "./activity";
@@ -354,12 +355,19 @@ export const get = query({
  * independently per column; `campaignId` optionally scopes to one campaign.
  * Older active missions are never hidden by an activity-date filter — the
  * index is on `updatedAt`, not on last activity.
+ *
+ * `visibility` defaults to `visible`, which is the board. Passing `archived`
+ * lists the archive instead; both index branches already carry `visibility`
+ * as an equality column, so neither listing scans the other. Without this
+ * argument `restore` is unreachable from any surface, because nothing can
+ * name an archived mission (V09 step 3, `plan/verification.md`).
  */
 export const listBoard = query({
   args: {
     workspaceId: v.id("workspaces"),
     campaignId: v.optional(v.id("campaigns")),
     column: vBoardColumn,
+    visibility: v.optional(vMissionVisibility),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
   },
@@ -367,6 +375,7 @@ export const listBoard = query({
   handler: async (ctx, args) => {
     await requireWorkspaceMember(ctx, args.workspaceId);
     const limit = boundedLimit(args.limit);
+    const visibility = args.visibility ?? "visible";
     const result =
       args.campaignId === undefined
         ? await ctx.db
@@ -376,7 +385,7 @@ export const listBoard = query({
               (q) =>
                 q
                   .eq("workspaceId", args.workspaceId)
-                  .eq("visibility", "visible")
+                  .eq("visibility", visibility)
                   .eq("boardColumn", args.column),
             )
             .order("desc")
@@ -389,7 +398,7 @@ export const listBoard = query({
                 q
                   .eq("workspaceId", args.workspaceId)
                   .eq("campaignId", args.campaignId!)
-                  .eq("visibility", "visible")
+                  .eq("visibility", visibility)
                   .eq("boardColumn", args.column),
             )
             .order("desc")
