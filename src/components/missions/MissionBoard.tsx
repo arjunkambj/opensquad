@@ -101,9 +101,14 @@ export function MissionBoard() {
       ? undefined
       : (search.campaign as Id<"campaigns">)
 
-  // `listBoard` does not validate `campaignId` — a hand-edited or stale
-  // `?campaign=` returns an empty page silently rather than NOT_FOUND. Saying
-  // so beats four mystery empties and an unselected dropdown.
+  // The dropdown's page is bounded at 25 and unordered by recency, so a
+  // campaign missing from it is NOT evidence that the campaign is missing, and
+  // it is certainly not evidence about the board: `listBoard` filters on
+  // `campaignId` directly and knows nothing about this list's page. All this
+  // flag may claim is that the dropdown cannot name the filter — which is a
+  // real thing to say, because otherwise the control reads "All campaigns"
+  // while the board is filtered. Whether a column is empty is the column's own
+  // claim to make, and `ColumnEmpty` already makes it.
   const campaignUnknown =
     search.campaign !== undefined &&
     campaigns !== undefined &&
@@ -150,6 +155,15 @@ export function MissionBoard() {
             }
           >
             <option value="">All campaigns</option>
+            {/* Without this the select falls back to rendering its first
+                option — "All campaigns" — while the board is filtered to a
+                campaign past the page bound, which is the control stating the
+                opposite of what is true. */}
+            {campaignUnknown && search.campaign !== undefined ? (
+              <option value={search.campaign}>
+                The campaign this link names
+              </option>
+            ) : null}
             {(campaigns?.items ?? []).map((campaign) => (
               <option key={campaign._id} value={campaign._id}>
                 {campaign.title}
@@ -217,8 +231,10 @@ export function MissionBoard() {
       {campaignUnknown ? (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
-            Filtered to a campaign that is not in this list. The board is empty
-            because nothing matches it, not because there is no work.
+            The board is filtered to a campaign this list cannot name — it is
+            not in the first {campaigns?.items.length ?? 0} campaigns. Each
+            column below still shows that campaign's missions, and says for
+            itself whether it has any.
           </span>
           <Button
             variant="outline"
