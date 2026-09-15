@@ -2721,6 +2721,22 @@ export function researchPageLimit(leadLimit: number): number {
   );
 }
 
+/**
+ * One page the BACKEND itself retrieved, in the shape the pipeline stores
+ * and cites. `retrievedAt` is epoch ms — `scrapePage` reports an ISO 8601
+ * string, and the conversion happens once, here at the boundary, rather
+ * than being repeated (and eventually mis-repeated) at each read site.
+ */
+export const vRetrievedPage = v.object({
+  url: v.string(),
+  retrievedAt: v.number(),
+  excerpt: v.string(),
+  statusCode: v.optional(v.number()),
+  truncated: v.boolean(),
+  providerOperationId: v.id("providerOperations"),
+});
+export type RetrievedPage = Infer<typeof vRetrievedPage>;
+
 export const vUsageReservationState = v.union(
   v.literal("reserved"),
   v.literal("committed"),

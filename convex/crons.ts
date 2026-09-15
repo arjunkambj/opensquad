@@ -51,4 +51,15 @@ crons.interval(
   {},
 );
 
+// A paid provider call that never recorded its outcome must not silently
+// keep an allowance reserved forever. This moves those to `uncertain` — which
+// KEEPS capacity blocked, deliberately: we cannot prove we were not billed,
+// so the honest accounting is an explicit unknown, not a release.
+crons.interval(
+  "provider-operation-sweep",
+  { minutes: 5 },
+  internal.integrations.firecrawl.sweepStaleFirecrawlOperations,
+  {},
+);
+
 export default crons;
