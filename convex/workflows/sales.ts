@@ -84,6 +84,7 @@ import {
   invalid,
   normalizeHttpUrl,
   parseWorkerResult,
+  receiptNamesRun,
   vMissionOutcome,
   vQualification,
   vWorkerRequestCompletion,
@@ -361,10 +362,16 @@ function prospectBlock(prospect: Doc<"prospects">): PromptBlock {
 }
 
 /**
- * The pages THIS run's backend retrieved, read back from their own
- * `providerOperations` receipts. Nothing the model said is consulted: the
- * receipt is what makes a page citable, both here (what it may read) and in
+ * The pages THIS run read back from their own `providerOperations`
+ * receipts. Nothing the model said is consulted: the receipt is what makes
+ * a page citable, both here (what it may read) and in
  * `evidence.recordResearchEvidence` (what it may cite).
+ *
+ * "This run" means the receipt NAMES this run — it either paid for the
+ * retrieval or replayed it. A campaign's second mission plans the same URLs
+ * and the campaign-scoped `operationKey` replays every one of them, so
+ * strict `runId` equality here would return nothing and every branch of
+ * every later mission would halt on "no page could be retrieved".
  */
 async function retrievedPagesForRun(
   ctx: MutationCtx,
@@ -383,7 +390,7 @@ async function retrievedPagesForRun(
     .take(RESEARCH_PAGES_PER_PROSPECT * 2);
   const pages: RetrievedPage[] = [];
   for (const row of rows) {
-    if (row.runId !== runId) continue;
+    if (!receiptNamesRun(row, runId)) continue;
     if (row.resultRef === undefined || row.resultRef.kind !== "inline") continue;
     const value: unknown = row.resultRef.value;
     if (typeof value !== "object" || value === null) continue;

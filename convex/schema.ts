@@ -1165,7 +1165,16 @@ export const providerOperationFields = {
   createdAt: v.number(),
   updatedAt: v.number(),
   prospectId: v.optional(v.id("prospects")),
+  /** The run whose retrieval created this receipt — stamped once, at insert,
+   *  and never rewritten. It is what `supported` confidence is measured
+   *  against: a retrieval taken in the run that cites it. */
   runId: v.optional(v.id("runs")),
+  /** The later runs that READ this receipt back instead of paying for the
+   *  page again. `operationKey` is campaign-scoped, so a second mission on
+   *  the same campaign replays every page it plans; without this column
+   *  those pages named no run the second mission could recognise, and the
+   *  campaign could never be researched twice. Bounded and append-only. */
+  replayedForRunIds: v.optional(v.array(v.id("runs"))),
   /* Continuation binding — present ONLY for a callback-correlated operation
    * (a durable crawl). The bounded synchronous scrape and the lease-bound
    * tool route complete inside their own action and have no continuation to

@@ -21,13 +21,23 @@
  *   runId        The `runs` row this stage created with `insertRun` — the same
  *                run the worker request was dispatched under.
  *
- *   sourceUrl    ONLY an observation citing a page THIS RUN's backend actually
- *                retrieved becomes an evidence row. The model's `sourceUrl` is
- *                normalized with `normalizeHttpUrl` and looked up in the map of
- *                pages this run fetched. An observation with no `sourceUrl`, or
- *                naming a page the backend never fetched, IS NOT EVIDENCE. It
- *                may live in the research brief artifact, labelled unsourced,
- *                and is counted in the returned `unsourced` total.
+ *   sourceUrl    ONLY an observation citing a page THE BACKEND RETRIEVED AND
+ *                THIS RUN READ BACK becomes an evidence row. The model's
+ *                `sourceUrl` is normalized with `normalizeHttpUrl` and looked
+ *                up in the map of pages this run read. An observation with no
+ *                `sourceUrl`, or naming a page the backend never fetched, IS
+ *                NOT EVIDENCE. It may live in the research brief artifact,
+ *                labelled unsourced, and is counted in the returned
+ *                `unsourced` total.
+ *
+ *                "This run read it back" is mechanical, not asserted: the
+ *                receipt NAMES the run (`receiptNamesRun`) — either this run
+ *                paid for the retrieval (`providerOperations.runId`) or it
+ *                replayed the receipt and was recorded on it
+ *                (`replayedForRunIds`). The campaign-scoped `operationKey`
+ *                means a campaign's second mission pays for nothing and
+ *                replays everything, so REPLAY IS THE NORMAL CASE for any run
+ *                after the first — what it may never be is silent.
  *
  *   retrievedAt  The backend's own retrieval timestamp for THAT page.
  *                `scrapePage` returns `retrievedAt` as an ISO 8601 STRING while
@@ -55,19 +65,26 @@
  *                `supported`". DEFAULT TO "unknown". The exact rule:
  *
  *                  "supported"  ONLY on this stated mechanical basis — the cited
- *                               page was retrieved by the backend in THIS run
- *                               AND the stored excerpt is drawn from that same
- *                               retrieval AND the retrieval reported a 2xx
- *                               statusCode AND `markdownTruncated` is false.
- *                               Nothing about the model's wording contributes.
+ *                               page's retrieval was PAID FOR BY THIS RUN
+ *                               (`receiptRetrievedInRun`, strict equality on
+ *                               `providerOperations.runId`) AND the stored
+ *                               excerpt is drawn from that same retrieval AND
+ *                               the retrieval reported a 2xx statusCode AND
+ *                               `markdownTruncated` is false. Nothing about the
+ *                               model's wording contributes. A page this run
+ *                               only REPLAYED is admissible but never
+ *                               `supported`: the retrieval predates the run and
+ *                               nothing here re-checked the page.
  *                  "hypothesis" ONLY where the model labelled it one, i.e. the
  *                               observation's `topic` begins with the reserved
  *                               host marker "hypothesis:" that the Researcher
  *                               role template instructs it to use, per §4.5's
  *                               "hypotheses labeled".
  *                  "unknown"    Everywhere else, including every truncated page,
- *                               every non-2xx retrieval, and every observation
- *                               whose basis cannot be stated mechanically.
+ *                               every non-2xx retrieval, every page this run
+ *                               replayed rather than retrieved, and every
+ *                               observation whose basis cannot be stated
+ *                               mechanically.
  *
  *   workspaceId / createdAt   Backend facts. Not gaps.
  *
@@ -90,10 +107,11 @@
  * page it retrieved. Every entry in `pages` names a `providerOperations` row,
  * and the url, retrieval time, excerpt, status code and truncation flag are
  * read back from THAT row — the receipt Convex itself wrote when it paid for
- * the page. A page whose operation is missing, is not `completed`, or belongs
- * to another workspace or prospect is not admitted at all, so no observation
- * can cite it. The argument is therefore a set of receipts, not a set of
- * claims.
+ * the page. A page whose operation is missing, is not `completed`, belongs to
+ * another workspace or prospect, or does not name this run is not admitted at
+ * all, so no observation can cite it. The argument is therefore a set of
+ * receipts, not a set of claims, and `admitRecordedPage` re-checks all five
+ * conditions itself rather than trusting the caller that selected them.
  */
 import { internalMutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
@@ -109,6 +127,8 @@ import {
   invalid,
   isHypothesisTopic,
   normalizeHttpUrl,
+  receiptNamesRun,
+  receiptRetrievedInRun,
   vResearchObservation,
   vRetrievedPage,
   RESEARCH_OBSERVATIONS_MAX,
@@ -217,20 +237,28 @@ export const listForRun = query({
 /* The §4.5 synthesis site                                             */
 /* ------------------------------------------------------------------ */
 
-/** A page this run retrieved, as read back from its own provider receipt. */
+/** A page this run read back from its own provider receipt. */
 type AdmittedPage = {
   readonly url: string;
   readonly retrievedAt: number;
   readonly excerpt: string;
   readonly statusCode: number | undefined;
   readonly truncated: boolean;
+  /** `true` when THIS run's own retrieval produced the receipt, `false`
+   *  when the run replayed a receipt an earlier run paid for. Only the
+   *  first may reach `supported`. */
+  readonly retrievedInRun: boolean;
 };
 
 /**
  * Read one `providerOperations` receipt back into the page it recorded.
  * Returns `null` for anything that is not a completed, inline-result page
- * receipt belonging to this workspace and prospect — the caller then never
- * admits the page, so nothing can cite it.
+ * receipt belonging to this workspace and prospect AND naming this run —
+ * the caller then never admits the page, so nothing can cite it.
+ *
+ * The run check is here, not only in the caller that selected the receipts,
+ * so the §4.5 rule is mechanical at the site that writes the row: an
+ * `evidence` row can only ever cite a page its own run read back.
  *
  * `resultRef.value` is `v.any()` by declaration, so every field is checked
  * here rather than cast. That is the same fail-closed discipline
@@ -240,11 +268,13 @@ function admitRecordedPage(
   row: Doc<"providerOperations"> | null,
   workspaceId: Id<"workspaces">,
   prospectId: Id<"prospects">,
+  runId: Id<"runs">,
 ): AdmittedPage | null {
   if (row === null) return null;
   if (row.workspaceId !== workspaceId) return null;
   if (row.prospectId !== prospectId) return null;
   if (row.state !== "completed") return null;
+  if (!receiptNamesRun(row, runId)) return null;
   if (row.resultRef === undefined || row.resultRef.kind !== "inline") {
     return null;
   }
@@ -266,6 +296,7 @@ function admitRecordedPage(
     excerpt,
     statusCode: typeof statusCode === "number" ? statusCode : undefined,
     truncated,
+    retrievedInRun: receiptRetrievedInRun(row, runId),
   };
 }
 
@@ -281,6 +312,11 @@ function confidenceFor(
   // A labelled hypothesis is never upgraded by a good retrieval: the model
   // said it is a guess, and a guess about a page is not the page's claim.
   if (isHypothesisTopic(topic)) return "hypothesis";
+  // A page this run only REPLAYED is a real backend retrieval of the right
+  // URL, but it was taken before this run existed and nothing here
+  // re-checked it. It may be cited; it may not be called `supported`,
+  // because `supported` claims a retrieval this run can vouch for.
+  if (!page.retrievedInRun) return "unknown";
   const ok =
     page.statusCode !== undefined &&
     page.statusCode >= 200 &&
@@ -391,7 +427,12 @@ export const recordResearchEvidence = internalMutation({
         "providerOperations",
         page.providerOperationId,
       );
-      const recorded = admitRecordedPage(row, args.workspaceId, args.prospectId);
+      const recorded = admitRecordedPage(
+        row,
+        args.workspaceId,
+        args.prospectId,
+        args.runId,
+      );
       if (recorded === null) continue;
       let key: string;
       try {

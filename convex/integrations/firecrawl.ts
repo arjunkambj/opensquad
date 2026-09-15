@@ -48,8 +48,10 @@ import {
   domainError,
   invalid,
   normalizeHttpUrl,
+  receiptNamesRun,
   researchPageLimit,
   sha256Hex,
+  PROVIDER_OPERATION_RUN_HISTORY_MAX,
   vProviderOperationState,
   vRetrievedPage,
   RESEARCH_PAGES_PER_PROSPECT,
@@ -516,6 +518,23 @@ export const beginFirecrawlOperation = internalMutation({
           "CONFLICT",
           "operationKey was already used with different arguments",
         );
+      }
+      // Record that THIS run read the receipt back. `operationKey` is
+      // campaign-scoped, so a second mission on the same campaign replays
+      // every page it plans and pays for none of them; without this the
+      // replayed page would name only the first run, be invisible to the
+      // one that actually read it, and the campaign could never be
+      // researched a second time. The retrieving `runId` is never rewritten
+      // — it is what `supported` confidence is still measured against.
+      if (args.runId !== undefined && !receiptNamesRun(existing, args.runId)) {
+        const history = [
+          ...(existing.replayedForRunIds ?? []),
+          args.runId,
+        ].slice(-PROVIDER_OPERATION_RUN_HISTORY_MAX);
+        await ctx.db.patch("providerOperations", existing._id, {
+          replayedForRunIds: history,
+          updatedAt: Date.now(),
+        });
       }
       const recorded =
         existing.state === "completed" && existing.resultRef?.kind === "inline"

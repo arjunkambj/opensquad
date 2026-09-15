@@ -2723,6 +2723,47 @@ export type ProviderOperationSettlement = Infer<
 >;
 
 /**
+ * How many runs one page receipt remembers having served. A campaign may be
+ * researched more than once and every later mission replays the same pages;
+ * the window keeps the newest, so a receipt stays attributable to the runs
+ * still working with it without growing without bound.
+ */
+export const PROVIDER_OPERATION_RUN_HISTORY_MAX = 16;
+
+/**
+ * Does this receipt name the given run — that is, did THIS run either pay
+ * for the retrieval or read the receipt back in place of paying again?
+ *
+ * This is the admissibility half of the §4.5 rule. It is deliberately not
+ * `row.runId === runId`: `operationKey` is campaign-scoped, so a second
+ * mission on the same campaign replays every page it plans and pays for
+ * none of them. Strict equality would have made those pages invisible to
+ * the run that read them, so a campaign could be researched exactly once.
+ */
+export function receiptNamesRun<T extends string>(
+  receipt: { runId?: T; replayedForRunIds?: readonly T[] },
+  runId: T,
+): boolean {
+  if (receipt.runId === runId) return true;
+  return receipt.replayedForRunIds?.includes(runId) === true;
+}
+
+/**
+ * Was the retrieval on this receipt taken BY the given run?
+ *
+ * This is the `supported` half of the same rule, and it stays strict. A
+ * replayed receipt is a real backend retrieval of the right page, but it
+ * was taken before this run existed and nothing here re-checked the page,
+ * so it can support an observation only as far as `unknown`.
+ */
+export function receiptRetrievedInRun<T extends string>(
+  receipt: { runId?: T },
+  runId: T,
+): boolean {
+  return receipt.runId === runId;
+}
+
+/**
  * Does this operation's receipt consume the prospect's page allowance?
  *
  * Everything except a released reservation does. A row with no recorded
