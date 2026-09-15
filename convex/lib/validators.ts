@@ -1355,12 +1355,39 @@ export const vDraftResult = v.object({
   usage: v.optional(vWorkerUsage),
 });
 
+/**
+ * What the worker may answer for a `classify_reply` request. This const is the
+ * single definition site: `vClassifyReplyResult.classification` and
+ * `parseWorkerResult`'s runtime guard both read it, so the two can never
+ * drift apart.
+ *
+ * `not_now` is a purely ADDITIVE widening (P11 / integrator decision D2). A
+ * worker that only ever produces the older subset is unaffected, and the enum
+ * handed to the model is built by the backend as the request's `outputSchema`
+ * — so the value already has a producer path without touching `worker/src`.
+ * The role template that makes the model choose it well is P21's.
+ */
+export const CLASSIFY_REPLY_CLASSIFICATIONS = [
+  "interested",
+  "not_interested",
+  "not_now",
+  "out_of_office",
+  "unsubscribe",
+  "bounce",
+  "question",
+  "other",
+] as const;
+
+export type ClassifyReplyClassification =
+  (typeof CLASSIFY_REPLY_CLASSIFICATIONS)[number];
+
 export const vClassifyReplyResult = v.object({
   schemaVersion: v.literal(1),
   operation: v.literal("classify_reply"),
   classification: v.union(
     v.literal("interested"),
     v.literal("not_interested"),
+    v.literal("not_now"),
     v.literal("out_of_office"),
     v.literal("unsubscribe"),
     v.literal("bounce"),
@@ -1373,6 +1400,67 @@ export const vClassifyReplyResult = v.object({
   evidenceRefs: v.optional(v.array(vEvidenceRef)),
   usage: v.optional(vWorkerUsage),
 });
+
+/**
+ * The PRODUCT-level meaning of a reply, which is what the inbox row, the
+ * reply workflow's branch and `plan/tasks.md` P11 §3 all speak in. It is
+ * deliberately not the worker's vocabulary: `out_of_office` and `bounce` both
+ * mean *machine-generated*, and the product owes them the same treatment —
+ * no draft, no takeover, no inference about interest.
+ *
+ * A model classification is a signal, never an authority: a `unsubscribe`
+ * disposition holds the thread for a human, it does not write a suppression
+ * row. The deterministic opt-out rule stops a clear unsubscribe without the
+ * model (architecture §8 step 6).
+ */
+export const REPLY_DISPOSITIONS = [
+  "interested",
+  "question",
+  "not_now",
+  "not_interested",
+  "unsubscribe",
+  "automated",
+  "needs_review",
+] as const;
+
+export const vReplyDisposition = v.union(
+  v.literal("interested"),
+  v.literal("question"),
+  v.literal("not_now"),
+  v.literal("not_interested"),
+  v.literal("unsubscribe"),
+  v.literal("automated"),
+  v.literal("needs_review"),
+);
+
+export type ReplyDisposition = (typeof REPLY_DISPOSITIONS)[number];
+
+/**
+ * The one total mapping from the worker's answer to the product disposition.
+ * The switch is exhaustive with no `default`, so adding a ninth
+ * classification is a compile error until its row is written here.
+ */
+export function replyDispositionFromClassification(
+  classification: ClassifyReplyClassification,
+): ReplyDisposition {
+  switch (classification) {
+    case "interested":
+      return "interested";
+    case "question":
+      return "question";
+    case "not_now":
+      return "not_now";
+    case "not_interested":
+      return "not_interested";
+    case "unsubscribe":
+      return "unsubscribe";
+    case "out_of_office":
+    case "bounce":
+      return "automated";
+    case "other":
+      return "needs_review";
+  }
+}
 
 export const vWorkerResult = v.union(
   vDiscoverResult,
@@ -1616,15 +1704,9 @@ export function parseWorkerResult(
     }
     case "classify_reply": {
       if (
-        ![
-          "interested",
-          "not_interested",
-          "out_of_office",
-          "unsubscribe",
-          "bounce",
-          "question",
-          "other",
-        ].includes(result.classification as string)
+        !(CLASSIFY_REPLY_CLASSIFICATIONS as readonly string[]).includes(
+          result.classification as string,
+        )
       ) {
         throw bridgeInvalid("classify_reply.classification is not recognized");
       }
