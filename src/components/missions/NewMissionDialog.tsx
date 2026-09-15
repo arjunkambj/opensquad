@@ -185,14 +185,19 @@ export function NewMissionDialog({
         confirmDisabled={
           noneEligible || trimmed.length === 0 || trimmed.length > TITLE_MAX
         }
-        confirmDescribedBy="new-mission-title-bound"
+        // Point at whichever sentence is actually the reason. A disabled
+        // control described by the title bound while the real refusal is "no
+        // confirmed campaign" is a reachable reason for the wrong thing.
+        confirmDescribedBy={
+          noneEligible ? "new-mission-no-campaign" : "new-mission-title-bound"
+        }
         busy={busy}
         error={error}
         onConfirm={() => void submit()}
       >
         <div className="flex flex-col gap-4">
           {noneEligible ? (
-            <p className="text-sm text-foreground">
+            <p id="new-mission-no-campaign" className="text-sm text-foreground">
               {refusal} Nothing was written and what you typed is still here —
               confirm a campaign in another tab and this form is still usable.
             </p>
