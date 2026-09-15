@@ -1920,6 +1920,22 @@ export const ACTIVITY_KINDS_P10 = [
 
 export type ActivityKindP10 = (typeof ACTIVITY_KINDS_P10)[number];
 
+/**
+ * Activity kinds produced by the P11 inbound/reply modules. Same rule as the
+ * P10 list: `kind` is a bounded string in storage and producers keep to this
+ * list, which is the single definition site.
+ *
+ * A conversation with no mission can hold NO activity row at all
+ * (`activityEventFields.missionId` is a required `v.id("missions")`), so these
+ * kinds appear only once a reply mission exists. Conversation lifecycle facts
+ * that happen without a mission — unassigned intake, takeover, association,
+ * closure — are recorded on the conversation row and in `conversationNotes`
+ * instead.
+ */
+export const ACTIVITY_KINDS_P11 = ["reply_classified"] as const;
+
+export type ActivityKindP11 = (typeof ACTIVITY_KINDS_P11)[number];
+
 /* ----- conversation/draft/approval/send-attempt state unions -------- */
 
 export const vConversationState = v.union(
@@ -1929,6 +1945,99 @@ export const vConversationState = v.union(
 );
 
 export type ConversationState = "open" | "closed" | "unassigned";
+
+/**
+ * Why automation is frozen on a conversation (`conversations.takeoverReason`).
+ *
+ * `humanTakeover` alone cannot tell an operator's deliberate hold from one the
+ * system placed, and V16/V17 need that distinction *before* offering Resume —
+ * an unassigned thread has no mission, so it can carry no activity row to
+ * explain itself (see `ACTIVITY_KINDS_P11`). The reason therefore lives on the
+ * conversation row.
+ *
+ * - `unassigned_inbound` — verified mail on a known inbox matched no thread.
+ * - `operator` — a human pressed Take over.
+ * - `ambiguous_opt_out` — the reply may be an opt-out; a human decides.
+ * - `awaiting_resume` — a lead was associated, or a closed thread reopened;
+ *   automation stays frozen until `conversations.resume` re-runs the policy.
+ * - `needs_review` — classification could not be trusted.
+ */
+export const TAKEOVER_REASONS = [
+  "unassigned_inbound",
+  "operator",
+  "ambiguous_opt_out",
+  "awaiting_resume",
+  "needs_review",
+] as const;
+
+export const vTakeoverReason = v.union(
+  v.literal("unassigned_inbound"),
+  v.literal("operator"),
+  v.literal("ambiguous_opt_out"),
+  v.literal("awaiting_resume"),
+  v.literal("needs_review"),
+);
+
+export type TakeoverReason = (typeof TAKEOVER_REASONS)[number];
+
+/**
+ * `conversationNotes.kind`. `note` is a human annotation; `system` is a
+ * lifecycle record the backend wrote. Neither can ever resolve a business
+ * approval — the same invariant `activity.ts` states for `missionComments`.
+ */
+export const CONVERSATION_NOTE_KINDS = ["note", "system"] as const;
+
+export const vConversationNoteKind = v.union(
+  v.literal("note"),
+  v.literal("system"),
+);
+
+export type ConversationNoteKind = (typeof CONVERSATION_NOTE_KINDS)[number];
+
+/**
+ * The inbox tabs `plan/ux.md` §48 puts in the URL. Each one is a single exact
+ * index range on `conversations`; there is no post-filtered tab, because a
+ * post-filtered truncated page is not a filtered result (architecture §5).
+ */
+export const CONVERSATION_TABS = [
+  "open",
+  "unassigned",
+  "takeover",
+  "closed",
+] as const;
+
+export const vConversationTab = v.union(
+  v.literal("open"),
+  v.literal("unassigned"),
+  v.literal("takeover"),
+  v.literal("closed"),
+);
+
+export type ConversationTab = (typeof CONVERSATION_TABS)[number];
+
+/** Bound on one `conversationNotes.body`. */
+export const CONVERSATION_NOTE_BODY_MAX_LENGTH = 4_000;
+
+/**
+ * How much inbound text the deterministic opt-out rule scans. The scan runs on
+ * the reply's own text, never on the quoted history — a reply that quotes our
+ * own footer must not suppress the recipient we just mailed.
+ */
+export const INBOUND_BODY_SCAN_MAX_LENGTH = 4_000;
+
+/**
+ * How much inbound text may ride into a worker request as labelled untrusted
+ * context. Email bodies are the prompt-injection vector: they are data, never
+ * instruction, and they are never concatenated into the instruction itself.
+ */
+export const INBOUND_BODY_CONTEXT_MAX_LENGTH = 8_000;
+
+/**
+ * How much of a message body a thread view returns. Plain text only — `html`
+ * is never projected, which removes raw-HTML injection and remote
+ * tracking-image loads at the source rather than at the renderer.
+ */
+export const THREAD_BODY_MAX_LENGTH = 20_000;
 
 /** Provider endpoint an attempt targets (integrations.md §G3 step 5). */
 export const vEndpointOperation = v.union(
