@@ -63,11 +63,20 @@ crons.interval(
 );
 
 // Artifact row→blob reconcile. `sweepOrphanArtifacts` has existed since the
-// bridge landed and was on no schedule, because nothing uploaded an artifact:
-// `BridgeClient.uploadArtifact` had zero callers. The sales pipeline
-// dispatches research turns whose contract carries `artifactIds`, so a
-// research brief can now be uploaded and its row and blob can now drift —
-// which is what makes this sweep worth running rather than merely declared.
+// bridge landed and was on no schedule, because nothing uploaded an artifact.
+//
+// Stated plainly, because an earlier version of this comment implied
+// otherwise: `BridgeClient.uploadArtifact` STILL has zero callers after P21
+// (`grep -rn uploadArtifact worker/src/` finds only its own declaration and
+// one comment), and the pinned codex 0.154.0 exposes no dynamic-tool
+// registration, so the model cannot be told an upload path exists either.
+// What P21 changed is the reachability of the drift, not the existence of a
+// writer: the research contract carries `artifactIds` and
+// `resolveBriefArtifact` reads them, so the first caller will land on a
+// reconciled store. Until then this sweep is PRE-EMPTIVE and its correct
+// output is zero. Driven once on dev:flexible-grasshopper-949 rather than
+// assumed: `npx convex run workerBridge:sweepOrphanArtifacts '{}'` →
+// `{"checked": 0, "removed": 0}`.
 crons.interval(
   "orphan-artifact-sweep",
   { minutes: 30 },
