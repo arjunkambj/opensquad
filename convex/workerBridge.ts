@@ -53,10 +53,11 @@ import {
   mintLeaseToken,
   parseWorkerResult,
   sha256Hex,
+  vCapabilityId,
   vWorkerPhase,
   vWorkerRequestCompletion,
 } from "./lib/validators";
-import type { WorkerScope } from "./lib/validators";
+import type { CapabilityId, WorkerScope } from "./lib/validators";
 
 /** What an authenticated call resolves to. */
 type WorkerAuth = {
@@ -207,6 +208,7 @@ function assertLiveLease(
   slot: Doc<"workspaceExecutionSlots"> | null,
   generation: number,
   leaseHash: string,
+  requiredCapability?: CapabilityId,
 ): void {
   if (generation !== request.generation) {
     throw bridgeError(
@@ -229,6 +231,21 @@ function assertLiveLease(
       "CONFLICT",
       "execution slot is not held by this request",
     );
+  }
+  // The capability re-check hangs off the choke point every lease-bearing
+  // route already passes through, and is read from the COLUMN — never from
+  // `inputRef.value`, and never from anything the worker sent. An absent
+  // column is no capabilities at all, so a row predating the transport is
+  // denied rather than grandfathered. 403, per architecture §7.7's
+  // documented "capability denied".
+  if (requiredCapability !== undefined) {
+    const granted = request.capabilities ?? [];
+    if (!granted.includes(requiredCapability)) {
+      throw bridgeError(
+        "FORBIDDEN",
+        `request does not carry the ${requiredCapability} capability`,
+      );
+    }
   }
 }
 
@@ -311,6 +328,10 @@ export const claimWork = internalMutation({
       leaseExpiresAt: v.number(),
       operation: v.string(),
       outputSchemaVersion: v.number(),
+      /** The set Convex issued for THIS request — the same bytes the bridge
+       *  re-checks, so the worker's host-side router and the backend can
+       *  never disagree about what was granted. */
+      capabilities: v.array(vCapabilityId),
       input: v.any(),
     }),
   ),
@@ -449,6 +470,8 @@ export const claimWork = internalMutation({
       leaseExpiresAt,
       operation: request.operation,
       outputSchemaVersion: request.outputSchemaVersion,
+      // Absent means none. A claim never widens what dispatch issued.
+      capabilities: request.capabilities ?? [],
       input: request.inputRef.value,
     };
   },
