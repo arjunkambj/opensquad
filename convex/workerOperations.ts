@@ -23,7 +23,10 @@ import { v } from "convex/values";
 import { insertRun, finishRun } from "./runs";
 import {
   assertWorkerRequestInput,
+  boundedInt,
   boundedString,
+  CAMPAIGN_LEAD_LIMIT_MIN,
+  CAMPAIGN_LEAD_LIMIT_MAX,
   deriveRequestCapabilities,
   intersectCapabilities,
   vCapabilityId,
@@ -781,6 +784,10 @@ export const devSeedFixture = internalMutation({
      *  the FORBIDDEN half of the capability gate can be driven directly:
      *  `[]` makes the dispatch refuse rather than issue a capability set. */
     narrowEmployeeCapabilities: v.optional(v.array(vCapabilityId)),
+    /** Campaign lead ceiling, which is also the campaign's research-page
+     *  allowance (`leadLimit * RESEARCH_PAGES_PER_PROSPECT`). Seed a small
+     *  one to exhaust the allowance without a large paid run. */
+    leadLimit: v.optional(v.number()),
   },
   returns: v.object({
     workspaceId: v.id("workspaces"),
@@ -794,6 +801,7 @@ export const devSeedFixture = internalMutation({
     missionWorkflowId: v.string(),
     employeeId: v.id("employees"),
     campaignId: v.id("campaigns"),
+    prospectId: v.id("prospects"),
     capabilities: v.array(vCapabilityId),
   }),
   handler: async (ctx, args) => {
@@ -872,7 +880,13 @@ export const devSeedFixture = internalMutation({
       brief: "Fixture brief",
       briefVersion: 1,
       sourcePlan,
-      leadLimit: 5,
+      leadLimit:
+        args.leadLimit === undefined
+          ? 5
+          : boundedInt(args.leadLimit, "leadLimit", {
+              min: CAMPAIGN_LEAD_LIMIT_MIN,
+              max: CAMPAIGN_LEAD_LIMIT_MAX,
+            }),
       enrichmentLimit: 3,
       status: "active",
       createdBy: identityKey,
@@ -929,6 +943,31 @@ export const devSeedFixture = internalMutation({
       },
     );
     await ctx.db.patch("missions", missionId, { workflowId: missionWorkflowId });
+
+    // One persisted prospect on the fixture campaign. The research tool
+    // route and the page allowance are both prospect-bound, so a fixture
+    // with no prospect cannot exercise either.
+    const prospectId = await ctx.db.insert("prospects", {
+      workspaceId,
+      campaignId,
+      companyName: "Example Fixture Co",
+      canonicalDomain: "example.com",
+      sourceRefs: [
+        {
+          source: "apollo" as const,
+          profileUrl: "https://example.com/",
+          providerRecordId: "p21-bridge-fixture",
+          retrievedAt: now,
+        },
+      ],
+      qualification: "pending",
+      fitReason: "Fixture prospect — developer bridge exercise only.",
+      salesStage: "discovered",
+      ownerIdentityKey: identityKey,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     const connectionId = await ctx.db.insert("runtimeConnections", {
       workspaceId,
@@ -987,6 +1026,7 @@ export const devSeedFixture = internalMutation({
       missionWorkflowId,
       employeeId: actingEmployeeId,
       campaignId,
+      prospectId,
       capabilities: seeded?.capabilities ?? [],
     };
   },
