@@ -1,6 +1,6 @@
 import { ArrowRight01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
@@ -39,7 +39,10 @@ const STEPS = [
   { id: "review", label: "Confirm" },
 ] as const
 
-type StepId = (typeof STEPS)[number]["id"]
+export type StepId = (typeof STEPS)[number]["id"]
+
+/** The step ids, for the route's `?step=` validator. */
+export const STEP_IDS = STEPS.map((entry) => entry.id) as readonly StepId[]
 
 /**
  * First-run setup: provision the workspace (if needed), save the business
@@ -123,7 +126,9 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   const profile = useQuery(api.businessProfiles.get, {
     workspaceId: workspace._id,
   })
-  const [step, setStep] = useState<StepId>("business")
+  const search = useSearch({ from: "/_dashboard/onboarding" })
+  const navigate = useNavigate()
+  const step: StepId = search.step ?? "business"
   const [campaignForm, setCampaignForm] =
     useState<CampaignScopeForm>(defaultCampaignForm)
   const [completed, setCompleted] = useState(false)
@@ -173,7 +178,11 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   }
 
   const stepIndex = STEPS.findIndex((entry) => entry.id === step)
-  const go = (id: StepId) => setStep(id)
+  // `replace` — the wizard is one task, so Back should leave setup rather than
+  // walk the user backwards through every step they already completed.
+  const go = (id: StepId) => {
+    void navigate({ to: "/onboarding", search: { step: id }, replace: true })
+  }
 
   return (
     <div className="flex w-full max-w-3xl flex-col gap-6">
