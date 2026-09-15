@@ -512,6 +512,17 @@ export const workerRequestFields = {
   /** Validated worker input: small inline document or private storage
    *  reference (256 KiB cap, §4.4 note). */
   inputRef: vWorkerDataRef,
+  /** The capability set Convex ISSUED for this request, derived at dispatch
+   *  from the run's employee ∩ `HOST_CAPABILITY_POLICY`. This column — not
+   *  the mirror inside `inputRef.value` and never anything the worker sends
+   *  — is the authority every tool route re-checks. Optional only because
+   *  rows predating P21 exist on the dev deployment; ABSENT MEANS NONE, and
+   *  every read site treats `undefined` as `[]` and denies. */
+  capabilities: v.optional(v.array(vCapabilityId)),
+  /** Tool calls this request has been authorized for, compared against
+   *  `inputRef.value.constraints.maxToolCalls` inside the authorizing
+   *  transaction. Absent means zero. */
+  toolCallsUsed: v.optional(v.number()),
   outputSchemaVersion: v.number(),
   /* Continuation binding — assigned by the dispatching backend, never
    * trusted from a callback payload (§4.2 note covers worker requests). */

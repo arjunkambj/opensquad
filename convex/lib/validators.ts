@@ -1112,6 +1112,55 @@ export const vWorkerOperation = v.union(
 );
 export type WorkerOperation = (typeof WORKER_OPERATIONS)[number];
 
+/**
+ * The one capability each bounded operation cannot run without. A dispatch
+ * whose employee does not hold the named capability is refused at dispatch,
+ * so a request that exists on the row is always a request the host policy
+ * already permitted.
+ */
+export const OPERATION_CAPABILITY_REQUIREMENT: Readonly<
+  Record<WorkerOperation, CapabilityId>
+> = {
+  discover: "apollo.company_search",
+  contact: "apollo.contact_enrichment",
+  research: "opensquad.web_research",
+  draft: "opensquad.draft_compose",
+  classify_reply: "opensquad.reply_classify",
+};
+
+/**
+ * The capability set Convex issues for ONE request: the employee's own
+ * `allowedCapabilities` narrowed by the host policy for its template.
+ *
+ * This is deliberately NOT `intersectCapabilities`, which THROWS for any
+ * capability outside `HOST_CAPABILITY_POLICY` — the right behaviour for the
+ * operator WRITE it guards (`employees.update`), and the wrong behaviour for
+ * this READ path. Here a stored capability the host policy no longer grants
+ * must be dropped, never raised, because dispatch may only ever narrow.
+ *
+ * Refuses when the operation's required capability survives neither side:
+ * a disabled capability must stop the work, not silently produce a request
+ * the worker can never act on.
+ */
+export function deriveRequestCapabilities(
+  template: EmployeeTemplate,
+  allowed: readonly CapabilityId[],
+  operation: WorkerOperation,
+): CapabilityId[] {
+  const policy = new Set<CapabilityId>(HOST_CAPABILITY_POLICY[template]);
+  const granted = [...new Set(allowed)]
+    .filter((capability) => policy.has(capability))
+    .sort();
+  const required = OPERATION_CAPABILITY_REQUIREMENT[operation];
+  if (!granted.includes(required)) {
+    throw domainError(
+      "FORBIDDEN",
+      `employee ${template} lacks ${required} for operation ${operation}`,
+    );
+  }
+  return granted;
+}
+
 export const ARTIFACT_KINDS = [
   "research_brief",
   "crawl",
@@ -1187,14 +1236,44 @@ export const vWorkerRequestInput = v.object({
   ),
   /** The structured-output JSON Schema handed to Codex verbatim. */
   outputSchema: v.any(),
+  /**
+   * Mirror of the `workerRequests.capabilities` column, so the worker's
+   * host-side tool router can refuse without a second round trip. The COLUMN
+   * is the authority: this copy is never read back as one, and it stays
+   * optional permanently because rows predating P21 carry no capability set.
+   */
+  capabilities: v.optional(v.array(vCapabilityId)),
 });
 export type WorkerRequestInput = Infer<typeof vWorkerRequestInput>;
+
+/** Closed key sets — an envelope field this build does not know is refused
+ *  rather than carried unvalidated into `workerRequests.inputRef.value`. */
+const WORKER_INPUT_KEYS: ReadonlySet<string> = new Set([
+  "schemaVersion",
+  "operation",
+  "prompt",
+  "context",
+  "constraints",
+  "session",
+  "outputSchema",
+  "capabilities",
+]);
+const WORKER_CONSTRAINT_KEYS: ReadonlySet<string> = new Set([
+  "deadlineMs",
+  "maxToolCalls",
+  "model",
+]);
 
 /** Structural + size validation for an input envelope (untrusted at rest). */
 export function assertWorkerRequestInput(
   value: unknown,
 ): asserts value is WorkerRequestInput {
   const input = asRecord(value, "input");
+  for (const key of Object.keys(input)) {
+    if (!WORKER_INPUT_KEYS.has(key)) {
+      throw invalid(`input.${key} is not an accepted envelope field`);
+    }
+  }
   if (input.schemaVersion !== WORKER_INPUT_SCHEMA_VERSION) {
     throw invalid("input.schemaVersion must be 1");
   }
@@ -1222,7 +1301,31 @@ export function assertWorkerRequestInput(
       });
     });
   }
+  if (input.capabilities !== undefined) {
+    const capabilities = asArray(input.capabilities, "input.capabilities");
+    if (capabilities.length > CAPABILITY_IDS.length) {
+      throw invalid("input.capabilities has too many entries");
+    }
+    const seen = new Set<string>();
+    capabilities.forEach((entry, index) => {
+      if (
+        typeof entry !== "string" ||
+        !(CAPABILITY_IDS as readonly string[]).includes(entry)
+      ) {
+        throw invalid(`input.capabilities[${index}] is not a known capability`);
+      }
+      if (seen.has(entry)) {
+        throw invalid(`input.capabilities[${index}] is a duplicate`);
+      }
+      seen.add(entry);
+    });
+  }
   const constraints = asRecord(input.constraints, "input.constraints");
+  for (const key of Object.keys(constraints)) {
+    if (!WORKER_CONSTRAINT_KEYS.has(key)) {
+      throw invalid(`input.constraints.${key} is not an accepted constraint`);
+    }
+  }
   const deadlineMs = constraints.deadlineMs;
   if (
     typeof deadlineMs !== "number" ||
