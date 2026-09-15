@@ -22,6 +22,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { insertRun, finishRun } from "./runs";
 import {
+  assertProspectContact,
   assertWorkerRequestInput,
   boundedInt,
   boundedString,
@@ -46,7 +47,11 @@ import {
   WORKER_INPUT_SCHEMA_VERSION,
   CONTROL_REQUEST_TTL_MS,
 } from "./lib/validators";
-import type { EmployeeTemplate, WorkerOperation } from "./lib/validators";
+import type {
+  CapabilityId,
+  EmployeeTemplate,
+  WorkerOperation,
+} from "./lib/validators";
 import type { MutationCtx } from "./_generated/server";
 
 /* ------------------------------------------------------------------ */
@@ -860,6 +865,314 @@ const FIXTURE_TEMPLATE_FOR: Readonly<Record<WorkerOperation, EmployeeTemplate>> 
   };
 
 /**
+ * The seeding half every dev fixture shares: workspace + owner membership +
+ * three employees at the host policy + a confirmed active campaign + a
+ * mission bound to a real durable workflow + N prospects + a
+ * runtimeConnection in `connecting` + one scoped credential.
+ *
+ * It exists because two seeders need the same world and only differ in what
+ * they do with it — the bridge fixture dispatches a worker request against
+ * the P06 development workflow, and the pipeline fixture starts the real
+ * sales workflow and lets it drive. A second copy of this would have drifted
+ * the way the two dispatch paths already did once.
+ */
+type FixtureSeedArgs = {
+  operation: WorkerOperation;
+  workspaceName?: string;
+  /** Owner identity of the seeded workspace. It defaults to the seeders'
+   *  `dev-seed|owner`, which no real session can present; pass a
+   *  `<issuer>|<subject>` key when the fixture has to be driven through an
+   *  AUTHENTICATED mutation such as `approvals.approve`. */
+  ownerIdentityKey?: string;
+  narrowEmployeeCapabilities?: CapabilityId[];
+  leadLimit?: number;
+  prospectCount?: number;
+  /** How many of the seeded prospects already carry a contact address, as a
+   *  lead enriched on an earlier pass would. It is written at insert time on
+   *  purpose: `applyContactEnrichment`'s qualification-and-evidence refusal
+   *  (G2 item 5) is exercised directly, and a fixture that could not
+   *  represent an already-enriched lead could never reach the draft stage
+   *  with Apollo blocked. */
+  contactCount?: number;
+  /** Set to give the workspace a mail inbox, which outreach drafting needs
+   *  to stage a conversation on. */
+  inboxRef?: string;
+  missionState: "queued" | "active";
+  missionWorkflow: "devFixture" | "sales";
+};
+
+type FixtureSeed = {
+  workspaceId: Id<"workspaces">;
+  identityKey: string;
+  campaignId: Id<"campaigns">;
+  missionId: Id<"missions">;
+  missionWorkflowId: WorkflowId;
+  actingEmployeeId: Id<"employees">;
+  employeeIds: Record<EmployeeTemplate, Id<"employees">>;
+  prospectIds: Id<"prospects">[];
+  connectionId: Id<"runtimeConnections">;
+  token: string;
+};
+
+async function seedFixtureWorkspace(
+  ctx: MutationCtx,
+  args: FixtureSeedArgs,
+): Promise<FixtureSeed> {
+  const now = Date.now();
+  const identityKey = boundedString(
+    args.ownerIdentityKey ?? "dev-seed|owner",
+    "ownerIdentityKey",
+    { min: 1, max: 300 },
+  );
+  const name = boundedString(args.workspaceName ?? "P07 bridge fixture", "name", {
+    min: 1,
+    max: 100,
+  });
+  const sourcePlan = {
+    instruction: "Fixture source plan (bridge exercise only)",
+    sources: [
+      {
+        source: "apollo" as const,
+        filters: { locations: ["US"], categories: ["software"] },
+        maxResults: 5,
+      },
+    ],
+    confirmedBy: identityKey,
+    confirmedAt: now,
+    confirmedBriefVersion: 1,
+  };
+  const workspaceId = await ctx.db.insert("workspaces", {
+    name,
+    ownerIdentityKey: identityKey,
+    timezone: "UTC",
+    automationState: "paused",
+    pauseReason: "fixture",
+    policyVersion: 1,
+    dailySendLimit: 10,
+    sendWindow: { weekdays: [1, 2, 3, 4, 5], startMinute: 540, endMinute: 1020 },
+    demoMode: false,
+    createdAt: now,
+    updatedAt: now,
+    ...(args.inboxRef !== undefined ? { inboxRef: args.inboxRef } : {}),
+  });
+  await ctx.db.insert("memberships", {
+    workspaceId,
+    identityKey,
+    role: "owner",
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+  // One employee per template, each seeded at the exact host policy — the
+  // fixture then dispatches as the employee that actually owns the
+  // operation. Seeding a capability-less employee (as this fixture used
+  // to) now makes every dispatch FORBIDDEN, which is the point: pass
+  // `narrowEmployeeCapabilities` to ask for that refusal deliberately.
+  const actingTemplate = FIXTURE_TEMPLATE_FOR[args.operation];
+  const employeeIds: Record<EmployeeTemplate, Id<"employees">> = {
+    scout: null as unknown as Id<"employees">,
+    researcher: null as unknown as Id<"employees">,
+    outreach: null as unknown as Id<"employees">,
+  };
+  for (const template of ["scout", "researcher", "outreach"] as const) {
+    employeeIds[template] = await ctx.db.insert("employees", {
+      workspaceId,
+      template,
+      name: `Fixture ${template}`,
+      instructions: `Fixture ${template}`,
+      instructionVersion: 1,
+      enabled: true,
+      allowedCapabilities:
+        template === actingTemplate &&
+        args.narrowEmployeeCapabilities !== undefined
+          ? intersectCapabilities(template, args.narrowEmployeeCapabilities)
+          : [...HOST_CAPABILITY_POLICY[template]],
+      updatedAt: now,
+    });
+  }
+  const actingEmployeeId = employeeIds[actingTemplate];
+  const campaignId = await ctx.db.insert("campaigns", {
+    workspaceId,
+    title: "Bridge fixture campaign",
+    brief: "Fixture brief",
+    briefVersion: 1,
+    sourcePlan,
+    leadLimit:
+      args.leadLimit === undefined
+        ? 5
+        : boundedInt(args.leadLimit, "leadLimit", {
+            min: CAMPAIGN_LEAD_LIMIT_MIN,
+            max: CAMPAIGN_LEAD_LIMIT_MAX,
+          }),
+    enrichmentLimit: 3,
+    status: "active",
+    createdBy: identityKey,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const missionId = await ctx.db.insert("missions", {
+    workspaceId,
+    campaignId,
+    kind: "sales_campaign",
+    title: "Bridge fixture mission",
+    state: args.missionState,
+    boardColumn: args.missionState === "queued" ? "backlog" : "in_flight",
+    version: 1,
+    inputSnapshot: {
+      campaignTitle: "Bridge fixture campaign",
+      campaignBrief: "Fixture brief",
+      briefVersion: 1,
+      sourcePlan,
+      employeeInstructions: [
+        {
+          employeeId: actingEmployeeId,
+          template: actingTemplate,
+          name: `Fixture ${actingTemplate}`,
+          instructionVersion: 1,
+        },
+      ],
+      policyVersion: 1,
+      requestedOutcome: "Fixture outcome",
+    },
+    inputVersion: 1,
+    priority: "normal",
+    assignedEmployeeId: actingEmployeeId,
+    progressSummary: "Fixture",
+    requiredDecisionCount: 0,
+    visibility: "visible",
+    createdBy: identityKey,
+    createdAt: now,
+    updatedAt: now,
+    workflowGeneration: 1,
+  });
+
+  // A real durable workflow to bind the continuation event to. The dev
+  // fixture parks at its decision wait; our completion event is a second,
+  // independently-addressable event on the same workflow.
+  const missionWorkflowId: WorkflowId = await start(
+    ctx,
+    args.missionWorkflow === "sales"
+      ? internal.workflows.sales.salesMissionWorkflow
+      : internal.workflows.devFixture.devFixtureMissionWorkflow,
+    { missionId },
+    {
+      startAsync: true,
+      onComplete: internal.workflows.steps.onMissionWorkflowComplete,
+      context: { missionId, workspaceId },
+    },
+  );
+  await ctx.db.patch("missions", missionId, { workflowId: missionWorkflowId });
+
+  // One persisted prospect on the fixture campaign. The research tool
+  // route and the page allowance are both prospect-bound, so a fixture
+  // with no prospect cannot exercise either.
+  // IANA-reserved example domains only — a fixture must never name a real
+  // company, and every one of these is safe to scrape.
+  const FIXTURE_DOMAINS = [
+    "example.com",
+    "example.net",
+    "example.org",
+    "example.edu",
+    "iana.org",
+  ] as const;
+  // Zero is allowed on purpose: a campaign with no persisted lead is the
+  // state the parent's "no prospects" ask exists for, and a fixture that
+  // could not reach it could not exercise that remedy.
+  const prospectCount =
+    args.prospectCount === undefined
+      ? 1
+      : boundedInt(args.prospectCount, "prospectCount", {
+          min: 0,
+          max: FIXTURE_DOMAINS.length,
+        });
+  const contactCount =
+    args.contactCount === undefined
+      ? 0
+      : boundedInt(args.contactCount, "contactCount", {
+          min: 0,
+          max: FIXTURE_DOMAINS.length,
+        });
+  const prospectIds: Id<"prospects">[] = [];
+  let seededProspects = 0;
+  for (const domain of FIXTURE_DOMAINS.slice(0, prospectCount)) {
+    const withContact = seededProspects < contactCount;
+    seededProspects += 1;
+    prospectIds.push(
+      await ctx.db.insert("prospects", {
+        workspaceId,
+        campaignId,
+        companyName: `Fixture Co (${domain})`,
+        canonicalDomain: domain,
+        sourceRefs: [
+          {
+            source: "apollo" as const,
+            profileUrl: `https://${domain}/`,
+            providerRecordId: `p21-bridge-fixture:${domain}`,
+            retrievedAt: now,
+          },
+        ],
+        qualification: "pending",
+        fitReason: "Fixture prospect — developer bridge exercise only.",
+        salesStage: "discovered",
+        ownerIdentityKey: identityKey,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+        ...(withContact
+          ? {
+              contact: assertProspectContact({
+                source: "apollo" as const,
+                providerRef: `p21-fixture-contact:${domain}`,
+                fullName: "Fixture Contact",
+                role: "Head of Fixtures",
+                email: `owner@${domain}`,
+                providerEmailStatus: "verified" as const,
+                retrievedAt: now,
+                selectionReason:
+                  "Fixture contact — developer pipeline exercise only.",
+              }),
+            }
+          : {}),
+      }),
+    );
+  }
+
+  const connectionId = await ctx.db.insert("runtimeConnections", {
+    workspaceId,
+    generation: 1,
+    state: "connecting",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await ctx.db.insert("providerConnections", {
+    workspaceId,
+    provider: "codex",
+    state: "connecting",
+    capabilities: [],
+    updatedAt: now,
+    runtimeConnectionId: connectionId,
+  });
+  const { token } = await issueCredentialRow(ctx, {
+    workspaceId,
+    runtimeConnectionId: connectionId,
+    runtimeGeneration: 1,
+    scopes: ["claim", "control", "heartbeat", "activity", "result", "artifact"],
+  });
+  return {
+    workspaceId,
+    identityKey,
+    campaignId,
+    missionId,
+    missionWorkflowId,
+    actingEmployeeId,
+    employeeIds,
+    prospectIds,
+    connectionId,
+    token,
+  };
+}
+
+/**
  * Seed a complete bridge fixture on an isolated deployment: workspace +
  * owner membership + confirmed campaign + active mission + run receipt +
  * runtimeConnection (state `connecting`) + scoped credential + one pending
@@ -900,213 +1213,39 @@ export const devSeedFixture = internalMutation({
     capabilities: v.array(vCapabilityId),
   }),
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const identityKey = "dev-seed|owner";
-    const name = boundedString(args.workspaceName ?? "P07 bridge fixture", "name", {
-      min: 1,
-      max: 100,
-    });
-    const sourcePlan = {
-      instruction: "Fixture source plan (bridge exercise only)",
-      sources: [
-        {
-          source: "apollo" as const,
-          filters: { locations: ["US"], categories: ["software"] },
-          maxResults: 5,
-        },
-      ],
-      confirmedBy: identityKey,
-      confirmedAt: now,
-      confirmedBriefVersion: 1,
-    };
-    const workspaceId = await ctx.db.insert("workspaces", {
-      name,
-      ownerIdentityKey: identityKey,
-      timezone: "UTC",
-      automationState: "paused",
-      pauseReason: "fixture",
-      policyVersion: 1,
-      dailySendLimit: 10,
-      sendWindow: { weekdays: [1, 2, 3, 4, 5], startMinute: 540, endMinute: 1020 },
-      demoMode: false,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert("memberships", {
-      workspaceId,
-      identityKey,
-      role: "owner",
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    });
-    // One employee per template, each seeded at the exact host policy — the
-    // fixture then dispatches as the employee that actually owns the
-    // operation. Seeding a capability-less employee (as this fixture used
-    // to) now makes every dispatch FORBIDDEN, which is the point: pass
-    // `narrowEmployeeCapabilities` to ask for that refusal deliberately.
     const operation: WorkerOperation = args.operation ?? "research";
-    const actingTemplate = FIXTURE_TEMPLATE_FOR[operation];
-    const employeeIds: Record<EmployeeTemplate, Id<"employees">> = {
-      scout: null as unknown as Id<"employees">,
-      researcher: null as unknown as Id<"employees">,
-      outreach: null as unknown as Id<"employees">,
-    };
-    for (const template of ["scout", "researcher", "outreach"] as const) {
-      employeeIds[template] = await ctx.db.insert("employees", {
-        workspaceId,
-        template,
-        name: `Fixture ${template}`,
-        instructions: `Fixture ${template}`,
-        instructionVersion: 1,
-        enabled: true,
-        allowedCapabilities:
-          template === actingTemplate &&
-          args.narrowEmployeeCapabilities !== undefined
-            ? intersectCapabilities(template, args.narrowEmployeeCapabilities)
-            : [...HOST_CAPABILITY_POLICY[template]],
-        updatedAt: now,
-      });
-    }
-    const actingEmployeeId = employeeIds[actingTemplate];
-    const campaignId = await ctx.db.insert("campaigns", {
-      workspaceId,
-      title: "Bridge fixture campaign",
-      brief: "Fixture brief",
-      briefVersion: 1,
-      sourcePlan,
-      leadLimit:
-        args.leadLimit === undefined
-          ? 5
-          : boundedInt(args.leadLimit, "leadLimit", {
-              min: CAMPAIGN_LEAD_LIMIT_MIN,
+    const seed = await seedFixtureWorkspace(ctx, {
+      operation,
+      ...(args.workspaceName !== undefined
+        ? { workspaceName: args.workspaceName }
+        : {}),
+      ...(args.narrowEmployeeCapabilities !== undefined
+        ? { narrowEmployeeCapabilities: args.narrowEmployeeCapabilities }
+        : {}),
+      ...(args.leadLimit !== undefined ? { leadLimit: args.leadLimit } : {}),
+      ...(args.prospectCount !== undefined
+        ? {
+            // The bridge fixture always needs at least one prospect: its
+            // research tool route and page allowance are prospect-bound.
+            prospectCount: boundedInt(args.prospectCount, "prospectCount", {
+              min: 1,
               max: CAMPAIGN_LEAD_LIMIT_MAX,
             }),
-      enrichmentLimit: 3,
-      status: "active",
-      createdBy: identityKey,
-      createdAt: now,
-      updatedAt: now,
+          }
+        : {}),
+      missionState: "active",
+      missionWorkflow: "devFixture",
     });
-    const missionId = await ctx.db.insert("missions", {
+    const {
       workspaceId,
       campaignId,
-      kind: "sales_campaign",
-      title: "Bridge fixture mission",
-      state: "active",
-      boardColumn: "in_flight",
-      version: 1,
-      inputSnapshot: {
-        campaignTitle: "Bridge fixture campaign",
-        campaignBrief: "Fixture brief",
-        briefVersion: 1,
-        sourcePlan,
-        employeeInstructions: [
-          {
-            employeeId: actingEmployeeId,
-            template: actingTemplate,
-            name: `Fixture ${actingTemplate}`,
-            instructionVersion: 1,
-          },
-        ],
-        policyVersion: 1,
-        requestedOutcome: "Fixture outcome",
-      },
-      inputVersion: 1,
-      priority: "normal",
-      assignedEmployeeId: actingEmployeeId,
-      progressSummary: "Fixture",
-      requiredDecisionCount: 0,
-      visibility: "visible",
-      createdBy: identityKey,
-      createdAt: now,
-      updatedAt: now,
-      workflowGeneration: 1,
-    });
-
-    // A real durable workflow to bind the continuation event to. The dev
-    // fixture parks at its decision wait; our completion event is a second,
-    // independently-addressable event on the same workflow.
-    const missionWorkflowId: WorkflowId = await start(
-      ctx,
-      internal.workflows.devFixture.devFixtureMissionWorkflow,
-      { missionId },
-      {
-        startAsync: true,
-        onComplete: internal.workflows.steps.onMissionWorkflowComplete,
-        context: { missionId, workspaceId },
-      },
-    );
-    await ctx.db.patch("missions", missionId, { workflowId: missionWorkflowId });
-
-    // One persisted prospect on the fixture campaign. The research tool
-    // route and the page allowance are both prospect-bound, so a fixture
-    // with no prospect cannot exercise either.
-    // IANA-reserved example domains only — a fixture must never name a real
-    // company, and every one of these is safe to scrape.
-    const FIXTURE_DOMAINS = [
-      "example.com",
-      "example.net",
-      "example.org",
-      "example.edu",
-      "iana.org",
-    ] as const;
-    const prospectCount =
-      args.prospectCount === undefined
-        ? 1
-        : boundedInt(args.prospectCount, "prospectCount", {
-            min: 1,
-            max: FIXTURE_DOMAINS.length,
-          });
-    const prospectIds: Id<"prospects">[] = [];
-    for (const domain of FIXTURE_DOMAINS.slice(0, prospectCount)) {
-      prospectIds.push(
-        await ctx.db.insert("prospects", {
-          workspaceId,
-          campaignId,
-          companyName: `Fixture Co (${domain})`,
-          canonicalDomain: domain,
-          sourceRefs: [
-            {
-              source: "apollo" as const,
-              profileUrl: `https://${domain}/`,
-              providerRecordId: `p21-bridge-fixture:${domain}`,
-              retrievedAt: now,
-            },
-          ],
-          qualification: "pending",
-          fitReason: "Fixture prospect — developer bridge exercise only.",
-          salesStage: "discovered",
-          ownerIdentityKey: identityKey,
-          version: 1,
-          createdAt: now,
-          updatedAt: now,
-        }),
-      );
-    }
-    const prospectId = prospectIds[0]!;
-
-    const connectionId = await ctx.db.insert("runtimeConnections", {
-      workspaceId,
-      generation: 1,
-      state: "connecting",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.insert("providerConnections", {
-      workspaceId,
-      provider: "codex",
-      state: "connecting",
-      capabilities: [],
-      updatedAt: now,
-      runtimeConnectionId: connectionId,
-    });
-    const { token } = await issueCredentialRow(ctx, {
-      workspaceId,
-      runtimeConnectionId: connectionId,
-      runtimeGeneration: 1,
-      scopes: ["claim", "control", "heartbeat", "activity", "result", "artifact"],
-    });
+      missionId,
+      missionWorkflowId,
+      actingEmployeeId,
+      prospectIds,
+      connectionId,
+      token,
+    } = seed;
 
     const runId = await insertRun(ctx, {
       missionId,
@@ -1143,7 +1282,7 @@ export const devSeedFixture = internalMutation({
       missionWorkflowId,
       employeeId: actingEmployeeId,
       campaignId,
-      prospectId,
+      prospectId: prospectIds[0]!,
       prospectIds,
       capabilities: seeded?.capabilities ?? [],
     };
@@ -1159,6 +1298,89 @@ function fixtureInputFor(operation: WorkerOperation): Record<string, unknown> {
     outputSchema: { type: "object" },
   };
 }
+
+/**
+ * Seed a world and let the REAL sales workflow drive it.
+ *
+ * `missions.create` is the production entry point and needs an authenticated
+ * editor, a campaign the operator confirmed and a workspace that already
+ * exists. That is the right shape for production and the wrong shape for
+ * exercising the pipeline on a shared dev deployment, so this seeder builds
+ * the same world internally and starts `salesMissionWorkflow` against it —
+ * the same workflow, the same steps, the same durable events, no shortcut
+ * around any of them.
+ *
+ * The mission is seeded `queued` so `gateMission`'s `queued → active`
+ * transition is exercised rather than assumed.
+ *
+ * TODO(P16): remove before public release.
+ */
+export const devSeedSalesMission = internalMutation({
+  args: {
+    workspaceName: v.optional(v.string()),
+    ownerIdentityKey: v.optional(v.string()),
+    /** Campaign lead ceiling — also its lifetime research-page allowance
+     *  (`leadLimit * RESEARCH_PAGES_PER_PROSPECT`). */
+    leadLimit: v.optional(v.number()),
+    prospectCount: v.optional(v.number()),
+    contactCount: v.optional(v.number()),
+    /** Give the workspace a mail inbox so drafting can stage a conversation.
+     *  Omit it to exercise the honest refusal instead. */
+    inboxRef: v.optional(v.string()),
+  },
+  returns: v.object({
+    workspaceId: v.id("workspaces"),
+    ownerIdentityKey: v.string(),
+    campaignId: v.id("campaigns"),
+    missionId: v.id("missions"),
+    missionWorkflowId: v.string(),
+    prospectIds: v.array(v.id("prospects")),
+    employeeIds: v.object({
+      scout: v.id("employees"),
+      researcher: v.id("employees"),
+      outreach: v.id("employees"),
+    }),
+    runtimeConnectionId: v.id("runtimeConnections"),
+    runtimeGeneration: v.number(),
+    workerToken: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const seed = await seedFixtureWorkspace(ctx, {
+      // The mission is owned by the scout, exactly as `missions.create`
+      // makes it; each stage then attributes its own run to the employee
+      // that owns the operation.
+      operation: "discover",
+      ...(args.workspaceName !== undefined
+        ? { workspaceName: args.workspaceName }
+        : {}),
+      ...(args.ownerIdentityKey !== undefined
+        ? { ownerIdentityKey: args.ownerIdentityKey }
+        : {}),
+      ...(args.leadLimit !== undefined ? { leadLimit: args.leadLimit } : {}),
+      ...(args.prospectCount !== undefined
+        ? { prospectCount: args.prospectCount }
+        : {}),
+      ...(args.contactCount !== undefined
+        ? { contactCount: args.contactCount }
+        : {}),
+      ...(args.inboxRef !== undefined ? { inboxRef: args.inboxRef } : {}),
+      missionState: "queued",
+      missionWorkflow: "sales",
+    });
+    return {
+      workspaceId: seed.workspaceId,
+      ownerIdentityKey: seed.identityKey,
+      campaignId: seed.campaignId,
+      missionId: seed.missionId,
+      missionWorkflowId: seed.missionWorkflowId,
+      prospectIds: seed.prospectIds,
+      employeeIds: seed.employeeIds,
+      runtimeConnectionId: seed.connectionId,
+      runtimeGeneration: 1,
+      workerToken: seed.token,
+    };
+  },
+});
 
 /** Mint an additional credential (optionally scope-reduced) for scope-
  *  denial verification. Internal only; returns the plaintext once. */
