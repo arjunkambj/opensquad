@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/_dashboard'
 import { Route as MarketingRouteImport } from './routes/_marketing'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as DashboardSplatRouteImport } from './routes/_dashboard/$'
 import { Route as DashboardEmployeesRouteImport } from './routes/_dashboard/employees'
 import { Route as DashboardOnboardingRouteImport } from './routes/_dashboard/onboarding'
 import { Route as DashboardOverviewRouteImport } from './routes/_dashboard/overview'
@@ -32,6 +33,11 @@ const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardSplatRoute = DashboardSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardEmployeesRoute = DashboardEmployeesRouteImport.update({
   id: '/employees',
@@ -72,6 +78,7 @@ const HandlerSplatRoute = HandlerSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
   '/sign-in': typeof SignInRoute
+  '/$': typeof DashboardSplatRoute
   '/employees': typeof DashboardEmployeesRoute
   '/onboarding': typeof DashboardOnboardingRoute
   '/overview': typeof DashboardOverviewRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
   '/sign-in': typeof SignInRoute
+  '/$': typeof DashboardSplatRoute
   '/employees': typeof DashboardEmployeesRoute
   '/onboarding': typeof DashboardOnboardingRoute
   '/overview': typeof DashboardOverviewRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_dashboard': typeof DashboardRouteWithChildren
   '/_marketing': typeof MarketingRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/_dashboard/$': typeof DashboardSplatRoute
   '/_dashboard/employees': typeof DashboardEmployeesRoute
   '/_dashboard/onboarding': typeof DashboardOnboardingRoute
   '/_dashboard/overview': typeof DashboardOverviewRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/sign-in'
+    | '/$'
     | '/employees'
     | '/onboarding'
     | '/overview'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/sign-in'
+    | '/$'
     | '/employees'
     | '/onboarding'
     | '/overview'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/_dashboard'
     | '/_marketing'
     | '/sign-in'
+    | '/_dashboard/$'
     | '/_dashboard/employees'
     | '/_dashboard/onboarding'
     | '/_dashboard/overview'
@@ -166,6 +178,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_dashboard/$': {
+      id: '/_dashboard/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof DashboardSplatRouteImport
+      parentRoute: typeof DashboardRoute
     }
     '/_dashboard/employees': {
       id: '/_dashboard/employees'
@@ -220,6 +239,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardRouteChildren {
+  DashboardSplatRoute: typeof DashboardSplatRoute
   DashboardEmployeesRoute: typeof DashboardEmployeesRoute
   DashboardOnboardingRoute: typeof DashboardOnboardingRoute
   DashboardOverviewRoute: typeof DashboardOverviewRoute
@@ -228,6 +248,7 @@ interface DashboardRouteChildren {
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardSplatRoute: DashboardSplatRoute,
   DashboardEmployeesRoute: DashboardEmployeesRoute,
   DashboardOnboardingRoute: DashboardOnboardingRoute,
   DashboardOverviewRoute: DashboardOverviewRoute,
