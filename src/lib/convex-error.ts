@@ -52,6 +52,29 @@ export function isConflictError(error: unknown): boolean {
 }
 
 /**
+ * A malformed document id in a URL — a hand-edited, truncated or stale one.
+ *
+ * Convex ids carry a checksum, so a mistyped id fails ARGUMENT validation
+ * before the handler ever runs. It therefore never reaches the `NOT_FOUND`
+ * the handler throws for a well-formed foreign id, and it arrives as a plain
+ * `Error` with no domain code for `domainErrorCode` to read — which today
+ * means the operator is shown `ArgumentValidationError … Validator:
+ * v.id("missions")` and a request id. For the person who pasted a bad link,
+ * that record simply does not exist, and this says so.
+ *
+ * Matched narrowly, on an ID validator specifically: any other argument
+ * mismatch is a client bug and must keep surfacing as the unexpected error it
+ * is, rather than being quietly relabelled "not found".
+ */
+export function isMalformedIdError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("ArgumentValidationError") &&
+    error.message.includes("Validator: v.id(")
+  )
+}
+
+/**
  * Human-readable message for a failed call. Prefers the backend's domain
  * message; falls back to the Error text and finally a generic fallback.
  */

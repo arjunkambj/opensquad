@@ -12,7 +12,11 @@ import { DashboardLoadingSkeleton } from "@/components/Layout/DashboardLoadingSk
 import { DashboardShell } from "@/components/Layout/DashboardShell"
 import { EmptyState, ErrorState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { domainErrorCode, errorMessage } from "@/lib/convex-error"
+import {
+  domainErrorCode,
+  errorMessage,
+  isMalformedIdError,
+} from "@/lib/convex-error"
 
 export const Route = createFileRoute("/_dashboard")({
   component: DashboardLayout,
@@ -82,14 +86,23 @@ function DashboardRouteError({ error, reset }: ErrorComponentProps) {
     )
   }
 
-  if (code === "NOT_FOUND") {
+  // A malformed id in the URL means the same thing to the reader as a foreign
+  // one — that record is not here — but it fails Convex ARGUMENT validation
+  // before the handler runs, so it carries no domain code and would otherwise
+  // render as a raw `ArgumentValidationError` with a request id. V09 step 3
+  // opens exactly this URL.
+  if (code === "NOT_FOUND" || isMalformedIdError(error)) {
     return (
       <EmptyState
         title="Not found"
-        description={errorMessage(
-          error,
-          "That record doesn't exist, or it belongs to another workspace.",
-        )}
+        description={
+          code === "NOT_FOUND"
+            ? errorMessage(
+                error,
+                "That record doesn't exist, or it belongs to another workspace.",
+              )
+            : "That link doesn't name a record in this workspace. It may have been edited, truncated or copied from somewhere else."
+        }
         action={<Button render={<Link to="/overview" />}>Go to Overview</Button>}
       />
     )
