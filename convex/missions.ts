@@ -69,8 +69,19 @@ const vBoardPage = v.object({
   hasMore: v.boolean(),
 });
 
-/** Terminal mission states — nothing leaves them except archive/restore. */
-const TERMINAL_STATES: readonly MissionState[] = ["completed", "cancelled"];
+/**
+ * Mission states no further work can leave. `failed` belongs here: §6's state
+ * table calls it a terminal technical error and `MISSION_TRANSITIONS.failed`
+ * offers only `cancelled`, so nothing resumes from it. Omitting it made the
+ * sibling check below refuse a new mission for the campaign and call the dead
+ * one active — the architecture's "explicit safe retry action" for a failed
+ * mission IS creating its replacement.
+ */
+const TERMINAL_STATES: readonly MissionState[] = [
+  "completed",
+  "cancelled",
+  "failed",
+];
 
 async function getMissionInWorkspace(
   ctx: AuthCtx,
