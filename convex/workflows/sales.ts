@@ -143,6 +143,27 @@ const DRAFT_EVIDENCE_LIMIT = Math.min(
  *  (§6.2), and `retry` is honoured for `step.runAction` only. Reservations
  *  settle per page INSIDE the action, so a retried step replays the pages
  *  already paid for instead of paying twice. */
+/**
+ * How much of one page's failure text reaches a lead's `fitReason`. A
+ * provider message can run to 500 characters on its own and three of them are
+ * concatenated, so an unbounded join turns a readable reason into a wall.
+ */
+const RETRIEVAL_REASON_MAX = 140;
+
+/**
+ * Bound on a branch's terminal reason.
+ *
+ * `finalizeBranch` bounds its own `reason` at 500 AND then builds an activity
+ * summary as `Prospect branch <id>: <outcome> — <reason>`, which
+ * `recordActivityEvent` bounds at 500 as well. A 500-character reason
+ * therefore makes the activity write THROW, failing the very step that was
+ * recording the branch's outcome. 400 leaves room for the ~52-character
+ * prefix. The latent defect is in `convex/workflows/steps.ts`, which is not
+ * P21's to change — it is reported in `plan/evidence/P21.md`; this bound is
+ * what keeps this caller out of it.
+ */
+const BRANCH_REASON_MAX = 400;
+
 const RETRIEVE_RETRY = {
   maxAttempts: 2,
   initialBackoffMs: 1_000,
@@ -1624,7 +1645,11 @@ export const salesProspectWorkflow = workflow
     ): Promise<null> => {
       await step.runMutation(
         internal.workflows.sales.finishBranch,
-        { branchId: args.branchId, outcome, reason: reason.slice(0, 500) },
+        {
+          branchId: args.branchId,
+          reason: reason.slice(0, BRANCH_REASON_MAX),
+          outcome,
+        },
         { name },
       );
       return null;
@@ -1807,7 +1832,10 @@ export const salesProspectWorkflow = workflow
       retrieved.pages.length === 0
         ? `No page could be retrieved for this lead: ${
             retrieved.failures
-              .map((failure) => `${failure.url} — ${failure.message}`)
+              .map(
+                (failure) =>
+                  `${failure.url} — ${failure.message.slice(0, RETRIEVAL_REASON_MAX)}`,
+              )
               .join("; ") || "no URL was admissible"
           }`
         : undefined;
