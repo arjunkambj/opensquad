@@ -1656,21 +1656,34 @@ export const salesProspectWorkflow = workflow
     };
     /** A CHILD may not park on `resumeEvent` (header rule 1). It sleeps
      *  durably and re-asks, bounded, and records `cancelled` rather than
-     *  hanging if the pause outlives the budget. */
+     *  hanging if the pause outlives the budget.
+     *
+     *  `polls` in and `polls` out are ONE running counter — the number of
+     *  30 s polls this branch has already spent across every pause it has
+     *  observed. The caller must write the returned count back, or a branch
+     *  that waited out one pause would enter its next one with the budget
+     *  already at `PAUSE_POLL_MAX`, execute no loop body, and be cancelled
+     *  instantly on a reason ("paused beyond the branch budget") that
+     *  nothing had actually spent. */
     const waitOutPause = async (
       label: string,
       polls: number,
-    ): Promise<"proceed" | "abandon" | "exhausted"> => {
+    ): Promise<{
+      state: "proceed" | "abandon" | "exhausted";
+      polls: number;
+    }> => {
+      let spent = polls;
       for (let poll = polls; poll < PAUSE_POLL_MAX; poll += 1) {
         await step.sleep(PAUSE_POLL_MS, { name: `${label}:pause:${poll}` });
+        spent = poll + 1;
         const state = await step.runMutation(
           internal.workflows.sales.branchPauseCheck,
           { branchId: args.branchId },
           { name: `${label}:pauseCheck:${poll}` },
         );
-        if (state !== "wait") return state;
+        if (state !== "wait") return { state, polls: spent };
       }
-      return "exhausted";
+      return { state: "exhausted", polls: spent };
     };
 
     // 1. Which lead is this branch about?
@@ -1681,8 +1694,9 @@ export const salesProspectWorkflow = workflow
     );
     let pausePolls = 0;
     while (resolved.action === "wait") {
-      const state = await waitOutPause("resolve", pausePolls);
-      pausePolls = PAUSE_POLL_MAX;
+      const waited = await waitOutPause("resolve", pausePolls);
+      const state = waited.state;
+      pausePolls = waited.polls;
       if (state === "abandon") {
         return await finish("cancelled", "mission is not active", "finish:resolveAbandoned");
       }
@@ -1710,8 +1724,9 @@ export const salesProspectWorkflow = workflow
       { name: "beginResearch" },
     );
     while (opened.action === "wait") {
-      const state = await waitOutPause("beginResearch", pausePolls);
-      pausePolls = PAUSE_POLL_MAX;
+      const waited = await waitOutPause("beginResearch", pausePolls);
+      const state = waited.state;
+      pausePolls = waited.polls;
       if (state !== "proceed") {
         return await finish(
           "cancelled",
@@ -1768,11 +1783,12 @@ export const salesProspectWorkflow = workflow
         dispatched.action === "unavailable"
       ) {
         if (dispatched.action === "wait") {
-          const state = await waitOutPause(
+          const waited = await waitOutPause(
             `dispatchResearch:${redispatch}`,
             pausePolls,
           );
-          pausePolls = PAUSE_POLL_MAX;
+          const state = waited.state;
+          pausePolls = waited.polls;
           if (state !== "proceed") {
             return await finish(
               "cancelled",
@@ -1939,11 +1955,12 @@ export const salesProspectWorkflow = workflow
     let draftRedispatch = 0;
     while (proposed.action === "wait" || proposed.action === "unavailable") {
       if (proposed.action === "wait") {
-        const state = await waitOutPause(
+        const waited = await waitOutPause(
           `dispatchDraft:${draftRedispatch}`,
           pausePolls,
         );
-        pausePolls = PAUSE_POLL_MAX;
+        const state = waited.state;
+        pausePolls = waited.polls;
         if (state !== "proceed") {
           return await finish(
             "cancelled",
