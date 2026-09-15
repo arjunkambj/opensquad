@@ -53,6 +53,7 @@ import {
   vSourcePlan,
   vSuppressionKind,
   vSuppressionReason,
+  vProviderOperationState,
   vUsageMetric,
   vUsageReservationState,
   vWorkerDataRef,
@@ -1123,6 +1124,51 @@ export const usageReservationFields = {
   providerReference: v.optional(v.string()),
 };
 
+/**
+ * §4.4 `providerOperations` — the dedupe/accounting record for ONE paid
+ * provider invocation. G2's gateway contract item 3 requires that "a
+ * duplicate invocation ID returns its recorded result or status" and that
+ * "ambiguous failures consume the reservation until reconciled"; before this
+ * table there was nowhere to record either.
+ *
+ * The row is written in the SAME transaction as the `usage.reserve` it owns,
+ * before the provider is contacted, so there is no window in which a paid
+ * call exists with no record of it. `reservationIds` names the reservations
+ * the settle path must move, so a caller can never settle a different debit
+ * than the one it took.
+ */
+export const providerOperationFields = {
+  workspaceId: v.id("workspaces"),
+  provider: vProviderKind,
+  /** Stable semantic invocation id. A repeat returns the recorded result or
+   *  status instead of forwarding a second paid request. */
+  operationKey: v.string(),
+  missionId: v.id("missions"),
+  /** sha256 of the canonical {provider, tool, arguments}. A reused
+   *  operationKey carrying different arguments is a CONFLICT, never a
+   *  replay — the same rule `checkArtifactGrant` applies to content. */
+  requestDigest: v.string(),
+  /** The usage reservations this operation took, settled together. */
+  reservationIds: v.array(v.id("usageReservations")),
+  state: vProviderOperationState,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  prospectId: v.optional(v.id("prospects")),
+  runId: v.optional(v.id("runs")),
+  /* Continuation binding — present ONLY for a callback-correlated operation
+   * (a durable crawl). The bounded synchronous scrape and the lease-bound
+   * tool route complete inside their own action and have no continuation to
+   * correlate, so they leave these absent rather than inventing one. */
+  targetWorkflowId: v.optional(v.string()),
+  continuationEventId: v.optional(v.string()),
+  workflowGeneration: v.optional(v.number()),
+  /** The provider's own reference for the request — the backend receipt. */
+  componentRequestRef: v.optional(v.string()),
+  resultRef: v.optional(vWorkerDataRef),
+  resultDigest: v.optional(v.string()),
+  error: v.optional(v.object({ code: v.string(), message: v.string() })),
+};
+
 export default defineSchema({
   workspaces: defineTable(workspaceFields)
     .index("by_ownerIdentityKey", ["ownerIdentityKey"])
@@ -1478,4 +1524,26 @@ export default defineSchema({
       "bucketId",
     ])
     .index("by_bucketId_and_state", ["bucketId", "state"]),
+
+  providerOperations: defineTable(providerOperationFields)
+    // The dedupe lookup: one operation per (workspace, provider, key),
+    // enforced transactionally inside the reserving mutation.
+    .index("by_workspaceId_and_provider_and_operationKey", [
+      "workspaceId",
+      "provider",
+      "operationKey",
+    ])
+    // Callback correlation for a provider that answers asynchronously.
+    .index("by_provider_and_componentRequestRef", [
+      "provider",
+      "componentRequestRef",
+    ])
+    // The per-prospect page cap: this prospect's non-failed operations.
+    .index("by_workspaceId_and_prospectId_and_state", [
+      "workspaceId",
+      "prospectId",
+      "state",
+    ])
+    // The stale-operation sweep: still `requested`/`accepted` past its age.
+    .index("by_state_and_updatedAt", ["state", "updatedAt"]),
 });

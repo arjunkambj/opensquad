@@ -2673,6 +2673,54 @@ export type UsageMetric =
   | "research_pages"
   | "research_searches";
 
+/**
+ * §4.4 provider tool-invocation lifecycle. `requested` is recorded BEFORE
+ * the provider is contacted and `accepted` once the provider acknowledged a
+ * durable job, so a crash between the two is always visible as an operation
+ * that may have been billed. `uncertain` deliberately keeps its reservation
+ * blocking capacity: an ambiguous failure consumes the allowance until
+ * something reconciles it, which is the only honest accounting when we
+ * cannot tell whether we were charged.
+ */
+export const PROVIDER_OPERATION_STATES = [
+  "requested",
+  "accepted",
+  "completed",
+  "uncertain",
+  "failed",
+] as const;
+export const vProviderOperationState = v.union(
+  v.literal("requested"),
+  v.literal("accepted"),
+  v.literal("completed"),
+  v.literal("uncertain"),
+  v.literal("failed"),
+);
+export type ProviderOperationState =
+  (typeof PROVIDER_OPERATION_STATES)[number];
+
+/**
+ * §G2 Firecrawl route item 2: homepage plus at most two relevant pages per
+ * prospect. Three is the per-prospect cap AND the per-prospect share of the
+ * campaign's page allowance.
+ */
+export const RESEARCH_PAGES_PER_PROSPECT = 3;
+
+/**
+ * The campaign's lifetime research-page allowance: its accepted-lead ceiling
+ * times the per-prospect page cap. This is the first code in the repo that
+ * reads `campaigns.leadLimit` to gate anything — it has been validated at
+ * write time since P06 and never consulted since.
+ */
+export function researchPageLimit(leadLimit: number): number {
+  return (
+    boundedInt(leadLimit, "campaign.leadLimit", {
+      min: CAMPAIGN_LEAD_LIMIT_MIN,
+      max: CAMPAIGN_LEAD_LIMIT_MAX,
+    }) * RESEARCH_PAGES_PER_PROSPECT
+  );
+}
+
 export const vUsageReservationState = v.union(
   v.literal("reserved"),
   v.literal("committed"),
