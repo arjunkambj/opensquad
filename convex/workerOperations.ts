@@ -788,6 +788,10 @@ export const devSeedFixture = internalMutation({
      *  allowance (`leadLimit * RESEARCH_PAGES_PER_PROSPECT`). Seed a small
      *  one to exhaust the allowance without a large paid run. */
     leadLimit: v.optional(v.number()),
+    /** How many prospects to seed on the campaign (default 1, max 5). More
+     *  than one is what lets the CAMPAIGN allowance bind before any single
+     *  prospect's own page cap does. */
+    prospectCount: v.optional(v.number()),
   },
   returns: v.object({
     workspaceId: v.id("workspaces"),
@@ -802,6 +806,7 @@ export const devSeedFixture = internalMutation({
     employeeId: v.id("employees"),
     campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
+    prospectIds: v.array(v.id("prospects")),
     capabilities: v.array(vCapabilityId),
   }),
   handler: async (ctx, args) => {
@@ -947,27 +952,49 @@ export const devSeedFixture = internalMutation({
     // One persisted prospect on the fixture campaign. The research tool
     // route and the page allowance are both prospect-bound, so a fixture
     // with no prospect cannot exercise either.
-    const prospectId = await ctx.db.insert("prospects", {
-      workspaceId,
-      campaignId,
-      companyName: "Example Fixture Co",
-      canonicalDomain: "example.com",
-      sourceRefs: [
-        {
-          source: "apollo" as const,
-          profileUrl: "https://example.com/",
-          providerRecordId: "p21-bridge-fixture",
-          retrievedAt: now,
-        },
-      ],
-      qualification: "pending",
-      fitReason: "Fixture prospect — developer bridge exercise only.",
-      salesStage: "discovered",
-      ownerIdentityKey: identityKey,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+    // IANA-reserved example domains only — a fixture must never name a real
+    // company, and every one of these is safe to scrape.
+    const FIXTURE_DOMAINS = [
+      "example.com",
+      "example.net",
+      "example.org",
+      "example.edu",
+      "iana.org",
+    ] as const;
+    const prospectCount =
+      args.prospectCount === undefined
+        ? 1
+        : boundedInt(args.prospectCount, "prospectCount", {
+            min: 1,
+            max: FIXTURE_DOMAINS.length,
+          });
+    const prospectIds: Id<"prospects">[] = [];
+    for (const domain of FIXTURE_DOMAINS.slice(0, prospectCount)) {
+      prospectIds.push(
+        await ctx.db.insert("prospects", {
+          workspaceId,
+          campaignId,
+          companyName: `Fixture Co (${domain})`,
+          canonicalDomain: domain,
+          sourceRefs: [
+            {
+              source: "apollo" as const,
+              profileUrl: `https://${domain}/`,
+              providerRecordId: `p21-bridge-fixture:${domain}`,
+              retrievedAt: now,
+            },
+          ],
+          qualification: "pending",
+          fitReason: "Fixture prospect — developer bridge exercise only.",
+          salesStage: "discovered",
+          ownerIdentityKey: identityKey,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+    }
+    const prospectId = prospectIds[0]!;
 
     const connectionId = await ctx.db.insert("runtimeConnections", {
       workspaceId,
@@ -1027,6 +1054,7 @@ export const devSeedFixture = internalMutation({
       employeeId: actingEmployeeId,
       campaignId,
       prospectId,
+      prospectIds,
       capabilities: seeded?.capabilities ?? [],
     };
   },
