@@ -445,14 +445,28 @@ export async function cancelMissionWorkerRequests(
       request.state === "leased" ||
       request.state === "running"
     ) {
+      // The settlement is chosen by the state the request was in BEFORE this
+      // cancel, so capture it first. `pending` is the only state that proves
+      // no model work ran: nothing has claimed it, so the debit is provably
+      // unspent and is released. A `leased` row is already in a worker's
+      // hands with a live lease token, and a `running` row has had
+      // `heartbeat` confirm the turn started on the Box — either may have
+      // been billed, so the honest accounting is `markUncertain`, which
+      // KEEPS the capacity blocked until something reconciles it. That is
+      // the same rule `sweepExpiredLeases` and `applyFailure`'s
+      // `termination_unconfirmed` branch apply to exactly these two states.
+      const priorState = request.state;
       await ctx.db.patch("workerRequests", request._id, {
         state: "cancelled",
         error: { code, message: detail },
         updatedAt: Date.now(),
       });
       cancelled += 1;
-      // Cancelled before any model work could run — the debit is released.
-      await settleModelRun(ctx, request, "release");
+      await settleModelRun(
+        ctx,
+        request,
+        priorState === "pending" ? "release" : "markUncertain",
+      );
       const run = await ctx.db.get("runs", request.runId);
       if (run !== null) {
         await finishRun(ctx, run, "cancelled", {
