@@ -259,10 +259,16 @@ function clip(value: unknown, max: number): string | undefined {
  * `by_workspaceId_and_humanTakeover_and_lastMessageAt`. No tab post-filters a
  * page — a post-filtered truncated page is not a filtered result (§5).
  *
- * The `takeover` tab is every frozen thread, unassigned ones included: an
- * unassigned conversation is always under takeover, and excluding it would
- * mean post-filtering a page. `unassigned` is the narrower slice when that is
- * what the operator wants.
+ * The `takeover` tab is every frozen thread — unassigned ones, which are
+ * frozen by construction, and closed-but-frozen ones. Both are included
+ * because excluding either would mean post-filtering a page, and only
+ * `by_workspaceId_and_humanTakeover_and_lastMessageAt` carries the ordering
+ * column this tab pages by. `unassigned` and `closed` are the narrower slices
+ * when that is what the operator wants.
+ *
+ * It is therefore a SUPERSET of `attentionCounts.openTakeover`, which counts
+ * open threads under takeover only. That count is named for what it measures
+ * precisely so it is not wired up as this tab's badge.
  */
 export const list = query({
   args: {
@@ -513,6 +519,18 @@ export const thread = query({
  * threads, which are not attention. Neither range post-filters a truncated
  * page — that is the whole reason the third index exists.
  *
+ * THE SECOND BUCKET IS NOT THE `takeover` TAB, AND IT IS NAMED SO IT CANNOT
+ * BE MISTAKEN FOR IT. `list({tab: "takeover"})` ranges over
+ * `by_workspaceId_and_humanTakeover_and_lastMessageAt` and returns EVERY
+ * frozen thread — unassigned ones, which are frozen by construction, and
+ * closed-but-frozen ones — because that index carries `lastMessageAt` and the
+ * tab must page in inbox order without post-filtering. This count is
+ * `openTakeover`: open threads under takeover, which is the attention
+ * definition and a strict subset of the tab. A UI that renders `openTakeover`
+ * as the tab's badge would show a smaller number above a longer list, so the
+ * field says which of the two it is. (integrator decision D1: two numbers for
+ * one thing is a defect — these are two different things.)
+ *
  * Counts are capped at `MAX_LIST_LIMIT` and paired with `hasMore` so the UI
  * renders "50+". Architecture §5 forbids an exact unlimited counter.
  */
@@ -521,8 +539,9 @@ export const attentionCounts = query({
   returns: v.object({
     unassigned: v.number(),
     unassignedHasMore: v.boolean(),
-    takeover: v.number(),
-    takeoverHasMore: v.boolean(),
+    /** OPEN threads under takeover — not the `takeover` tab's row count. */
+    openTakeover: v.number(),
+    openTakeoverHasMore: v.boolean(),
     needsAttention: v.number(),
     needsAttentionHasMore: v.boolean(),
     bound: v.number(),
@@ -547,17 +566,17 @@ export const attentionCounts = query({
 
     const unassigned = Math.min(unassignedRows.length, MAX_LIST_LIMIT);
     const unassignedHasMore = unassignedRows.length > MAX_LIST_LIMIT;
-    const takeover = Math.min(takeoverRows.length, MAX_LIST_LIMIT);
-    const takeoverHasMore = takeoverRows.length > MAX_LIST_LIMIT;
-    const total = unassigned + takeover;
+    const openTakeover = Math.min(takeoverRows.length, MAX_LIST_LIMIT);
+    const openTakeoverHasMore = takeoverRows.length > MAX_LIST_LIMIT;
+    const total = unassigned + openTakeover;
     return {
       unassigned,
       unassignedHasMore,
-      takeover,
-      takeoverHasMore,
+      openTakeover,
+      openTakeoverHasMore,
       needsAttention: Math.min(total, MAX_LIST_LIMIT),
       needsAttentionHasMore:
-        unassignedHasMore || takeoverHasMore || total > MAX_LIST_LIMIT,
+        unassignedHasMore || openTakeoverHasMore || total > MAX_LIST_LIMIT,
       bound: MAX_LIST_LIMIT,
     };
   },
