@@ -2594,13 +2594,50 @@ export const vEmailEventHandlingState = v.union(
 export type EmailEventHandlingState = "pending" | "handled" | "failed";
 
 /**
+ * Which half of the mail path a receipt belongs to.
+ *
+ * It exists so the inbound drain can RANGE over inbound rows rather than
+ * filter a fixed page after taking it. The two halves reach a terminal
+ * `handlingState` by completely different routes — an inbound row through
+ * `inbox.applyInboundMessage`, an outbound one only once a send attempt
+ * carries its `providerMessageRef` — so an outbound receipt that never
+ * matches an attempt stays `pending` forever. Scanning `handlingState` alone,
+ * oldest first, therefore hands the inbound sweep a page made entirely of
+ * those rows, and the recovery path for a lost inbound callback stops running
+ * with no error to say so.
+ */
+export const vEmailEventDirection = v.union(
+  v.literal("inbound"),
+  v.literal("outbound"),
+);
+
+export type EmailEventDirection = "inbound" | "outbound";
+
+/** Prefix of every inbound application key. */
+export const INBOUND_APPLICATION_KEY_PREFIX = "incoming:";
+
+/**
+ * Derive a receipt's direction from its application key — TOTAL, and
+ * deliberately biased to `outbound` for anything that is not recognisably an
+ * inbound key, because `outbound` is the half the inbound drain never feeds
+ * to `applyInboundMessage`.
+ */
+export function directionForApplicationKey(
+  applicationKey: string,
+): EmailEventDirection {
+  return applicationKey.startsWith(INBOUND_APPLICATION_KEY_PREFIX)
+    ? "inbound"
+    : "outbound";
+}
+
+/**
  * Application handling key for inbound messages
  * (`incoming:<inbox>:<message>`) — a second provider event ID for the same
  * message can never start a second reply mission (§4.3 note). Outbound
  * delivery events use `outbound:<messageRef>:<eventType>` instead.
  */
 export function inboundApplicationKey(inboxRef: string, messageRef: string) {
-  return `incoming:${inboxRef}:${messageRef}`;
+  return `${INBOUND_APPLICATION_KEY_PREFIX}${inboxRef}:${messageRef}`;
 }
 
 export function outboundApplicationKey(

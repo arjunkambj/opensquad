@@ -27,6 +27,7 @@ import {
   vDecisionAnswer,
   vDecisionKind,
   vDecisionState,
+  vEmailEventDirection,
   vEmailEventHandlingState,
   vEmployeeTemplate,
   vEndpointOperation,
@@ -1016,6 +1017,15 @@ export const emailEventReceiptFields = {
   providerMessageRef: v.string(),
   eventType: v.string(),
   receivedAt: v.number(),
+  /**
+   * Which half of the mail path this row belongs to, derived from
+   * `applicationKey` by `directionForApplicationKey` so the two can never
+   * disagree. It exists to keep the inbound drain's filter INSIDE its index
+   * range: the two halves settle by different routes, so an outbound receipt
+   * whose message ref never lands on a send attempt stays `pending` forever
+   * and would otherwise fill the oldest-first scan window.
+   */
+  direction: vEmailEventDirection,
   handlingState: vEmailEventHandlingState,
   /** Bounded projection of the verified event (≤4 KiB enforced on write). */
   providerFacts: v.record(v.string(), v.any()),
@@ -1377,7 +1387,15 @@ export default defineSchema({
     ])
     // Delivery-fact lookup when the send attempt records its message ref.
     .index("by_providerMessageRef", ["providerMessageRef"])
-    .index("by_handlingState_and_receivedAt", ["handlingState", "receivedAt"]),
+    // The drain's exact range: one half of the mail path, still pending,
+    // older than the cutoff, oldest first. `direction` leads so the sweep
+    // never pages through the other half's permanently-pending rows (§5 — a
+    // post-filtered page is not a filtered result).
+    .index("by_direction_and_handlingState_and_receivedAt", [
+      "direction",
+      "handlingState",
+      "receivedAt",
+    ]),
 
   /* §4.4 — usage (P10) */
 

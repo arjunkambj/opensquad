@@ -27,6 +27,7 @@ import { requireWorkspaceMember } from "./lib/auth";
 import {
   boundedLimit,
   boundedString,
+  directionForApplicationKey,
   domainError,
   invalid,
   PROVIDER_REF_MAX_LENGTH,
@@ -328,6 +329,11 @@ export async function recordReceipt(
     providerMessageRef,
     eventType,
     receivedAt: args.receivedAt ?? now,
+    // Derived from the key, never passed in: the key already names the half
+    // of the mail path this row belongs to, and two independent statements of
+    // one fact is how the drain's index range would come to disagree with the
+    // prefix it replaced.
+    direction: directionForApplicationKey(applicationKey),
     handlingState: duplicateApplicationKey ? "handled" : "pending",
     providerFacts: facts,
     ...(args.providerThreadRef !== undefined

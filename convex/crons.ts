@@ -39,7 +39,11 @@ crons.interval(
 // retried — Workpool does not retry mutations, and the component will not
 // re-dispatch an `event_id` it has already ingested — so one lost schedule
 // would strand a verified reply forever. This re-drives `pending` inbound
-// receipts and is the first consumer of `by_handlingState_and_receivedAt`.
+// receipts over an exact `by_direction_and_handlingState_and_receivedAt`
+// range — the outbound half never settles unless a send attempt claims it, so
+// scanning `handlingState` alone would eventually hand this sweep a page with
+// no inbound row in it — and settles the outbound rows that can no longer
+// reach an attempt so they stop accumulating.
 crons.interval(
   "inbound-receipt-drain",
   { minutes: 5 },
