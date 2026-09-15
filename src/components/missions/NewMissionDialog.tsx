@@ -41,6 +41,14 @@ const TITLE_MAX = 200
  * The other refusal — one live sales mission per campaign — cannot be checked
  * from here without reading every mission on the campaign, so it renders in
  * place in the dialog, quoting the backend's own sentence.
+ *
+ * The dialog is mounted unconditionally. `eligible` is recomputed from a live
+ * subscription on every render, so a teammate completing the workspace's last
+ * active campaign can empty it while this form is open; returning the refusal
+ * *above* the dialog would unmount the form and throw away a title someone was
+ * halfway through typing. The refusal moves inside instead, and every rule
+ * this codebase has about a refusal — it is a sentence, it preserves what was
+ * typed — still holds.
  */
 export function NewMissionDialog({
   workspaceId,
@@ -86,29 +94,21 @@ export function NewMissionDialog({
     )
   }
 
-  if (eligible.length === 0) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm text-muted-foreground">
-          A mission needs an active campaign whose source plan someone has
-          confirmed.{" "}
-          {activeCampaignsTruncated
-            ? `None of the first ${activeCampaigns.length} active campaigns has one, and this workspace has more than that — so this is not proof there is none.`
-            : "There is none yet."}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          render={<Link to="/onboarding" search={{ step: "campaign" }} />}
-        >
-          Set up a campaign
-        </Button>
-      </div>
-    )
-  }
+  const noneEligible = eligible.length === 0
+  const refusal = `A mission needs an active campaign whose source plan someone has confirmed. ${
+    activeCampaignsTruncated
+      ? `None of the first ${activeCampaigns.length} active campaigns has one, and this workspace has more than that — so this is not proof there is none.`
+      : "There is none yet."
+  }`
 
   const trimmed = title.trim()
-  const chosen = campaignId === "" ? eligible[0]._id : campaignId
+  // Defensive rather than positional: a live subscription can retire the
+  // campaign the operator picked while the form is open, and `value` falling
+  // back to the first remaining option while `submit` still sent the retired
+  // id would be the select showing one thing and doing another.
+  const chosen = eligible.some((campaign) => campaign._id === campaignId)
+    ? campaignId
+    : (eligible[0]?._id ?? "")
 
   const openForm = () => {
     // One id per opened form. Minted here rather than per click, so pressing
@@ -116,7 +116,7 @@ export function NewMissionDialog({
     // so a second deliberate mission is a second intent.
     setRequestId(crypto.randomUUID())
     setTitle("")
-    setCampaignId(eligible[0]._id)
+    setCampaignId(eligible[0]?._id ?? "")
     setPriority("normal")
     setError(null)
     setOpen(true)
@@ -151,9 +151,25 @@ export function NewMissionDialog({
 
   return (
     <>
-      <Button size="sm" onClick={openForm}>
-        New mission
-      </Button>
+      {/* The refusal takes the button's place rather than sitting under a
+          disabled one — but it never takes the DIALOG's place, because an
+          open form is somewhere the operator has already typed. */}
+      {noneEligible ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm text-muted-foreground">{refusal}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            render={<Link to="/onboarding" search={{ step: "campaign" }} />}
+          >
+            Set up a campaign
+          </Button>
+        </div>
+      ) : (
+        <Button size="sm" onClick={openForm}>
+          New mission
+        </Button>
+      )}
 
       <DecisionActionDialog
         open={open}
@@ -166,12 +182,20 @@ export function NewMissionDialog({
         title="Start a sales mission"
         description="The squad discovers and researches prospects, then asks you to approve every email before it leaves. Nothing is sent without a decision from someone here."
         confirmLabel="Start the mission"
-        confirmDisabled={trimmed.length === 0 || trimmed.length > TITLE_MAX}
+        confirmDisabled={
+          noneEligible || trimmed.length === 0 || trimmed.length > TITLE_MAX
+        }
         busy={busy}
         error={error}
         onConfirm={() => void submit()}
       >
         <div className="flex flex-col gap-4">
+          {noneEligible ? (
+            <p className="text-sm text-foreground">
+              {refusal} Nothing was written and what you typed is still here —
+              confirm a campaign in another tab and this form is still usable.
+            </p>
+          ) : null}
           <div className="flex flex-col gap-1">
             <Label htmlFor="new-mission-title">Title</Label>
             <Input
@@ -197,7 +221,7 @@ export function NewMissionDialog({
             <NativeSelect
               id="new-mission-campaign"
               value={chosen}
-              disabled={busy}
+              disabled={busy || noneEligible}
               onChange={(event) => setCampaignId(event.target.value)}
             >
               {eligible.map((campaign) => (
