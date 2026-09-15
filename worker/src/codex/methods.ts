@@ -516,6 +516,12 @@ export function waitForLoginCompleted(
  * declined; requests the worker cannot service get a JSON-RPC error so the
  * app-server does not hang. Host policy (`approvalPolicy: "never"`, read-only
  * sandbox) should prevent these from arriving at all — this is the backstop.
+ *
+ * The production daemon installs `workerServerRequestHandler` (codex/toolRouter.ts)
+ * instead, which reproduces every refusal below and replaces only the
+ * `item/tool/call` branch with the capability-filtered router. This remains
+ * the correct handler for a caller that has NO work context at all — the
+ * probes, which never hold a lease and must therefore never route a tool.
  */
 export function decliningServerRequestHandler(): ServerRequestHandler {
   return (method, _params) => {

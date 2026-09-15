@@ -21,8 +21,10 @@
 // credential so provisioning — not restart loops — replaces the runtime.
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { CodexAppServer } from "./codex/appserver.js";
+import type { CodexAppServer, ServerRequestHandler } from "./codex/appserver.js";
 import { AppServerError } from "./codex/appserver.js";
+import { workerServerRequestHandler } from "./codex/toolRouter.js";
+import type { ParsedToolCall, ToolCallOutcome } from "./codex/toolRouter.js";
 import {
   accountLoginCancel,
   accountLoginStartDeviceCode,
@@ -110,6 +112,11 @@ export class WorkerDaemon {
   #fatal: Error | null = null;
   #currentWork: ClaimedWork | null = null;
   #currentTurnRef: string | null = null;
+  /** Tool calls accepted for the CURRENT request. Reset on every claim; the
+   *  budget is `constraints.maxToolCalls`, and an absent constraint means
+   *  zero. This counter is the fast local half — Convex keeps the
+   *  authoritative one on the request row, because the worker is untrusted. */
+  #toolCallsUsed = 0;
   #activeLogin: ActiveLogin | null = null;
   /** controlRequestIds currently executing — the bridge re-delivers a
    *  claimed command on every poll (crash recovery), so the same request
@@ -128,6 +135,55 @@ export class WorkerDaemon {
     this.#config = config;
     this.#server = server;
     this.#bridge = new BridgeClient(config);
+  }
+
+  /**
+   * The app-server's single server-request handler, built once and installed
+   * at boot. It closes over `this` rather than over a work item, so it always
+   * reads the lease the daemon holds at call time — installing it per turn
+   * would race the control loop, which drives `accountRead`/`turnInterrupt`
+   * through the same connection while a turn is running.
+   */
+  serverRequestHandler(): ServerRequestHandler {
+    return workerServerRequestHandler({
+      currentWork: () => this.#currentWork,
+      currentTurnRef: () => this.#currentTurnRef,
+      consumeToolCall: () => this.#consumeToolCall(),
+      invokeTool: (work, call) => this.#invokeTool(work, call),
+      log: (event, fields) => log(event, fields),
+    });
+  }
+
+  /** Spend one tool call against `constraints.maxToolCalls`. An absent
+   *  constraint is zero, not unlimited. */
+  #consumeToolCall(): boolean {
+    const budget = this.#currentWork?.input.constraints.maxToolCalls ?? 0;
+    if (this.#toolCallsUsed >= budget) {
+      return false;
+    }
+    this.#toolCallsUsed += 1;
+    return true;
+  }
+
+  /**
+   * Execute a permitted tool through the backend. No provider credential
+   * exists inside the Box (envcheck refuses to start with one), so every
+   * paid call runs Convex-side; until the bridge carries a tool channel
+   * there is nothing to call, and a permitted tool reports an explicit
+   * unknown rather than a fabricated result.
+   */
+  async #invokeTool(
+    _work: ClaimedWork,
+    call: ParsedToolCall,
+  ): Promise<ToolCallOutcome> {
+    log("tool_unavailable", { tool: call.tool, reason: "no_backend_channel" });
+    return {
+      kind: "unavailable",
+      text: JSON.stringify({
+        status: "unavailable",
+        reason: "the research channel is not available on this build",
+      }),
+    };
   }
 
   /** Signal handler hook — stop accepting work, let the lease lapse. */
@@ -573,6 +629,7 @@ export class WorkerDaemon {
       generation: work.generation,
     });
     this.#currentWork = work;
+    this.#toolCallsUsed = 0;
     const priorPhase = this.#phase;
     this.#phase = "running";
     try {

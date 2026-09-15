@@ -11,7 +11,6 @@
 
 import { mkdir } from "node:fs/promises";
 import { CodexAppServer } from "./codex/appserver.js";
-import { decliningServerRequestHandler } from "./codex/methods.js";
 import { initialize, sendInitialized } from "./codex/methods.js";
 import { loadWorkerConfig } from "./config.js";
 import {
@@ -67,7 +66,12 @@ async function main(): Promise<void> {
       process.exit(1);
     },
   });
-  server.setServerRequestHandler(decliningServerRequestHandler());
+  // The daemon owns the server-request policy: one stable handler, installed
+  // before the child is spawned, that reads the daemon's current lease at
+  // call time. It reproduces every refusal the declining backstop makes and
+  // replaces only `item/tool/call` with the capability-filtered router.
+  const daemon = new WorkerDaemon(config, server);
+  server.setServerRequestHandler(daemon.serverRequestHandler());
   await server.start({
     codexBin: config.codexBin,
     cwd: config.workDir,
@@ -93,8 +97,6 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
-
-  const daemon = new WorkerDaemon(config, server);
 
   const shutdown = async () => {
     if (shuttingDown) return;
