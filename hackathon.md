@@ -401,7 +401,7 @@ turn for this pipeline and outbound sending remained deferred. Evidence:
 `plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P20.md`,
 `plan/evidence/P21.md`.
 
-### 2026-09-16 - 4572b2d
+### 2026-09-16 - 75e76f6
 
 Shipped the round's three cards: the Mission Control board (P12, accepted), the
 shared inbox and reply backend (P11), and the sales pipeline with its capability
