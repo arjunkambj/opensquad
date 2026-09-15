@@ -2,7 +2,7 @@ import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { isTypingTarget } from "@/lib/keyboard"
 import { optionalOneOf } from "@/lib/search-params"
 import {
   MISSION_TABS,
@@ -82,6 +83,34 @@ export function MissionDetail({ missionId }: { missionId: string }) {
   )
 
   const tab: MissionTab = search.tab ?? OVERVIEW_DEFAULTS.tab
+
+  // Escape closes the detail by NAVIGATING to the board, not by blurring —
+  // otherwise the URL still names a mission the operator is no longer looking
+  // at, and Back does something they did not ask for.
+  //
+  // Two guards. A typing target, so Escape in the note textarea is the
+  // textarea's; and an already-handled event or an open dialog, so a Base UI
+  // confirmation dismisses itself first rather than the route changing out
+  // from under an irreversible action someone was about to confirm.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return
+      }
+      if (isTypingTarget(event.target)) {
+        return
+      }
+      if (document.querySelector('[role="dialog"]') !== null) {
+        return
+      }
+      void navigate({
+        to: "/overview",
+        search: (previous) => ({ ...previous, tab: undefined }),
+      })
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [navigate])
 
   // `null` cannot reach here — the `_workspace` gate redirects a
   // membership-less user to setup — but the query types as nullable and
@@ -212,6 +241,12 @@ function BackToBoard() {
   )
 }
 
+/**
+ * Opening a detail moves focus to its heading — not a trap, because this is a
+ * non-modal inline panel rather than a `role="dialog"`. Containment and
+ * restore stay where they belong: the irreversible confirmations, which Base
+ * UI already handles.
+ */
 function MissionHeader({
   mission,
   timezone,
@@ -219,6 +254,12 @@ function MissionHeader({
   mission: Doc<"missions">
   timezone: string
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [mission._id])
+
   return (
     <header className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -234,7 +275,11 @@ function MissionHeader({
           updated {formatWaited(mission.updatedAt)}
         </span>
       </div>
-      <h1 className="font-heading text-2xl font-semibold text-foreground">
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-heading text-2xl font-semibold text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+      >
         {mission.title}
       </h1>
       <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">

@@ -50,10 +50,6 @@ function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn(
           "top-1/3 translate-y-0 overflow-hidden rounded-3xl! p-0",
@@ -61,6 +57,14 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
+        {/* Inside DialogContent, not beside it. As a sibling these strings are
+            mounted wherever CommandDialog is written — for us, inline in the
+            sidebar tree — so a screen reader walking the nav read the palette's
+            title and description on every page, with no palette open. */}
+        <DialogHeader className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         {children}
       </DialogContent>
     </Dialog>

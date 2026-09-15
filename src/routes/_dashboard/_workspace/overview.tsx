@@ -1,4 +1,5 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router"
+import { MissionFocusProvider } from "@/components/missions/mission-focus"
 import { SetupBanner } from "@/components/onboarding/SetupBanner"
 import {
   flag,
@@ -120,12 +121,19 @@ export const Route = createFileRoute("/_dashboard/_workspace/overview")({
  * screen while a mission detail is open: an unfinished onboarding is exactly
  * the reason a mission is stuck, and hiding the banner one click deep would
  * hide the fix from the person looking for it.
+ *
+ * The focus memory lives here for the same structural reason the filters do:
+ * this is what survives the swap between the board and the detail, so it is
+ * the only place that can still remember which card was opened once the
+ * detail closes.
  */
 function OverviewLayout() {
   return (
     <>
       <SetupBanner />
-      <Outlet />
+      <MissionFocusProvider>
+        <Outlet />
+      </MissionFocusProvider>
     </>
   )
 }

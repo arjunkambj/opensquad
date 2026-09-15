@@ -40,6 +40,7 @@ import {
   sidebarMainItems,
 } from "@/constants/sidebar-menu"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { isTypingTarget } from "@/lib/keyboard"
 import Logo from "./Logo"
 
 /**
@@ -82,7 +83,10 @@ export function AppSidebar() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === SEARCH_SHORTCUT
+        event.key.toLowerCase() === SEARCH_SHORTCUT &&
+        // Not while the user is typing. ⌘K inside a campaign brief or a
+        // mission note opened the palette over their half-written words.
+        !isTypingTarget(event.target)
       ) {
         event.preventDefault()
         setSearchOpen((open) => !open)

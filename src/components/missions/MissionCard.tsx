@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router"
+import { useEffect, useRef } from "react"
 import type { Doc } from "../../../convex/_generated/dataModel"
 import { formatWaited } from "@/components/decisions/decision-presentation"
+import { useMissionFocus } from "@/components/missions/mission-focus"
 import {
   MissionOutcomeChip,
   MissionPriorityChip,
@@ -35,11 +37,26 @@ export function MissionCard({
   ownerName: string | undefined
   ownersLoading: boolean
 }) {
+  const { remember, claim } = useMissionFocus()
+  const ref = useRef<HTMLAnchorElement>(null)
+
+  // Closing the detail returns focus to the row that opened it. The claim is
+  // made by the card itself rather than by the board, because a column's rows
+  // arrive asynchronously — the board has no moment at which it can be sure
+  // the remembered card is on screen, and this card knows exactly when it is.
+  useEffect(() => {
+    if (claim(mission._id)) {
+      ref.current?.focus()
+    }
+  }, [claim, mission._id])
+
   return (
     <Link
+      ref={ref}
       to="/overview/missions/$missionId"
       params={{ missionId: mission._id }}
       search={(previous) => previous}
+      onClick={() => remember(mission._id)}
       className="flex flex-col gap-2 rounded-[min(var(--radius-4xl),24px)] bg-card px-4 py-3 text-card-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
     >
       <p className="text-sm font-medium text-foreground">{mission.title}</p>
