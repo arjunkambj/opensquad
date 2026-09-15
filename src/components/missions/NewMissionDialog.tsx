@@ -26,6 +26,12 @@ const TITLE_MAX = 200
  * that fixes it. A dead button whose failure only appears after you press it
  * is the thing this avoids.
  *
+ * The campaigns arrive from a query the board runs **filtered to `active`**,
+ * because the board's own unfiltered dropdown page is bounded at 25 and a
+ * refusal derived from it would be a claim about the workspace made from a
+ * truncated page. `activeCampaignsTruncated` carries `hasMore` through, so
+ * even the wider page cannot pose as the whole workspace when it is not.
+ *
  * One `requestId` is minted per opened form and reused on every retry of that
  * form. It is the only thing standing between a double-click and two missions
  * when the first response is lost: `create` looks the id up on
@@ -39,13 +45,15 @@ const TITLE_MAX = 200
 export function NewMissionDialog({
   workspaceId,
   role,
-  campaigns,
-  campaignsLoading,
+  activeCampaigns,
+  activeCampaignsLoading,
+  activeCampaignsTruncated,
 }: {
   workspaceId: Id<"workspaces">
   role: WorkspaceRole
-  campaigns: Doc<"campaigns">[]
-  campaignsLoading: boolean
+  activeCampaigns: Doc<"campaigns">[]
+  activeCampaignsLoading: boolean
+  activeCampaignsTruncated: boolean
 }) {
   const create = useMutation(api.missions.create)
 
@@ -57,17 +65,17 @@ export function NewMissionDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const eligible = campaigns.filter(
-    (campaign) =>
-      campaign.status === "active" &&
-      campaign.sourcePlan.confirmedBy !== undefined,
+  // `status` was already applied by the server; only the confirmation is left
+  // to read off the row.
+  const eligible = activeCampaigns.filter(
+    (campaign) => campaign.sourcePlan.confirmedBy !== undefined,
   )
 
   if (!canEdit(role)) {
     return <PermissionNote role={role} action="start a mission" />
   }
 
-  if (campaignsLoading) {
+  if (activeCampaignsLoading) {
     return (
       <Button size="sm" disabled aria-describedby="new-mission-loading">
         New mission
@@ -83,7 +91,10 @@ export function NewMissionDialog({
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm text-muted-foreground">
           A mission needs an active campaign whose source plan someone has
-          confirmed. There is none yet.
+          confirmed.{" "}
+          {activeCampaignsTruncated
+            ? `None of the first ${activeCampaigns.length} active campaigns has one, and this workspace has more than that — so this is not proof there is none.`
+            : "There is none yet."}
         </p>
         <Button
           variant="outline"

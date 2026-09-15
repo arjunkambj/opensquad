@@ -29,6 +29,15 @@ const OVERVIEW_ROUTE = "/_dashboard/_workspace/overview"
 const PHONE_DEFAULT_COLUMN: BoardColumn = "needs_you"
 
 /**
+ * `MAX_LIST_LIMIT`. `boundedLimit` THROWS outside [1, 50] rather than
+ * clamping, so this is a literal. Campaign rows carry no frozen snapshot, so
+ * unlike the board there is no payload reason to ask for fewer — and the
+ * question being asked ("can a mission be started at all?") deserves the
+ * widest answer the backend will give.
+ */
+const ACTIVE_CAMPAIGN_LIMIT = 50
+
+/**
  * The four-column board.
  *
  * One `missions.listBoard` query per column, one `employees.list` for every
@@ -53,6 +62,18 @@ export function MissionBoard() {
   const campaigns = useQuery(
     api.campaigns.list,
     workspaceId === undefined ? "skip" : { workspaceId },
+  )
+  // Eligibility is asked of the server rather than derived from the dropdown's
+  // page. `campaigns.list` above is unfiltered and bounded at 25, so a
+  // workspace with 26+ campaigns could hide the one confirmed campaign that
+  // `missions.create` would have accepted — and post-filtering a truncated
+  // page and presenting the result as a filtered answer is what
+  // `plan/ux.md` §6 forbids outright. `status` is a real argument; use it.
+  const activeCampaigns = useQuery(
+    api.campaigns.list,
+    workspaceId === undefined
+      ? "skip"
+      : { workspaceId, status: "active" as const, limit: ACTIVE_CAMPAIGN_LIMIT },
   )
   const employees = useQuery(
     api.employees.list,
@@ -172,8 +193,9 @@ export function MissionBoard() {
           <NewMissionDialog
             workspaceId={current.workspace._id}
             role={current.role}
-            campaigns={campaigns?.items ?? []}
-            campaignsLoading={campaigns === undefined}
+            activeCampaigns={activeCampaigns?.items ?? []}
+            activeCampaignsLoading={activeCampaigns === undefined}
+            activeCampaignsTruncated={activeCampaigns?.hasMore ?? false}
           />
         </div>
       </div>
