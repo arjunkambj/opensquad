@@ -17,6 +17,16 @@
  * that re-runs every gate fresh. "Every external response still needs its own
  * exact approval" is therefore a property of the code, not a convention.
  *
+ * BUT IT OUTLIVES THE SEND IT AUTHORIZED. The mission may not go terminal at
+ * approval, because `evaluateSendGates` refuses a `completed` mission with
+ * `mission_inactive` and `beginDispatch` cancels the attempt on that refusal —
+ * so a reply parked for the send window or the daily cap would be thrown away
+ * hours later, and a lost acknowledgement would open no `delivery_uncertain`
+ * ask at all. After an approval the workflow therefore polls
+ * `internal.inbox.checkApprovedSend`, a pure read of the send path, sleeping
+ * durably while the attempt is parked and parking on the uncertainty ask when
+ * the provider outcome is unknown. It still dispatches nothing.
+ *
  * THE DRAFT REACHES THE SHIPPED APPROVAL PATH, NOT A NEW ONE.
  * `internal.drafts.createRevision` opens a normal required `draft_approval`
  * decision (`askKey: draft_approval:<draftId>`), which is exactly what
@@ -71,6 +81,14 @@ const RUNTIME_WAIT_MS = 60_000;
  * person, not another model call.
  */
 const MAX_DRAFT_ATTEMPTS = 2;
+
+/**
+ * How many times the workflow re-polls the send an approval authorized before
+ * handing it to a human. A parked attempt waits out one closed send window
+ * per poll, so this covers a long weekend with room to spare; an attempt that
+ * is still unsettled after that is not something another sleep will fix.
+ */
+const MAX_SEND_SETTLE_WAITS = 14;
 
 export const replyMissionWorkflow = workflow
   .define({
@@ -339,16 +357,85 @@ export const replyMissionWorkflow = workflow
       // the branch reads `fields.draftResolution` and never `answer.approved`.
       const draftResolution = resolution.answer.fields?.draftResolution;
       if (draftResolution === "approved") {
-        // `approvals.approve` already scheduled the send boundary, which
-        // re-runs every gate fresh. This workflow deliberately does not also
-        // journal a send: a second dispatcher on one attempt row produces only
-        // `in_flight`/`already_resolved` noise, and a parked attempt outside
-        // the send window is re-driven by the existing sweep.
-        return await finish(
-          "completed",
-          `The reviewer approved response revision ${installed.revision}; the send boundary owns the dispatch.`,
-          `finish:approved:${attempt}`,
-        );
+        // `approvals.approve` already scheduled the send boundary, and this
+        // workflow still does not dispatch: a second dispatcher on one attempt
+        // row would race the first for the `reserved → requesting` flip and
+        // add nothing. What it MUST do is outlive the send it authorized.
+        //
+        // The boundary can legitimately park the attempt — outside the send
+        // window, or with the day's allowance spent — and re-drive it hours
+        // later. Every re-entry re-runs `evaluateSendGates`, which refuses a
+        // `completed` mission with `mission_inactive`, on which `beginDispatch`
+        // CANCELS the attempt. Completing here therefore discarded the
+        // reviewer's explicitly approved reply the moment the send had to
+        // wait. A terminal mission also makes
+        // `sending.openDeliveryUncertainAsk` open nothing, and
+        // `completeReplyMission` retires an ask already open.
+        //
+        // So the mission stays non-terminal until the send settles: polled
+        // through a journaled read-only step, slept on durably while parked,
+        // and parked on the `delivery_uncertain` ask when the provider
+        // outcome is unknown. Nothing here can send — only `approvals.approve`
+        // can, a human already did, and every gate still re-runs inside
+        // `beginDispatch`.
+        const awaited = new Set<string>();
+        let settleWaits = 0;
+        let unsettledReason = "no_attempt";
+        for (;;) {
+          const send = await step.runMutation(
+            internal.inbox.checkApprovedSend,
+            { missionId: args.missionId, draftId: installed.draftId },
+            { name: `awaitSend:${attempt}:${settleWaits}` },
+          );
+          if (send.action === "settled") {
+            return await finish(
+              send.outcome,
+              send.summary,
+              `finish:sent:${attempt}:${settleWaits}`,
+            );
+          }
+          if (settleWaits >= MAX_SEND_SETTLE_WAITS) {
+            return await finish(
+              "contact_needed",
+              `Approved response revision ${installed.revision} has not settled (${unsettledReason}); it is waiting for a human.`,
+              `finish:sendUnsettled:${attempt}`,
+            );
+          }
+          settleWaits += 1;
+          if (send.action === "review") {
+            // One event id may be awaited exactly once; a second await throws.
+            // A `delivery_uncertain` ask that comes back unchanged means the
+            // reconciliation is genuinely a human's, so stop waiting on it.
+            if (awaited.has(send.continuationEventId)) {
+              return await finish(
+                "contact_needed",
+                `Delivery of approved response revision ${installed.revision} is uncertain; a human owns the reconciliation.`,
+                `finish:sendUncertain:${attempt}`,
+              );
+            }
+            awaited.add(send.continuationEventId);
+            unsettledReason = "delivery_uncertain";
+            await step.runMutation(
+              internal.workflows.steps.markAwaitingUser,
+              { missionId: args.missionId },
+              { name: `markAwaitingSend:${attempt}:${settleWaits}` },
+            );
+            try {
+              await step.awaitEvent({
+                id: send.continuationEventId as EventId,
+                validator: vDecisionContinuation,
+              });
+            } catch {
+              // Superseded or cancelled underneath us. Re-read the attempt
+              // rather than guessing what replaced the ask.
+            }
+            continue;
+          }
+          unsettledReason = send.reason;
+          await step.sleep(Math.max(0, send.untilMs - Date.now()), {
+            name: `sendWait:${attempt}:${settleWaits}`,
+          });
+        }
       }
       if (draftResolution === "changes_requested") {
         if (attempt < MAX_DRAFT_ATTEMPTS) {

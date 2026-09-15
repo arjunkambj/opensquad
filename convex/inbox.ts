@@ -1827,6 +1827,206 @@ export const completeReplyMission = internalMutation({
 });
 
 /* ------------------------------------------------------------------ */
+/* Waiting out the send an approval authorized                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Where the send this mission's approval authorized has got to.
+ *
+ * `settled` — a terminal state worth reporting as the mission's outcome.
+ * `wait` — still in motion (or parked for the send window); re-poll after
+ * `untilMs`. `review` — the provider outcome is uncertain and a required
+ * `delivery_uncertain` ask is open for a human, so the workflow parks on it
+ * rather than finishing and taking that ask down with it.
+ */
+const vApprovedSendState = v.union(
+  v.object({
+    action: v.literal("settled"),
+    outcome: vMissionOutcome,
+    summary: v.string(),
+  }),
+  v.object({
+    action: v.literal("wait"),
+    untilMs: v.number(),
+    reason: v.string(),
+  }),
+  v.object({
+    action: v.literal("review"),
+    decisionId: v.id("decisions"),
+    continuationEventId: v.string(),
+  }),
+);
+
+export type ApprovedSendState = typeof vApprovedSendState.type;
+
+/** Shortest gap between two polls of an unsettled send. */
+const SEND_SETTLE_POLL_MS = 60_000;
+
+/** `completeReplyMission` bounds its summary to 500 and THROWS above it. */
+const MISSION_SUMMARY_MAX_LENGTH = 500;
+
+function clipSummary(value: string): string {
+  return value.length > MISSION_SUMMARY_MAX_LENGTH
+    ? value.slice(0, MISSION_SUMMARY_MAX_LENGTH)
+    : value;
+}
+
+/**
+ * Read the state of the approved revision's send. A PURE READ of the send
+ * path — it dispatches nothing, and adds no auto-send path.
+ *
+ * WHY THE REPLY MISSION MAY NOT END AT APPROVAL. `approvals.approve` schedules
+ * `internal.sending.sendApprovedDraft`, which can legitimately PARK the
+ * attempt: outside the workspace's send window, or with the day's allowance
+ * already spent, the attempt is inserted `reserved` with a `nextPermittedAt`
+ * hours away and a transactional re-drive scheduled for then. Every re-entry
+ * re-runs `evaluateSendGates`, and that gate refuses a mission which is
+ * `paused`/`cancelled`/`failed`/`completed` with `mission_inactive` — on which
+ * `beginDispatch` CANCELS the attempt. A reply mission completed the moment
+ * the reviewer approved therefore threw away that reviewer's explicitly
+ * approved reply as soon as the send had to wait for the window.
+ *
+ * The same terminal mission also silences the uncertainty path:
+ * `sending.openDeliveryUncertainAsk` returns `{opened: false}` for a completed
+ * mission, so a lost acknowledgement would open no ask at all, and
+ * `completeReplyMission`'s own `retireAllOpenDecisions` would retire one that
+ * had already been opened.
+ *
+ * So the workflow polls this until the send reaches a state worth stating,
+ * and only then completes. Attempts are read by PRECEDENCE, not recency, so
+ * the answer does not depend on the order rows were written: an acknowledged
+ * send wins, then an uncertain one, then a live one, then the refusals.
+ */
+export const checkApprovedSend = internalMutation({
+  args: {
+    missionId: v.id("missions"),
+    draftId: v.id("drafts"),
+  },
+  returns: vApprovedSendState,
+  handler: async (ctx, args): Promise<ApprovedSendState> => {
+    const mission = await ctx.db.get("missions", args.missionId);
+    if (mission === null) {
+      return {
+        action: "settled" as const,
+        outcome: "cancelled" as const,
+        summary: "The reply mission no longer exists.",
+      };
+    }
+    const draft = await ctx.db.get("drafts", args.draftId);
+    if (draft === null || draft.missionId !== mission._id) {
+      return {
+        action: "settled" as const,
+        outcome: "contact_needed" as const,
+        summary:
+          "The approved revision is no longer held by this mission; a human owns what happens next.",
+      };
+    }
+    const attempts = await ctx.db
+      .query("sendAttempts")
+      .withIndex("by_draftId", (q) => q.eq("draftId", draft._id))
+      .collect();
+
+    const acknowledged = attempts.find(
+      (attempt) => attempt.state === "acknowledged",
+    );
+    if (acknowledged !== undefined) {
+      return {
+        action: "settled" as const,
+        outcome: "completed" as const,
+        summary: clipSummary(
+          `The reviewer approved response revision ${draft.revision} and the provider accepted it (message ${acknowledged.providerMessageRef ?? "unrecorded"}).`,
+        ),
+      };
+    }
+
+    const uncertain = attempts.find(
+      (attempt) => attempt.state === "uncertain",
+    );
+    if (uncertain !== undefined) {
+      // The ask `sending.ts` opens for exactly this attempt. Parking on it
+      // keeps the mission non-terminal, which is what lets
+      // `prepareReconcile`'s own `evaluateSendGates` still permit the replay.
+      const open = await ctx.db
+        .query("decisions")
+        .withIndex("by_missionId_and_state", (q) =>
+          q.eq("missionId", mission._id).eq("state", "open"),
+        )
+        .collect();
+      const ask = open.find(
+        (decision) =>
+          decision.kind === "delivery_uncertain" &&
+          decision.sendAttemptId === String(uncertain._id),
+      );
+      if (ask !== undefined) {
+        return {
+          action: "review" as const,
+          decisionId: ask._id,
+          continuationEventId: ask.continuationEventId,
+        };
+      }
+      return {
+        action: "settled" as const,
+        outcome: "contact_needed" as const,
+        summary: clipSummary(
+          `Delivery of approved response revision ${draft.revision} is uncertain and no review ask is open for it; a human owns the reconciliation.`,
+        ),
+      };
+    }
+
+    const live = attempts.find(
+      (attempt) =>
+        attempt.state === "reserved" || attempt.state === "requesting",
+    );
+    if (live !== undefined) {
+      const parked = live.state === "reserved";
+      return {
+        action: "wait" as const,
+        untilMs: Math.max(
+          parked ? (live.nextPermittedAt ?? 0) : 0,
+          Date.now() + SEND_SETTLE_POLL_MS,
+        ),
+        reason: parked ? "send_parked" : "dispatch_in_flight",
+      };
+    }
+
+    const failed = attempts.find(
+      (attempt) => attempt.state === "definitively_failed",
+    );
+    if (failed !== undefined) {
+      return {
+        action: "settled" as const,
+        outcome: "failed" as const,
+        summary: clipSummary(
+          `The provider refused approved response revision ${draft.revision}: ${failed.error?.message ?? "no reason recorded"}`,
+        ),
+      };
+    }
+
+    const cancelled = attempts.find(
+      (attempt) => attempt.state === "cancelled",
+    );
+    if (cancelled !== undefined) {
+      return {
+        action: "settled" as const,
+        outcome: "contact_needed" as const,
+        summary: clipSummary(
+          `Approved response revision ${draft.revision} was stopped at the dispatch gate (${cancelled.error?.reason ?? "no reason recorded"}); nothing was sent.`,
+        ),
+      };
+    }
+
+    // No attempt row at all — either the scheduled dispatch has not committed
+    // one yet, or preflight refused before reserving (which records its own
+    // `send_attempt_cancelled` activity row with the gate code).
+    return {
+      action: "wait" as const,
+      untilMs: Date.now() + SEND_SETTLE_POLL_MS,
+      reason: "no_attempt",
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ */
 /* Proposing a response draft                                          */
 /* ------------------------------------------------------------------ */
 
