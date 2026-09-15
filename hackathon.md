@@ -8,11 +8,11 @@
 - **Frontend:** not deployed
 - **Convex deployment:** not deployed
 - **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/workflow
-- **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions, durable workflows
+- **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions, crons, scheduled functions, durable workflows
 - **Auth:** Other
-- **AI models:** none
+- **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-14T13:26:34Z
+- **Last updated:** 2026-09-15T17:51:09Z
 
 ## Log
 
@@ -384,3 +384,19 @@ emits live device codes. UI: root error + not-found boundaries; employee
 cards submit the edit-base version. Verified: lint, build, root + worker
 tsc, `pnpm plan check` clean.
 Evidence: `plan/evidence/review-round3.md`.
+
+### 2026-09-15 - 30f45c9
+
+Shipped Mission Control with a four-column board, deep-linked mission details,
+lifecycle actions, receipts, comments and a human-approval queue, exercised in a
+real browser against the shared development deployment (`src/components/missions/`,
+`src/components/decisions/`). Added verified inbound routing, quarantine,
+conversation ownership, opt-out enforcement and reply-draft orchestration
+(`convex/inbox.ts`, `convex/conversations.ts`, `convex/workflows/reply.ts`). Replaced
+the sales fixture with a durable per-prospect workflow using bounded Firecrawl
+retrieval, capability-scoped worker calls and backend-synthesized cited evidence
+(`convex/workflows/sales.ts`, `convex/evidence.ts`, `convex/prospects.ts`). Live
+development probes covered the inbound and Firecrawl paths; Apollo, a live Codex
+turn for this pipeline and outbound sending remained deferred. Evidence:
+`plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P20.md`,
+`plan/evidence/P21.md`.
