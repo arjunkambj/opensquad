@@ -573,7 +573,8 @@ export const artifactFields = {
  * Conversations — full §4.3 table. P11 builds the public
  * `conversations.ts` module; P10 needs the table now because drafts,
  * approvals and send attempts all bind `contextVersion`/`currentDraftId`
- * here, and provides only the minimal internal helpers in `drafts.ts`.
+ * here, and provides only the minimal internal helpers in `drafts.ts` plus the
+ * send-acknowledgement thread mapping in `sending.ts`.
  */
 export const conversationFields = {
   workspaceId: v.id("workspaces"),

@@ -1187,6 +1187,163 @@ const vRecordResult = v.object({
   replayed: v.boolean(),
 });
 
+/** How an acknowledged thread ref relates to the attempt's conversation. */
+type ThreadMapping =
+  | { kind: "claim" }
+  | { kind: "already_linked" }
+  | { kind: "conflict"; detail: string };
+
+/**
+ * Surface an acknowledged send whose conversation could not be mapped. The
+ * send stands; only the reply route is missing, so this is the operator's one
+ * signal that inbound mail on that thread will need manual assignment.
+ */
+async function reportThreadLinkMissed(
+  ctx: MutationCtx,
+  args: {
+    attempt: Doc<"sendAttempts">;
+    missionId: Id<"missions">;
+    threadId: string;
+    detail: string;
+  },
+): Promise<void> {
+  await recordActivityEvent(ctx, {
+    workspaceId: args.attempt.workspaceId,
+    missionId: args.missionId,
+    kind: "conversation_thread_link_missed",
+    summary: `Send acknowledged on thread ${args.threadId.slice(0, 120)} but the conversation thread mapping was not written — ${args.detail}; replies on that thread need manual assignment`,
+    actor: "workflow",
+    dedupeKey: `sendattempt:${args.attempt._id}:threadlinkmiss`,
+    conversationId: args.attempt.conversationId,
+  });
+}
+
+/**
+ * Mirror an acknowledged send's provider thread ref onto its conversation.
+ *
+ * `conversations.(inboxRef, providerThreadRef)` is the pair P11 matches every
+ * inbound reply on (§4.3), so a conversation that never records it routes
+ * every authentic reply to the unassigned takeover queue — exactly what V15
+ * forbids. Called from inside `recordSendOutcome`'s transaction, so a mapping
+ * this can write is committed with the accepted outcome and never after it.
+ *
+ * Never throws, and therefore does NOT guarantee every acknowledged send is
+ * mapped: the provider has already accepted the send, so no mapping anomaly
+ * may roll the accepted outcome back. Every unmapped case instead emits a
+ * `conversation_thread_link_missed` activity event. P11 must still treat an
+ * unmatched inbound message as unassigned rather than assuming a mapping
+ * exists for OpenSquad-originated threads.
+ */
+async function linkConversationThread(
+  ctx: MutationCtx,
+  args: {
+    attempt: Doc<"sendAttempts">;
+    missionId: Id<"missions">;
+    threadId: string;
+    at: number;
+  },
+): Promise<void> {
+  const { attempt, threadId, at } = args;
+  const conversation = await ctx.db.get(
+    "conversations",
+    attempt.conversationId,
+  );
+  // Workspace boundary — an attempt never writes through into another
+  // workspace's conversation row. This is the one branch here that indicates a
+  // real integrity violation, so it is reported rather than returned silently.
+  if (
+    conversation === null ||
+    conversation.workspaceId !== attempt.workspaceId
+  ) {
+    await reportThreadLinkMissed(ctx, {
+      attempt,
+      missionId: args.missionId,
+      threadId,
+      detail:
+        conversation === null
+          ? "the attempt's conversation row is missing"
+          : "the attempt's conversation belongs to another workspace",
+    });
+    return;
+  }
+
+  let mapping: ThreadMapping;
+  if (conversation.inboxRef !== attempt.inboxRef) {
+    // The stored pair keys on the conversation's own `inboxRef`, but the mail
+    // left on the attempt's. Equal on every path today; if they ever diverge,
+    // claiming would write an index entry P11's inbound matcher never reads.
+    mapping = {
+      kind: "conflict",
+      detail: `conversation is bound to a different inbox than the send`,
+    };
+  } else if (conversation.providerThreadRef === threadId) {
+    mapping = { kind: "already_linked" };
+  } else if (conversation.providerThreadRef !== undefined) {
+    // A thread ref is stable for the life of a thread. Overwriting it would
+    // orphan every reply already threaded under the first ref, so the first
+    // one stands and the second is surfaced. This is not only a provider
+    // anomaly: a follow-up with no inbound reply dispatches as `send` rather
+    // than `reply` (`endpointFor` in drafts.ts), and AgentMail mints a fresh
+    // thread for a send — so the second thread stays unmapped by design and
+    // its replies need assignment.
+    mapping = {
+      kind: "conflict",
+      detail: `already mapped to thread ${conversation.providerThreadRef.slice(0, 120)}`,
+    };
+  } else {
+    // §4.3 uniqueness on (inboxRef, providerThreadRef) — the same guard
+    // `drafts.stageConversation` applies before it patches or inserts a
+    // thread ref, except it may not throw here. `.collect()`, not `.unique()`:
+    // an already-violated pair must not strand an acknowledged send, and the
+    // index is not workspace-scoped, so a foreign row must neither block the
+    // claim nor have its id quoted into this workspace's activity feed.
+    const holders = await ctx.db
+      .query("conversations")
+      .withIndex("by_inboxRef_and_providerThreadRef", (q) =>
+        q
+          .eq("inboxRef", conversation.inboxRef)
+          .eq("providerThreadRef", threadId),
+      )
+      .collect();
+    const duplicate = holders.find(
+      (row) =>
+        row._id !== conversation._id &&
+        row.workspaceId === conversation.workspaceId,
+    );
+    mapping =
+      duplicate !== undefined
+        ? {
+            kind: "conflict",
+            detail: `thread already mapped to conversation ${duplicate._id}`,
+          }
+        : { kind: "claim" };
+  }
+
+  if (mapping.kind === "conflict") {
+    await reportThreadLinkMissed(ctx, {
+      attempt,
+      missionId: args.missionId,
+      threadId,
+      detail: mapping.detail,
+    });
+  }
+
+  // Recency is monotonic: P11's inbound processing writes `lastMessageAt`
+  // too, and a reconcile can record this acknowledgement long after a newer
+  // reply landed — a late outbound ack must never rewind the inbox ordering.
+  const advanceRecency =
+    conversation.lastMessageAt === undefined || conversation.lastMessageAt < at;
+  const claims = mapping.kind === "claim";
+  if (!claims && !advanceRecency) {
+    return; // replay of an already-linked, already-current conversation
+  }
+  await ctx.db.patch("conversations", conversation._id, {
+    ...(claims ? { providerThreadRef: threadId } : {}),
+    ...(advanceRecency ? { lastMessageAt: at } : {}),
+    updatedAt: at,
+  });
+}
+
 /**
  * Persist the provider outcome onto the attempt — the ONLY write path from
  * transport result to durable state.
@@ -1313,6 +1470,14 @@ export const recordSendOutcome = internalMutation({
           ? { reconciledAt: now }
           : {}),
         updatedAt: now,
+      });
+      // Same transaction as the accepted outcome: an acknowledged send whose
+      // conversation carries no thread ref loses every reply to it.
+      await linkConversationThread(ctx, {
+        attempt,
+        missionId: draft.missionId,
+        threadId,
+        at: now,
       });
       await settle("committed", messageId);
       // Fold any delivery receipts that beat the acknowledgement.

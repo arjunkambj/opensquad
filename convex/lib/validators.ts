@@ -1904,6 +1904,7 @@ export const ACTIVITY_KINDS_P10 = [
   "suppression_removed",
   "delivery_receipt_applied",
   "delivery_receipt_parked",
+  "conversation_thread_link_missed",
 ] as const;
 
 export type ActivityKindP10 = (typeof ACTIVITY_KINDS_P10)[number];
