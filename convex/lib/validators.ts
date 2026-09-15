@@ -2725,6 +2725,27 @@ export function researchPageLimit(leadLimit: number): number {
 }
 
 /**
+ * Default daily model-run ceiling for a workspace that has not set one.
+ * A workspace field overrides it (`workspaces.modelRunDailyLimit`), so the
+ * owner-facing ceiling §9 asks for has a home before anything can write it.
+ */
+export const MODEL_RUN_DAILY_LIMIT_DEFAULT = 200;
+
+/**
+ * The stable debit identity of ONE model run. Derived entirely from columns
+ * the request row already carries, so the dispatch that takes the debit and
+ * every terminal transition that settles it compute the same key without
+ * storing a second copy of it.
+ */
+export function modelRunOperationKey(request: {
+  missionId: string;
+  stepKey: string;
+  generation: number;
+}): string {
+  return `model:${request.missionId}:${request.stepKey}:${request.generation}`;
+}
+
+/**
  * One page the BACKEND itself retrieved, in the shape the pipeline stores
  * and cites. `retrievedAt` is epoch ms — `scrapePage` reports an ISO 8601
  * string, and the conversion happens once, here at the boundary, rather

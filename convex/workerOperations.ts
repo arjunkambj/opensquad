@@ -29,6 +29,9 @@ import {
   CAMPAIGN_LEAD_LIMIT_MAX,
   deriveRequestCapabilities,
   intersectCapabilities,
+  localDayKey,
+  modelRunOperationKey,
+  MODEL_RUN_DAILY_LIMIT_DEFAULT,
   vCapabilityId,
   HOST_CAPABILITY_POLICY,
   bridgeError,
@@ -63,6 +66,60 @@ export const DISPATCHABLE_RUNTIME_STATES: ReadonlySet<string> = new Set([
   "connecting",
   "ready",
 ]);
+
+/**
+ * Settle the model-run debit a dispatch took for this request.
+ *
+ * Every terminal transition calls this, and it asks before it settles: a
+ * request dispatched before the debit existed has no reservation, and
+ * `usage.commit` on a missing one would throw NOT_FOUND inside the caller's
+ * transaction and roll back the terminal write itself. A nested mutation's
+ * error cannot be caught, so the check has to come first.
+ *
+ * `markUncertain` keeps capacity blocked on purpose. A run whose outcome we
+ * cannot prove is spend we cannot prove we did not incur.
+ */
+export async function settleModelRun(
+  ctx: MutationCtx,
+  request: Doc<"workerRequests">,
+  target: "commit" | "release" | "markUncertain",
+): Promise<void> {
+  const operationKey = modelRunOperationKey(request);
+  const reservation = await ctx.runMutation(internal.usage.getByOperationKey, {
+    workspaceId: request.workspaceId,
+    operationKey,
+  });
+  if (reservation === null) {
+    return;
+  }
+  if (target === "commit") {
+    if (reservation.state !== "reserved" && reservation.state !== "uncertain") {
+      return;
+    }
+    await ctx.runMutation(internal.usage.commit, {
+      workspaceId: request.workspaceId,
+      operationKey,
+    });
+    return;
+  }
+  if (target === "release") {
+    if (reservation.state !== "reserved" && reservation.state !== "uncertain") {
+      return;
+    }
+    await ctx.runMutation(internal.usage.release, {
+      workspaceId: request.workspaceId,
+      operationKey,
+    });
+    return;
+  }
+  if (reservation.state !== "reserved") {
+    return;
+  }
+  await ctx.runMutation(internal.usage.markUncertain, {
+    workspaceId: request.workspaceId,
+    operationKey,
+  });
+}
 
 /**
  * Create a bounded external worker request for a workflow step. Idempotent
@@ -257,6 +314,32 @@ async function dispatchWorkerRequestImpl(
     };
     assertWorkerRequestInput(input);
 
+    // The model-run debit is taken HERE: after the `alreadyExists` early
+    // return (a replayed step must never debit twice) and before anything is
+    // written, so a workspace over its daily ceiling aborts this whole
+    // transaction with no request row, no continuation event and no claimable
+    // work. It is deliberately not taken in `claimWork`, which must throw
+    // before any state mutation — a reservation conflict placed after the
+    // lease and slot patches would leave a leased request holding a slot the
+    // worker never received.
+    const workspace = await ctx.db.get("workspaces", mission.workspaceId);
+    if (workspace === null) {
+      throw domainError("NOT_FOUND", "workspace not found for mission");
+    }
+    await ctx.runMutation(internal.usage.reserve, {
+      workspaceId: mission.workspaceId,
+      scopeKey: "workspace",
+      metric: "model_runs" as const,
+      periodKey: localDayKey(Date.now(), workspace.timezone),
+      limit: workspace.modelRunDailyLimit ?? MODEL_RUN_DAILY_LIMIT_DEFAULT,
+      operationKey: modelRunOperationKey({
+        missionId: args.missionId,
+        stepKey,
+        generation: args.generation,
+      }),
+      quantity: 1,
+    });
+
     const continuationEventId = await createEvent(ctx, components.workflow, {
       name: `worker:${args.operation}:${stepKey}`,
       workflowId: args.targetWorkflowId as WorkflowId,
@@ -363,6 +446,8 @@ export async function cancelMissionWorkerRequests(
         updatedAt: Date.now(),
       });
       cancelled += 1;
+      // Cancelled before any model work could run — the debit is released.
+      await settleModelRun(ctx, request, "release");
       const run = await ctx.db.get("runs", request.runId);
       if (run !== null) {
         await finishRun(ctx, run, "cancelled", {
@@ -454,6 +539,9 @@ export const sweepExpiredLeases = internalMutation({
           updatedAt: now,
         });
         expiredRequests += 1;
+        // The turn may have run and may have been billed; we cannot tell.
+        // `uncertain` keeps the capacity blocked until something can.
+        await settleModelRun(ctx, request, "markUncertain");
         const slot = await ctx.db
           .query("workspaceExecutionSlots")
           .withIndex("by_workspaceId", (q) =>
@@ -554,6 +642,8 @@ export const sweepExpiredLeases = internalMutation({
           updatedAt: now,
         });
         cancelledRequests += 1;
+        // Never claimed, so never executed — release the debit.
+        await settleModelRun(ctx, request, "release");
         // Finish the run receipt too — the event alone leaves the run
         // `running` forever (sweepRuns only fires at mission termination,
         // which may already have passed for a completed mission).

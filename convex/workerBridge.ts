@@ -31,6 +31,7 @@ import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { finishRun } from "./runs";
+import { settleModelRun } from "./workerOperations";
 import { recordActivityEvent } from "./activity";
 import {
   ARTIFACT_KINDS,
@@ -404,6 +405,9 @@ export const claimWork = internalMutation({
             errorMessage: `mission is ${mission.state}`,
           });
         }
+        // Cancelled before the lease was issued — the dispatch's model-run
+        // debit is released, not charged.
+        await settleModelRun(ctx, request, "release");
         await deliverCompletion(ctx, request, "cancelled", "mission terminal");
         continue;
       }
@@ -1082,6 +1086,8 @@ export const applyResult = internalMutation({
         updatedAt: now,
       });
     }
+    // The turn ran and produced an accepted result — charge the debit.
+    await settleModelRun(ctx, request, "commit");
     await releaseSlot(ctx, request);
     const run = await ctx.db.get("runs", request.runId);
     if (run !== null) {
@@ -1189,6 +1195,10 @@ export const applyFailure = internalMutation({
       code === "interruption_unconfirmed" ||
       code === "turn_start_unconfirmed";
     if (unconfirmed) {
+      // The turn could not be proven dead, so it could not be proven
+      // un-billed either. `uncertain` keeps the debit blocking capacity
+      // until the interrupt confirmation settles it.
+      await settleModelRun(ctx, request, "markUncertain");
       await ctx.db.patch("workerRequests", request._id, {
         state: "uncertain",
         resultId: `failure:${failureId}`,
@@ -1264,6 +1274,10 @@ export const applyFailure = internalMutation({
         updatedAt: now,
       });
     }
+    // A reported, bounded failure is a definite outcome: whatever the model
+    // did, the run is over and the workflow may retry it under a new
+    // generation, which takes its own debit. Release this one.
+    await settleModelRun(ctx, request, "release");
     await releaseSlot(ctx, request);
     const run = await ctx.db.get("runs", request.runId);
     if (run !== null) {
@@ -2135,6 +2149,10 @@ async function applyControlEffects(
             },
             updatedAt: now,
           });
+          // Confirmed interruption is information the uncertain state did
+          // not have: a turn really was running, so it really was billed.
+          // Charging it also unblocks the capacity `uncertain` was holding.
+          await settleModelRun(ctx, interrupted, "commit");
           const run = await ctx.db.get("runs", interrupted.runId);
           if (run !== null) {
             await finishRun(ctx, run, "failed", {

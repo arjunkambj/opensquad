@@ -98,6 +98,10 @@ export const workspaceFields = {
   demoMode: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
+  /** Owner-set daily model-run ceiling (§9). Absent falls back to
+   *  `MODEL_RUN_DAILY_LIMIT_DEFAULT`; the debit is taken at dispatch and
+   *  settled by the run's own outcome. */
+  modelRunDailyLimit: v.optional(v.number()),
   /** AgentMail inbox reference assigned by P05/P10; unique when present. */
   inboxRef: v.optional(v.string()),
   pauseReason: v.optional(v.string()),
