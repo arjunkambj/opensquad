@@ -5,6 +5,7 @@ import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import type { BoardColumn } from "../../../convex/lib/validators"
 import { MissionCard } from "@/components/missions/MissionCard"
+import { useMissionFocus } from "@/components/missions/mission-focus"
 import { BOARD_COLUMN_META } from "@/components/missions/mission-presentation"
 import { EmptyState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
@@ -50,6 +51,7 @@ export function MissionColumn({
   display,
   expanded,
   active = false,
+  viewKey,
   ownerNames,
   ownersLoading,
 }: {
@@ -60,17 +62,33 @@ export function MissionColumn({
   display: ColumnDisplay
   expanded: boolean
   active?: boolean
+  /** The board's current view, which scopes focus restore. */
+  viewKey: string
   ownerNames: Map<string, string>
   ownersLoading: boolean
 }) {
   const search = useSearch({ from: OVERVIEW_ROUTE })
   const navigate = useNavigate()
+  const { drop } = useMissionFocus()
 
   // `index` is what the header shows once the operator has paged: a count
   // taken from page two counts page two, so it stops being a count.
   const [page, setPage] = useState<{ cursor?: string; index: number }>({
     index: 1,
   })
+
+  // Paging is the operator placing focus on a pager control. The card they
+  // opened before may well be on the page that arrives; restoring focus to it
+  // would take focus off the button they just pressed, so the memory is
+  // dropped rather than carried across a page they asked for.
+  const showFirstPage = () => {
+    drop()
+    setPage({ index: 1 })
+  }
+  const showNextPage = (cursor: string) => {
+    drop()
+    setPage((previous) => ({ cursor, index: previous.index + 1 }))
+  }
 
   const result = useQuery(api.missions.listBoard, {
     workspaceId,
@@ -148,7 +166,7 @@ export function MissionColumn({
             archived={archived}
             paged={page.index > 1}
             filteredToCampaign={search.campaign !== undefined}
-            onFirstPage={() => setPage({ index: 1 })}
+            onFirstPage={showFirstPage}
           />
         ) : (
           <ul className="flex flex-col gap-2">
@@ -156,6 +174,7 @@ export function MissionColumn({
               <li key={mission._id}>
                 <MissionCard
                   mission={mission}
+                  viewKey={viewKey}
                   ownerName={ownerNames.get(mission.assignedEmployeeId)}
                   ownersLoading={ownersLoading}
                 />
@@ -169,12 +188,8 @@ export function MissionColumn({
         <ColumnPager
           hasMore={result.hasMore}
           cursor={result.cursor}
-          onFirstPage={
-            page.index === 1 ? undefined : () => setPage({ index: 1 })
-          }
-          onNextPage={(cursor) =>
-            setPage((previous) => ({ cursor, index: previous.index + 1 }))
-          }
+          onFirstPage={page.index === 1 ? undefined : showFirstPage}
+          onNextPage={showNextPage}
         />
       ) : result.hasMore ? (
         <div>

@@ -1,8 +1,10 @@
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
+import { useEffect } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { MissionColumn } from "@/components/missions/MissionColumn"
+import { useMissionFocus } from "@/components/missions/mission-focus"
 import { NewMissionDialog } from "@/components/missions/NewMissionDialog"
 import { RuntimeBadge } from "@/components/overview/RuntimeBadge"
 import { LoadingState } from "@/components/states/states"
@@ -55,6 +57,26 @@ export function MissionBoard() {
   const search = useSearch({ from: OVERVIEW_ROUTE })
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const { settle } = useMissionFocus()
+
+  const archived = search.archived ?? false
+  const singleColumn = isMobile || search.column !== undefined
+  const activeColumn: BoardColumn = search.column ?? PHONE_DEFAULT_COLUMN
+
+  // Remounting on a filter change is what drops a column's local page cursor
+  // without an effect — page two of one filter must never render as page two
+  // of a different one.
+  const filterKey = `${search.campaign ?? ""}:${archived}`
+
+  // The board the operator is actually looking at. Focus restore is scoped to
+  // it: a card opened from Needs you may claim focus back on Needs you and
+  // nowhere else, because anywhere else the operator moved here deliberately
+  // and focus is already where they put it.
+  const viewKey = `${filterKey}:${singleColumn ? activeColumn : "all"}`
+
+  useEffect(() => {
+    settle(viewKey)
+  }, [settle, viewKey])
 
   const workspaceId =
     current !== undefined && current !== null ? current.workspace._id : undefined
@@ -95,7 +117,6 @@ export function MissionBoard() {
   const ownerNames = new Map<string, string>(
     (employees ?? []).map((employee) => [employee._id, employee.name]),
   )
-  const archived = search.archived ?? false
   const campaignId =
     search.campaign === undefined
       ? undefined
@@ -114,18 +135,11 @@ export function MissionBoard() {
     campaigns !== undefined &&
     !campaigns.items.some((campaign) => campaign._id === search.campaign)
 
-  const singleColumn = isMobile || search.column !== undefined
-  const activeColumn: BoardColumn = search.column ?? PHONE_DEFAULT_COLUMN
-
-  // Remounting on a filter change is what drops a column's local page cursor
-  // without an effect — page two of one filter must never render as page two
-  // of a different one.
-  const filterKey = `${search.campaign ?? ""}:${archived}`
-
   const shared = {
     workspaceId: current.workspace._id,
     campaignId,
     archived,
+    viewKey,
     ownerNames,
     ownersLoading: employees === undefined,
   }

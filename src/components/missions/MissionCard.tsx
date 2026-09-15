@@ -30,10 +30,17 @@ import {
  */
 export function MissionCard({
   mission,
+  viewKey,
   ownerName,
   ownersLoading,
 }: {
   mission: Doc<"missions">
+  /**
+   * The board view this card is rendered in — its filters, its column and its
+   * page. Focus restore is scoped to it, so a remounted card in some later
+   * view cannot claim a memory taken from an earlier one.
+   */
+  viewKey: string
   ownerName: string | undefined
   ownersLoading: boolean
 }) {
@@ -44,11 +51,17 @@ export function MissionCard({
   // made by the card itself rather than by the board, because a column's rows
   // arrive asynchronously — the board has no moment at which it can be sure
   // the remembered card is on screen, and this card knows exactly when it is.
+  //
+  // `viewKey` is what stops that latitude becoming a licence. This effect runs
+  // on every mount of a matching card, and a board under `/overview` remounts
+  // its cards whenever the operator changes a filter or a column; without the
+  // view in the key, pressing a column selector could mount the remembered
+  // card and pull focus out of the control just pressed.
   useEffect(() => {
-    if (claim(mission._id)) {
+    if (claim(mission._id, viewKey)) {
       ref.current?.focus()
     }
-  }, [claim, mission._id])
+  }, [claim, mission._id, viewKey])
 
   return (
     <Link
@@ -56,7 +69,7 @@ export function MissionCard({
       to="/overview/missions/$missionId"
       params={{ missionId: mission._id }}
       search={(previous) => previous}
-      onClick={() => remember(mission._id)}
+      onClick={() => remember(mission._id, viewKey)}
       className="flex flex-col gap-2 rounded-[min(var(--radius-4xl),24px)] bg-card px-4 py-3 text-card-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
     >
       <p className="text-sm font-medium text-foreground">{mission.title}</p>
