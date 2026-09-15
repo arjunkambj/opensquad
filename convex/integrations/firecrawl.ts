@@ -768,6 +768,109 @@ export const retrieveProspectPage = internalAction({
   },
 });
 
+/**
+ * Retrieve one prospect's research pages — the homepage plus at most two more
+ * (§G2 Firecrawl route item 2), in ONE journaled workflow step.
+ *
+ * It never throws for a single URL. An inadmissible URL, an exhausted
+ * campaign allowance, a per-prospect cap and a provider failure all land in
+ * `failures` with a stated reason, because a research branch that loses one
+ * page should still cite the pages it did retrieve — and because a step that
+ * throws would take a `retry` policy with it and re-drive a refusal that is
+ * deterministic by construction.
+ *
+ * Every page is reserved and settled individually inside
+ * `retrieveProspectPage`, so re-executing this step after a crash REPLAYS the
+ * pages already paid for rather than paying twice.
+ */
+export const retrieveProspectPages = internalAction({
+  args: {
+    missionId: v.id("missions"),
+    prospectId: v.id("prospects"),
+    runId: v.id("runs"),
+    urls: v.array(v.string()),
+  },
+  returns: v.object({
+    pages: v.array(vRetrievedPage),
+    failures: v.array(
+      v.object({
+        url: v.string(),
+        code: v.string(),
+        message: v.string(),
+      }),
+    ),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    pages: Infer<typeof vRetrievedPage>[];
+    failures: { url: string; code: string; message: string }[];
+  }> => {
+    if (args.urls.length > RESEARCH_PAGES_PER_PROSPECT) {
+      throw invalid(
+        `urls allows at most ${RESEARCH_PAGES_PER_PROSPECT} pages per prospect`,
+      );
+    }
+    const pages: Infer<typeof vRetrievedPage>[] = [];
+    const failures: { url: string; code: string; message: string }[] = [];
+    for (const url of args.urls) {
+      let outcome: RetrieveProspectPageResult;
+      try {
+        outcome = await ctx.runAction(
+          internal.integrations.firecrawl.retrieveProspectPage,
+          {
+            missionId: args.missionId,
+            prospectId: args.prospectId,
+            runId: args.runId,
+            url,
+          },
+        );
+      } catch (error) {
+        // A refusal raised BEFORE the provider was contacted: an
+        // inadmissible URL, the prospect's own page cap, or the campaign's
+        // exhausted page allowance. Nothing was reserved and nothing was
+        // forwarded, so it is recorded and the next URL is tried.
+        failures.push({
+          url: url.slice(0, 300),
+          code: "refused",
+          message: refusalMessage(error),
+        });
+        continue;
+      }
+      if (outcome.page !== undefined) {
+        pages.push(outcome.page);
+        continue;
+      }
+      failures.push({
+        url: url.slice(0, 300),
+        code: outcome.error?.code ?? outcome.state,
+        message: (outcome.error?.message ?? `page is ${outcome.state}`).slice(
+          0,
+          500,
+        ),
+      });
+    }
+    return { pages, failures };
+  },
+});
+
+/** The human-readable half of a refusal. `ConvexError.data` is read FIRST: a
+ *  `ConvexError` is also an `Error` whose `.message` is the serialized
+ *  `{code, message}` envelope, so reading `.message` first would put JSON
+ *  where a reason belongs. */
+function refusalMessage(error: unknown): string {
+  const data =
+    typeof error === "object" && error !== null
+      ? (error as { data?: { message?: unknown } }).data
+      : undefined;
+  if (data !== undefined && typeof data.message === "string") {
+    return data.message.slice(0, 500);
+  }
+  if (error instanceof Error) return error.message.slice(0, 500);
+  return "page could not be retrieved";
+}
+
 type BeginFirecrawlOperationResult =
   | {
       decision: "execute";
