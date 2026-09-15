@@ -879,3 +879,55 @@ export const assignWorkspaceInbox = internalMutation({
     return null;
   },
 });
+
+/**
+ * Retire the live work a conversation carries, because a fact just changed
+ * that every open approval and every parked send was authorized against.
+ *
+ * This is the same pair `applyInboundContext` runs — supersede the open
+ * `draft_approval` asks, then cancel the `reserved` attempts — exported so
+ * P11's takeover, assignment, association and closure paths invalidate
+ * EXACTLY the way an inbound reply does, rather than each growing its own
+ * half-correct version.
+ *
+ * It is not optional politeness on a `contextVersion` bump. Once the version
+ * moves, `approvals.resolveDraftDecision` refuses the bound ask forever
+ * (`conversation.contextVersion !== draft.basedOnContextVersion`), so an ask
+ * left open is unresolvable and pins `requiredDecisionCount` on its mission.
+ * Superseding it through `internal.decisions.supersedeDecision` is what
+ * decrements that count, un-parks the mission and wakes the waiting workflow.
+ *
+ * Callers must not patch a decision or an attempt themselves: the decision
+ * path owns the mission bookkeeping and the attempt path owns the usage
+ * reservation release and the §8.7 coverage unwind.
+ */
+export const retireConversationWork = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    reason: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get("conversations", args.conversationId);
+    if (conversation === null) {
+      throw domainError("NOT_FOUND", "conversation not found");
+    }
+    const reason = boundedString(args.reason, "reason", { min: 1, max: 500 });
+    // A conversation that never had a draft has no ask and no reserved
+    // attempt to retire — the same guard `applyInboundContext` uses.
+    if (conversation.currentDraftId === undefined) {
+      return null;
+    }
+    await supersedeOpenDraftDecisions(ctx, conversation._id);
+    // The retired counts are deliberately not returned: `sending.ts` imports
+    // this module, so typing this call's result here would make the two
+    // modules' inference circular. Nothing needs the numbers — the retiring
+    // mutations record their own activity.
+    await ctx.runMutation(internal.sending.cancelParkedConversationAttempts, {
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation._id,
+      reason,
+    });
+    return null;
+  },
+});
