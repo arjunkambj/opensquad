@@ -4,6 +4,7 @@ import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { MissionColumn } from "@/components/missions/MissionColumn"
 import { NewMissionDialog } from "@/components/missions/NewMissionDialog"
+import { RuntimeBadge } from "@/components/overview/RuntimeBadge"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -105,6 +106,10 @@ export function MissionBoard() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Above the controls, because whether anything can run at all outranks
+          how the board is filtered. */}
+      <RuntimeBadge workspaceId={current.workspace._id} />
+
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <Label htmlFor="board-campaign">Campaign</Label>

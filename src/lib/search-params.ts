@@ -69,6 +69,29 @@ export function flag(value: unknown): boolean {
   return value === true || value === "true"
 }
 
+/** The largest instant a JavaScript `Date` can represent. */
+const MAX_EPOCH_MS = 8_640_000_000_000_000
+
+/**
+ * An absolute instant in epoch milliseconds — the `from`/`to` of a custom
+ * date range.
+ *
+ * Absolute on purpose: `?range=today` means today for whoever opens the link,
+ * which is right for a relative window and wrong for a range someone pasted to
+ * a colleague to talk about. A custom range has to mean the same instants for
+ * both of them, so it travels as two numbers rather than as a label.
+ *
+ * Anything that is not a finite, non-negative integer instant normalises to
+ * absent, and the range falls back to its default rather than throwing.
+ */
+export function optionalEpochMs(value: unknown): number | undefined {
+  const parsed = typeof value === "string" ? Number(value) : value
+  if (typeof parsed !== "number" || !Number.isInteger(parsed)) {
+    return undefined
+  }
+  return parsed < 0 || parsed > MAX_EPOCH_MS ? undefined : parsed
+}
+
 /** A page size restricted to the sizes the backend actually serves. */
 export const PAGE_SIZES = [25, 50] as const
 export type PageSize = (typeof PAGE_SIZES)[number]

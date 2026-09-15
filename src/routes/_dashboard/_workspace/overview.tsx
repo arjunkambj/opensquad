@@ -3,6 +3,7 @@ import { SetupBanner } from "@/components/onboarding/SetupBanner"
 import {
   flag,
   optionalCursor,
+  optionalEpochMs,
   optionalOneOf,
   optionalText,
 } from "@/lib/search-params"
@@ -46,12 +47,22 @@ export type MissionTab = (typeof MISSION_TABS)[number]
  * were required, at every link in the app.
  *
  * Read them through `overviewDefaults` rather than defaulting at each use site.
+ *
+ * `from`/`to` are absolute epoch-millisecond instants and belong to
+ * `?range=custom` alone: a relative label like `7d` means the last seven days
+ * for whoever opens the link, which is right for a window and wrong for a
+ * range someone pasted to a colleague to talk about. They bound the activity
+ * feed only — `missions.listBoard` takes no date arguments at all, and hiding
+ * an old unfinished mission behind a date range is the defect
+ * `plan/architecture.md` §5 names.
  */
 export type OverviewSearch = {
   campaign?: string
   column?: BoardColumn
   archived?: boolean
   range?: ActivityRange
+  from?: number
+  to?: number
   tab?: MissionTab
   cursor?: string
 }
@@ -96,6 +107,8 @@ export const Route = createFileRoute("/_dashboard/_workspace/overview")({
     column: optionalOneOf(BOARD_COLUMNS, search.column),
     archived: flag(search.archived) ? true : undefined,
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
+    from: optionalEpochMs(search.from),
+    to: optionalEpochMs(search.to),
     tab: optionalOneOf(MISSION_TABS, search.tab),
     cursor: optionalCursor(search.cursor),
   }),
