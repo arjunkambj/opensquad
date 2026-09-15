@@ -54,6 +54,7 @@ import {
   computeResultDigest,
   mintLeaseToken,
   parseWorkerResult,
+  receiptNamesRun,
   sha256Hex,
   vCapabilityId,
   vWorkerPhase,
@@ -621,6 +622,40 @@ const vToolArgs = {
   url: v.optional(v.string()),
 };
 
+/** The `stepKey` prefix `dispatchResearch` writes for a prospect branch. The
+ *  suffix is the `missionProspects` row id, so the request names the ONE
+ *  branch — and therefore the ONE lead — it was dispatched for. */
+const RESEARCH_STEP_KEY_PREFIX = "research:";
+
+/**
+ * The lead this request's own branch is about.
+ *
+ * A request carries a workspace and a mission, but those bound a tool call
+ * only to the CAMPAIGN — every sibling lead in it passed. So a turn running
+ * for prospect A could spend prospect B's page cap and read back B's stored
+ * excerpts, leaving B's own branch refused with "prospect page cap reached"
+ * and its lead written `needs_review` over a gap a sibling created.
+ *
+ * `stepKey` already names the branch, so nothing new has to be stored. A
+ * request whose `stepKey` names no branch of its own mission (a dev seeder's
+ * `fixture-step-*`) resolves to `null` and its tool calls are refused: a call
+ * that cannot be bound to a branch has no lead it is entitled to.
+ */
+async function branchProspectFor(
+  ctx: MutationCtx,
+  request: Doc<"workerRequests">,
+): Promise<Id<"prospects"> | null> {
+  if (!request.stepKey.startsWith(RESEARCH_STEP_KEY_PREFIX)) return null;
+  const branchId = ctx.db.normalizeId(
+    "missionProspects",
+    request.stepKey.slice(RESEARCH_STEP_KEY_PREFIX.length),
+  );
+  if (branchId === null) return null;
+  const branch = await ctx.db.get("missionProspects", branchId);
+  if (branch === null || branch.missionId !== request.missionId) return null;
+  return ctx.db.normalizeId("prospects", branch.prospectId);
+}
+
 /**
  * Authorize one tool call and consume one of the request's tool-call budget.
  *
@@ -692,16 +727,20 @@ export const beginWorkerToolCall = internalMutation({
       .unique();
     assertLiveLease(request, slot, args.generation, leaseHash, capability);
 
-    // Same rule as an unknown workerRequestId: unknown, foreign-workspace and
-    // wrong-mission prospects are the SAME 400, so a workspace can never use
-    // this route to learn whether another workspace's row exists.
+    // Same rule as an unknown workerRequestId: unknown, foreign-workspace,
+    // wrong-mission and wrong-BRANCH prospects are the SAME 400, so a
+    // workspace can never use this route to learn whether another
+    // workspace's row exists — and a turn can never reach past its own lead.
     const prospectId = ctx.db.normalizeId("prospects", args.prospectId);
     const prospect =
       prospectId === null ? null : await ctx.db.get("prospects", prospectId);
     const mission = await ctx.db.get("missions", request.missionId);
+    const ownProspectId = await branchProspectFor(ctx, request);
     if (
       prospect === null ||
       mission === null ||
+      ownProspectId === null ||
+      prospect._id !== ownProspectId ||
       prospect.workspaceId !== request.workspaceId ||
       prospect.campaignId !== mission.campaignId
     ) {
@@ -730,31 +769,38 @@ export const beginWorkerToolCall = internalMutation({
             .eq("prospectId", prospect._id)
             .eq("state", "completed"),
         )
-        .take(RESEARCH_PAGES_PER_PROSPECT);
-      const pages = retrieved.map((row) => {
-        const page =
-          row.resultRef?.kind === "inline"
-            ? (row.resultRef.value as {
-                url?: unknown;
-                retrievedAt?: unknown;
-                excerpt?: unknown;
-                statusCode?: unknown;
-                truncated?: unknown;
-              })
-            : {};
-        return {
-          url: typeof page.url === "string" ? page.url : "",
-          retrievedAt:
-            typeof page.retrievedAt === "number" ? page.retrievedAt : 0,
-          statusCode:
-            typeof page.statusCode === "number" ? page.statusCode : null,
-          truncated: page.truncated === true,
-          excerpt:
-            typeof page.excerpt === "string"
-              ? page.excerpt.slice(0, TOOL_EXCERPT_MAX_LENGTH)
-              : "",
-        };
-      });
+        .take(RESEARCH_PAGES_PER_PROSPECT * 2);
+      // Scoped to THIS run's own receipts — the same predicate the evidence
+      // synthesis site admits by. A lead researched on an earlier mission
+      // carries receipts this turn never read, and handing them back would
+      // put text in front of the model that its own run cannot cite.
+      const pages = retrieved
+        .filter((row) => receiptNamesRun(row, request.runId))
+        .slice(0, RESEARCH_PAGES_PER_PROSPECT)
+        .map((row) => {
+          const page =
+            row.resultRef?.kind === "inline"
+              ? (row.resultRef.value as {
+                  url?: unknown;
+                  retrievedAt?: unknown;
+                  excerpt?: unknown;
+                  statusCode?: unknown;
+                  truncated?: unknown;
+                })
+              : {};
+          return {
+            url: typeof page.url === "string" ? page.url : "",
+            retrievedAt:
+              typeof page.retrievedAt === "number" ? page.retrievedAt : 0,
+            statusCode:
+              typeof page.statusCode === "number" ? page.statusCode : null,
+            truncated: page.truncated === true,
+            excerpt:
+              typeof page.excerpt === "string"
+                ? page.excerpt.slice(0, TOOL_EXCERPT_MAX_LENGTH)
+                : "",
+          };
+        });
       return {
         decision: "answer" as const,
         payload: JSON.stringify({ status: "ok", pages }),
@@ -821,8 +867,17 @@ export const settleWorkerToolCall = internalMutation({
       .unique();
     assertLiveLease(request, slot, args.generation, leaseHash, capability);
     const callId = boundedString(args.callId, "callId", { min: 1, max: 100 });
+    // Bound to the request's OWN branch, exactly as the begin half is. The
+    // id lands on an activity row, so an unbound one would let a turn
+    // attribute its tool call to a sibling lead — or to any row whose id
+    // happens to normalize.
     const prospectId = ctx.db.normalizeId("prospects", args.prospectId);
-    if (prospectId === null) {
+    const ownProspectId = await branchProspectFor(ctx, request);
+    if (
+      prospectId === null ||
+      ownProspectId === null ||
+      prospectId !== ownProspectId
+    ) {
       throw bridgeInvalid("prospectId is not valid in this scope");
     }
     await recordActivityEvent(ctx, {
