@@ -55,7 +55,7 @@
         "plan/evidence/P01.md: integrated at 39305d3; .env.example + worker/.env.example added, lint/build pass on merged main, zero env values in committed files.",
         "G1 unavailable: ASCII_API_KEY absent locally and on deployment; P03 blocked until owner supplies a Box API key. Codex CLI 0.154.0 confirmed on builder machine only.",
         "G2 partial: Firecrawl key valid (1000 credits), webhook secret missing; Apollo OAuth needs human grant inside runtime. G3 partial: AgentMail key is inbox-scoped; P05 blocked on inbox ID, webhook secret, controlled recipient. Live Hexclave sign-in/JWT claims still need a human browser check (V01/V02 limitation).",
-        "2026-09-14 follow-up: owner completed live Hexclave sign-in \u2014 real JWT verified end to end (V01 step 3 limitation closed). ASCII_API_KEY, AgentMail key/webhook secret and controlled inboxes were later supplied for the P03/P05 live gates; FIRECRAWL_WEBHOOK_SECRET now set on the dev deployment."
+        "2026-09-14 follow-up: owner completed live Hexclave sign-in — real JWT verified end to end (V01 step 3 limitation closed). ASCII_API_KEY, AgentMail key/webhook secret and controlled inboxes were later supplied for the P03/P05 live gates; FIRECRAWL_WEBHOOK_SECRET now set on the dev deployment."
       ]
     },
     {
@@ -92,7 +92,7 @@
         "convex/campaigns.ts"
       ],
       "evidence": [
-        "plan/evidence/P02.md: integrated at f9f6664; five \u00a74.1 tables (workspaces, memberships, businessProfiles, employees, campaigns) with declared indexes/invariants, typed auth guards (tokenIdentifier identityKey, anonymous-issuer rejection, uniform NOT_FOUND), idempotent one-transaction bootstrap, role matrix, campaign confirmSourcePlan/setState with immutable confirmed scope and version conflicts.",
+        "plan/evidence/P02.md: integrated at f9f6664; five §4.1 tables (workspaces, memberships, businessProfiles, employees, campaigns) with declared indexes/invariants, typed auth guards (tokenIdentifier identityKey, anonymous-issuer rejection, uniform NOT_FOUND), idempotent one-transaction bootstrap, role matrix, campaign confirmSourcePlan/setState with immutable confirmed scope and version conflicts.",
         "Live local-backend probes with synthetic --identity claims exercised real authorization: unauthenticated/anonymous rejection, cross-workspace NOT_FOUND incl. caller-supplied workspaceId, viewer/owner/operator matrix, last-owner protection, leadLimit 1-5 cap, unconfirmed-activation and yc-source rejections, version CONFLICTs, pagination. lint/build/tsc clean on merged main.",
         "Deferred gates: real Hexclave JWT end-to-end still needs human sign-in (P01 limitation); two-session V02 in P14; V03 UI portion in P08. First cloud push to dev:flexible-grasshopper-949 completed during integration via convex codegen upload/typecheck. P05 noted mailEvents dedupe table need for P10/P11 reconciliation.",
         "2026-09-14 follow-up: owner's live sign-in verified the real Hexclave JWT passes requireUser's issuer check (P01 limitation closed). Post-acceptance hardening on main: ensureWorkspace no longer dead-ends callers holding only non-owner memberships; campaigns.create dedupes on (workspaceId, requestId); workspaces.update skips no-op writes; setAutomationState lets a paused workspace update pauseReason.",
@@ -125,8 +125,8 @@
       ],
       "evidence": [
         "plan/evidence/P03.md: integrated at 73ff205; worker package with typed ASCII lifecycle adapter (persisted idempotency, fingerprint-guarded reuse, uncertain-outcome classification, X-Ascii-Confirm-Delete delta encoded), Codex App Server stdio client + 711 generated protocol files from codex-cli 0.154.0, runloop/bridge seams, systemd unit, RUNTIME.md.",
-        "LIVE GATE PASSED on real ASCII Boxes: idempotent create+replay (bx_f5tr3und), readiness+heartbeat, presence-clean at birth, in-Box Node 24.21.0 + codex 0.154.0 bootstrap, managed device-code login completed by owner inside Box (bx_a879jdvq) verified chatgpt via account/read, bounded structured turn completed (gpt-6-astra, {\"ok\":true}), pause\u2192archived\u2192resume with marker byte-identical, managed login+thread survived resume with second turn on resumed thread, second-Box isolation verified, all boxes deleted (0 remaining).",
-        "Recorded deltas/notes: ChatGPT device-code authorization must be enabled in account security settings (owner enabled it); in-Box generate-ts output differs from committed generated files (P07 to pin generation version); Codex warns Linux sandbox needs bubblewrap user namespaces; idle/running states reflect built-in harness only \u2014 heartbeat files are the liveness signal; lease-expiry\u2192Needs-attention and bridge routing remain P07/P14 scope.",
+        "LIVE GATE PASSED on real ASCII Boxes: idempotent create+replay (bx_f5tr3und), readiness+heartbeat, presence-clean at birth, in-Box Node 24.21.0 + codex 0.154.0 bootstrap, managed device-code login completed by owner inside Box (bx_a879jdvq) verified chatgpt via account/read, bounded structured turn completed (gpt-6-astra, {\"ok\":true}), pause→archived→resume with marker byte-identical, managed login+thread survived resume with second turn on resumed thread, second-Box isolation verified, all boxes deleted (0 remaining).",
+        "Recorded deltas/notes: ChatGPT device-code authorization must be enabled in account security settings (owner enabled it); in-Box generate-ts output differs from committed generated files (P07 to pin generation version); Codex warns Linux sandbox needs bubblewrap user namespaces; idle/running states reflect built-in harness only — heartbeat files are the liveness signal; lease-expiry→Needs-attention and bridge routing remain P07/P14 scope.",
         "2026-09-14 review: worker restart/login, bootstrap/create replay, secret-free fingerprints and terminal-notification recovery hardened. Local typecheck/build and offline acceptance pass; plan/evidence/review-worker.md. No new live gate claimed."
       ]
     },
@@ -151,16 +151,16 @@
       ],
       "evidence": [
         "plan/evidence/P04.md: integrated; @firecrawl/firecrawl-convex@0.1.1 pinned + registered via convex.config.ts app-env binding; component self-mounts signed webhook at /firecrawl/webhook via httpPrefix (no app route added); narrow internal wrapper in convex/integrations/firecrawl.ts with hostname/SSRF admission checks.",
-        "Verified on isolated local backend: component install + push, ONE real bounded scrape (basicagency.com, 1 credit, 1000\u2192999 balance), 6-case URL rejection matrix (non-http/userinfo/localhost/private ranges), webhook HMAC verification with 401 on missing/bogus signatures, public-surface unreachable. Live component also installed on dev deployment via merged push (FIRECRAWL_WEBHOOK_SECRET present there, 33 chars).",
-        "IMPORTANT DELTA: component skips HMAC verification entirely when FIRECRAWL_WEBHOOK_SECRET is unset \u2014 must always be configured per deployment. poll fallback mode exists for unreachable deployments.",
-        "Apollo machinery committed and compiled (worker boxmcp.ts auth/call/list/token-inspect phases, p04gate.ts host driver, callback-url ferry for localhost-redirect OAuth) but NOT exercised \u2014 no Box provisioned, no tools/list, no search/enrichment probes. Employee image ships zero MCP servers (boundary verified by construction).",
-        "2026-09-14 follow-up: FIRECRAWL_WEBHOOK_SECRET now set on dev:flexible-grasshopper-949 (verified via convex env list, names only) \u2014 HMAC gate active there. scrapePage IPv6 guard widened (fe80/10 link-local, fec0/10 site-local, fe00/8 reserved, 64:ff9b NAT64). Apollo OAuth still deferred by owner; task stays blocked.",
+        "Verified on isolated local backend: component install + push, ONE real bounded scrape (basicagency.com, 1 credit, 1000→999 balance), 6-case URL rejection matrix (non-http/userinfo/localhost/private ranges), webhook HMAC verification with 401 on missing/bogus signatures, public-surface unreachable. Live component also installed on dev deployment via merged push (FIRECRAWL_WEBHOOK_SECRET present there, 33 chars).",
+        "IMPORTANT DELTA: component skips HMAC verification entirely when FIRECRAWL_WEBHOOK_SECRET is unset — must always be configured per deployment. poll fallback mode exists for unreachable deployments.",
+        "Apollo machinery committed and compiled (worker boxmcp.ts auth/call/list/token-inspect phases, p04gate.ts host driver, callback-url ferry for localhost-redirect OAuth) but NOT exercised — no Box provisioned, no tools/list, no search/enrichment probes. Employee image ships zero MCP servers (boundary verified by construction).",
+        "2026-09-14 follow-up: FIRECRAWL_WEBHOOK_SECRET now set on dev:flexible-grasshopper-949 (verified via convex env list, names only) — HMAC gate active there. scrapePage IPv6 guard widened (fe80/10 link-local, fec0/10 site-local, fe00/8 reserved, 64:ff9b NAT64). Apollo OAuth still deferred by owner; task stays blocked.",
         "2026-09-14 review: Firecrawl reported source URL and local-host admission checks tightened; offline checks pass (plan/evidence/review-providers.md). Apollo remains deliberately untested and blocked by owner choice."
       ],
       "branch": "opensquad/P04",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P04",
       "baseRef": "aead563",
-      "blocker": "Owner deferred the Apollo OAuth grant. To resume: run the committed probe machinery (worker/src/{boxmcp,p04gate}.ts) in a disposable Box \u2014 up \u2192 auth (relay URL to owner) \u2192 tools/list \u2192 one search \u2192 \u22641 enrichment \u2192 token-inspect \u2192 down. Firecrawl portion is verified."
+      "blocker": "Owner deferred the Apollo OAuth grant. To resume: run the committed probe machinery (worker/src/{boxmcp,p04gate}.ts) in a disposable Box — up → auth (relay URL to owner) → tools/list → one search → ≤1 enrichment → token-inspect → down. Firecrawl portion is verified."
     },
     {
       "id": "P05",
@@ -193,7 +193,7 @@
       "evidence": [
         "plan/evidence/P05.md: integrated at fbde8c4; @agentmail/convex@0.1.0 + convex-helpers@0.1.124 pinned, component registered in new convex/convex.config.ts, signed webhook mounted at POST /agentmail/webhook, narrow internal send adapter with HTTP Idempotency-Key and accepted/rejected/uncertain outcomes.",
         "Verified on isolated local backend: component+workpools install, 401 on missing/bogus Svix signatures, send actions unreachable publicly, live negative probe reached api.agentmail.to and classified 404 as rejected. Temporary diagnostic probe removed before merge per task card; executeSendAttempt remains callable via `convex run` for the controlled probe.",
-        "LIVE GATE PASSED at 787c0d2 on dev:flexible-grasshopper-949: webhook registered org-wide with API-returned secret synced via convex env set (401 on bad signature); second controlled inbox created via client_id with repeat-create dedupe; controlled send accepted with real message/thread IDs; same-key replay returned identical IDs with zero duplicate delivery or events; changed payload on same key \u2192 409\u2192uncertain; reply round trip delivered through signed webhook into component inboundMessages on the same sender-side thread; message.delivered observed arriving BEFORE message.sent (ordering tolerance required in P11); fabricated signed duplicate event deduped by event_id.",
+        "LIVE GATE PASSED at 787c0d2 on dev:flexible-grasshopper-949: webhook registered org-wide with API-returned secret synced via convex env set (401 on bad signature); second controlled inbox created via client_id with repeat-create dedupe; controlled send accepted with real message/thread IDs; same-key replay returned identical IDs with zero duplicate delivery or events; changed payload on same key → 409→uncertain; reply round trip delivered through signed webhook into component inboundMessages on the same sender-side thread; message.delivered observed arriving BEFORE message.sent (ordering tolerance required in P11); fabricated signed duplicate event deduped by event_id.",
         "Recorded deltas: thread_id is per-inbox (P11 must key conversations by inboxId+threadId); message_id is RFC5322 Message-ID needing URL-encoding in path params; AgentMail has no event resend endpoint; 24h idempotency boundary unverified; unmapped inboxes currently persist inbound without quarantine (P11 must add resolution+quarantine). mailEvents dedupe/replay table need recorded for P02/P10 reconciliation. Read-only diagnosticInboundState remains internal with TODO(P16).",
         "2026-09-14 review: AgentMail deadline now covers response bodies and classifies body failures as uncertain; offline acceptance passes (plan/evidence/review-providers.md). Current P05 evidence inbox references redacted; no new mail or live gate."
       ]
@@ -234,11 +234,11 @@
         "convex/workflows/"
       ],
       "evidence": [
-        "plan/evidence/P06.md: integrated at 8266686; six \u00a74.2 tables (missions, missionProspects, runs, decisions, missionComments, activityEvents) with declared indexes, derived board columns, expectedVersion guards, requestId dedupe. @convex-dev/workflow@0.4.6 registered; dev-fixture workflow (explicitly not AI/provider work) exercises dispatch gate \u2192 validated stage \u2192 prospect branches \u2192 required decision \u2192 durable awaitEvent \u2192 persisted continuation \u2192 aggregated outcome.",
-        "Local-backend probes verified: full lifecycle queued\u2192active\u2192waiting_for_user\u2192completed with board mapping; concurrent resolve single-apply (loser CONFLICT); requestId replay dedupe; backend kill+restart mid-wait resumed without re-running journaled steps; comments never resolve approvals; pause\u2192resolve-while-parked\u2192resume; cancel mid-wait retiring asks/children/runs; per-column cursor pagination; auth matrix (viewer FORBIDDEN, non-member NOT_FOUND, anonymous issuer FORBIDDEN); semantic duplicate mission CONFLICT.",
-        "Combined main pushed to dev:flexible-grasshopper-949 \u2014 workflow component + workpool subcomponents installed, \u00a74.2 indexes live. lint/tsc/build clean on merged main.",
-        "Notes for P07/P10/P12: decisions carry backend-assigned targetWorkflowId/continuationEventId/workflowGeneration; decisions.resolve is the only continuation path; checkContinuation re-gates pause/cancel/stale inputs; insertRun/finishRun/sweepRuns are the receipt helpers; missionProspects.prospectId and decision draftId/sendAttemptId/approvalId are bounded strings pending \u00a74.3 tables; waiting_for_runtime is plumbed but unexercised until worker uncertainty exists; cancelChildWorkflows code-reviewed but not exercised live.",
-        "2026-09-14 review-orch: terminal reconcile could not express queued\u2192failed/paused\u2192failed/paused\u2192completed (silently swallowed by the workpool's onComplete \u2014 permanent wedge) and a workflow that abandoned via outcome 'cancelled' marked a live mission completed; both fixed, plus stale-workflowId guards on the completion callbacks and a chronological by_missionId_and_createdAt index for listForMission. See plan/evidence/review-orch.md; commits 82986cb/7b1fa02/5ffca96 on opensquad/review-orch."
+        "plan/evidence/P06.md: integrated at 8266686; six §4.2 tables (missions, missionProspects, runs, decisions, missionComments, activityEvents) with declared indexes, derived board columns, expectedVersion guards, requestId dedupe. @convex-dev/workflow@0.4.6 registered; dev-fixture workflow (explicitly not AI/provider work) exercises dispatch gate → validated stage → prospect branches → required decision → durable awaitEvent → persisted continuation → aggregated outcome.",
+        "Local-backend probes verified: full lifecycle queued→active→waiting_for_user→completed with board mapping; concurrent resolve single-apply (loser CONFLICT); requestId replay dedupe; backend kill+restart mid-wait resumed without re-running journaled steps; comments never resolve approvals; pause→resolve-while-parked→resume; cancel mid-wait retiring asks/children/runs; per-column cursor pagination; auth matrix (viewer FORBIDDEN, non-member NOT_FOUND, anonymous issuer FORBIDDEN); semantic duplicate mission CONFLICT.",
+        "Combined main pushed to dev:flexible-grasshopper-949 — workflow component + workpool subcomponents installed, §4.2 indexes live. lint/tsc/build clean on merged main.",
+        "Notes for P07/P10/P12: decisions carry backend-assigned targetWorkflowId/continuationEventId/workflowGeneration; decisions.resolve is the only continuation path; checkContinuation re-gates pause/cancel/stale inputs; insertRun/finishRun/sweepRuns are the receipt helpers; missionProspects.prospectId and decision draftId/sendAttemptId/approvalId are bounded strings pending §4.3 tables; waiting_for_runtime is plumbed but unexercised until worker uncertainty exists; cancelChildWorkflows code-reviewed but not exercised live.",
+        "2026-09-14 review-orch: terminal reconcile could not express queued→failed/paused→failed/paused→completed (silently swallowed by the workpool's onComplete — permanent wedge) and a workflow that abandoned via outcome 'cancelled' marked a live mission completed; both fixed, plus stale-workflowId guards on the completion callbacks and a chronological by_missionId_and_createdAt index for listForMission. See plan/evidence/review-orch.md; commits 82986cb/7b1fa02/5ffca96 on opensquad/review-orch."
       ]
     },
     {
@@ -278,13 +278,13 @@
         "convex/runtimeControlRequests.ts"
       ],
       "evidence": [
-        "plan/evidence/P07.md: \u00a74.4 runtime transport tables + P07 validators; workerBridge (credential auth, slot+lease claim, heartbeat/stop, activity dedupe+throttle, exactly-once results with canonical digest, bounded failures, runtime-heartbeat + agentSessions persistence, artifact grant/link, control claim/result + login-challenge lifecycle); workerOperations (dispatch adapter idempotent on mission+step+generation with transactional continuation event, sweep, AES-256-GCM credential sealing, dev* internal-only helpers); runtimeControlRequests (owner enqueue, exclusive start_login, cancel coexistence); runtimeConnections (owner lifecycle, durable ledger, ASCII REST create/resume/extend/stop/delete, sealed env injection); nine /worker/* routes with spec status codes; 1-minute sweep cron.",
-        "curl-verified on isolated local deployment opensquad-p07 (ports 3214/3215): 401 missing/bad/retired-generation tokens; 403 scope denial; claim\u2192lease\u2192204-held; heartbeat renew/stop; activity dedupe; result digest check, exactly-once, duplicate replay, digest-conflict 409; failure idempotent; expired lease\u2192409\u2192sweep uncertain\u2192interrupt_turn terminated:true\u2192slot idle; control claim/result incl. challenge_issued\u2192challenge row\u2192completed\u2192challenge deleted + connection ready; artifact upload+dedupe+digest verify; 429 poll throttle; 413 bound; 400 malformed.",
+        "plan/evidence/P07.md: §4.4 runtime transport tables + P07 validators; workerBridge (credential auth, slot+lease claim, heartbeat/stop, activity dedupe+throttle, exactly-once results with canonical digest, bounded failures, runtime-heartbeat + agentSessions persistence, artifact grant/link, control claim/result + login-challenge lifecycle); workerOperations (dispatch adapter idempotent on mission+step+generation with transactional continuation event, sweep, AES-256-GCM credential sealing, dev* internal-only helpers); runtimeControlRequests (owner enqueue, exclusive start_login, cancel coexistence); runtimeConnections (owner lifecycle, durable ledger, ASCII REST create/resume/extend/stop/delete, sealed env injection); nine /worker/* routes with spec status codes; 1-minute sweep cron.",
+        "curl-verified on isolated local deployment opensquad-p07 (ports 3214/3215): 401 missing/bad/retired-generation tokens; 403 scope denial; claim→lease→204-held; heartbeat renew/stop; activity dedupe; result digest check, exactly-once, duplicate replay, digest-conflict 409; failure idempotent; expired lease→409→sweep uncertain→interrupt_turn terminated:true→slot idle; control claim/result incl. challenge_issued→challenge row→completed→challenge deleted + connection ready; artifact upload+dedupe+digest verify; 429 poll throttle; 413 bound; 400 malformed.",
         "Checks: convex tsc clean; convex dev push OK; worker tsc+build clean; pnpm lint 0 errors; pnpm build (tsc -b && vite build && worker build) passes; git diff --check clean.",
-        "Honest deferral: owner connect/reconnect/disconnect/getStatus compile but need a Hexclave session (not curl-able); ASCII lifecycle action implemented + ASCII_API_KEY set on the isolated deployment, but no disposable Box created this round; no live Codex turn run (no managed login on isolated workspace) \u2014 daemon turn executor composes P03-proven methods; the full daemon-in-Box loop is the P07 live gate.",
-        "Integrated at 7dbac79 into main alongside P10 (schema/validators section conflicts resolved by union; artifacts table is P07-owned \u2014 P09 must not re-add). Combined main pushed to dev:flexible-grasshopper-949 \u2014 all \u00a74.4 tables, /worker/* routes and the 1-min lease sweep cron live; lint/build/tsc clean.",
-        "2026-09-14 review-orch: boundedString crashed with TypeError on non-string fields carved from v.any() worker envelopes, mapping to 503 instead of the documented 400 INVALID \u2014 fixed at the shared validator (commit 86babfc). Slot/lease/result contract re-verified; cancelMissionWorkerRequests noted as dead code that must NOT be wired in without slot release (spec-safe \u00a77.7 path is sweep\u2192uncertain\u2192interrupt-confirm). See plan/evidence/review-orch.md.",
-        "2026-09-15 integrator correction: P07's card required the allowed tool router/capability transport, and it was NOT delivered \u2014 the daemon spawns no MCP server, every turn starts readOnly with networkAccess:false (worker/src/codex/methods.ts:332) and vWorkerRequestInput carries no capability field (convex/lib/validators.ts). The deferral list omitted this. Ownership moves to P21, which is the first task that needs it. Also undocumented: OPENSQUAD_WORKER_IMAGE, OPENSQUAD_WORKER_SETUP (convex/runtimeConnections.ts:444-449) and OPENSQUAD_WORKER_SEAL_KEY (convex/workerOperations.ts:540) are read by convex/ but appear in neither .env.example, so a bootstrap with setup unset records a completed create with no daemon installed."
+        "Honest deferral: owner connect/reconnect/disconnect/getStatus compile but need a Hexclave session (not curl-able); ASCII lifecycle action implemented + ASCII_API_KEY set on the isolated deployment, but no disposable Box created this round; no live Codex turn run (no managed login on isolated workspace) — daemon turn executor composes P03-proven methods; the full daemon-in-Box loop is the P07 live gate.",
+        "Integrated at 7dbac79 into main alongside P10 (schema/validators section conflicts resolved by union; artifacts table is P07-owned — P09 must not re-add). Combined main pushed to dev:flexible-grasshopper-949 — all §4.4 tables, /worker/* routes and the 1-min lease sweep cron live; lint/build/tsc clean.",
+        "2026-09-14 review-orch: boundedString crashed with TypeError on non-string fields carved from v.any() worker envelopes, mapping to 503 instead of the documented 400 INVALID — fixed at the shared validator (commit 86babfc). Slot/lease/result contract re-verified; cancelMissionWorkerRequests noted as dead code that must NOT be wired in without slot release (spec-safe §7.7 path is sweep→uncertain→interrupt-confirm). See plan/evidence/review-orch.md.",
+        "2026-09-15 integrator correction: P07's card required the allowed tool router/capability transport, and it was NOT delivered — the daemon spawns no MCP server, every turn starts readOnly with networkAccess:false (worker/src/codex/methods.ts:332) and vWorkerRequestInput carries no capability field (convex/lib/validators.ts). The deferral list omitted this. Ownership moves to P21, which is the first task that needs it. Also undocumented: OPENSQUAD_WORKER_IMAGE, OPENSQUAD_WORKER_SETUP (convex/runtimeConnections.ts:444-449) and OPENSQUAD_WORKER_SEAL_KEY (convex/workerOperations.ts:540) are read by convex/ but appear in neither .env.example, so a bootstrap with setup unset records a completed create with no daemon installed."
       ]
     },
     {
@@ -317,8 +317,8 @@
         "src/components/settings/"
       ],
       "evidence": [
-        "plan/evidence/P08.md: integrated at 3497402; onboarding wizard (business/workspace/campaign scope/review) persists via real P02 APIs \u2014 profile update, timezone with expectedPolicyVersion, send policy, idempotent campaign create, immutable confirmSourcePlan, then setAutomationState active. Zero convex/ changes needed.",
-        "Employees route shows honest enabled\u2192disconnected/disabled status only (idle/busy/blocked stay unreachable until P06 runs + P07 runtime signals exist); versioned instruction edits with CONFLICT surfacing. Settings sections cover workspace, send window/limits, automation pause, members/roles \u2014 integrations/Codex rows deliberately disabled pending P07/P04 with no simulated connect.",
+        "plan/evidence/P08.md: integrated at 3497402; onboarding wizard (business/workspace/campaign scope/review) persists via real P02 APIs — profile update, timezone with expectedPolicyVersion, send policy, idempotent campaign create, immutable confirmSourcePlan, then setAutomationState active. Zero convex/ changes needed.",
+        "Employees route shows honest enabled→disconnected/disabled status only (idle/busy/blocked stay unreachable until P06 runs + P07 runtime signals exist); versioned instruction edits with CONFLICT surfacing. Settings sections cover workspace, send window/limits, automation pause, members/roles — integrations/Codex rows deliberately disabled pending P07/P04 with no simulated connect.",
         "API-level probes on isolated local deployment verified the full onboarding chain, version conflicts, idempotent replay, last-owner protection, leadLimit cap, yc-source rejection and cross-workspace NOT_FOUND. lint/tsc/build pass on merged main; dev-server smoke serves all routes.",
         "Deferred: real browser sign-in + visual/a11y review (V10 portions) await human; working runtime controls belong to P13 after P07. deriveEmployeeStatus and IntegrationsSection are the flagged P07 wiring seams. Leads/Inbox/Decisions nav intentionally unlinked until P12/P13 routes exist; /squads is now a typed redirect to /employees; /overview remains post-sign-in home."
       ]
@@ -342,11 +342,11 @@
         "plan/evidence/P20.md"
       ],
       "evidence": [
-        "plan/evidence/P20.md: integrated at 79856a2; four \u00a74.3 tables (prospects, leadEvents, bookings, evidence) declared once in convex/schema.ts with every specified index, plus 16 domain unions/bounded shapes in convex/lib/validators.ts (ordered 11-member salesStage, bookings.proposal discriminated union, bounded sourceRefs/contact). drafts gains optional bookingId/bookingVersion \u2014 \u00a74.3 places them on booking-invitation drafts and P19 adds behavior only, so this was their only declaration site.",
-        "GATE MET: pushed to dev:flexible-grasshopper-949 on 2026-09-15 \u2014 13 new indexes accepted server-side including the search index prospects.search_company_name (searchField companyName; filters workspaceId, salesStage, campaignId, ownerIdentityKey). lint silent, convex+app tsc clean, vite build passes.",
+        "plan/evidence/P20.md: integrated at 79856a2; four §4.3 tables (prospects, leadEvents, bookings, evidence) declared once in convex/schema.ts with every specified index, plus 16 domain unions/bounded shapes in convex/lib/validators.ts (ordered 11-member salesStage, bookings.proposal discriminated union, bounded sourceRefs/contact). drafts gains optional bookingId/bookingVersion — §4.3 places them on booking-invitation drafts and P19 adds behavior only, so this was their only declaration site.",
+        "GATE MET: pushed to dev:flexible-grasshopper-949 on 2026-09-15 — 13 new indexes accepted server-side including the search index prospects.search_company_name (searchField companyName; filters workspaceId, salesStage, campaignId, ownerIdentityKey). lint silent, convex+app tsc clean, vite build passes.",
         "Retype decisions recorded per site. conversations.prospectId is now v.id(\"prospects\") so P11's associateProspect has a typed target. Everything chained to the dev fixture's synthetic dev-prospect-* literals (missionProspects.prospectId, activityEvents.prospectId, vBranchCompletion.prospectId) stays a validated string until P21 replaces the fixture; artifacts.prospectId stays a string because it arrives as the worker's x-prospect-id header.",
         "Three adversarial review lenses ran; findings applied. Substantive: an uncalled assertExpectedVersion export colliding by name with the differently-signed convex/missions.ts local was dropped; assertBookingTimes renamed to assertRequiredBookingTimes with its contract restated so P19's cancel path cannot read it as \"compute the times to store\" and erase an agreed meeting; ProspectSource derived from SourceConfig instead of restating the literals; assertConfirmationSourceEnabled added to back the rule that provider confirmation is unavailable.",
-        "HONEST DEFERRALS: normalizeCanonicalDomain is a syntax/host floor, NOT public-suffix aware \u2014 P09 must deepen it in place before Apollo dedupe or acme.com and shop.acme.com become two prospects in one campaign. The evidence table's required retrievedAt/excerpt/confidence have no producer in vResearchResult (\u00a74.5 worker envelope) \u2014 P21 must close that or state what it synthesizes. Eleven bound constants still have no enforcing helper; P19 adds them with their first call sites."
+        "HONEST DEFERRALS: normalizeCanonicalDomain is a syntax/host floor, NOT public-suffix aware — P09 must deepen it in place before Apollo dedupe or acme.com and shop.acme.com become two prospects in one campaign. The evidence table's required retrievedAt/excerpt/confidence have no producer in vResearchResult (§4.5 worker envelope) — P21 must close that or state what it synthesizes. Eleven bound constants still have no enforcing helper; P19 adds them with their first call sites."
       ]
     },
     {
@@ -437,18 +437,18 @@
         "convex/suppressions.ts"
       ],
       "evidence": [
-        "plan/evidence/P10.md: integrated alongside P07. \u00a74.3 tables (conversations, drafts, approvals, sendAttempts, suppressions, emailEventReceipts) + \u00a74.4 usage (usageBuckets, usageReservations) live on dev:flexible-grasshopper-949. Immutable draft revisions with payloadHash; approvals bind draftId+payloadHash+normalizedRecipient+contextVersion; single sendAttempts intent with durable providerIdempotencyKey reserved before any network I/O; beginDispatch is the atomic commit point; no blind retries anywhere (adapter never retries, component sender unused).",
-        "Verified on isolated local backend opensquad_p10 (synthetic --identity subjects, controlled *@agentmail.to inboxes only): V13 version/requestId dedupe + revise supersedes old ask; V15 real controlled send acknowledged with SES providerMessageRef + re-dispatch already_sent; V17 full block matrix (no_current_approval, suppressed_email/domain, human_takeover, workspace_paused, policy_changed, context_changed, outside_window parked reserved intent, send_limit_reached, uncertain/unresolved guards); V18 dead-endpoint\u2192uncertain\u2192same-key reconcile\u2192acknowledged, \u00a78.7 replacement-decision binding with acknowledgeDuplicate required, covered-attempt reconcile refused (draft_not_current), read-only provider evidence.",
-        "Deferred: demo_recipient_blocked and brief_changed code-verified only (no demo provisioning toggle exists \u2014 P02 gap); P11 owns the real conversations module + inbound-driven invalidation; approval/draft UI is P12/P13.",
-        "2026-09-14 review-orch: vSendWorkflowResult.preflight_refused drifted from vDispatchOutcome (missing optional sendAttemptId \u2014 workflow return validation would kill the dormant send workflow after a committed reservation); fixed at commit efa8d50 before P09 consumes the seam. Send commit/reconcile contract re-verified. See plan/evidence/review-orch.md."
+        "plan/evidence/P10.md: integrated alongside P07. §4.3 tables (conversations, drafts, approvals, sendAttempts, suppressions, emailEventReceipts) + §4.4 usage (usageBuckets, usageReservations) live on dev:flexible-grasshopper-949. Immutable draft revisions with payloadHash; approvals bind draftId+payloadHash+normalizedRecipient+contextVersion; single sendAttempts intent with durable providerIdempotencyKey reserved before any network I/O; beginDispatch is the atomic commit point; no blind retries anywhere (adapter never retries, component sender unused).",
+        "Verified on isolated local backend opensquad_p10 (synthetic --identity subjects, controlled *@agentmail.to inboxes only): V13 version/requestId dedupe + revise supersedes old ask; V15 real controlled send acknowledged with SES providerMessageRef + re-dispatch already_sent; V17 full block matrix (no_current_approval, suppressed_email/domain, human_takeover, workspace_paused, policy_changed, context_changed, outside_window parked reserved intent, send_limit_reached, uncertain/unresolved guards); V18 dead-endpoint→uncertain→same-key reconcile→acknowledged, §8.7 replacement-decision binding with acknowledgeDuplicate required, covered-attempt reconcile refused (draft_not_current), read-only provider evidence.",
+        "Deferred: demo_recipient_blocked and brief_changed code-verified only (no demo provisioning toggle exists — P02 gap); P11 owns the real conversations module + inbound-driven invalidation; approval/draft UI is P12/P13.",
+        "2026-09-14 review-orch: vSendWorkflowResult.preflight_refused drifted from vDispatchOutcome (missing optional sendAttemptId — workflow return validation would kill the dormant send workflow after a committed reservation); fixed at commit efa8d50 before P09 consumes the seam. Send commit/reconcile contract re-verified. See plan/evidence/review-orch.md."
       ]
     },
     {
       "id": "P11",
       "title": "Shared inbox and reply workflows",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P11",
       "dependsOn": [
         "P07",
         "P10"
@@ -464,14 +464,28 @@
         "convex/webhooks.ts",
         "convex/workflows/reply.ts"
       ],
-      "evidence": []
+      "evidence": [],
+      "branch": "main",
+      "baseRef": "1f1c598",
+      "reservedFiles": [
+        "convex/schema.ts",
+        "convex/lib/validators.ts",
+        "convex/http.ts",
+        "convex/integrations/agentmail.ts",
+        "convex/drafts.ts",
+        "convex/conversations.ts",
+        "convex/inbox.ts",
+        "convex/workflows/reply.ts",
+        "plan/architecture.md",
+        "plan/evidence/P11.md"
+      ]
     },
     {
       "id": "P12",
       "title": "Mission Control board and detail",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P12",
       "dependsOn": [
         "P06",
         "P08"
@@ -486,7 +500,13 @@
         "src/components/activity/",
         "src/routes/_dashboard/"
       ],
-      "evidence": []
+      "evidence": [],
+      "branch": "main",
+      "baseRef": "1f1c598",
+      "reservedFiles": [
+        "src/",
+        "plan/evidence/P12.md"
+      ]
     },
     {
       "id": "P19",
@@ -539,8 +559,8 @@
         "src/hexclave/client.ts"
       ],
       "evidence": [
-        "2026-09-15 PRE-BUILT, DO NOT REBUILD: P13 \u00a73's decision queue already ships at 4d2289a \u2014 /decisions and /decisions/$decisionId (src/routes/_dashboard/_workspace/decisions*, src/components/decisions/*), all four vDecisionKind panels, exact-draft rendering, approvals.approve/requestChanges/reject wiring, the delivery-uncertain reconcile-before-replace flow, and the Decisions sidebar item. Pulled forward because it needed no new Convex code. P13 owns the REMAINING \u00a73 work: inbox list/thread UI and the CRM/booking surfaces, plus reusing these decision components rather than writing a second implementation.",
-        "Known gaps left for P13 in that surface: no Edit draft (drafts.revise with expectedRevision and the withdraw-approval affordance); no list-beside-detail split at \u22651280px; no j/k queue navigation; no sidebar count badge (the nav number and the home attention block must come from one decisions.listOpen call or they will disagree); no kind filter or resolved-history view until an index supports them."
+        "2026-09-15 PRE-BUILT, DO NOT REBUILD: P13 §3's decision queue already ships at 4d2289a — /decisions and /decisions/$decisionId (src/routes/_dashboard/_workspace/decisions*, src/components/decisions/*), all four vDecisionKind panels, exact-draft rendering, approvals.approve/requestChanges/reject wiring, the delivery-uncertain reconcile-before-replace flow, and the Decisions sidebar item. Pulled forward because it needed no new Convex code. P13 owns the REMAINING §3 work: inbox list/thread UI and the CRM/booking surfaces, plus reusing these decision components rather than writing a second implementation.",
+        "Known gaps left for P13 in that surface: no Edit draft (drafts.revise with expectedRevision and the withdraw-approval affordance); no list-beside-detail split at ≥1280px; no j/k queue navigation; no sidebar count badge (the nav number and the home attention block must come from one decisions.listOpen call or they will disagree); no kind filter or resolved-history view until an index supports them."
       ]
     },
     {
@@ -606,7 +626,7 @@
         "plan/evidence/P16.md"
       ],
       "evidence": [
-        "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort \u2014 treat it as a release action, not a task to schedule around."
+        "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort — treat it as a release action, not a task to schedule around."
       ]
     },
     {
@@ -626,7 +646,7 @@
         "plan/evidence/P17.md"
       ],
       "evidence": [
-        "2026-09-15 owner scoping: the VIDEO is produced externally and is not this repo's work. P17's remaining scope is the agency trial and the corrections it surfaces. The video must still exist for P18 \u2014 external ownership removes the effort, not the requirement."
+        "2026-09-15 owner scoping: the VIDEO is produced externally and is not this repo's work. P17's remaining scope is the agency trial and the corrections it surfaces. The video must still exist for P18 — external ownership removes the effort, not the requirement."
       ]
     },
     {
