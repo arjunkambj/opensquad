@@ -10,7 +10,9 @@ import {
 import { EmptyState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useQueueNavigation } from "@/hooks/use-queue-navigation"
 import { withFilters } from "@/lib/search-params"
+import { cn } from "@/lib/utils"
 
 const QUEUE_ROUTE = "/_dashboard/_workspace/decisions"
 
@@ -22,9 +24,10 @@ const QUEUE_ROUTE = "/_dashboard/_workspace/decisions"
  * sub-tickets (`decisionFields` has no parent pointer), no kind filter and no
  * resolved tab; see the route file for why the last two cannot exist yet.
  *
- * Every row is a link, so the queue is workable with Tab and Enter alone.
+ * Every row is a link, so the queue is workable with Tab and Enter alone —
+ * and j/k moves DOM focus between those links, so Enter opens natively.
  */
-export function DecisionQueue() {
+export function DecisionQueue({ detailOpen }: { detailOpen: boolean }) {
   const current = useCurrentWorkspace()
   const search = useSearch({ from: QUEUE_ROUTE })
   const navigate = useNavigate()
@@ -44,6 +47,12 @@ export function DecisionQueue() {
           ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
         },
   )
+
+  const { activeKey, setActiveKey } = useQueueNavigation({
+    items: page?.items ?? [],
+    keyOf: (decision) => decision._id,
+    detailOpen,
+  })
 
   // `null` cannot reach here — `_workspace` redirects a membership-less user
   // to setup — but the query types as nullable and loading is the only honest
@@ -143,6 +152,8 @@ export function DecisionQueue() {
           missionId={group.missionId}
           decisions={group.decisions}
           filtered={search.mission !== undefined}
+          activeKey={activeKey}
+          setActiveKey={setActiveKey}
           onFilterToMission={() =>
             void navigate({
               to: "/decisions",
@@ -213,12 +224,16 @@ function MissionGroup({
   missionId,
   decisions,
   filtered,
+  activeKey,
+  setActiveKey,
   onFilterToMission,
 }: {
   workspaceId: Id<"workspaces">
   missionId: Id<"missions">
   decisions: Doc<"decisions">[]
   filtered: boolean
+  activeKey: string | null
+  setActiveKey: (key: string) => void
   onFilterToMission: () => void
 }) {
   const detail = useQuery(api.missions.get, { workspaceId, missionId })
@@ -251,7 +266,11 @@ function MissionGroup({
       <ul className="flex flex-col gap-2">
         {decisions.map((decision) => (
           <li key={decision._id}>
-            <DecisionRow decision={decision} />
+            <DecisionRow
+              decision={decision}
+              active={decision._id === activeKey}
+              setActiveKey={setActiveKey}
+            />
           </li>
         ))}
       </ul>
@@ -264,13 +283,26 @@ function MissionGroup({
  * filter and the page cursor into the detail route, which is what lets "back
  * to the queue" return to the page the reviewer was actually on.
  */
-function DecisionRow({ decision }: { decision: Doc<"decisions"> }) {
+function DecisionRow({
+  decision,
+  active,
+  setActiveKey,
+}: {
+  decision: Doc<"decisions">
+  active: boolean
+  setActiveKey: (key: string) => void
+}) {
   return (
     <Link
       to="/decisions/$decisionId"
       params={{ decisionId: decision._id }}
       search={(previous) => previous}
-      className="flex flex-col gap-2 rounded-[min(var(--radius-4xl),24px)] bg-card px-4 py-3 text-card-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
+      data-queue-item={decision._id}
+      onFocus={() => setActiveKey(decision._id)}
+      className={cn(
+        "flex flex-col gap-2 rounded-[min(var(--radius-4xl),24px)] bg-card px-4 py-3 text-card-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30",
+        active && "ring-3 ring-ring/30",
+      )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <KindChip kind={decision.kind} />
