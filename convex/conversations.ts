@@ -1337,6 +1337,20 @@ export const associateProspect = mutation({
       actor: identityKey,
       body: `Associated with ${prospect.companyName} on campaign "${campaign.title}". Takeover stays on until resume.`,
     });
+    // A reply that arrived while the thread was still unassigned is a reply
+    // fact once the lead is named — stamp `lastReplyAt`/`replied` from the
+    // recorded inbound now (P19). Keyed on the message ref, so re-running it
+    // later is a no-op.
+    if (
+      updated.lastInboundMessageRef !== undefined &&
+      updated.lastInboundAt !== undefined
+    ) {
+      await ctx.runMutation(internal.prospects.markReplied, {
+        conversationId: updated._id,
+        messageRef: updated.lastInboundMessageRef,
+        at: updated.lastInboundAt,
+      });
+    }
     return updated;
   },
 });
