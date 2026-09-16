@@ -21,6 +21,7 @@ function HomePage() {
         <HowItWorks />
         <Features />
         <Pricing />
+        <FAQ />
       </div>
     </main>
   )
