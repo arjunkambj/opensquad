@@ -27,11 +27,11 @@ export function Pricing() {
   return (
     <MarketingSection id="pricing">
       <MarketingSectionIntro
-        description="Start free with one campaign and five leads. Every plan keeps a human approving each email, and meetings are still recorded by your team."
+        description="Every plan runs from your inbox with five companies per campaign."
         eyebrow="Pricing"
         icon={Tag01Icon}
         revealViewport={revealViewport}
-        title="Pick the plan that fits how your agency sells."
+        title="Simple pricing."
       />
       <motion.div
         className="grid items-stretch gap-5 lg:grid-cols-3"

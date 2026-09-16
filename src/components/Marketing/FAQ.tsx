@@ -1,4 +1,4 @@
-import { QuestionIcon } from "@hugeicons/core-free-icons"
+import { HelpCircleIcon } from "@hugeicons/core-free-icons"
 import { motion } from "motion/react"
 import {
   MarketingSection,
@@ -23,9 +23,9 @@ export function FAQ() {
   return (
     <MarketingSection id="faq">
       <MarketingSectionIntro
-        description="Short answers on approvals, evidence, limits, and how the agents run."
+        description="Short answers to the things people ask before they sign up."
         eyebrow="FAQ"
-        icon={QuestionIcon}
+        icon={HelpCircleIcon}
         revealViewport={revealViewport}
         title={
           <>
