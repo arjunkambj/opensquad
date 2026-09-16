@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import agentmail from "@agentmail/convex/convex.config";
 import firecrawl from "@firecrawl/firecrawl-convex/convex.config";
 import workflow from "@convex-dev/workflow/convex.config";
+import staticHosting from "@convex-dev/static-hosting/convex.config";
 
 const app = defineApp({
   env: {
@@ -42,8 +43,13 @@ app.use(firecrawl, {
 // and event state — no `jobs` table reproduces it.
 app.use(workflow);
 
-// Later tasks extend this file through the integrator — do not register these
-// components here:
-//   P16       @convex-dev/static-hosting  (app-owned root routing per G4)
+// P16: Static hosting for the Vite `dist` SPA — app-owned root routing per
+// integrations.md §G4. Deliberately NO `httpPrefix`: the component must not
+// own the root URL space (the default setup would also move app routes under
+// `/api`, silently breaking every webhook and worker-bridge URL). The app's
+// convex/http.ts keeps `/worker/*`, `/agentmail/webhook` and `/firecrawl/*`
+// and registers the static GET catch-all LAST via `registerStaticRoutes`;
+// uploads, manifest and file storage stay inside the component.
+app.use(staticHosting);
 
 export default app;

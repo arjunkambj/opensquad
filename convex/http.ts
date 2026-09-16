@@ -1,5 +1,7 @@
 import { httpRouter } from "convex/server";
+import { registerStaticRoutes } from "@convex-dev/static-hosting";
 import { httpAction } from "./_generated/server";
+import { components } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -664,11 +666,61 @@ function sniffMimeType(bytes: Uint8Array): string | null {
   return null;
 }
 
-// --- Reserved sections; owning tasks add their routes here --------------------
-//   /firecrawl/*  P04 (registered): the @firecrawl component SELF-MOUNTS its
-//                 signed webhook at /firecrawl/webhook via `httpPrefix` in
-//                 convex.config.ts — no app route is added here on purpose;
-//                 keeping the prefix free of app routes preserves the G4 table.
-//   /*            P16 — Vite SPA static fallback, registered LAST per G4
+// --- Reserved-path method guards (P16) ----------------------------------------
+// Convex route lookup checks exact (path, method) pairs BEFORE prefix routes.
+// The static catch-all registered below is GET-only, so a bare GET on a
+// reserved webhook/bridge path would still fall through to it and render
+// index.html — a misleading 200 on an API path, and exactly the "swallowed
+// route" failure G4 forbids. Pin every reserved path to an app-owned 405 for
+// GET so NO method on these paths can ever serve the SPA. (POST keeps its
+// exact handlers above; other methods have no prefix route to fall into and
+// already 404.) `/firecrawl/webhook` is component-mounted for POST; the guard
+// only claims the unused GET method on the same path.
+const RESERVED_GET_PATHS = [
+  "/agentmail/webhook",
+  "/firecrawl/webhook",
+  "/worker/claim",
+  "/worker/control/claim",
+  "/worker/control/result",
+  "/worker/runtime-heartbeat",
+  "/worker/heartbeat",
+  "/worker/activity",
+  "/worker/result",
+  "/worker/failure",
+  "/worker/tool",
+  "/worker/artifact",
+] as const;
+
+for (const path of RESERVED_GET_PATHS) {
+  http.route({
+    path,
+    method: "GET",
+    handler: httpAction(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "METHOD_NOT_ALLOWED",
+              message: "this endpoint accepts POST only",
+            },
+          }),
+          {
+            status: 405,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    ),
+  });
+}
+
+// --- Static hosting SPA fallback (P16) ----------------------------------------
+// App-owned root routing (integrations.md §G4): registered LAST, after every
+// app route and method guard above. `registerStaticRoutes` adds a single GET
+// prefix route at "/" that resolves uploaded Vite `dist` assets from the
+// staticHosting component (with SPA fallback to index.html). It cannot shadow
+// the exact POST routes for /worker/*, /agentmail/webhook or the
+// component-mounted /firecrawl/* prefix — the router prefers exact matches
+// and the reserved-path guards above close the remaining GET gap.
+registerStaticRoutes(http, components.staticHosting);
 
 export default http;
