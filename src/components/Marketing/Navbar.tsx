@@ -1,41 +1,188 @@
+import { useUser } from "@hexclave/react"
+import { Menu02Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { motion } from "motion/react"
+import { Suspense, useState } from "react"
 import Logo from "@/components/Layout/Logo"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+
+const navVariants = {
+  animate: {
+    opacity: 1,
+    transition: { duration: 0.5, ease: "easeInOut" as const },
+    y: 0,
+  },
+  initial: { opacity: 0, y: -20 },
+}
+
+export const marketingNavLinks = [
+  { href: "#how-it-works", name: "How it works" },
+  { href: "#features", name: "Features" },
+  { href: "#pricing", name: "Pricing" },
+  { href: "#faq", name: "FAQ" },
+] as const
+
+const navLinkClassName =
+  "rounded-md px-2 py-2 text-sm font-medium text-background/90 transition-colors hover:text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-background"
+
+const sheetLinkClassName =
+  "flex min-h-11 items-center rounded-xl px-3 text-base font-medium text-foreground transition-colors hover:bg-muted"
+
+/** Signed-out actions; also the Suspense fallback while the session resolves. */
+function SignedOutActions() {
+  return (
+    <>
+      <Link
+        className={`hidden sm:inline-flex ${navLinkClassName}`}
+        to="/sign-in"
+      >
+        Sign in
+      </Link>
+      <Button
+        nativeButton={false}
+        render={<Link to="/sign-in" />}
+        size="nav"
+        variant="outline"
+      >
+        Start for free
+      </Button>
+    </>
+  )
+}
+
+function AccountActions() {
+  const user = useUser()
+
+  if (user) {
+    return (
+      <Button
+        nativeButton={false}
+        render={<Link to="/overview" />}
+        size="nav"
+        variant="outline"
+      >
+        Dashboard
+      </Button>
+    )
+  }
+
+  return <SignedOutActions />
+}
+
+function SheetAccountLink({ onNavigate }: { onNavigate: () => void }) {
+  const user = useUser()
+
+  return user ? (
+    <Link className={sheetLinkClassName} onClick={onNavigate} to="/overview">
+      Dashboard
+    </Link>
+  ) : (
+    <Link className={sheetLinkClassName} onClick={onNavigate} to="/sign-in">
+      Sign in
+    </Link>
+  )
+}
 
 export function Navbar() {
-  const [isScrolled, setIsScrolled] = useState(
-    () => typeof window !== "undefined" && window.scrollY > 24,
-  )
-
-  useEffect(() => {
-    const onScroll = () => {
-      const next = window.scrollY > 24
-      setIsScrolled((prev) => (prev === next ? prev : next))
-    }
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const closeMenu = () => setMenuOpen(false)
 
   return (
-    <header
-      className={cn(
-        "sticky z-50 mx-auto rounded-2xl backdrop-blur-lg transition-[width,background-color,transform] duration-300",
-        isScrolled
-          ? "top-1.5 mt-1.5 w-[min(42rem,calc(100%-0.75rem))] translate-y-1 bg-card/95 sm:top-2 sm:mt-2 sm:w-[min(42rem,calc(100%-2rem))]"
-          : "top-1.5 mt-1.5 w-[min(80rem,calc(100%-0.75rem))] bg-background/95 sm:top-3 sm:mt-3 sm:w-[min(80rem,calc(100%-2rem))]",
-      )}
+    <motion.div
+      className="sticky top-4 z-50 mt-4 w-full md:top-6 md:mt-6"
+      initial="initial"
+      variants={navVariants}
+      viewport={{ once: true }}
+      whileInView="animate"
     >
-      <nav className="flex h-11 w-full items-center justify-between gap-4 px-2.5 sm:h-14 sm:gap-6 sm:px-6">
-        <Link aria-label="OpenSquad" className="justify-self-start" to="/">
-          <Logo markOnly markClassName="size-7 sm:size-8" />
-        </Link>
+      <div className="mx-auto flex w-full max-w-7xl justify-center px-4 sm:px-6 lg:px-8">
+        <nav
+          aria-label="Main navigation"
+          className="flex w-full items-center justify-between gap-4 rounded-xl bg-foreground p-1.5 text-background sm:w-fit sm:gap-5"
+        >
+          <Link
+            aria-label="OpenSquad home"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-background"
+            to="/"
+          >
+            <Logo markClassName="size-5" markOnly />
+          </Link>
 
-        <Button nativeButton={false} render={<Link to="/sign-in" />}>
-          Get started
-        </Button>
-      </nav>
-    </header>
+          <ul className="hidden items-center gap-4 sm:flex">
+            {marketingNavLinks.map((link) => (
+              <li key={link.name}>
+                <a className={navLinkClassName} href={link.href}>
+                  {link.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex items-center gap-2">
+            <Sheet onOpenChange={setMenuOpen} open={menuOpen}>
+              <SheetTrigger
+                render={
+                  <button
+                    aria-label="Open navigation menu"
+                    className="flex size-8 items-center justify-center rounded-lg text-background transition-colors hover:bg-background/10 focus-visible:outline-2 focus-visible:outline-background sm:hidden"
+                    type="button"
+                  />
+                }
+              >
+                <HugeiconsIcon icon={Menu02Icon} size={20} strokeWidth={2} />
+              </SheetTrigger>
+              <SheetContent className="w-[min(20rem,88vw)]" side="right">
+                <SheetHeader className="border-b">
+                  <SheetTitle>
+                    <Logo />
+                  </SheetTitle>
+                  <SheetDescription className="sr-only">
+                    Site navigation
+                  </SheetDescription>
+                </SheetHeader>
+
+                <nav className="flex flex-col gap-1 px-3 py-4">
+                  {marketingNavLinks.map((link) => (
+                    <a
+                      className={sheetLinkClassName}
+                      href={link.href}
+                      key={link.name}
+                      onClick={closeMenu}
+                    >
+                      {link.name}
+                    </a>
+                  ))}
+                  <Suspense
+                    fallback={
+                      <Link
+                        className={sheetLinkClassName}
+                        onClick={closeMenu}
+                        to="/sign-in"
+                      >
+                        Sign in
+                      </Link>
+                    }
+                  >
+                    <SheetAccountLink onNavigate={closeMenu} />
+                  </Suspense>
+                </nav>
+              </SheetContent>
+            </Sheet>
+            <Suspense fallback={<SignedOutActions />}>
+              <AccountActions />
+            </Suspense>
+          </div>
+        </nav>
+      </div>
+    </motion.div>
   )
 }
