@@ -1,9 +1,15 @@
+import { useId } from "react"
 import { cn } from "@/lib/utils"
 
 /**
  * The OpenSquad mark: a solid rounded tile with three dots cut out of it,
  * one per AI employee. The dots are masked, not drawn, so the mark reads on
  * light and dark surfaces with a single `currentColor`.
+ *
+ * The mask id is per-instance: several marks render on one page (navbar,
+ * sheet, footer, previews), and a shared literal id left the document holding
+ * duplicate ids — invalid HTML, and every `url(#…)` resolving to whichever
+ * mask mounted first.
  */
 export function LogoMark({
   className,
@@ -12,7 +18,7 @@ export function LogoMark({
   className?: string
   title?: string
 }) {
-  const maskId = "opensquad-mark-mask"
+  const maskId = `opensquad-mark-mask-${useId().replace(/:/g, "")}`
   return (
     <svg
       aria-hidden={title ? undefined : true}

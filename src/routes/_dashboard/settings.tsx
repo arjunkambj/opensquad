@@ -1,8 +1,11 @@
-import { useUser } from "@hexclave/react"
+import { useHexclaveApp, useUser } from "@hexclave/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { optionalOneOf } from "@/lib/search-params"
 import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
-import { SettingsSections } from "@/components/settings/SettingsSections"
+import {
+  SettingsSections,
+  settingsSectionId,
+} from "@/components/settings/SettingsSections"
 import {
   Card,
   CardContent,
@@ -43,37 +46,65 @@ export const Route = createFileRoute("/_dashboard/settings")({
 
 function SettingsPage() {
   const user = useUser()
+  const app = useHexclaveApp()
 
-  if (!user) {
-    return null
-  }
-
+  // The workspace sections must not wait on the user object — a `return null`
+  // here blanked the whole page, which is never a page-level outcome. The
+  // Account card is the only part that needs it.
   return (
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
         title="Settings"
         description="Your profile and workspace preferences."
       />
-      <Card className="max-w-3xl">
-        <CardHeader>
-          <CardTitle>Account</CardTitle>
-          <CardDescription>
-            Your sign-in identity, managed by Hexclave.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="display-name">Name</FieldLabel>
-              <Input
-                id="display-name"
-                readOnly
-                value={user.displayName ?? ""}
-              />
-            </Field>
-          </FieldGroup>
-        </CardContent>
-      </Card>
+      {user ? (
+        <Card
+          className="max-w-3xl scroll-mt-6"
+          id={settingsSectionId("account")}
+        >
+          <CardHeader>
+            <CardTitle>Account</CardTitle>
+            <CardDescription>
+              Your sign-in identity, managed by Hexclave.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              {user.displayName === null ? (
+                // An empty readOnly input renders identical to a loading
+                // skeleton — a box that says nothing about an unset name. The
+                // email is the identity; the hint names what is missing and
+                // where it can actually be changed.
+                <Field>
+                  <FieldLabel>Email</FieldLabel>
+                  <p className="text-sm text-foreground">
+                    {user.primaryEmail ?? "—"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    No display name set.{" "}
+                    <a
+                      className="font-medium text-foreground underline underline-offset-2"
+                      href={app.urls.accountSettings}
+                    >
+                      Manage your account
+                    </a>{" "}
+                    to add one.
+                  </p>
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="display-name">Name</FieldLabel>
+                  <Input
+                    id="display-name"
+                    readOnly
+                    value={user.displayName}
+                  />
+                </Field>
+              )}
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      ) : null}
       <SettingsSections />
     </div>
   )
