@@ -10,3 +10,9 @@ LIVE_GATE_STATUS.json
 P04_AUTH_STATUS.json
 P04_CALLBACK_URL.txt
 .p04gate/
+
+# P21 runtime exercise driver — untracked local state. .p21box/worker.env
+# holds a scoped worker credential (workspace+generation bound); state.json
+# and operations.json persist box ids and provider operation records.
+# Never commit.
+.p21box/
