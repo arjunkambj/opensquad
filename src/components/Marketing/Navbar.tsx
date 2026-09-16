@@ -110,10 +110,14 @@ export function Navbar() {
         >
           <Link
             aria-label="OpenSquad home"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-background"
+            className="flex shrink-0 items-center rounded-lg text-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-background"
             to="/"
           >
-            <Logo markClassName="size-5" markOnly />
+            <Logo
+              className="text-background hover:text-background/80"
+              markClassName="size-8"
+              markOnly
+            />
           </Link>
 
           <ul className="hidden items-center gap-4 sm:flex">

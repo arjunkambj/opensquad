@@ -1,6 +1,7 @@
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
+import { LogoMark } from "@/components/Layout/Logo"
 import { cn } from "@/lib/utils"
 
 /**
@@ -16,24 +17,38 @@ export function MarketingChip({
   href,
   tone = "default",
 }: {
-  icon: IconSvgElement
+  /** A section icon, or "logo" to use the OpenSquad mark as the tile. */
+  icon: IconSvgElement | "logo"
   label: string
   href?: string
   tone?: "default" | "inverted"
 }) {
   const content = (
     <>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-lg",
-          tone === "inverted"
-            ? "bg-background text-foreground"
-            : "bg-foreground text-background",
-        )}
-      >
-        <HugeiconsIcon className="size-[1.125rem]" icon={icon} strokeWidth={2} />
-      </span>
+      {icon === "logo" ? (
+        <LogoMark
+          className={cn(
+            "size-7",
+            tone === "inverted" ? "text-background" : "text-foreground",
+          )}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-lg",
+            tone === "inverted"
+              ? "bg-background text-foreground"
+              : "bg-foreground text-background",
+          )}
+        >
+          <HugeiconsIcon
+            className="size-[1.125rem]"
+            icon={icon}
+            strokeWidth={2}
+          />
+        </span>
+      )}
       <span className="inline-flex h-7 w-fit shrink-0 items-center justify-center gap-1 rounded-lg bg-secondary px-3 py-1 text-xs font-medium whitespace-nowrap text-secondary-foreground">
         {label}
         {href ? (
