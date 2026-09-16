@@ -1,6 +1,6 @@
 import {
   CheckListIcon,
-  CheckmarkCircle02Icon,
+  ArrowUpRight01Icon,
   DashboardSquare01Icon,
   InboxIcon,
   Link01Icon,
@@ -11,6 +11,7 @@ import {
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
 import Logo from "@/components/Layout/Logo"
+import { CompanyMark } from "@/components/Marketing/CompanyMark"
 import { cn } from "@/lib/utils"
 
 const navItems: {
@@ -40,7 +41,7 @@ const evidence = [
 const prospectFacts = [
   { label: "Stage", value: "Draft ready" },
   { label: "Owner", value: "Researcher" },
-  { label: "Contact", value: "Maya Chen, Ops" },
+  { label: "Contact", value: "Sienna Whitlock, Ops" },
   { label: "Next action", value: "Approve first email" },
 ]
 
@@ -87,7 +88,7 @@ export function HeroApprovalPreview() {
               className={cn(
                 "flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm",
                 item.active
-                  ? "bg-illustration font-medium text-foreground"
+                  ? "bg-muted font-medium text-foreground"
                   : "text-muted-foreground",
               )}
               key={item.label}
@@ -114,7 +115,7 @@ export function HeroApprovalPreview() {
               <HugeiconsIcon className="size-3.5" icon={Search01Icon} />
               Search leads
             </span>
-            <span className="rounded-md bg-illustration px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
               Illustrative preview
             </span>
           </div>
@@ -130,23 +131,19 @@ export function HeroApprovalPreview() {
                     Prepared by Outreach for Northwind Studio
                   </p>
                 </div>
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-illustration px-2.5 py-1 text-xs font-medium">
-                  <HugeiconsIcon
-                    className="size-3.5"
-                    icon={CheckmarkCircle02Icon}
-                  />
+                <span className="inline-flex items-center rounded-lg bg-muted px-2.5 py-1 text-xs font-medium">
                   Ready to send
                 </span>
               </div>
 
-              <div className="flex flex-col overflow-hidden rounded-xl bg-illustration">
-                <div className="flex flex-col gap-1.5 bg-muted/60 px-4 py-3 text-xs">
+              <div className="flex flex-col overflow-hidden rounded-xl bg-muted p-1.5">
+                <div className="flex flex-col gap-1.5 px-3 py-2.5 text-xs">
                   <div className="flex gap-2">
                     <span className="w-14 shrink-0 text-muted-foreground">
                       To
                     </span>
                     <span className="truncate">
-                      Maya Chen &lt;maya@northwind.example.com&gt;
+                      Sienna Whitlock &lt;sienna@northwind.example.com&gt;
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -158,8 +155,8 @@ export function HeroApprovalPreview() {
                     </span>
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 px-4 py-4 text-sm leading-relaxed">
-                  <p>Hi Maya,</p>
+                <div className="flex flex-col gap-3 rounded-lg bg-background px-4 py-4 text-sm leading-relaxed">
+                  <p>Hi Sienna,</p>
                   <p>
                     I saw Northwind is launching a new booking flow this
                     quarter. We help studios ship booking pages that convert,
@@ -169,9 +166,9 @@ export function HeroApprovalPreview() {
                     Would a short call next week be useful? Happy to share two
                     recent examples first.
                   </p>
-                  <p>Best, Sam</p>
+                  <p>Best, Arjun</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/60 px-4 py-2 font-mono text-[10px] text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 font-mono text-[10px] text-muted-foreground">
                   <span>Revision 2</span>
                   <span>sha256 · 9f3c…a41e</span>
                   <span className="hidden sm:inline">
@@ -187,7 +184,7 @@ export function HeroApprovalPreview() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {evidence.map((item) => (
                     <div
-                      className="flex items-start gap-2.5 rounded-xl bg-illustration p-3"
+                      className="flex items-start gap-2.5 rounded-xl bg-muted p-3"
                       key={item.domain}
                     >
                       <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-illustration-accent text-illustration-accent-foreground">
@@ -208,11 +205,11 @@ export function HeroApprovalPreview() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <MockButton tone="primary">
+                  Approve and send
                   <HugeiconsIcon
                     className="size-3.5"
-                    icon={CheckmarkCircle02Icon}
+                    icon={ArrowUpRight01Icon}
                   />
-                  Approve and send
                 </MockButton>
                 <MockButton>Request changes</MockButton>
                 <MockButton>Reject</MockButton>
@@ -220,11 +217,9 @@ export function HeroApprovalPreview() {
             </div>
 
             <div className="hidden w-60 shrink-0 flex-col gap-3 lg:flex">
-              <div className="flex flex-col gap-3 rounded-xl bg-illustration p-4">
+              <div className="flex flex-col gap-3 rounded-xl bg-muted p-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-illustration-accent font-heading text-sm font-semibold text-illustration-accent-foreground">
-                    NS
-                  </span>
+                  <CompanyMark className="size-9 rounded-lg" company="Northwind Studio" />
                   <div className="flex min-w-0 flex-col">
                     <span className="truncate text-sm font-medium">
                       Northwind Studio
@@ -248,7 +243,7 @@ export function HeroApprovalPreview() {
                   ))}
                 </div>
               </div>
-              <div className="flex flex-col gap-2 rounded-xl bg-illustration p-4">
+              <div className="flex flex-col gap-2 rounded-xl bg-muted p-4">
                 <span className="text-xs font-medium">Campaign</span>
                 <span className="text-xs text-muted-foreground">
                   Studios launching booking flows
@@ -260,7 +255,7 @@ export function HeroApprovalPreview() {
                         "h-1.5 flex-1 rounded-full",
                         index < 3
                           ? "bg-illustration-accent"
-                          : "bg-background",
+                          : "bg-border",
                       )}
                       key={index}
                     />

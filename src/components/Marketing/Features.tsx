@@ -4,7 +4,6 @@ import {
   Layers01Icon,
   Link01Icon,
   PauseIcon,
-  Tick02Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
@@ -80,7 +79,7 @@ function SourceBackedResearch() {
         </div>
       </div>
       <div className="bg-muted px-5 py-3 text-xs text-muted-foreground">
-        3 reasons · 3 sources · contact found: Maya Chen, Ops
+        3 reasons · 3 sources · contact found: Sienna Whitlock, Ops
       </div>
     </div>
   )
@@ -93,10 +92,10 @@ function ExactDraftApproval() {
       <PanelHeader meta="Outreach · draft" title="New email" />
       <div className="p-4 pt-3">
         <div className="overflow-hidden rounded-xl bg-muted p-1.5">
-          <div className="flex flex-col gap-1.5 px-3 py-2.5 text-xs">
+          <div className="flex flex-col gap-1 px-3 py-2 text-xs">
             {[
-              { label: "From", value: "sam@yourstudio.example" },
-              { label: "To", value: "maya@northwind.example.com" },
+              { label: "From", value: "arjun@yourstudio.example" },
+              { label: "To", value: "sienna@northwind.example.com" },
               { label: "Subject", value: "Your new booking flow" },
             ].map(({ label, value }) => (
               <div className="flex gap-3" key={label}>
@@ -107,20 +106,20 @@ function ExactDraftApproval() {
               </div>
             ))}
           </div>
-          <div className="flex flex-col gap-3 rounded-lg bg-illustration px-4 py-4 text-sm leading-relaxed">
-            <p>Hi Maya,</p>
+          <div className="flex flex-col gap-2 rounded-lg bg-illustration px-4 py-3 text-sm leading-snug">
+            <p>Hi Sienna,</p>
             <p>
               Saw Northwind is moving to online bookings this quarter, and the
               current form breaks on mobile. We build booking pages for
               studios, usually in three weeks.
             </p>
             <p>Worth a short call next week?</p>
-            <p>Sam</p>
+            <p>Arjun</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-3 px-3 py-2">
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-illustration-accent px-3 py-1.5 text-xs font-medium text-illustration-accent-foreground">
-              <HugeiconsIcon className="size-3.5" icon={Tick02Icon} />
               OK, send
+              <HugeiconsIcon className="size-3.5" icon={ArrowUpRight01Icon} />
             </span>
             <span className="text-xs text-muted-foreground">Edit</span>
             <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -145,7 +144,7 @@ function InboxTakeover() {
             Interesting, timing is good. Could we talk next week?
           </p>
           <span className="text-xs text-muted-foreground">
-            Maya Chen · 10:14
+            Sienna Whitlock · 10:14
           </span>
         </div>
         <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs">
@@ -162,8 +161,8 @@ function InboxTakeover() {
             easier.
           </p>
           <span className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-illustration-accent px-3 py-1.5 text-xs font-medium text-illustration-accent-foreground">
-            <HugeiconsIcon className="size-3.5" icon={Tick02Icon} />
             OK, send
+            <HugeiconsIcon className="size-3.5" icon={ArrowUpRight01Icon} />
           </span>
         </div>
       </div>
@@ -215,7 +214,7 @@ function MissionControlBoard() {
       </div>
       <div className="flex flex-col gap-2 bg-muted px-5 py-3 text-xs text-muted-foreground">
         <div className="flex justify-between gap-3">
-          <span>Reply from Maya Chen, Northwind</span>
+          <span>Reply from Sienna Whitlock, Northwind</span>
           <span>Today 10:14</span>
         </div>
         <div className="flex justify-between gap-3">

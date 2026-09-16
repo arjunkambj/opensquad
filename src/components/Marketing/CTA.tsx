@@ -22,7 +22,7 @@ export function CTA() {
         viewport={revealViewport}
         whileInView="animate"
       >
-        <div className="flex flex-col items-start justify-center gap-5 p-8 sm:p-14 lg:p-20 lg:py-28">
+        <div className="flex flex-col items-start justify-center gap-5 p-8 sm:p-14 lg:p-20 lg:py-24">
           <motion.p
             className="-mb-4 text-sm text-muted-foreground"
             variants={revealItemVariants}
@@ -58,7 +58,7 @@ export function CTA() {
         </div>
         <motion.div
           aria-hidden="true"
-          className="relative min-h-80 overflow-hidden md:min-h-[560px]"
+          className="relative min-h-80 overflow-hidden md:min-h-[500px]"
           variants={revealItemVariants}
         >
           <img
@@ -68,7 +68,7 @@ export function CTA() {
             loading="lazy"
             src="/marketing/hero-landscape.png"
           />
-          <div className="absolute top-14 left-14 w-[calc(100%+6rem)] rounded-t-marketing-preview bg-background/40 p-3 backdrop-blur-md sm:top-20 sm:left-20">
+          <div className="absolute top-8 left-4 w-[calc(100%-1rem)] rounded-t-marketing-preview bg-background/40 p-3 backdrop-blur-md sm:top-20 sm:left-20 sm:w-[calc(100%+6rem)]">
             <CtaPreview />
           </div>
         </motion.div>
