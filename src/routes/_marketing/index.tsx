@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { FAQ } from "@/components/Marketing/FAQ"
 import { Features } from "@/components/Marketing/Features"
 import { Hero } from "@/components/Marketing/Hero"
 import { HowItWorks } from "@/components/Marketing/HowItWorks"
+import { Pricing } from "@/components/Marketing/Pricing"
 import { WorksWith } from "@/components/Marketing/WorksWith"
 
 export const Route = createFileRoute("/_marketing/")({
@@ -18,6 +20,7 @@ function HomePage() {
         </div>
         <HowItWorks />
         <Features />
+        <Pricing />
       </div>
     </main>
   )
