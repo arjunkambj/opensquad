@@ -1,5 +1,7 @@
 import {
+  Briefcase01Icon,
   Home01Icon,
+  InboxIcon,
   RoboticIcon,
   Settings02Icon,
   UserCheck01Icon,
@@ -8,6 +10,8 @@ import type { IconSvgElement } from "@hugeicons/react"
 
 export type MenuHref =
   | "/decisions"
+  | "/inbox"
+  | "/leads"
   | "/overview"
   | "/employees"
   | "/settings"
@@ -23,15 +27,26 @@ export type MenuCategory = {
   items: MenuItem[]
 }
 
-// The work band, in §3 order. Leads and Inbox belong ahead of Decisions but
-// their routes do not exist yet, and an item is added in the same change as
-// its route — never before, or the nav promises a page that 404s.
+// The work band, in §3 order: Leads, Inbox, Decisions, Mission Control. Each
+// item lands in the same change as its route — never before, or the nav
+// promises a page that 404s. `/leads` is the labelled placeholder until P19
+// ships the pipeline; `/prospects` is a redirect, not a second entry.
 //
-// The Decisions count badge is NOT declared here, and deliberately so: it
-// lives in `AppSidebar.tsx`, which reads it through the same
-// `useOpenDecisionCount` hook the home attention block uses, with identical
-// arguments. Two sources for one count is a defect, so there is one call.
+// Neither count badge is declared here, and deliberately so: Decisions' badge
+// comes from `useOpenDecisionCount` and Inbox's from `useInboxAttention` —
+// the same hook and arguments the attention surfaces use, one call each. Two
+// sources for one count is a defect.
 export const sidebarMainItems: MenuItem[] = [
+  {
+    name: "Leads",
+    href: "/leads",
+    icon: Briefcase01Icon,
+  },
+  {
+    name: "Inbox",
+    href: "/inbox",
+    icon: InboxIcon,
+  },
   {
     name: "Decisions",
     href: "/decisions",
