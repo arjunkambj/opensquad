@@ -68,7 +68,7 @@ export function MissionCard({
       ref={ref}
       to="/overview/missions/$missionId"
       params={{ missionId: mission._id }}
-      search={(previous) => previous}
+      search={true}
       onClick={() => remember(mission._id, viewKey)}
       className="flex flex-col gap-2 rounded-[min(var(--radius-4xl),24px)] bg-card px-4 py-3 text-card-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
     >
