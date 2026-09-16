@@ -32,7 +32,7 @@ export function MarketingChip({
             : "bg-foreground text-background",
         )}
       >
-        <HugeiconsIcon className="size-4" icon={icon} strokeWidth={1.75} />
+        <HugeiconsIcon className="size-[1.125rem]" icon={icon} strokeWidth={2} />
       </span>
       <span className="inline-flex h-7 w-fit shrink-0 items-center justify-center gap-1 rounded-lg bg-secondary px-3 py-1 text-xs font-medium whitespace-nowrap text-secondary-foreground">
         {label}

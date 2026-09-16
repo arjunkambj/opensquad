@@ -25,7 +25,6 @@ const navVariants = {
 }
 
 export const marketingNavLinks = [
-  { href: "#how-it-works", name: "How it works" },
   { href: "#features", name: "Features" },
   { href: "#pricing", name: "Pricing" },
   { href: "#faq", name: "FAQ" },
@@ -53,7 +52,7 @@ function SignedOutActions() {
         size="nav"
         variant="outline"
       >
-        Start for free
+        Get started
       </Button>
     </>
   )
@@ -107,7 +106,7 @@ export function Navbar() {
       <div className="mx-auto flex w-full max-w-7xl justify-center px-4 sm:px-6 lg:px-8">
         <nav
           aria-label="Main navigation"
-          className="flex w-full items-center justify-between gap-4 rounded-xl bg-foreground p-1.5 text-background sm:w-fit sm:gap-5"
+          className="marketing-ink flex w-full items-center justify-between gap-4 rounded-xl p-1.5 sm:w-fit sm:gap-5"
         >
           <Link
             aria-label="OpenSquad home"
