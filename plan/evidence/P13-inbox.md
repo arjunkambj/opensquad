@@ -248,6 +248,28 @@ rendering, focus and keyboard behavior, which the CLI cannot see.
 - No overdue-next-action query exists — the overview attention block
   says so rather than rendering a count.
 
+## Merge surface with `main` (moved after the fork)
+
+`main` advanced to `4abcd5b` ("merge: qa-web frontend fixes") while this
+branch was open. Two of its commits overlap this lane:
+
+- `8611ec6` added a queue-local `onQueueKeyDown` j/k handler to
+  `DecisionQueue`. This branch replaces it with the shared
+  `use-queue-navigation` hook — a strict superset (same keys, plus
+  `detailOpen` tracking and focus restoration to the originating row).
+  Take this branch's `DecisionQueue` wholesale.
+- `a193a8f` kept the stacked settings sections and added element-id +
+  `scrollIntoView` deep links, plus an account card fix using the
+  **deprecated** `app.urls.accountSettings`. This branch implements the
+  lane spec instead — `?section=` selects and renders one section (nav
+  marks owner-only sections before opening) and the Account card links
+  `/handler/$` `account-settings`, which `HexclaveHandler` maps to its
+  real `AccountSettings` page in-app (verified in
+  `components-page/hexclave-handler-client.js:40`). Conflict files:
+  `src/routes/_dashboard/settings.tsx`,
+  `src/components/settings/SettingsSections.tsx` — the integrator should
+  take this branch's versions (theirs are interim scroll behavior).
+
 ## Known limitations / deferrals
 
 - Browser session evidence requires the verification owner's Hexclave
