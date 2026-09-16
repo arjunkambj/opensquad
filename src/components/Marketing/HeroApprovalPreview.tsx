@@ -32,8 +32,8 @@ const evidence = [
     domain: "northwind.example.com",
   },
   {
-    label: "Hiring a product designer for the web team",
-    domain: "jobs.example.org",
+    label: "Current booking form breaks on mobile",
+    domain: "northwind.example.com/book",
   },
 ]
 
@@ -57,7 +57,7 @@ function MockButton({
         "inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-medium whitespace-nowrap",
         tone === "primary"
           ? "bg-primary text-primary-foreground"
-          : "border border-border bg-background",
+          : "bg-muted",
       )}
     >
       {children}
@@ -73,7 +73,7 @@ export function HeroApprovalPreview() {
   return (
     <div
       aria-label="Illustrative preview of an OpenSquad draft approval screen, where a human reviews an exact email before it sends"
-      className="relative w-full overflow-hidden rounded-2xl bg-background text-foreground shadow-foreground/10 shadow-xl select-none sm:min-h-[600px]"
+      className="relative w-full overflow-hidden rounded-2xl bg-background text-foreground select-none sm:min-h-[600px]"
       role="img"
     >
       <div aria-hidden="true" className="flex h-full">
@@ -110,7 +110,7 @@ export function HeroApprovalPreview() {
             <span className="truncate text-xs font-medium">
               Draft approval
             </span>
-            <span className="ml-auto hidden items-center gap-2 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
+            <span className="ml-auto hidden items-center gap-2 rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
               <HugeiconsIcon className="size-3.5" icon={Search01Icon} />
               Search leads
             </span>
@@ -139,8 +139,8 @@ export function HeroApprovalPreview() {
                 </span>
               </div>
 
-              <div className="flex flex-col rounded-xl border border-border">
-                <div className="flex flex-col gap-1.5 border-b border-border px-4 py-3 text-xs">
+              <div className="flex flex-col overflow-hidden rounded-xl bg-illustration">
+                <div className="flex flex-col gap-1.5 bg-muted/60 px-4 py-3 text-xs">
                   <div className="flex gap-2">
                     <span className="w-14 shrink-0 text-muted-foreground">
                       To
@@ -171,7 +171,7 @@ export function HeroApprovalPreview() {
                   </p>
                   <p>Best, Sam</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-4 py-2 font-mono text-[10px] text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/60 px-4 py-2 font-mono text-[10px] text-muted-foreground">
                   <span>Revision 2</span>
                   <span>sha256 · 9f3c…a41e</span>
                   <span className="hidden sm:inline">
@@ -220,7 +220,7 @@ export function HeroApprovalPreview() {
             </div>
 
             <div className="hidden w-60 shrink-0 flex-col gap-3 lg:flex">
-              <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
+              <div className="flex flex-col gap-3 rounded-xl bg-illustration p-4">
                 <div className="flex items-center gap-2.5">
                   <span className="flex size-9 items-center justify-center rounded-lg bg-illustration-accent font-heading text-sm font-semibold text-illustration-accent-foreground">
                     NS

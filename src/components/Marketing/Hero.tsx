@@ -1,13 +1,16 @@
-import {
-  ArrowUpRight01Icon,
-  UserCheck01Icon,
-} from "@hugeicons/core-free-icons"
+import { ArrowUpRight01Icon, MailSend01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion, useReducedMotion } from "motion/react"
 import { HeroApprovalPreview } from "@/components/Marketing/HeroApprovalPreview"
 import { MarketingChip } from "@/components/Marketing/MarketingChip"
 import { Button } from "@/components/ui/button"
+
+/** Bring your own Codex or Claude plan; the squad runs on it. */
+const providers = [
+  { name: "Codex", logo: "/marketing/logos/openai.svg" },
+  { name: "Claude", logo: "/marketing/logos/claude.svg" },
+] as const
 
 export function Hero() {
   const reduceMotion = useReducedMotion()
@@ -38,8 +41,8 @@ export function Hero() {
           variants={heroItemVariants}
         >
           <MarketingChip
-            icon={UserCheck01Icon}
-            label="Every email approved by a human"
+            icon={MailSend01Icon}
+            label="Outbound that runs while you work"
           />
         </motion.div>
         <motion.h1
@@ -47,42 +50,8 @@ export function Hero() {
           custom={1}
           variants={heroItemVariants}
         >
-          <span className="flex flex-wrap items-center gap-x-word gap-y-line">
-            Your
-            <span className="inline-flex items-center gap-glyph">
-              <svg
-                aria-hidden="true"
-                className="size-[0.8em] shrink-0 -rotate-3"
-                fill="none"
-                viewBox="0 0 64 64"
-              >
-                <circle
-                  cx="22"
-                  cy="24"
-                  r="8"
-                  stroke="currentColor"
-                  strokeWidth="6"
-                />
-                <circle
-                  cx="42"
-                  cy="24"
-                  r="8"
-                  stroke="currentColor"
-                  strokeWidth="6"
-                />
-                <circle
-                  cx="32"
-                  cy="42"
-                  r="8"
-                  stroke="currentColor"
-                  strokeWidth="6"
-                />
-              </svg>
-              AI
-            </span>
-            Sales Squad
-          </span>
-          <span className="block">You Approve Every Word</span>
+          <span className="block">Your AI Sales Squad</span>
+          <span className="block">Does the research, finds the leads, books the calls.</span>
         </motion.h1>
         <motion.div
           className="flex flex-col items-start gap-6"
@@ -90,18 +59,19 @@ export function Hero() {
           variants={heroItemVariants}
         >
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-            Scout finds companies, Researcher backs every opportunity with
-            sources, and Outreach drafts the exact email. Nothing sends until
-            you approve it.
+            Give it a campaign. Scout finds the companies, Researcher reads up
+            on them, Outreach writes and sends the emails from your inbox, and
+            replies come back to one place. You get a quick heads-up when
+            something needs your OK.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              aria-label="Start OpenSquad for free"
+              aria-label="Get started with OpenSquad"
               nativeButton={false}
               render={<Link to="/sign-in" />}
               size="cta"
             >
-              Start For Free
+              Get started
               <HugeiconsIcon
                 aria-hidden="true"
                 data-icon="inline-end"
@@ -112,14 +82,38 @@ export function Hero() {
               nativeButton={false}
               render={<a href="#how-it-works" />}
               size="cta"
-              variant="outline"
+              variant="secondary"
             >
               See how it works
             </Button>
           </div>
         </motion.div>
+        <motion.div
+          className="mt-4 flex flex-col items-start gap-3"
+          custom={3}
+          variants={heroItemVariants}
+        >
+          <p className="text-sm text-muted-foreground">
+            Works with your existing subscription
+          </p>
+          <ul aria-label="Providers" className="flex flex-wrap gap-2">
+            {providers.map((provider) => (
+              <li key={provider.name}>
+                <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-secondary px-3 text-xs font-medium text-secondary-foreground">
+                  <img
+                    alt=""
+                    className="size-4"
+                    decoding="async"
+                    src={provider.logo}
+                  />
+                  {provider.name}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
       </div>
-      <motion.div custom={3} variants={heroItemVariants}>
+      <motion.div custom={4} variants={heroItemVariants}>
         <div className="relative overflow-hidden rounded-2xl bg-accent px-3 pt-12 sm:h-[560px] sm:px-12 sm:pt-16 lg:h-[640px]">
           <img
             alt=""
