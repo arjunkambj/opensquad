@@ -50,11 +50,11 @@ function AuthPanel() {
 
       <div className="relative flex max-w-md flex-col gap-3">
         <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
-          Your AI sales squad, supervised by you
+          Your AI sales squad
         </h2>
         <p className="text-sm leading-6 text-muted-foreground">
-          Scout, Researcher and Outreach find, research and draft — nothing
-          sends until you approve the exact words.
+          Finds leads, does the research, sends the emails from your inbox.
+          You get a heads-up when something needs your OK.
         </p>
       </div>
     </aside>

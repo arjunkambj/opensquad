@@ -1,13 +1,13 @@
 import {
   EyeIcon,
   EyeOffIcon,
-  GoogleIcon,
   LockPasswordIcon,
   Mail01Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp } from "@hexclave/react"
 import { useEffect, useRef, useState } from "react"
+import { GoogleMark } from "@/components/auth/GoogleMark"
 import { Button } from "@/components/ui/button"
 import {
   InputGroup,
@@ -204,6 +204,7 @@ export function SignInForm() {
       {step === "email" ? (
         <div className="flex flex-col gap-4">
           <Button
+            className="border-border bg-background text-foreground shadow-[0_1px_1px_rgba(0,0,0,0.03),0_4px_12px_-6px_rgba(0,0,0,0.06)] hover:bg-background hover:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_6px_16px_-6px_rgba(0,0,0,0.08)]"
             type="button"
             variant="outline"
             size="lg"
@@ -213,7 +214,7 @@ export function SignInForm() {
             {isGoogleLoading ? (
               <Spinner data-icon="inline-start" />
             ) : (
-              <HugeiconsIcon icon={GoogleIcon} data-icon="inline-start" />
+              <GoogleMark className="size-4" data-icon="inline-start" />
             )}
             {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
           </Button>
