@@ -212,6 +212,28 @@ async function resolveDraftDecision(
       "conversation context changed since this draft was written — revise or redraft first",
     );
   }
+  // §4.3: a booking-linked draft is approved ONLY while the proposal it names
+  // is still live at the exact version the content was written against. A
+  // confirmed/rescheduled/cancelled booking means the mailed times or link
+  // are no longer the offer on the table — approving this revision would
+  // authorize content that no longer matches the agreement. The dispatch
+  // preflight runs the same check a third time before any wire call.
+  if (draft.bookingId !== undefined) {
+    const booking = await ctx.db.get("bookings", draft.bookingId);
+    if (booking === null || booking.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "booking not found");
+    }
+    if (
+      booking.state !== "proposed" ||
+      booking.version !== draft.bookingVersion ||
+      booking.prospectId !== conversation.prospectId
+    ) {
+      throw domainError(
+        "CONFLICT",
+        `linked booking ${booking._id} is ${booking.state} at version ${booking.version}; this draft proposed it at version ${draft.bookingVersion} — draft a fresh proposal`,
+      );
+    }
+  }
 
   const now = Date.now();
   const approvalId = await ctx.db.insert("approvals", {

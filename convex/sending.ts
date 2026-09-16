@@ -117,6 +117,9 @@ export const SEND_BLOCK_CODES = [
   "outside_window",
   "send_limit_reached",
   "workflow_superseded",
+  /** §4.3 (P19): the draft offers a booking proposal whose linked booking is
+   *  no longer `proposed` at the recorded version — the offer changed. */
+  "booking_not_current",
 ] as const;
 
 export type SendBlockCode = (typeof SEND_BLOCK_CODES)[number];
@@ -373,6 +376,32 @@ async function evaluateSendGates(
       "brief_changed",
       `campaign brief is v${campaign.briefVersion}; draft was written against v${draft.campaignBriefVersion}`,
     );
+  }
+
+  // --- booking link (§4.3, P19) ------------------------------------------
+  // A booking-linked draft is sendable only while the proposal it names is
+  // still live at the exact version the content was written against. This is
+  // the third evaluation of the same check (install, approval, dispatch): a
+  // confirm/reschedule/cancel that lands after approval must catch the send
+  // here, because the mailed times or link would no longer be the offer.
+  if (draft.bookingId !== undefined) {
+    const booking = await ctx.db.get("bookings", draft.bookingId);
+    if (booking === null || booking.workspaceId !== workspace._id) {
+      return block(
+        "booking_not_current",
+        "the linked booking no longer exists in this workspace",
+      );
+    }
+    if (
+      booking.state !== "proposed" ||
+      booking.version !== draft.bookingVersion ||
+      booking.prospectId !== conversation.prospectId
+    ) {
+      return block(
+        "booking_not_current",
+        `linked booking is ${booking.state} at version ${booking.version}; this draft proposed it at version ${draft.bookingVersion}`,
+      );
+    }
   }
 
   // --- conversation state ----------------------------------------------
@@ -1477,6 +1506,15 @@ export const recordSendOutcome = internalMutation({
         attempt,
         missionId: draft.missionId,
         threadId,
+        at: now,
+      });
+      // Same transaction again (§8 step 5, P19): the provider's acceptance is
+      // the ONLY fact that may stamp `lastContactedAt` and advance the lead —
+      // `contacted` for a plain send, `booking_proposed` when this exact
+      // draft carries a live booking link. Non-throwing by contract: a broken
+      // association records less, never rolls back the acceptance.
+      await ctx.runMutation(internal.prospects.markSendAccepted, {
+        sendAttemptId: attempt._id,
         at: now,
       });
       await settle("committed", messageId);
@@ -2844,6 +2882,72 @@ export const cancelParkedConversationAttempts = internalMutation({
       }
     }
     return { cancelled: parked.length };
+  },
+});
+
+/**
+ * Per-draft parked-cancel — the booking lifecycle's precise half of
+ * `cancelParkedConversationAttempts`. Retiring the drafts that offer a
+ * rescheduled or cancelled booking must not touch OTHER revisions' parked
+ * intents on the same thread.
+ */
+export const cancelDraftParkedAttempts = internalMutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    draftId: v.id("drafts"),
+    reason: v.string(),
+  },
+  returns: v.object({ cancelled: v.number() }),
+  handler: async (ctx, args) => {
+    const draft = await ctx.db.get("drafts", args.draftId);
+    if (draft === null || draft.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "draft not found");
+    }
+    const parked = await ctx.db
+      .query("sendAttempts")
+      .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
+      .collect();
+    const now = Date.now();
+    let cancelled = 0;
+    for (const attempt of parked) {
+      if (attempt.state !== "reserved") {
+        continue;
+      }
+      await ctx.db.patch("sendAttempts", attempt._id, {
+        state: "cancelled",
+        error: {
+          message: args.reason.slice(0, 200),
+          at: now,
+          reason: "superseded",
+        },
+        updatedAt: now,
+      });
+      await releaseCoverageLinks(ctx, attempt);
+      const reservation = await ctx.runMutation(
+        internal.usage.getByOperationKey,
+        {
+          workspaceId: args.workspaceId,
+          operationKey: attempt.operationKey,
+        },
+      );
+      if (reservation !== null && reservation.state === "reserved") {
+        await ctx.runMutation(internal.usage.release, {
+          workspaceId: args.workspaceId,
+          operationKey: attempt.operationKey,
+        });
+      }
+      await recordActivityEvent(ctx, {
+        workspaceId: args.workspaceId,
+        missionId: draft.missionId,
+        kind: "send_attempt_cancelled",
+        summary: `Parked send intent retired — ${args.reason.slice(0, 160)}`,
+        actor: "workflow",
+        dedupeKey: `sendattempt:${attempt._id}:cancelled`,
+        conversationId: attempt.conversationId,
+      });
+      cancelled += 1;
+    }
+    return { cancelled };
   },
 });
 
