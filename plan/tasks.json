@@ -354,7 +354,7 @@
       "title": "Sales pipeline execution and source-backed research",
       "tier": "core",
       "status": "in_progress",
-      "owner": "subagent-P21",
+      "owner": "subagent-P21-runtime",
       "dependsOn": [
         "P07",
         "P08",
@@ -380,14 +380,17 @@
         "NOT DONE. This deployment has no connected Codex runtime and no managed Codex login, so NO MODEL EXECUTES A REQUEST. Every worker request was claimed over the real bridge by a driver script standing in for the daemon, with the model's own words supplied explicitly and labelled as such wherever they appear. V12 step 1's full Scout to Researcher to Outreach chain therefore remains deferred, as does any claim that the role templates make a real model behave well. What is proven is the complete backend path on either side of the model.",
         "IN SCOPE FOR P09 AND DEFERRED - P04 is blocked on the owner-deferred Apollo OAuth grant: every discover and enrich step. No tools/list has ever been observed against the Apollo MCP server, so G2 item 2's permitted Apollo tool names cannot be pinned, and writing guessed names into an allowlist would be a fabricated gate. The seams ship and are exercised: prospects.importCampaignProspects accepts a candidate array from any confirmed source, and prospects.applyContactEnrichment already refuses everything the gate requires it to refuse.",
         "REPORTED NOT TAKEN, outside the declared write surface: the vBranchCompletion.prospectId and ActivityInput.prospectId retype, with the four-step sequencing a later card must follow recorded in the evidence file - vBranchCompletion is a durable workflow event validator, so changing it while a parent is parked on awaitEvent invalidates that journal. artifacts.prospectId stays a string permanently because it crosses the worker trust boundary as the x-prospect-id upload header."
-      ]
+      ],
+      "branch": "opensquad/P21-runtime",
+      "worktree": "../opensquad-worktrees/P21-runtime",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P09",
       "title": "Apollo discovery and contact enrichment",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P21-runtime",
       "dependsOn": [
         "P04",
         "P21"
@@ -404,7 +407,10 @@
         "convex/workflows/sales.ts",
         "plan/evidence/P09.md"
       ],
-      "evidence": []
+      "evidence": [],
+      "branch": "opensquad/P21-runtime",
+      "worktree": "../opensquad-worktrees/P21-runtime",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P10",
@@ -454,7 +460,7 @@
       "title": "Shared inbox and reply workflows",
       "tier": "core",
       "status": "in_progress",
-      "owner": "subagent-P11",
+      "owner": "subagent-P11-gate",
       "dependsOn": [
         "P07",
         "P10"
@@ -476,7 +482,10 @@
         "NOT DONE. The reply path - associateProspect, resume, the reply workflow end to end, and V16.3 - is still unrun. Its recorded blocker was FALSE: an audit demonstrated that `npx convex run --identity` authenticates against this deployment today, returning real output from conversations.attentionCounts on the same fixture workspace the evidence file used. An unattempted gate must not be recorded as a blocked one. The authenticated re-exercise was launched and stopped before completing; resume it there.",
         "INTEGRATOR ERROR, recorded so it is not repeated: `npx convex codegen` does NOT push functions - its own help says so. P11 and P12 were both instructed to use it and forbidden from deploying, so neither track could exercise anything against a deployment until `npx convex dev --once` was run afterwards. That cost Wave A its gate evidence and is not a track failure.",
         "BUG FOUND AND FIXED at a627376: onMessageReceived declared thread: v.any(), which accepts any value but NOT a missing field, while the component's own vEvent declares thread optional. A verified message.received carrying no thread object therefore threw ArgumentValidationError inside a Workpool that does not retry mutations, and the component's by_eventId ledger then refused the provider's resend - the mail was lost with no receipt to drain and no quarantine row to replay. Verified fixed against a signed no-thread event that previously produced zero rows and now produces a handled inbound receipt."
-      ]
+      ],
+      "branch": "opensquad/P11-gate",
+      "worktree": "../opensquad-worktrees/P11-gate",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P12",
@@ -510,8 +519,8 @@
       "id": "P19",
       "title": "Lead CRM and booking backend",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P19",
       "dependsOn": [
         "P11",
         "P20"
@@ -529,14 +538,17 @@
         "convex/sending.ts",
         "plan/evidence/P19.md"
       ],
-      "evidence": []
+      "evidence": [],
+      "branch": "opensquad/P19",
+      "worktree": "../opensquad-worktrees/P19",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P13",
       "title": "Connected lead CRM, booking, decisions and inbox UI",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P13-inbox",
       "dependsOn": [
         "P11",
         "P12",
@@ -559,7 +571,10 @@
       "evidence": [
         "2026-09-15 PRE-BUILT, DO NOT REBUILD: P13 §3's decision queue already ships at 72ee363 — /decisions and /decisions/$decisionId (src/routes/_dashboard/_workspace/decisions*, src/components/decisions/*), all four vDecisionKind panels, exact-draft rendering, approvals.approve/requestChanges/reject wiring, the delivery-uncertain reconcile-before-replace flow, and the Decisions sidebar item. Pulled forward because it needed no new Convex code. P13 owns the REMAINING §3 work: inbox list/thread UI and the CRM/booking surfaces, plus reusing these decision components rather than writing a second implementation.",
         "Known gaps left for P13 in that surface: no Edit draft (drafts.revise with expectedRevision and the withdraw-approval affordance); no list-beside-detail split at ≥1280px; no j/k queue navigation; no sidebar count badge (the nav number and the home attention block must come from one decisions.listOpen call or they will disagree); no kind filter or resolved-history view until an index supports them."
-      ]
+      ],
+      "branch": "opensquad/P13-inbox",
+      "worktree": "../opensquad-worktrees/P13-inbox",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P14",
@@ -608,8 +623,8 @@
       "id": "P16",
       "title": "Constrained public deployment",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P16",
       "dependsOn": [
         "P14"
       ],
@@ -625,14 +640,17 @@
       ],
       "evidence": [
         "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort — treat it as a release action, not a task to schedule around."
-      ]
+      ],
+      "branch": "opensquad/P16-hosting",
+      "worktree": "../opensquad-worktrees/P16-hosting",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P17",
       "title": "Agency trial, fixes and video",
       "tier": "core",
-      "status": "pending",
-      "owner": "",
+      "status": "in_progress",
+      "owner": "subagent-P17",
       "dependsOn": [
         "P16"
       ],
@@ -645,7 +663,10 @@
       ],
       "evidence": [
         "2026-09-15 owner scoping: the VIDEO is produced externally and is not this repo's work. P17's remaining scope is the agency trial and the corrections it surfaces. The video must still exist for P18 — external ownership removes the effort, not the requirement."
-      ]
+      ],
+      "branch": "opensquad/P17-feedback",
+      "worktree": "../opensquad-worktrees/P17-feedback",
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P18",
