@@ -42,7 +42,7 @@ export function useRevealViewport() {
   }, [])
 
   return useMemo(
-    () => ({ amount: isMobile ? 0.15 : 0.3, once: true }) as const,
+    () => ({ amount: isMobile ? 0.08 : 0.3, once: true }) as const,
     [isMobile],
   )
 }

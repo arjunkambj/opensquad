@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_marketing/")({
 function HomePage() {
   return (
     <main className="relative isolate flex w-full flex-col">
-      <div className="flex flex-col gap-48">
+      <div className="flex flex-col gap-32 sm:gap-48">
         <Hero />
         <Squad />
         <HowItWorks />

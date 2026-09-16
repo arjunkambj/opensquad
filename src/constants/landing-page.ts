@@ -24,11 +24,11 @@ export const pricingPlans: PricingPlan[] = [
     periodLabel: "/mo",
     ctaLabel: "Choose Starter",
     features: [
-      "1 workspace with its own inbox",
-      "1 campaign at a time",
-      "Up to 5 leads per campaign",
-      "A quick OK on each email",
-      "One shared inbox for replies",
+      "One campaign at a time, five companies each",
+      "Every company researched, with sources you can check",
+      "Emails written for one person, sent from your inbox",
+      "Replies land in one inbox with a drafted answer",
+      "Your OK on each email, in seconds",
     ],
   },
   {
@@ -41,11 +41,11 @@ export const pricingPlans: PricingPlan[] = [
     isPopular: true,
     features: [
       "Everything in Starter",
-      "Multiple campaigns, 5 leads each",
-      "Invite your team with owner, editor and viewer roles",
-      "Send only in the hours you set",
-      "A do-not-email list and a pause button",
-      "A dated note for every step",
+      "Several campaigns running at once",
+      "Your whole team in, with owner, editor and viewer roles",
+      "Emails only go out in the hours you set",
+      "Anyone who says stop is never emailed again",
+      "A dated record of who did what, on every lead",
     ],
   },
   {
@@ -57,9 +57,9 @@ export const pricingPlans: PricingPlan[] = [
     ctaLabel: "Talk to us",
     features: [
       "Everything in Agency",
-      "More workspaces, each kept separate",
-      "Your work goes to the front of the queue",
-      "Help setting up your first campaigns",
+      "More workspaces, kept apart from each other",
+      "Your work goes first in the queue",
+      "We set up your first campaigns with you",
     ],
   },
 ]

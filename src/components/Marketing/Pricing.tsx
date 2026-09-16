@@ -123,11 +123,15 @@ function PricingCard({ plan }: { plan: PricingPlan }) {
       </CardContent>
       <CardFooter className="mt-auto pt-3">
         <Button
-          className="w-full"
+          className={
+            plan.isPopular
+              ? "w-full"
+              : "w-full border-border bg-background text-foreground shadow-[0_1px_1px_rgba(0,0,0,0.03),0_4px_12px_-6px_rgba(0,0,0,0.06)] hover:bg-background hover:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_6px_16px_-6px_rgba(0,0,0,0.08)]"
+          }
           nativeButton={false}
           render={<Link to="/sign-in" />}
           size="cta"
-          variant={plan.isPopular ? "default" : "secondary"}
+          variant={plan.isPopular ? "default" : "outline"}
         >
           {plan.ctaLabel}
         </Button>

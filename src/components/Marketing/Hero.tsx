@@ -1,4 +1,4 @@
-import { ArrowUpRight01Icon, MailSend01Icon } from "@hugeicons/core-free-icons"
+import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion, useReducedMotion } from "motion/react"
@@ -41,7 +41,7 @@ export function Hero() {
           variants={heroItemVariants}
         >
           <MarketingChip
-            icon={MailSend01Icon}
+            icon="logo"
             label="Outbound that runs while you work"
           />
         </motion.div>
@@ -60,9 +60,8 @@ export function Hero() {
         >
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
             Give it a campaign. Scout finds the companies, Researcher reads up
-            on them, Outreach writes and sends the emails from your inbox, and
-            replies come back to one place. You get a quick heads-up when
-            something needs your OK.
+            on them, and Outreach writes and sends the emails from your inbox.
+            Replies come back to one place.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -94,7 +93,7 @@ export function Hero() {
           variants={heroItemVariants}
         >
           <p className="text-sm text-muted-foreground">
-            Works with your existing subscription
+            Runs on your own Codex or Claude plan
           </p>
           <ul aria-label="Providers" className="flex flex-wrap gap-2">
             {providers.map((provider) => (

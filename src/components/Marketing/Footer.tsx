@@ -1,8 +1,7 @@
-import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
+import { NewTwitterIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import Logo from "@/components/Layout/Logo"
-import { Button } from "@/components/ui/button"
 
 // Every entry points at a route or anchor that exists today.
 const productLinks = [
@@ -35,19 +34,15 @@ export function Footer() {
               An AI sales squad for small agencies. Scout finds the leads,
               Researcher reads up on them, Outreach sends the emails.
             </p>
-            <Button
-              nativeButton={false}
-              render={<Link to="/sign-in" />}
-              size="cta"
-              variant="secondary"
+            <a
+              aria-label="OpenSquad on X"
+              className="flex size-9 items-center justify-center rounded-lg bg-background/10 text-background/80 transition-colors hover:bg-background/15 hover:text-background"
+              href="https://x.com/arjunkambj"
+              rel="noreferrer"
+              target="_blank"
             >
-              Get started
-              <HugeiconsIcon
-                aria-hidden="true"
-                data-icon="inline-end"
-                icon={ArrowUpRight01Icon}
-              />
-            </Button>
+              <HugeiconsIcon className="size-4" icon={NewTwitterIcon} />
+            </a>
           </div>
           <div className="flex flex-col gap-4">
             <h4 className="text-xs font-semibold tracking-eyebrow text-background/50 uppercase">
