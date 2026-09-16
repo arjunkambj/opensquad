@@ -47,14 +47,16 @@ export const vMembershipDoc = v.object({
 /* Employee templates created with every workspace                     */
 /* ------------------------------------------------------------------ */
 
-type EmployeeSeed = {
+export type EmployeeSeed = {
   template: EmployeeTemplate;
   name: string;
   instructions: string;
   capabilities: readonly CapabilityId[];
 };
 
-const EMPLOYEE_SEEDS: readonly EmployeeSeed[] = [
+/** Exported for the flag-gated demo bootstrap in `convex/demo.ts` (P16) —
+ *  demo workspaces are provisioned with the same employee templates. */
+export const EMPLOYEE_SEEDS: readonly EmployeeSeed[] = [
   {
     template: "scout",
     name: "Scout",
