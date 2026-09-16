@@ -86,6 +86,10 @@ export function AutomationSection({
             Paused until onboarding is confirmed. Finish setup to activate.
           </p>
         ) : null}
+        <p className="text-sm text-muted-foreground">
+          Pausing stops new work from dispatching — it cannot recall mail
+          already handed to the provider.
+        </p>
         <FormError message={error} />
         {isOwner ? (
           <div>

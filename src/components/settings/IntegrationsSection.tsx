@@ -20,6 +20,9 @@ type IntegrationRow = {
   name: string
   description: string
   status: string
+  /** `live` is the only state allowed to look green — pending and
+   *  backend-managed rows stay visually pending, never "connected". */
+  live?: boolean
   /** When false the control is intentionally disabled — nothing is faked. */
   action?: { label: string }
   note?: string
@@ -66,6 +69,7 @@ export function IntegrationsSection({
         workspace.inboxRef !== undefined
           ? "Assigned"
           : "Not assigned — arrives with P05/P10",
+      live: workspace.inboxRef !== undefined,
       note:
         workspace.inboxRef !== undefined
           ? "Inbox reference is set on this workspace."
@@ -97,7 +101,13 @@ export function IntegrationsSection({
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium">{row.name}</p>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                <span
+                  className={
+                    row.live === true
+                      ? "rounded-full bg-chart-2/15 px-2 py-0.5 text-xs text-chart-2"
+                      : "rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  }
+                >
                   {row.status}
                 </span>
               </div>
