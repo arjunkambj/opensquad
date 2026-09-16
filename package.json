@@ -12,11 +12,14 @@
     "preview": "vite preview",
     "worker:build": "pnpm -C worker run build",
     "worker:typecheck": "pnpm -C worker run typecheck",
-    "worker:dev": "pnpm -C worker run build && node worker/dist/main.js"
+    "worker:dev": "pnpm -C worker run build && node worker/dist/main.js",
+    "deploy": "static-hosting deploy --build-command 'pnpm run build'",
+    "deploy:dev": "static-hosting upload --build --build-command 'pnpm run build'"
   },
   "dependencies": {
     "@agentmail/convex": "0.1.0",
     "@base-ui/react": "^1.8.0",
+    "@convex-dev/static-hosting": "0.2.1",
     "@convex-dev/workflow": "0.4.6",
     "@convex-dev/workpool": "0.4.11",
     "@firecrawl/firecrawl-convex": "0.1.1",

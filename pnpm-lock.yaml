@@ -14,6 +14,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@convex-dev/static-hosting':
+        specifier: 0.2.1
+        version: 0.2.1(convex@1.45.0(react@19.3.0))(react@19.3.0)
       '@convex-dev/workflow':
         specifier: 0.4.6
         version: 0.4.6(@convex-dev/workpool@0.4.11(convex-helpers@0.1.124(@standard-schema/spec@1.1.0)(convex@1.45.0(react@19.3.0))(hono@4.13.7)(react@19.3.0)(typescript@7.0.2)(zod@4.6.2))(convex@1.45.0(react@19.3.0))(react@19.3.0))(convex-helpers@0.1.124(@standard-schema/spec@1.1.0)(convex@1.45.0(react@19.3.0))(hono@4.13.7)(react@19.3.0)(typescript@7.0.2)(zod@4.6.2))(convex@1.45.0(react@19.3.0))
@@ -379,6 +382,13 @@ packages:
     resolution: {integrity: sha512-3knigElzTVhWw1sN28EYkGBTdrJZ03vMj2PJPuFq3V0Tg41i7tcv/EWDBFQWcUaKzBWWVw693hcJtxCF3CRtEw==}
     peerDependencies:
       convex: ^1.36.1
+      react: ^18.3.1 || ^19.0.0
+
+  '@convex-dev/static-hosting@0.2.1':
+    resolution: {integrity: sha512-QMcfKUOB8dHeLa81xzk2GEIn7LzhEvtdgYhfFpIFer6uE/+xMStDxHAZsX5h1qsttYi7wNbEKAMf7MfOQ7ZrMw==}
+    hasBin: true
+    peerDependencies:
+      convex: ^1.37.0
       react: ^18.3.1 || ^19.0.0
 
   '@convex-dev/workflow@0.4.6':
@@ -4368,6 +4378,11 @@ snapshots:
       '@types/react': 19.3.0
 
   '@convex-dev/batch-worker@0.2.2(convex@1.45.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      convex: 1.45.0(react@19.3.0)
+      react: 19.3.0
+
+  '@convex-dev/static-hosting@0.2.1(convex@1.45.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       convex: 1.45.0(react@19.3.0)
       react: 19.3.0
