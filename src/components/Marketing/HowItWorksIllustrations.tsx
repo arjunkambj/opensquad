@@ -12,7 +12,7 @@ const badgeClassName =
 
 export function DiscoverIllustration() {
   return (
-    <div className="w-full max-w-72 -rotate-5 rounded-xl bg-illustration p-5 shadow-xl shadow-foreground/10">
+    <div className="w-full max-w-72 -rotate-5 rounded-xl bg-illustration p-5">
       <p className="text-xs tracking-widest text-muted-foreground uppercase">
         Scout found
       </p>
@@ -48,7 +48,7 @@ export function DiscoverIllustration() {
 export function ResearchIllustration() {
   return (
     <>
-      <div className="w-full max-w-72 -rotate-3 rounded-xl bg-illustration p-5 shadow-xl shadow-foreground/5">
+      <div className="w-full max-w-72 -rotate-3 rounded-xl bg-illustration p-5">
         <p className="text-xs tracking-widest text-muted-foreground uppercase">
           Opportunity
         </p>
@@ -63,7 +63,7 @@ export function ResearchIllustration() {
             </span>
           ))}
         </div>
-        <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
+        <div className="mt-5 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
           <HugeiconsIcon className="size-4" icon={UserCheck01Icon} />
           Owner contact enriched
         </div>
@@ -77,7 +77,7 @@ export function ResearchIllustration() {
 
 export function ApproveIllustration() {
   return (
-    <div className="w-full max-w-72 rotate-3 rounded-xl bg-illustration p-5 shadow-xl shadow-foreground/20">
+    <div className="w-full max-w-72 rotate-3 rounded-xl bg-illustration p-5">
       <p className="text-xs tracking-widest text-muted-foreground uppercase">
         Exact draft
       </p>
@@ -103,7 +103,7 @@ export function ApproveIllustration() {
 
 export function BookIllustration() {
   return (
-    <div className="w-full max-w-72 -rotate-4 rounded-xl bg-illustration p-5 shadow-xl shadow-foreground/10">
+    <div className="w-full max-w-72 -rotate-4 rounded-xl bg-illustration p-5">
       <p className="text-xs tracking-widest text-muted-foreground uppercase">
         Shared inbox
       </p>
@@ -113,7 +113,7 @@ export function BookIllustration() {
       <div className="mt-2 ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-illustration-accent px-3 py-2 text-sm text-illustration-accent-foreground">
         Thursday 10:00 or 14:30?
       </div>
-      <div className="mt-5 flex items-center justify-between gap-2 border-t border-border pt-4">
+      <div className="mt-5 flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2">
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           <HugeiconsIcon className="size-4" icon={Calendar03Icon} />
           Thu, 10:00
