@@ -24,10 +24,10 @@ import {
 
 const steps = [
   {
-    title: "Discover",
+    title: "Define",
     description:
-      "Scout finds up to five companies that fit, with a line on why.",
-    tags: ["Mission Control", "Scout"],
+      "Say who you want: the kind of company, the role, the signal that makes them worth an email.",
+    tags: ["Campaign", "You"],
     background: "/marketing/services/creators.webp",
     Illustration: DiscoverIllustration,
   },

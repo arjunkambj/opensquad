@@ -1,12 +1,5 @@
-import {
-  Calendar03Icon,
-  CheckmarkCircle02Icon,
-  Link01Icon,
-  MailOpen01Icon,
-  Search01Icon,
-  UserCheck01Icon,
-} from "@hugeicons/core-free-icons"
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
+import { Calendar03Icon } from "@hugeicons/core-free-icons"
+import { CompanyMark } from "@/components/Marketing/CompanyMark"
 import { motion } from "motion/react"
 import {
   MarketingSection,
@@ -25,9 +18,6 @@ const days: readonly {
   date: string
   title: string
   description: string
-  receipt: string
-  who: string
-  icon: IconSvgElement
 }[] = [
   {
     day: "Day 1",
@@ -35,9 +25,6 @@ const days: readonly {
     title: "You set up a campaign",
     description:
       "Scout comes back with five companies and a reason for each.",
-    receipt: "5 companies added",
-    who: "Scout",
-    icon: Search01Icon,
   },
   {
     day: "Day 2",
@@ -45,9 +32,6 @@ const days: readonly {
     title: "The research comes in",
     description:
       "A short write-up per company, with links.",
-    receipt: "Northwind: 3 reasons, 3 links",
-    who: "Researcher",
-    icon: Link01Icon,
   },
   {
     day: "Day 3",
@@ -55,19 +39,13 @@ const days: readonly {
     title: "The first email goes out",
     description:
       "Outreach writes it. A quick OK from you, and it's gone.",
-    receipt: "First email sent, 9:30",
-    who: "Outreach",
-    icon: UserCheck01Icon,
   },
   {
     day: "Day 5",
     date: "Fri 12 Sep",
     title: "Someone writes back",
     description:
-      "Maya at Northwind asks for a call. A reply is drafted.",
-    receipt: "Maya replied · waiting on you",
-    who: "Inbox",
-    icon: MailOpen01Icon,
+      "Sienna at Northwind asks for a call. A reply is drafted.",
   },
   {
     day: "Day 7",
@@ -75,34 +53,46 @@ const days: readonly {
     title: "First meeting on the calendar",
     description:
       "Thursday at two. Four companies still moving.",
-    receipt: "Meeting booked, Thu 2 pm",
-    who: "You",
-    icon: CheckmarkCircle02Icon,
   },
 ]
 
-/** The Mission Control activity feed after that same week. */
-function ActivityFeed() {
+const leadsOnDaySeven = [
+  { company: "Northwind Studio", contact: "Sienna Whitlock", stage: "Meeting booked", note: "Thu 2:00 pm", hot: true },
+  { company: "Harbor Dental", contact: "Tobias Ferreira", stage: "Replied", note: "Draft waiting on you", hot: false },
+  { company: "Fieldstone Law", contact: "Lena Okonkwo", stage: "Emailed", note: "Sent Thu 9:30", hot: false },
+  { company: "Juniper Bakery", contact: "Anaya Bhatt", stage: "Emailed", note: "Sent Fri 9:30", hot: false },
+  { company: "Acme Logistics", contact: "Rafael Duarte", stage: "Researching", note: "2 sources so far", hot: false },
+] as const
+
+/** Where the five companies stand at the end of that week. */
+function LeadsBoard() {
   return (
-    <div className="flex h-full w-full max-w-md flex-col rounded-2xl bg-illustration p-6 text-foreground">
+    <div className="flex h-full w-full max-w-md flex-col rounded-2xl bg-illustration p-4 text-foreground sm:p-6">
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="font-medium">Activity</span>
-        <span className="text-muted-foreground">Northwind Studio</span>
+        <span className="font-medium">Leads</span>
+        <span className="text-muted-foreground">Day 7 · 5 companies</span>
       </div>
       <ol className="mt-4 flex flex-1 flex-col justify-between gap-2">
-        {days.map(({ day, receipt, icon }, index) => (
+        {leadsOnDaySeven.map(({ company, contact, stage, note, hot }) => (
           <li
-            className={`flex flex-1 items-center gap-4 rounded-xl px-3 py-3 ${index === days.length - 1 ? "bg-muted" : "text-muted-foreground"}`}
-            key={day}
+            className={`flex flex-1 items-center gap-3 rounded-xl px-2.5 py-2.5 sm:gap-4 sm:px-3 sm:py-3 ${hot ? "bg-muted" : ""}`}
+            key={company}
           >
+            <CompanyMark company={company} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <p className="truncate text-sm sm:text-base">{company}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {contact} · {note}
+              </p>
+            </div>
             <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${index === days.length - 1 ? "bg-illustration-accent text-illustration-accent-foreground" : "bg-muted"}`}
+              className={`shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium sm:px-2 sm:text-xs ${
+                hot
+                  ? "bg-illustration-accent text-illustration-accent-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
-              <HugeiconsIcon className="size-5" icon={icon} />
-            </span>
-            <p className="min-w-0 flex-1 truncate text-base">{receipt}</p>
-            <span className="shrink-0 text-sm text-muted-foreground">
-              {day}
+              {stage}
             </span>
           </li>
         ))}
@@ -150,7 +140,7 @@ export function FirstWeek() {
         </motion.ol>
         <motion.div
           aria-hidden="true"
-          className="relative isolate flex min-h-96 items-stretch justify-center overflow-hidden rounded-4xl p-7 sm:p-10 lg:h-full"
+          className="relative isolate flex min-h-96 items-stretch justify-center overflow-hidden rounded-4xl p-4 sm:p-10 lg:h-full"
           initial="initial"
           variants={revealItemVariants}
           viewport={revealViewport}
@@ -163,7 +153,7 @@ export function FirstWeek() {
             loading="lazy"
             src="/marketing/services/launch.webp"
           />
-          <ActivityFeed />
+          <LeadsBoard />
         </motion.div>
       </div>
     </MarketingSection>
