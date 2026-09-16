@@ -62,7 +62,14 @@ export function OnboardingWizard() {
   }
 
   if (current === null) {
-    return <ProvisionWorkspace />
+    return (
+      <div className="flex w-full max-w-3xl flex-col gap-6">
+        {/* The rail renders on the provisioning screen too — setup is one
+            continuous task, and a bare card here read as a different flow. */}
+        <StepRail current={null} onGo={undefined} />
+        <ProvisionWorkspace />
+      </div>
+    )
   }
 
   if (current.role !== "owner") {
@@ -128,7 +135,13 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   })
   const search = useSearch({ from: "/_dashboard/onboarding" })
   const navigate = useNavigate()
-  const step: StepId = search.step ?? "business"
+  // No `?step=` means derive the start from what is already saved — a reload
+  // or a fresh arrival resumes instead of restarting at step one. The
+  // profile's existence is the only durable per-step marker: the workspace
+  // step can complete with no version bump (accepting every default writes
+  // nothing), and a campaign row only exists once review has run, so the
+  // honest resume point after a saved profile is the workspace step itself.
+  const step: StepId = search.step ?? (profile ? "workspace" : "business")
   const [campaignForm, setCampaignForm] =
     useState<CampaignScopeForm>(defaultCampaignForm)
   const [completed, setCompleted] = useState(false)
@@ -157,27 +170,33 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
           </CardTitle>
           <CardDescription>
             Your campaign scope is confirmed and automation is active. Runs
-            start once the workspace runtime connects (rolling out soon).
+            start once the workspace runtime connects — that is the one thing
+            still blocking them.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button render={<Link to="/employees" />}>
-            Meet your employees
+          {/* The finish line is the runtime connection, not a tour of empty
+              pages — link the action that actually unblocks runs. */}
+          <Button
+            render={
+              <Link to="/settings" search={{ section: "runtime" }} />
+            }
+          >
+            Connect the runtime
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               data-icon="inline-end"
               strokeWidth={2}
             />
           </Button>
-          <Button variant="outline" render={<Link to="/overview" />}>
-            Back to overview
+          <Button variant="outline" render={<Link to="/employees" />}>
+            Meet your employees
           </Button>
         </CardContent>
       </Card>
     )
   }
 
-  const stepIndex = STEPS.findIndex((entry) => entry.id === step)
   // `replace` — the wizard is one task, so Back should leave setup rather than
   // walk the user backwards through every step they already completed.
   const go = (id: StepId) => {
@@ -193,47 +212,7 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
           campaign.
         </p>
       ) : null}
-      <nav aria-label="Onboarding steps">
-        <ol className="flex flex-wrap gap-2">
-          {STEPS.map((entry, index) => {
-            const isCurrent = entry.id === step
-            const isPast = index < stepIndex
-            return (
-              <li key={entry.id}>
-                <button
-                  type="button"
-                  aria-current={isCurrent ? "step" : undefined}
-                  onClick={() => {
-                    if (isPast) {
-                      go(entry.id)
-                    }
-                  }}
-                  className={cn(
-                    "flex items-center gap-2 rounded-2xl border px-3 py-1.5 text-sm",
-                    isCurrent
-                      ? "border-primary bg-primary/5 font-medium"
-                      : isPast
-                        ? "border-border text-muted-foreground hover:text-foreground"
-                        : "cursor-default border-border text-muted-foreground/60",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "grid size-5 place-content-center rounded-full text-xs",
-                      isCurrent
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted",
-                    )}
-                  >
-                    {index + 1}
-                  </span>
-                  {entry.label}
-                </button>
-              </li>
-            )
-          })}
-        </ol>
-      </nav>
+      <StepRail current={step} onGo={go} />
 
       {step === "business" ? (
         <BusinessStep
@@ -262,5 +241,75 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
         />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The step rail, rendered on every setup screen including provisioning
+ * (`current: null`). A bare card before a workspace exists read as a
+ * different flow entirely — the rail keeps it visibly inside one sequence.
+ * While provisioning, it gains a leading "Create workspace" entry; once a
+ * workspace exists that step is always complete and never appears again.
+ *
+ * Only past steps are reachable: a step ahead of the current one may need
+ * input the user has not given yet, so future entries render inert.
+ */
+function StepRail({
+  current,
+  onGo,
+}: {
+  current: StepId | null
+  onGo?: (id: StepId) => void
+}) {
+  const entries: readonly { id: string; label: string }[] =
+    current === null
+      ? [{ id: "provision", label: "Create workspace" }, ...STEPS]
+      : STEPS
+  const stepIndex = entries.findIndex((entry) => entry.id === current)
+
+  return (
+    <nav aria-label="Onboarding steps">
+      <ol className="flex flex-wrap gap-2">
+        {entries.map((entry, index) => {
+          const isCurrent = index === stepIndex
+          const isPast = index < stepIndex
+          const reachable =
+            isPast && onGo !== undefined && entry.id !== "provision"
+          return (
+            <li key={entry.id}>
+              <button
+                type="button"
+                aria-current={isCurrent ? "step" : undefined}
+                onClick={() => {
+                  if (reachable) {
+                    onGo(entry.id as StepId)
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-2 rounded-2xl border px-3 py-1.5 text-sm",
+                  isCurrent
+                    ? "border-primary bg-primary/5 font-medium"
+                    : isPast
+                      ? "border-border text-muted-foreground hover:text-foreground"
+                      : "cursor-default border-border text-muted-foreground/60",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-5 place-content-center rounded-full text-xs",
+                    isCurrent
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted",
+                  )}
+                >
+                  {index + 1}
+                </span>
+                {entry.label}
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+    </nav>
   )
 }
