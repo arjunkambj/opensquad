@@ -14,7 +14,7 @@ const slots = [
  */
 export function CtaPreview() {
   return (
-    <div className="w-full overflow-hidden rounded-2xl bg-background text-foreground shadow-xl shadow-foreground/10 sm:min-h-[520px]">
+    <div className="w-full overflow-hidden rounded-2xl bg-background text-foreground sm:min-h-[520px]">
       <div className="flex flex-col gap-6 p-3 sm:p-7">
         <div className="flex flex-col items-end gap-1">
           <p className="max-w-xs rounded-2xl rounded-br-md bg-foreground px-4 py-2.5 text-sm leading-relaxed text-background">
@@ -35,9 +35,8 @@ export function CtaPreview() {
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             <p className="text-sm leading-relaxed">
-              Maya replied with interest. I drafted a reply that proposes two
-              slots and your booking link. It stays a draft until you approve
-              every word.
+              Maya replied with interest. I drafted a reply with two slots and
+              your booking link. One tap and it goes.
             </p>
             <div className="flex flex-col gap-2">
               {slots.map((slot) => (
@@ -71,7 +70,7 @@ export function CtaPreview() {
                 Edit draft
               </span>
               <span className="ml-auto text-xs text-muted-foreground">
-                Proposed Tue 10:30 · awaiting your approval
+                Proposed Tue 10:30 · waiting on you
               </span>
             </div>
           </div>
