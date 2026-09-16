@@ -1,5 +1,6 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
+import type { KeyboardEvent } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import {
@@ -10,6 +11,7 @@ import {
 import { EmptyState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { isTypingTarget } from "@/lib/keyboard"
 import { withFilters } from "@/lib/search-params"
 
 const QUEUE_ROUTE = "/_dashboard/_workspace/decisions"
@@ -22,7 +24,10 @@ const QUEUE_ROUTE = "/_dashboard/_workspace/decisions"
  * sub-tickets (`decisionFields` has no parent pointer), no kind filter and no
  * resolved tab; see the route file for why the last two cannot exist yet.
  *
- * Every row is a link, so the queue is workable with Tab and Enter alone.
+ * Every row is a link, so the queue is workable with Tab and Enter alone, and
+ * `j`/`k` move focus between rows while it is inside the queue — the handler
+ * lives on the queue container, so it can never hijack scrolling when focus
+ * is somewhere else (`plan/ux.md` §6).
  */
 export function DecisionQueue() {
   const current = useCurrentWorkspace()
@@ -117,7 +122,7 @@ export function DecisionQueue() {
   const groups = groupByMission(page.items)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" onKeyDown={onQueueKeyDown}>
       {search.mission === undefined ? null : (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>Filtered to one mission.</span>
@@ -181,6 +186,39 @@ export function DecisionQueue() {
 type MissionGroupItems = {
   missionId: Id<"missions">
   decisions: Doc<"decisions">[]
+}
+
+/**
+ * `j`/`k` on the queue move focus between decision rows. The rows are links,
+ * so Enter already opens the focused one — this only moves the ring. Focus
+ * outside a row (`j` from a filter button) lands on the first row; `k` lands
+ * on the last. No wrap: running off the end should stop, not loop back to a
+ * row the reviewer already passed.
+ */
+function onQueueKeyDown(event: KeyboardEvent<HTMLElement>) {
+  if (event.key !== "j" && event.key !== "k") {
+    return
+  }
+  if (isTypingTarget(event.target)) {
+    return
+  }
+  const rows = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>("[data-decision-row]"),
+  )
+  if (rows.length === 0) {
+    return
+  }
+  const index = rows.indexOf(document.activeElement as HTMLElement)
+  const next =
+    index === -1
+      ? event.key === "j"
+        ? 0
+        : rows.length - 1
+      : event.key === "j"
+        ? Math.min(index + 1, rows.length - 1)
+        : Math.max(index - 1, 0)
+  event.preventDefault()
+  rows[next]?.focus()
 }
 
 /**
@@ -267,6 +305,7 @@ function MissionGroup({
 function DecisionRow({ decision }: { decision: Doc<"decisions"> }) {
   return (
     <Link
+      data-decision-row
       to="/decisions/$decisionId"
       params={{ decisionId: decision._id }}
       search={(previous) => previous}
