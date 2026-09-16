@@ -133,6 +133,28 @@ export const getStatus = query({
 /* ------------------------------------------------------------------ */
 
 const DEFAULT_BOX_TTL_SECONDS = 7 * 24 * 60 * 60;
+/**
+ * `assertLifecycleRequestConfig` already bounds a requestConfig TTL to
+ * 60s..30d; the provider's own ceiling can be lower (trial accounts cap a
+ * Box at two hours — plan/integrations.md "Long-running tasks"). A
+ * deployment where the provider cap is lower sets
+ * `OPENSQUAD_BOX_TTL_SECONDS` once; a malformed override fails the mutation
+ * honestly rather than silently picking a different box lifetime.
+ */
+function boxTtlSeconds(): number {
+  const raw = process.env.OPENSQUAD_BOX_TTL_SECONDS;
+  if (raw === undefined || raw === "") {
+    return DEFAULT_BOX_TTL_SECONDS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 60 || parsed > 30 * 24 * 60 * 60) {
+    throw domainError(
+      "INVALID",
+      "OPENSQUAD_BOX_TTL_SECONDS must be an integer 60s..30d",
+    );
+  }
+  return parsed;
+}
 const WORKER_ENV_NAMES = [
   "OPENSQUAD_BRIDGE_URL",
   "OPENSQUAD_RUNTIME_ID",
@@ -409,7 +431,7 @@ export const connect = mutation({
             connection: prior,
             operation: "stop",
             operationKey: `stop:${prior._id}:orphan:${boxRef}`,
-            requestConfig: { ttlSeconds: DEFAULT_BOX_TTL_SECONDS, envNames: [] },
+            requestConfig: { ttlSeconds: boxTtlSeconds(), envNames: [] },
             targetBoxRef: boxRef,
           });
         }
@@ -439,7 +461,7 @@ export const connect = mutation({
       operation: "create",
       operationKey: `create:${connection._id}:gen${connection.generation}:${requestId}`,
       requestConfig: {
-        ttlSeconds: DEFAULT_BOX_TTL_SECONDS,
+        ttlSeconds: boxTtlSeconds(),
         envNames: [...WORKER_ENV_NAMES],
         ...(process.env.OPENSQUAD_WORKER_IMAGE !== undefined
           ? { image: process.env.OPENSQUAD_WORKER_IMAGE }
@@ -518,7 +540,7 @@ export const reconnect = mutation({
       operation,
       operationKey: `${operation}:${connection._id}:gen${generation}:${requestId}`,
       requestConfig: {
-        ttlSeconds: DEFAULT_BOX_TTL_SECONDS,
+        ttlSeconds: boxTtlSeconds(),
         envNames: [...WORKER_ENV_NAMES],
         ...(process.env.OPENSQUAD_WORKER_IMAGE !== undefined
           ? { image: process.env.OPENSQUAD_WORKER_IMAGE }
@@ -616,7 +638,7 @@ export const disconnect = mutation({
       connection,
       operation,
       operationKey: `${operation}:${connection._id}:gen${connection.generation}:${requestId}`,
-      requestConfig: { ttlSeconds: DEFAULT_BOX_TTL_SECONDS, envNames: [] },
+      requestConfig: { ttlSeconds: boxTtlSeconds(), envNames: [] },
       ...(connection.boxRef !== undefined
         ? { targetBoxRef: connection.boxRef }
         : {}),
