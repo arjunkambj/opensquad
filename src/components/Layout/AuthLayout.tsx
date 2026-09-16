@@ -4,16 +4,67 @@ import Logo from "@/components/Layout/Logo"
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-dvh flex-col bg-background">
-      <header className="absolute inset-x-0 top-0 flex h-14 items-center px-4 sm:px-6">
-        <Link to="/" className="inline-flex">
-          <Logo className="gap-2" />
-        </Link>
-      </header>
+    <div className="flex min-h-dvh flex-col bg-background p-4 sm:p-6 lg:p-8">
+      <div className="grid flex-1 gap-8 lg:grid-cols-2 lg:gap-12">
+        <AuthPanel />
 
-      <main className="flex flex-1 items-center justify-center px-4 py-20 sm:px-6 sm:py-24">
-        {children}
-      </main>
+        <div className="flex flex-col">
+          <div className="lg:hidden">
+            <HomeLink />
+          </div>
+
+          <main className="flex flex-1 items-center justify-center py-8 sm:py-10">
+            {children}
+          </main>
+
+          <footer className="text-center text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} OpenSquad. All rights reserved.
+          </footer>
+        </div>
+      </div>
     </div>
+  )
+}
+
+function AuthPanel() {
+  return (
+    <aside className="relative hidden overflow-hidden rounded-2xl lg:flex lg:flex-col lg:justify-between lg:p-10">
+      <img
+        alt=""
+        className="absolute inset-0 size-full object-cover object-right-bottom"
+        loading="eager"
+        src="/marketing/hero-landscape.png"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-3 rounded-xl border border-background/40"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-background/80 to-transparent"
+      />
+
+      <div className="relative">
+        <HomeLink />
+      </div>
+
+      <div className="relative flex max-w-md flex-col gap-3">
+        <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
+          Your AI sales squad, supervised by you
+        </h2>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Scout, Researcher and Outreach find, research and draft — nothing
+          sends until you approve the exact words.
+        </p>
+      </div>
+    </aside>
+  )
+}
+
+function HomeLink() {
+  return (
+    <Link to="/" className="inline-flex">
+      <Logo />
+    </Link>
   )
 }
