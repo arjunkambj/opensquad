@@ -34,7 +34,7 @@
     /* Peach pulled from the marketing landscape, for the dark marks inside
      * the illustrations: chat bubbles, bars, and progress fills. */
     --color-illustration-accent: oklch(0.78 0.11 40);
-    --color-illustration-accent-foreground: oklch(0.22 0.03 40);
+    --color-illustration-accent-foreground: oklch(1 0 0);
 
     /* Lift under the hero panels. */
     --color-panel-shadow: #30234355;
@@ -169,6 +169,23 @@
 .marketing-page :is(h1, h2, h3, h4, h5, h6) {
     font-family: var(--font-display);
     font-weight: 600;
+}
+
+/* Marketing cards, FAQ and CTA sit on zinc-100 instead of white. */
+.marketing-page {
+    --popover: oklch(0.967 0.001 286.375);
+}
+
+/* Navbar ink. */
+.marketing-ink {
+    background-color: var(--foreground);
+    color: var(--background);
+}
+
+/* Footer ink: a step darker than the navbar so it reads as the page floor. */
+.marketing-ink-deep {
+    background-color: oklch(0.21 0.006 286.033);
+    color: var(--background);
 }
 
 /*
