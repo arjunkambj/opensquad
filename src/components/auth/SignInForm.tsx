@@ -1,12 +1,18 @@
-import { GoogleIcon, Mail01Icon } from "@hugeicons/core-free-icons"
+import {
+  EyeIcon,
+  EyeOffIcon,
+  GoogleIcon,
+  LockPasswordIcon,
+  Mail01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp } from "@hexclave/react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Field, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field"
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group"
 import {
@@ -14,22 +20,43 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/toast"
+
+type AuthMethod = "code" | "password"
 
 export function SignInForm() {
   const app = useHexclaveApp()
 
   const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("code")
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [step, setStep] = useState<"email" | "otp">("email")
   const [nonce, setNonce] = useState("")
   const [otp, setOtp] = useState("")
-  const [isEmailLoading, setIsEmailLoading] = useState(false)
-  const [isVerifying, setIsVerifying] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isEmailLoading, setIsEmailLoading] = useState(false)
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const verificationPending = useRef(false)
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true)
+    try {
+      await app.signInWithOAuth("google", {
+        returnTo: app.urls.afterSignIn,
+      })
+    } catch {
+      toast.add({
+        type: "error",
+        title: "Could not continue with Google. Please try again.",
+      })
+      setIsGoogleLoading(false)
+    }
+  }
 
   const handleSendMagicLink = async (
     source: "initial" | "resend" = "initial",
@@ -76,6 +103,39 @@ export function SignInForm() {
       })
     } finally {
       setIsEmailLoading(false)
+    }
+  }
+
+  const handlePasswordSignIn = async () => {
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail || !password) {
+      toast.add({
+        type: "error",
+        title: "Please enter your email and password.",
+      })
+      return
+    }
+
+    setIsPasswordLoading(true)
+
+    try {
+      const result = await app.signInWithCredential({
+        email: normalizedEmail,
+        password,
+      })
+      if (result.status === "error") {
+        toast.add({
+          type: "error",
+          title: "Could not sign in. Check your email and password.",
+        })
+      }
+    } catch {
+      toast.add({
+        type: "error",
+        title: "Something went wrong. Please try again.",
+      })
+    } finally {
+      setIsPasswordLoading(false)
     }
   }
 
@@ -126,71 +186,151 @@ export function SignInForm() {
     }
   }, [app, nonce, otp])
 
-  const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true)
-    try {
-      await app.signInWithOAuth("google", {
-        returnTo: app.urls.afterSignIn,
-      })
-    } catch {
-      toast.add({
-        type: "error",
-        title: "Could not continue with Google. Please try again.",
-      })
-    } finally {
-      setIsGoogleLoading(false)
-    }
-  }
+  const isSubmitting = isEmailLoading || isPasswordLoading
 
   return (
-    <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
+    <div className="mx-auto flex w-full flex-col gap-6 sm:max-w-sm">
       <div className="text-center">
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
           Welcome to OpenSquad
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm font-light text-muted-foreground">
           {step === "email"
-            ? "Sign in to plan and ship together"
+            ? "Choose how you want to continue"
             : `We sent a code to ${email}`}
         </p>
       </div>
 
       {step === "email" ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            void handleSendMagicLink("initial")
-          }}
-        >
-          <FieldGroup className="gap-4">
-            <Field>
-              <FieldLabel htmlFor="email" className="sr-only">
-                Email
-              </FieldLabel>
+        <div className="flex flex-col gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            disabled={isGoogleLoading}
+            onClick={() => void handleGoogleSignIn()}
+          >
+            {isGoogleLoading ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <HugeiconsIcon icon={GoogleIcon} data-icon="inline-start" />
+            )}
+            {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
+          </Button>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <Tabs
+            value={authMethod}
+            onValueChange={(value) => setAuthMethod(value as AuthMethod)}
+            className="w-full"
+          >
+            <TabsList
+              aria-label="Email sign-in method"
+              className="w-full group-data-horizontal/tabs:h-9"
+            >
+              <TabsTrigger value="code">Email code</TabsTrigger>
+              <TabsTrigger value="password">Password</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (authMethod === "password") {
+                void handlePasswordSignIn()
+              } else {
+                void handleSendMagicLink("initial")
+              }
+            }}
+          >
+            <div className="flex flex-col gap-3">
               <InputGroup className="h-9">
                 <InputGroupAddon>
-                  <HugeiconsIcon icon={Mail01Icon} />
+                  <HugeiconsIcon icon={Mail01Icon} strokeWidth={2} />
                 </InputGroupAddon>
                 <InputGroupInput
-                  id="email"
+                  aria-label="Email address"
+                  autoComplete="email"
                   type="email"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
-                  autoComplete="email"
                 />
               </InputGroup>
-            </Field>
-            <Button type="submit" disabled={isEmailLoading} size="lg">
-              {isEmailLoading ? <Spinner data-icon="inline-start" /> : null}
-              Continue with Email
+
+              {authMethod === "password" ? (
+                <InputGroup className="h-9">
+                  <InputGroupAddon>
+                    <HugeiconsIcon icon={LockPasswordIcon} strokeWidth={2} />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    aria-label="Password"
+                    autoComplete="current-password"
+                    type={isPasswordVisible ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      size="icon-xs"
+                      aria-label={
+                        isPasswordVisible ? "Hide password" : "Show password"
+                      }
+                      aria-pressed={isPasswordVisible}
+                      onClick={() => setIsPasswordVisible((visible) => !visible)}
+                    >
+                      <HugeiconsIcon
+                        icon={isPasswordVisible ? EyeOffIcon : EyeIcon}
+                        strokeWidth={2}
+                      />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              ) : null}
+            </div>
+
+            {authMethod === "password" ? (
+              <a
+                href={app.urls.forgotPassword}
+                className="-mt-1 self-end rounded-sm text-sm font-medium text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:outline-none"
+              >
+                Forgot password?
+              </a>
+            ) : (
+              <p className="-mt-1 text-xs leading-5 text-muted-foreground">
+                We will email you a one-time sign-in code.
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              disabled={isSubmitting}
+              className="w-full"
+            >
+              {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+              {authMethod === "password"
+                ? isPasswordLoading
+                  ? "Signing in..."
+                  : "Sign in"
+                : isEmailLoading
+                  ? "Sending..."
+                  : "Send sign-in code"}
             </Button>
-          </FieldGroup>
-        </form>
+          </form>
+        </div>
       ) : (
         <div className="flex flex-col items-center gap-5 pt-1">
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-sm font-light text-muted-foreground">
             Enter the 6-character code from your email
           </p>
           <InputOTP
@@ -198,16 +338,19 @@ export function SignInForm() {
             value={otp}
             onChange={(value) => setOtp(value.toUpperCase())}
             disabled={isVerifying}
-            containerClassName="justify-center gap-2"
+            containerClassName="w-full justify-center"
           >
-            <InputOTPGroup className="gap-2">
+            <InputOTPGroup>
               {[0, 1, 2, 3, 4, 5].map((index) => (
-                <InputOTPSlot key={index} index={index} />
+                <InputOTPSlot key={index} index={index} className="size-10" />
               ))}
             </InputOTPGroup>
           </InputOTP>
           {isVerifying ? (
-            <Skeleton className="h-5 w-32" aria-label="Verifying..." />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner className="size-3.5" />
+              Verifying...
+            </div>
           ) : null}
           <div className="flex flex-col items-center gap-2 text-sm">
             <p className="text-xs text-muted-foreground">
@@ -216,52 +359,32 @@ export function SignInForm() {
                 : "Didn't get the code?"}
             </p>
             <div className="flex items-center gap-4">
-              <Button
+              <button
                 type="button"
-                variant="link"
-                size="lg"
                 disabled={isEmailLoading || resendCooldown > 0}
                 onClick={() => void handleSendMagicLink("resend")}
+                className="inline-flex items-center gap-1.5 font-medium disabled:opacity-60"
               >
+                {isEmailLoading ? <Spinner className="size-3.5" /> : null}
                 {isEmailLoading ? "Sending..." : "Resend code"}
-              </Button>
-              <Button
+              </button>
+              <span className="text-muted-foreground">|</span>
+              <button
                 type="button"
-                variant="link"
-                size="lg"
                 onClick={() => {
                   setStep("email")
                   setOtp("")
                   setNonce("")
                   setResendCooldown(0)
                 }}
+                className="font-medium"
               >
                 Use a different email
-              </Button>
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      <FieldSeparator>OR</FieldSeparator>
-
-      <Button
-        variant="secondary"
-        disabled={isGoogleLoading}
-        size="lg"
-        onClick={() => void handleGoogleSignIn()}
-      >
-        {isGoogleLoading ? (
-          <Spinner data-icon="inline-start" />
-        ) : (
-          <HugeiconsIcon icon={GoogleIcon} data-icon="inline-start" />
-        )}
-        Continue with Google
-      </Button>
-
-      <p className="text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} OpenSquad. All rights reserved.
-      </p>
     </div>
   )
 }
