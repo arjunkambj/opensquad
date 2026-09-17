@@ -163,7 +163,7 @@ export function ActivityFeed({
                 <Link
                   to="/overview/missions/$missionId"
                   params={{ missionId: event.missionId }}
-                  search={(previous) => previous}
+                  search={true}
                   className="flex flex-col gap-0.5 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 px-4 py-2 transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
                 >
                   <span className="text-sm text-foreground">

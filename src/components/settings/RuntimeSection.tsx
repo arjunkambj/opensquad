@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../convex/_generated/api"
 import type { Doc } from "../../../convex/_generated/dataModel"
@@ -48,6 +48,66 @@ function statusLabel(status: RuntimeStatus | undefined): string {
     default:
       return status.state ?? "Unknown"
   }
+}
+
+/**
+ * What the operator can do next, per recorded state — the card's controls are
+ * state-gated, so the state itself also names the step it is waiting on.
+ * Never a promise about timing: the backend records no deadline for
+ * provisioning, so none is displayed.
+ */
+function nextStepHint(status: RuntimeStatus | undefined): string | null {
+  if (status === undefined || !("state" in status)) {
+    return status === undefined
+      ? null
+      : "Connect to provision this workspace's Box."
+  }
+  switch (status.state) {
+    case "provisioning":
+      return "The Box is being provisioned — sign-in can already be started; the request waits for the worker's first poll."
+    case "connecting":
+      return "The Box is up and waiting for its worker to report in — start sign-in if it is not already complete."
+    case "ready":
+      return status.live
+        ? status.codexAccountSummary?.state === "chatgpt"
+          ? "Connected and signed in — employees can run."
+          : "Connected. Start Codex sign-in so employees can run."
+        : "Connected, but the worker heartbeat has gone quiet — reconnect if it does not come back."
+    case "stopping":
+      return "The Box is being stopped — wait for it to finish."
+    case "stopped":
+      return "Stopped. Connect to bring the Box back."
+    case "disconnected":
+      return "Disconnected. Connect to provision a fresh Box and credentials."
+    case "error":
+      return "The last lifecycle step failed — reconnect retries it; disconnect first if it stays failed."
+    default:
+      return null
+  }
+}
+
+/**
+ * A live countdown to the login challenge's expiry — "expires at 4:12 PM"
+ * makes the owner do timezone math mid-flow, and a challenge that quietly
+ * lapsed looks identical to one still open until the worker stops asking.
+ */
+function ChallengeCountdown({ expiresAt }: { expiresAt: number }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [])
+  const remaining = Math.max(0, expiresAt - now)
+  const minutes = Math.floor(remaining / 60_000)
+  const seconds = Math.floor((remaining % 60_000) / 1000)
+
+  return (
+    <span>
+      {remaining === 0
+        ? "The challenge has expired — cancel it and start again."
+        : `The challenge expires in ${minutes}:${seconds.toString().padStart(2, "0")}.`}
+    </span>
+  )
 }
 
 /**
@@ -165,6 +225,12 @@ export function RuntimeSection({
           <p className="text-sm text-destructive">{conn.error}</p>
         ) : null}
 
+        {nextStepHint(status) !== null ? (
+          <p className="text-sm text-muted-foreground">
+            {nextStepHint(status)}
+          </p>
+        ) : null}
+
         {challenge !== undefined && challenge !== null ? (
           <div className="flex flex-col gap-1 rounded-2xl border border-border px-4 py-3">
             <p className="text-sm font-medium">Finish Codex sign-in</p>
@@ -182,8 +248,8 @@ export function RuntimeSection({
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
                 {challenge.userCode}
               </code>
-              . The challenge expires{" "}
-              {new Date(challenge.expiresAt).toLocaleTimeString()}.
+              .{" "}
+              <ChallengeCountdown expiresAt={challenge.expiresAt} />
             </p>
             {isOwner ? (
               <div>

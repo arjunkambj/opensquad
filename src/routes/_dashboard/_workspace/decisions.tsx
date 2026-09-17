@@ -1,4 +1,10 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router"
+import {
+  Outlet,
+  createFileRoute,
+  useParams,
+} from "@tanstack/react-router"
+import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { DecisionQueue } from "@/components/decisions/DecisionQueue"
 import { optionalCursor, optionalText } from "@/lib/search-params"
 
 /**
@@ -33,6 +39,31 @@ export const Route = createFileRoute("/_dashboard/_workspace/decisions")({
   component: DecisionsLayout,
 })
 
+/**
+ * List-beside-detail at ≥1280px; below that an open decision replaces the
+ * queue with a back control (`plan/ux.md` §6). The queue stays MOUNTED either
+ * way — hiding is a CSS decision, not a route change — which is what lets
+ * closing a detail return focus to the row that opened it, and what keeps a
+ * mid-page cursor position intact.
+ */
 function DecisionsLayout() {
-  return <Outlet />
+  const params = useParams({ strict: false })
+  const detailOpen = params.decisionId !== undefined
+
+  return (
+    <div className="flex flex-col gap-6">
+      <DashboardPageTitle
+        title="Decisions"
+        description="Everything the squad cannot decide on its own. Nothing leaves the building until someone here says so."
+      />
+      <div className="flex min-w-0 flex-col gap-6 xl:grid xl:grid-cols-[24rem_minmax(0,1fr)] xl:items-start">
+        <div className={detailOpen ? "hidden min-w-0 xl:block" : "min-w-0"}>
+          <DecisionQueue detailOpen={detailOpen} />
+        </div>
+        <div className="min-w-0">
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  )
 }

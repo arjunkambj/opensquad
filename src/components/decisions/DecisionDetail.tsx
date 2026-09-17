@@ -2,8 +2,8 @@ import { ArrowLeft01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
-import { useState } from "react"
-import type { ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
+import type { ReactNode, RefObject } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { ConnectionRequiredPanel } from "@/components/decisions/ConnectionRequiredPanel"
@@ -34,6 +34,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useEscapeToParent } from "@/hooks/use-queue-navigation"
 import type { WorkspaceRole } from "@/lib/workspace-role"
 
 /**
@@ -56,6 +57,8 @@ export type { WorkspaceRole }
  */
 export function DecisionDetail({ decisionId }: { decisionId: string }) {
   const current = useCurrentWorkspace()
+  useEscapeToParent("/decisions")
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   const decision = useQuery(
     api.decisions.get,
@@ -66,6 +69,17 @@ export function DecisionDetail({ decisionId }: { decisionId: string }) {
         }
       : "skip",
   )
+
+  // Focus lands on the heading when a decision opens — once per decision, not
+  // on every live update, or a refresh would steal focus mid-review. The row
+  // that opened it gets focus back on the way out (the queue tracks its id).
+  const focusedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (decision !== undefined && focusedFor.current !== decisionId) {
+      focusedFor.current = decisionId
+      headingRef.current?.focus()
+    }
+  }, [decision, decisionId])
 
   if (current === undefined || current === null || decision === undefined) {
     return (
@@ -82,7 +96,7 @@ export function DecisionDetail({ decisionId }: { decisionId: string }) {
   return (
     <>
       <BackToQueue />
-      <DecisionHeader decision={decision} />
+      <DecisionHeader decision={decision} headingRef={headingRef} />
       {decision.state === "open" ? (
         <OpenDecision
           workspaceId={current.workspace._id}
@@ -120,7 +134,13 @@ function BackToQueue() {
   )
 }
 
-function DecisionHeader({ decision }: { decision: Doc<"decisions"> }) {
+function DecisionHeader({
+  decision,
+  headingRef,
+}: {
+  decision: Doc<"decisions">
+  headingRef: RefObject<HTMLHeadingElement | null>
+}) {
   return (
     <header className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -131,7 +151,11 @@ function DecisionHeader({ decision }: { decision: Doc<"decisions"> }) {
           opened {formatWaited(decision.createdAt)}
         </span>
       </div>
-      <h1 className="font-heading text-2xl font-semibold text-foreground">
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-heading text-2xl font-semibold text-foreground outline-none"
+      >
         {DECISION_KIND_LABEL[decision.kind]}
       </h1>
       <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">

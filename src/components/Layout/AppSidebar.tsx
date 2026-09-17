@@ -40,6 +40,7 @@ import {
   sidebarMainItems,
 } from "@/constants/sidebar-menu"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useInboxAttention } from "@/hooks/use-inbox-attention"
 import { isTypingTarget } from "@/lib/keyboard"
 import Logo from "./Logo"
 
@@ -74,6 +75,13 @@ export function AppSidebar() {
   // than a zero that would claim the queue is empty.
   const current = useCurrentWorkspace()
   const openDecisions = useOpenDecisionCount(
+    current !== undefined && current !== null
+      ? current.workspace._id
+      : undefined,
+  )
+  // Unassigned + open-frozen threads — the same call the Overview attention
+  // block makes, so the badge and the block can never disagree.
+  const inboxAttention = useInboxAttention(
     current !== undefined && current !== null
       ? current.workspace._id
       : undefined,
@@ -134,6 +142,12 @@ export function AppSidebar() {
           <SidebarMenuBadge>
             {openDecisions}
             <span className="sr-only"> open decisions</span>
+          </SidebarMenuBadge>
+        ) : null}
+        {item.href === "/inbox" && inboxAttention !== undefined ? (
+          <SidebarMenuBadge>
+            {inboxAttention.needsAttention}
+            <span className="sr-only"> threads need attention</span>
           </SidebarMenuBadge>
         ) : null}
       </SidebarMenuItem>

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { DecisionActionDialog } from "@/components/decisions/DecisionActionDialog"
+import { EditDraftDialog } from "@/components/decisions/EditDraftDialog"
 import type { DecisionPanelProps } from "@/components/decisions/decision-presentation"
 import {
   Chip,
@@ -179,6 +180,7 @@ export function DraftApprovalPanel({
         <DraftApprovalActions
           workspaceId={workspaceId}
           decision={decision}
+          draft={draft}
           expectedVersion={expectedVersion}
           disabledReason={staleReason}
         />
@@ -413,11 +415,13 @@ function PreflightCard({
 function DraftApprovalActions({
   workspaceId,
   decision,
+  draft,
   expectedVersion,
   disabledReason,
 }: {
   workspaceId: Id<"workspaces">
   decision: Doc<"decisions">
+  draft: Doc<"drafts">
   expectedVersion: number
   /**
    * Why acting is currently refused, or `undefined` when it is allowed. The
@@ -434,6 +438,7 @@ function DraftApprovalActions({
   const intentId = useDecisionIntents()
 
   const [open, setOpen] = useState<ActionKey | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Held here, outside the dialogs, so closing one or hitting a CONFLICT never
@@ -520,6 +525,17 @@ function DraftApprovalActions({
           onClick={() => setOpen("reject")}
         >
           Reject
+        </Button>
+        {/* J3 ④ — the same actor who approves may also fix the bytes. The edit
+            writes revision N+1 and withdraws THIS ask, so it sits inside the
+            group it supersedes, not on the content card. */}
+        <Button
+          variant="secondary"
+          disabled={blocked}
+          aria-describedby={blocked ? "draft-actions-blocked" : undefined}
+          onClick={() => setEditOpen(true)}
+        >
+          Edit draft
         </Button>
       </div>
       {/* The reason a disabled control is disabled has to be readable, not
@@ -618,6 +634,13 @@ function DraftApprovalActions({
           <CharacterCount value={reason} />
         </div>
       </DecisionActionDialog>
+
+      <EditDraftDialog
+        workspaceId={workspaceId}
+        draft={draft}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
     </div>
   )
 }
