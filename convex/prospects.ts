@@ -1693,8 +1693,13 @@ export const markSendAccepted = internalMutation({
             ? `Booking proposal delivered — lead is booking_proposed`
             : `Stage ${prospect.salesStage} → ${nextStage}`,
         operationKey:
+          // Keyed per ATTEMPT, not per booking: a human can pull the stage
+          // back down and a second send carrying the same live booking link
+          // must still record its re-advance — the row and the append-only
+          // history can never disagree. True replays still dedupe because
+          // one attempt writes this key at most once.
           booking !== null
-            ? `prospect:${prospect._id}:booking-sent:${booking._id}`
+            ? `prospect:${prospect._id}:booking-sent:${booking._id}:${attempt._id}`
             : `prospect:${prospect._id}:contacted:${attempt._id}`,
         fromStage: prospect.salesStage,
         toStage: nextStage,
