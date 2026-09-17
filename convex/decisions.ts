@@ -264,11 +264,17 @@ export const openRequiredDecision = internalMutation({
     if (mission === null) {
       throw domainError("NOT_FOUND", "mission not found");
     }
-    if (
+    const missionTerminal =
       mission.state === "completed" ||
       mission.state === "cancelled" ||
-      mission.state === "failed"
-    ) {
+      mission.state === "failed";
+    // `delivery_uncertain` is the one ask that may open on a terminal
+    // mission: an uncertain attempt blocks every future dispatch on its
+    // conversation, and the decision row is the only operator-visible
+    // recovery path — a mission cancelled while a send was in flight must
+    // not wedge the thread invisibly. Every other kind signals a live
+    // workflow, which a terminal mission no longer has.
+    if (missionTerminal && args.kind !== "delivery_uncertain") {
       throw domainError(
         "CONFLICT",
         `mission is ${mission.state}; cannot open a decision`,
@@ -353,7 +359,10 @@ export const openRequiredDecision = internalMutation({
         : {}),
     });
 
-    if (args.required) {
+    // A required ask on a terminal mission is a durable record, not a board
+    // gate — the dead mission's counters and column stay untouched (the ask
+    // still lists in the queue via by_workspaceId_and_state).
+    if (args.required && !missionTerminal) {
       const requiredDecisionCount = mission.requiredDecisionCount + 1;
       await ctx.db.patch("missions", mission._id, {
         requiredDecisionCount,

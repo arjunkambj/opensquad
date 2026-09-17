@@ -1632,8 +1632,11 @@ export const recordSendOutcome = internalMutation({
 /**
  * Open the required `delivery_uncertain` decision for an uncertain attempt
  * (§8.7 — the Needs-you surface). Idempotent per attempt via askKey; skips
- * cleanly when the attempt is no longer uncertain or the mission is already
- * terminal (the attempt row remains the durable record either way).
+ * cleanly when the attempt is no longer uncertain. The ask is opened even
+ * when the mission is already terminal — a mission cancelled mid-send does
+ * not retire an in-flight provider call, and without the ask the uncovered
+ * uncertain attempt would wedge the conversation invisibly
+ * (`missing_replacement_authorization` forever).
  */
 export const openDeliveryUncertainAsk = internalMutation({
   args: { sendAttemptId: v.id("sendAttempts") },
@@ -1651,13 +1654,7 @@ export const openDeliveryUncertainAsk = internalMutation({
       return { opened: false };
     }
     const mission = await ctx.db.get("missions", draft.missionId);
-    if (
-      mission === null ||
-      mission.workflowId === undefined ||
-      mission.state === "completed" ||
-      mission.state === "cancelled" ||
-      mission.state === "failed"
-    ) {
+    if (mission === null || mission.workflowId === undefined) {
       return { opened: false };
     }
     await ctx.runMutation(internal.decisions.openRequiredDecision, {
