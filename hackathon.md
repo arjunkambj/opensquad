@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-17T07:25:00Z
+- **Last updated:** 2026-09-17T09:32:00Z
 
 ## Log
 
@@ -500,3 +500,19 @@ UI (`conversations.listForProspect`, `missions.listForProspect`,
 `decisions.listForDraft`, `prospects.countOverdue`, `prospects.list`
 unscheduled) and are pushed to the dev deployment.
 Evidence: `plan/evidence/P13-inbox.md`, `plan/evidence/P13-leads.md`.
+
+### 2026-09-17 - 57ff45c
+
+**P14 (pre-pass).** The acceptance card ran its backend-exercisable half ahead
+of the credentialed gate: tenancy and role denial, concurrent start/approval
+conflicts, the full delivery-uncertainty loop (parked to requesting to
+swept-uncertain to reconciled or definitively failed), every send gate, worker
+bridge lease/scope/digest and credential-leak refusals, tool-boundary budgets
+and URL admission, webhook signature and dedupe, CRM/booking OCC rules, and
+payload/limit bounds. One real defect found and fixed: Convex Workflow
+serializes thrown errors with stack traces, and those raw strings were stored
+in user-facing `outcomeReason`/`failure`/`progressSummary` fields - now one
+bounded readable reason line (`convex/lib/validators.ts`). Deferred honestly:
+the physical model run, fresh-Box recovery, browser scenarios and Apollo legs
+await owner credentials.
+Evidence: `plan/evidence/P14.md`.
