@@ -555,3 +555,23 @@ longer wedges the conversation on `missing_replacement_authorization` with no
 operator recovery. And the `booking_proposed` history event is keyed per send
 attempt instead of per booking, so re-advancing a corrected lead records the
 event the row shows.
+
+### 2026-09-17 - 0d81310
+
+**Independent review of the audit fixes.** A four-lane re-review of the
+previous sweep confirmed the fixes and surfaced its own round: the decisions
+queue's bad-link test matched the `[Request ID]` in every Convex error and
+mislabelled real failures (now narrowed to `domainErrorCode`/`isMalformedIdError`
+per convex-error.ts's documented convention); the runtime teardown's bounded
+`workerRequests` scan read terminal history before live rows and could skip
+in-flight requests (now per-state like the controls loop); orphan-stop ops
+are keyed per generation so a past `failed` op can't dedupe a revive's
+coverage; `resolveDeliveryUncertainty` no longer claims `dispatched` for a
+replacement on a terminal mission; `p04gate auth` now actually forwards
+`--auth-budget-ms`/`--oauth-timeout-secs` to the in-box probe (the flag
+forwarding lived only on an unmerged branch) and boxmcp guards NaN budgets;
+`p21box up` treats only a 404 as "box gone" — a transient inspect failure no
+longer bills a duplicate Box. On the P16 lane, a demo+real owner now resolves
+to the real workspace (there is no switcher) and the tour copy no longer
+promises a runtime the demo cannot have. All checks green.
+Evidence: code review reports (four read-only lanes).
