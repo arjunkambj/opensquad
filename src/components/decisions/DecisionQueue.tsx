@@ -16,6 +16,7 @@ import {
 import { EmptyState, ErrorState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { domainErrorCode, isMalformedIdError } from "@/lib/convex-error"
 import { useQueueNavigation } from "@/hooks/use-queue-navigation"
 import { withFilters } from "@/lib/search-params"
 import type { DecisionsSearch } from "@/routes/_dashboard/_workspace/decisions"
@@ -412,22 +413,29 @@ function QueuePager({
  */
 function DecisionQueueError({ error, reset }: ErrorComponentProps) {
   const navigate = useNavigate()
+  const search = useSearch({ from: QUEUE_ROUTE })
   const message = error instanceof Error ? error.message : ""
   const cursorProblem = /cursor/i.test(message)
-  const badLink = cursorProblem || /id|argument|validator/i.test(message)
+  // Narrow matching only: every Convex error embeds `[Request ID: …]`, so a
+  // broad /id|argument|validator/ test would relabel ANY backend failure —
+  // a transient outage included — as a bad link. A foreign mission arrives
+  // as our NOT_FOUND; a mistyped one as the malformed-id validator error.
+  const badMission =
+    domainErrorCode(error) === "NOT_FOUND" || isMalformedIdError(error)
+  const badLink = cursorProblem || badMission
   return (
     <ErrorState
       title={
         cursorProblem
           ? "This page link is no longer valid"
-          : badLink
+          : badMission
             ? "This link doesn't name a queue this workspace has"
             : "The queue didn't load"
       }
       description={
         cursorProblem
           ? "The queue moved on since this link was made — the page cursor it carries no longer resolves."
-          : badLink
+          : badMission
             ? "The mission filter in this link does not resolve here — the unfiltered queue is the way back."
             : "The queue could not be loaded. Nothing here was decided or changed."
       }
@@ -436,14 +444,17 @@ function DecisionQueueError({ error, reset }: ErrorComponentProps) {
           ? () =>
               void navigate({
                 to: "/decisions",
-                search: {},
+                // A dead cursor re-throws on every retry — drop it but keep
+                // a still-valid mission filter. A dead mission can only be
+                // cleared by dropping the params entirely.
+                search: badMission ? {} : { ...search, cursor: undefined },
               })
           : reset
       }
       retryLabel={
         cursorProblem
           ? "Back to the first page"
-          : badLink
+          : badMission
             ? "Show the whole queue"
             : "Try again"
       }
