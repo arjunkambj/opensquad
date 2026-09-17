@@ -137,9 +137,17 @@ async function ensureWorkspaceImpl(
       q.eq("identityKey", identityKey).eq("status", "active"),
     )
     .collect();
-  const owned = existing.find((membership) => membership.role === "owner");
-  if (owned !== undefined) {
-    return { workspaceId: owned.workspaceId, created: false };
+  // A DEMO workspace does not satisfy "already owns one" — opting into the
+  // public demo must not strand the visitor without a real workspace (the
+  // demo row itself is created by `demo.optIn`, not this path).
+  const ownedMemberships = existing.filter(
+    (membership) => membership.role === "owner",
+  );
+  for (const membership of ownedMemberships) {
+    const workspace = await ctx.db.get("workspaces", membership.workspaceId);
+    if (workspace !== null && workspace.demoMode !== true) {
+      return { workspaceId: workspace._id, created: false };
+    }
   }
 
   const name =
