@@ -444,7 +444,7 @@ async function evaluateSendGates(
   if (suppression !== null) {
     return block(
       suppression.matchedBy === "email" ? "suppressed_email" : "suppressed_domain",
-      `recipient is suppressed by a ${suppression.matchedBy} record (${suppression.suppression.reason})`,
+      `recipient is suppressed by ${suppression.matchedBy} record (${suppression.suppression.reason})`,
     );
   }
 
