@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-router"
 import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
 import { DecisionQueue } from "@/components/decisions/DecisionQueue"
-import { optionalCursor, optionalText } from "@/lib/search-params"
+import { optionalCursor, optionalId } from "@/lib/search-params"
 
 /**
  * The decision queue's URL contract, declared on the layout so the queue and
@@ -33,7 +33,7 @@ export type DecisionsSearch = {
 
 export const Route = createFileRoute("/_dashboard/_workspace/decisions")({
   validateSearch: (search): DecisionsSearch => ({
-    mission: optionalText(search.mission),
+    mission: optionalId(search.mission),
     cursor: optionalCursor(search.cursor),
   }),
   component: DecisionsLayout,

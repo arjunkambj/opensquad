@@ -7,6 +7,7 @@ import {
 } from "@/lib/date-ranges"
 import {
   optionalCursor,
+  optionalId,
   optionalOneOf,
   optionalText,
   pageSize,
@@ -71,7 +72,7 @@ export const Route = createFileRoute("/_dashboard/_workspace/leads")({
   validateSearch: (search): LeadsSearch => ({
     mode: optionalOneOf(["pipeline", "due"] as const, search.mode),
     stage: optionalOneOf(SALES_STAGES, search.stage),
-    campaign: optionalText(search.campaign),
+    campaign: optionalId(search.campaign),
     owner: optionalText(search.owner, 300),
     due: optionalOneOf(DUE_WINDOW_IDS, search.due),
     q: optionalText(search.q),

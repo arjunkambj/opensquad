@@ -44,10 +44,7 @@ export function optionalOneOf<T extends string>(
 }
 
 /**
- * A bounded free-text param (a search box, a Convex document id from a link).
- * Ids cannot be validated client-side beyond shape; the backend rejects a
- * foreign or malformed one with NOT_FOUND, which the dashboard error boundary
- * already renders honestly.
+ * A bounded free-text param (a search box, a display label from a link).
  */
 export function optionalText(value: unknown, max = 200): string | undefined {
   if (typeof value !== "string") {
@@ -55,6 +52,23 @@ export function optionalText(value: unknown, max = 200): string | undefined {
   }
   const trimmed = value.trim()
   return trimmed.length === 0 || trimmed.length > max ? undefined : trimmed
+}
+
+/**
+ * A Convex document id carried in the URL (`?campaign=`, `?mission=`).
+ *
+ * A free-text param is wrong for these: `v.id(…)` argument validation on the
+ * backend THROWS on a value that is not an id — a hard error inside the list
+ * boundary, not the NOT_FOUND this layer is meant to fall back from (rule 2).
+ * Anything that cannot even be shaped like an id (generated ids are lowercase
+ * base32-ish, 16–64 chars) is dropped here, so a hand-edited link degrades to
+ * the unfiltered list instead of an error card. A well-shaped id that names a
+ * foreign table still reaches the backend and fails honestly there.
+ */
+export function optionalId(value: unknown): string | undefined {
+  return typeof value === "string" && /^[a-z0-9]{16,64}$/.test(value)
+    ? value
+    : undefined
 }
 
 /** An opaque pagination cursor. Never inspected, only carried. */
@@ -96,11 +110,17 @@ export function optionalEpochMs(value: unknown): number | undefined {
 export const PAGE_SIZES = [25, 50] as const
 export type PageSize = (typeof PAGE_SIZES)[number]
 
-export function pageSize(value: unknown): PageSize {
+/**
+ * Absent means the default — `25`. Returning `undefined` (not `25`) keeps the
+ * default out of the URL: the backend's own default is the same 25, and a
+ * parsed `limit` that always contains a value would write `?limit=25` onto
+ * every link this screen builds (rule 3 — the clean state is the bare path).
+ */
+export function pageSize(value: unknown): PageSize | undefined {
   const parsed = typeof value === "string" ? Number(value) : value
   return (PAGE_SIZES as readonly unknown[]).includes(parsed)
     ? (parsed as PageSize)
-    : 25
+    : undefined
 }
 
 /**
