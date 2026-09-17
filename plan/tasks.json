@@ -520,8 +520,8 @@
       "id": "P19",
       "title": "Lead CRM and booking backend",
       "tier": "core",
-      "status": "in_progress",
-      "owner": "subagent-P19",
+      "status": "done",
+      "owner": "integrator",
       "dependsOn": [
         "P11",
         "P20"
@@ -539,7 +539,12 @@
         "convex/sending.ts",
         "plan/evidence/P19.md"
       ],
-      "evidence": [],
+      "evidence": [
+        "plan/evidence/P19.md: convex/prospects.ts CRM surface (index-backed list, search_company_name search, getDetail, updateStage/assign/setNextAction/addNote), convex/leadEvents.ts append-only history, convex/bookings.ts full lifecycle (propose/draftProposal/confirm/reschedule/cancel/recordOutcome), plus bookingId/bookingVersion links on drafts revalidated at creation, approval and dispatch (booking_not_current), cancelDraftParkedAttempts, markSendAccepted on the accepted-send path, markReplied on verified inbound and associateProspect.",
+        "EXERCISED on an isolated local backend (local:local-arjun_kamboj_43d32-opensquad-1, http://127.0.0.1:3210) with --identity bearer users and imported memberships: cursor pagination over 5 leads, owner/stage/dueRange filters, company-name search with in-index equality filters and workspace isolation, viewer FORBIDDEN on mutations, outsider NOT_FOUND, stale expectedVersion CONFLICT, requestId replay vs same-key-different-content CONFLICT, booked-stage refusal without a confirmed booking, terminal-stage rules (human won/lost entry+exit, automatic reply never exits lost), one-active-booking CONFLICT, invalid IANA timezone/end-before-start/>24h/stale-version confirmations, viewer/outsider confirm denial, reschedule versioning, post-start-only recordOutcome (completed and no_show), cancel with lead stage fallback, booking-linked draft created/approved and refused at dispatch as booking_not_current after human confirm, cancel superseding the linked draft and its ask in one transaction, and recordSendOutcome(accepted) -> markSendAccepted -> lastContactedAt + booking_proposed on the lead.",
+        "HONEST DEFERRALS: the AgentMail provider call itself never ran on the local backend (no provider connection) - acceptance was driven through the real recordSendOutcome on a requesting attempt, so markSendAccepted is production code but the provider leg is P11 already-evidenced path. Real calendar sync remains unimplemented and is not implied anywhere (confirmationSource=manual, no externalEventRef). bookings.draftId records the first linked revision, not necessarily the sending one.",
+        "ACCEPTED at merge (branch opensquad/P19, head de5e61c incl. integrator-owned-file revert, on base 4ac81cb): combined branch lint/build/convex-tsc clean, pushed to dev:flexible-grasshopper-949. Bug found and fixed by the lane: undated leads sorted into overdue - listPage now applies gte(nextActionDueAt, from ?? 0)."
+      ],
       "branch": "opensquad/P19",
       "worktree": "../opensquad-worktrees/P19",
       "baseRef": "8f6f0f4"
