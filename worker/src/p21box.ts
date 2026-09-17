@@ -24,16 +24,21 @@
 //             appear on a command line.
 //
 // Subcommands:
-//   up         create box (persisted idempotency key), wait ready
+//   up         create box (fresh idempotency key per lifecycle) or resume a
+//              stopped/archived one, then wait ready
 //   adopt ID   adopt an existing connect-provisioned box
 //   bootstrap  presence/toolchain check → Node 24.21.0 + @openai/codex
 //              0.154.0 → upload the dependency-free dist bundle → worker.env
-//   start      launch `node bundle/main.js` detached, record the processId
+//   start      launch `node bundle/main.js` detached, verify it stays running
 //   status     box state + daemon stdout tail (sanitized: env VALUES never)
 //   bridge     host-side reachability probe — POST /worker/claim with no
 //              token must answer 401, not a network error
 //   stop       archive the box (pause; billing for the box stops)
 //   down       delete the box (confirm-header path), verify GET /boxes empty
+//
+// Flags:
+//   --ttl N    seconds before the provider auto-archives a created/resumed
+//              box (default P21BOX_TTL_SECONDS or 7200 — the trial cap)
 //
 // Local state: worker/.p21box/ (untracked). Env values: worker/.p21box/
 // worker.env (untracked, never committed, never echoed to stdout).
@@ -70,8 +75,10 @@ const ENV_IN = join(STATE_DIR, "worker.env");
 const NODE_VERSION = "24.21.0";
 const CODEX_VERSION = "0.154.0";
 // Trial accounts cap a Box at two hours (plan/integrations.md); the driver
-// default honours that ceiling. Paid accounts can pass --ttl.
-const BOX_TTL_SECONDS = Number(process.env.P21BOX_TTL_SECONDS ?? 7200);
+// default honours that ceiling. Paid accounts pass --ttl or set
+// P21BOX_TTL_SECONDS — validated in main() before anything spends.
+const RAW_TTL = argOf("ttl") ?? process.env.P21BOX_TTL_SECONDS;
+const BOX_TTL_SECONDS = Number(RAW_TTL ?? "7200");
 
 // The daemon's own module set — every file `dist/main.js` reaches by static
 // import. The production worker has ZERO runtime npm dependencies (verified:
@@ -212,6 +219,11 @@ type DriverState = {
   gateDir?: string;
   daemonProcessId?: number;
   boxDeleted?: boolean;
+  /** Operation + idempotency pair for the in-flight create. Minted once per
+   *  box lifecycle and cleared when the create lands — a NEW lifecycle must
+   *  never replay a dead Box's receipt (the provider returns the recorded
+   *  id, and inspecting a deleted Box dead-ends the driver). */
+  createOp?: { operationKey: string; idem: string };
 };
 
 /** GATE_DIR is discovered at bootstrap time and persisted — later driver
@@ -348,18 +360,58 @@ async function cmdUp(adapter: BoxLifecycleAdapter) {
       boxId: state.boxId,
     });
     if (inspected.ok) {
-      box = inspected.value;
-      line("box.reused", { boxId: box.boxId, state: box.state });
+      if (inspected.value.state === "archived") {
+        // `stop` or the TTL archived it — resume the SAME Box rather than
+        // billing a fresh one (resume keeps the filesystem, so the
+        // bootstrapped toolchain and worker.env survive).
+        const resumed = await adapter.resumeBox({
+          operationKey: `p21-resume-${Date.now()}`,
+          boxId: state.boxId,
+          ttlSeconds: BOX_TTL_SECONDS,
+          wait: { timeoutMs: 8 * 60_000, intervalMs: 5_000 },
+        });
+        if (!resumed.ok) {
+          line("box.resumeFailed", {
+            boxId: state.boxId,
+            error: `${resumed.error.code ?? resumed.error.kind}: ${resumed.error.message}`,
+            uncertain: resumed.uncertain,
+          });
+          process.exitCode = 1;
+          return;
+        }
+        box = resumed.value;
+        delete state.daemonProcessId;
+        saveState(state);
+        line("box.resumed", { boxId: box.boxId, state: box.state });
+      } else {
+        box = inspected.value;
+        line("box.reused", { boxId: box.boxId, state: box.state });
+      }
+    } else {
+      // The recorded Box is gone — deleted outside this driver or by `down`
+      // on another checkout. Mark it and fall through to a FRESH lifecycle.
+      state.boxDeleted = true;
+      saveState(state);
+      line("box.gone", {
+        boxId: state.boxId,
+        error: `${inspected.error.code ?? inspected.error.kind}: ${inspected.error.message}`,
+      });
     }
   }
   if (box === undefined) {
-    if (state.idem === undefined) {
-      state.idem = randomUUID();
+    if (state.createOp === undefined) {
+      // Fresh lifecycle → fresh operation AND idempotency keys. Reusing the
+      // prior receipt would reconcile the deleted Box's id forever, and
+      // reusing the old provider key could replay a stale response.
+      state.createOp = {
+        operationKey: `p21-create-${randomUUID()}`,
+        idem: randomUUID(),
+      };
       saveState(state);
     }
     const created = await adapter.createBox({
-      operationKey: "p21-create-a",
-      idempotencyKey: state.idem,
+      operationKey: state.createOp.operationKey,
+      idempotencyKey: state.createOp.idem,
       config,
     });
     if (!created.ok) {
@@ -371,8 +423,16 @@ async function cmdUp(adapter: BoxLifecycleAdapter) {
       return;
     }
     box = created.value;
+    // A new lifecycle — every recorded fact below named the OLD box.
     state.boxId = box.boxId;
     state.adopted = false;
+    state.boxDeleted = false;
+    delete state.createOp;
+    delete state.idem;
+    delete state.daemonProcessId;
+    delete state.codexBinInBox;
+    delete state.nodeBinDir;
+    delete state.gateDir;
     saveState(state);
     line("box.created", { boxId: box.boxId, state: box.state });
   }
@@ -389,7 +449,11 @@ async function cmdUp(adapter: BoxLifecycleAdapter) {
 /** Adopt a Box the backend's own `connect` provisioned — the sealed
  *  credential and env injection are already its work. */
 async function cmdAdopt(adapter: BoxLifecycleAdapter) {
-  const boxId = process.argv[3] ?? argOf("box");
+  // `--box <id>` wins over the positional — `adopt --box <id>` must not treat
+  // the flag itself as the id.
+  const positional = process.argv[3];
+  const boxId =
+    argOf("box") ?? (positional?.startsWith("--") ? undefined : positional);
   if (boxId === undefined) {
     line("adopt.usage", { usage: "node dist/p21box.js adopt <boxId>" });
     process.exitCode = 1;
@@ -407,6 +471,15 @@ async function cmdAdopt(adapter: BoxLifecycleAdapter) {
     return;
   }
   const state = loadState();
+  if (state.boxId !== boxId) {
+    // A different Box — every recorded runtime fact named the old one.
+    delete state.daemonProcessId;
+    delete state.codexBinInBox;
+    delete state.nodeBinDir;
+    delete state.gateDir;
+    delete state.createOp;
+    delete state.idem;
+  }
   state.boxId = boxId;
   state.adopted = true;
   state.boxDeleted = false;
@@ -431,6 +504,12 @@ async function cmdBridge() {
       body: "{}",
     });
     line("bridge.probe", { status: res.status, expect: 401 });
+    // Any status but 401 means the probe did not prove the bridge: 200 would
+    // be an unauthenticated claim succeeding, anything else a route that did
+    // not reach the auth check at all.
+    if (res.status !== 401) {
+      process.exitCode = 1;
+    }
   } catch (error) {
     line("bridge.unreachable", {
       error: error instanceof Error ? error.message : String(error),
@@ -452,9 +531,15 @@ async function cmdBootstrap(client: AsciiBoxClient, adapter: BoxLifecycleAdapter
   const entries = presence.stdout
     .split("\n")
     .filter((l) => l.includes(":present") || l.includes(":absent"));
+  // A failed probe produces empty stdout — empty is NOT clean. Only claim
+  // hygiene when the script actually ran.
   line("box.presence", {
-    clean: entries.filter((l) => l.endsWith(":present")).length === 0,
+    probed: presence.ok,
+    clean:
+      presence.ok &&
+      entries.filter((l) => l.endsWith(":present")).length === 0,
     present: entries.filter((l) => l.endsWith(":present")),
+    ...(presence.ok ? {} : { probeError: presence.error ?? "command failed" }),
   });
   const homeLine = presence.stdout
     .split("\n")
@@ -500,8 +585,10 @@ async function cmdBootstrap(client: AsciiBoxClient, adapter: BoxLifecycleAdapter
     'echo "codexpath:$(command -v codex)"',
   ].join("\n");
 
+  // The receipt key is scoped to THIS box — a fixed key would replay the
+  // previous box's bootstrap receipt onto a fresh lifecycle.
   const bootstrap = await adapter.bootstrap({
-    operationKey: "p21-bootstrap-a",
+    operationKey: `p21-bootstrap-${boxId}`,
     boxId,
     spec: { command: bootstrapScript, timeoutSeconds: 600 },
     timeoutMs: 10 * 60_000,
@@ -623,12 +710,15 @@ async function cmdStart(client: AsciiBoxClient) {
     state.nodeBinDir ?? `${boxHome}/.local/node-v${NODE_VERSION}/bin`;
   // A start script keeps the token off every command line and the daemon's
   // stdout in a file `status` can read back — a detached command's buffer is
-  // not the place for a long-lived service's log.
+  // not the place for a long-lived service's log. The env file is READ line
+  // by line rather than sourced: `.` would evaluate values as shell, so a
+  // space, quote or `$` in a token could break the export or execute.
   const script = [
     "#!/bin/sh",
-    "set -a",
-    `. "${gate}/worker.env"`,
-    "set +a",
+    `while IFS='=' read -r k v; do`,
+    `  case "$k" in ""|\\#*) continue;; esac`,
+    `  export "$k=$v"`,
+    `done < "${gate}/worker.env"`,
     `export PATH="${nodeBinDir}:$PATH"`,
     `cd "${bundle}"`,
     `exec node "${bundle}/main.js" >> "${gate}/daemon.log" 2>&1`,
@@ -662,9 +752,42 @@ async function cmdStart(client: AsciiBoxClient) {
     v["type"] === "command.started" &&
     typeof v["processId"] === "number"
   ) {
-    state.daemonProcessId = v["processId"];
+    const processId = v["processId"];
+    state.daemonProcessId = processId;
     saveState(state);
-    line("start.daemon", { processId: state.daemonProcessId });
+    // A spawned wrapper is not a running daemon: a missing worker.env, a bad
+    // node path or a config error exits within seconds. Watch briefly and
+    // report what the process ACTUALLY did before claiming success — `status`
+    // reads the real outcome back from daemon.log.
+    const deadline = Date.now() + 10_000;
+    let lastStatus: string | undefined;
+    let lastExit: number | null | undefined;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      const probe = await client.commandStatus(state.boxId, processId, 1024);
+      if (probe.ok) {
+        lastStatus = probe.value.status;
+        lastExit = probe.value.exitCode;
+        if (probe.value.running !== true) break;
+      }
+    }
+    if (lastStatus !== undefined && lastStatus !== "running") {
+      line("start.daemonExited", {
+        processId,
+        status: lastStatus,
+        exitCode: lastExit,
+        hint: "run `status` for the daemon.log tail",
+      });
+      process.exitCode = 1;
+      return;
+    }
+    line("start.daemon", {
+      processId,
+      aliveAfterSeconds: 10,
+      ...(lastStatus === undefined
+        ? { statusProbe: "unavailable — see `status`" }
+        : {}),
+    });
     return;
   }
   line("start.unexpected", { response: v });
@@ -725,6 +848,12 @@ async function cmdStop(adapter: BoxLifecycleAdapter) {
     operationKey: `p21-stop-${Date.now()}`,
     boxId: state.boxId,
   });
+  if (stopped.ok) {
+    // The daemon died with the archive — a stale processId would make
+    // `status` poll a process that can never exist again.
+    delete state.daemonProcessId;
+    saveState(state);
+  }
   line("box.stop", {
     ok: stopped.ok,
     ...(stopped.ok ? {} : { error: stopped.error.message }),
@@ -747,6 +876,9 @@ async function cmdDown(client: AsciiBoxClient, adapter: BoxLifecycleAdapter) {
     return;
   }
   state.boxDeleted = true;
+  delete state.createOp;
+  delete state.idem;
+  delete state.daemonProcessId;
   saveState(state);
   const remaining = await client.listBoxes({ limit: 20 });
   line("down.done", {
@@ -758,6 +890,19 @@ async function cmdDown(client: AsciiBoxClient, adapter: BoxLifecycleAdapter) {
 }
 
 async function main(): Promise<void> {
+  // Fail before any spend: a NaN/negative TTL would either throw inside the
+  // provider request or archive the Box the moment it lands.
+  if (
+    !Number.isInteger(BOX_TTL_SECONDS) ||
+    BOX_TTL_SECONDS < 60 ||
+    BOX_TTL_SECONDS > 86_400
+  ) {
+    line("config.badTtl", {
+      value: RAW_TTL ?? "(defaulted)",
+      hint: "pass --ttl <seconds> or set P21BOX_TTL_SECONDS — a whole number between 60 and 86400",
+    });
+    process.exit(1);
+  }
   const apiKey = readEnvFileKey("ASCII_API_KEY");
   if (apiKey === undefined) {
     line("noApiKey", { hint: "ASCII_API_KEY in env or .env.local" });
