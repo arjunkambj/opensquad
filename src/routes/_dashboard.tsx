@@ -81,7 +81,7 @@ function DashboardRouteError({ error, reset }: ErrorComponentProps) {
             ? "Your role in this workspace doesn't allow this page. An owner can change it in Settings."
             : "Sign in again to continue."
         }
-        action={<Button render={<Link to="/overview" />}>Go to Overview</Button>}
+        action={<Button render={<Link to="/leads" />}>Back to your leads</Button>}
       />
     )
   }
@@ -103,7 +103,7 @@ function DashboardRouteError({ error, reset }: ErrorComponentProps) {
               )
             : "That link doesn't name a record in this workspace. It may have been edited, truncated or copied from somewhere else."
         }
-        action={<Button render={<Link to="/overview" />}>Go to Overview</Button>}
+        action={<Button render={<Link to="/leads" />}>Back to your leads</Button>}
       />
     )
   }

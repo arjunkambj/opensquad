@@ -5,8 +5,10 @@ export const hexclaveClientApp = new HexclaveClientApp({
   urls: {
     handler: "/handler",
     signIn: "/sign-in",
-    afterSignIn: "/overview",
-    afterSignUp: "/overview",
+    // `/leads` is the signed-in home (§3/§161) — the CRM is what the operator
+    // lands on; Mission Control stays linked at the top of it.
+    afterSignIn: "/leads",
+    afterSignUp: "/leads",
     afterSignOut: "/",
   },
 });

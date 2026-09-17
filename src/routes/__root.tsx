@@ -45,7 +45,7 @@ function RootNotFound() {
         className="w-full max-w-md"
         title="Page not found"
         description="The page you're looking for doesn't exist."
-        action={<Button render={<Link to="/overview" />}>Back to overview</Button>}
+        action={<Button render={<Link to="/leads" />}>Back to your leads</Button>}
       />
     </div>
   )

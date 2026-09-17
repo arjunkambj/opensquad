@@ -58,8 +58,10 @@ function SignInGate() {
   }, [user, after_auth_return_to, navigate])
 
   if (user) {
+    // No return path means the signed-in home — `/leads`, not Mission
+    // Control, which is a deliberate step from the CRM's top bar.
     return after_auth_return_to === undefined ? (
-      <Navigate to="/overview" replace />
+      <Navigate to="/leads" replace />
     ) : (
       <Spinner className="mx-auto" />
     )
