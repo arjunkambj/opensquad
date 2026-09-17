@@ -1,4 +1,10 @@
-import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import {
+  CatchBoundary,
+  Link,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router"
+import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
@@ -7,11 +13,12 @@ import {
   RequiredChip,
   formatWaited,
 } from "@/components/decisions/decision-presentation"
-import { EmptyState, LoadingState } from "@/components/states/states"
+import { EmptyState, ErrorState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 import { useQueueNavigation } from "@/hooks/use-queue-navigation"
 import { withFilters } from "@/lib/search-params"
+import type { DecisionsSearch } from "@/routes/_dashboard/_workspace/decisions"
 import { cn } from "@/lib/utils"
 
 const QUEUE_ROUTE = "/_dashboard/_workspace/decisions"
@@ -30,23 +37,56 @@ const QUEUE_ROUTE = "/_dashboard/_workspace/decisions"
 export function DecisionQueue({ detailOpen }: { detailOpen: boolean }) {
   const current = useCurrentWorkspace()
   const search = useSearch({ from: QUEUE_ROUTE })
-  const navigate = useNavigate()
 
   const workspaceId =
     current !== undefined && current !== null ? current.workspace._id : undefined
 
-  const page = useQuery(
-    api.decisions.listOpen,
-    workspaceId === undefined
-      ? "skip"
-      : {
-          workspaceId,
-          ...(search.mission === undefined
-            ? {}
-            : { missionId: search.mission as Id<"missions"> }),
-          ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
-        },
+  // The `listOpen` query lives inside this boundary so a stale cursor or a
+  // foreign `?mission=` id throws HERE — never the whole route — the same
+  // arrangement the leads and inbox lists use (`plan/ux.md` §227).
+  if (workspaceId === undefined) {
+    // `null` cannot reach here — `_workspace` redirects a membership-less
+    // user to setup — but the workspace types as nullable and loading is the
+    // only honest render for a case that resolves elsewhere.
+    return (
+      <LoadingState
+        title="Loading decisions"
+        description="Reading everything that is waiting on a human."
+      />
+    )
+  }
+  return (
+    <CatchBoundary
+      getResetKey={() => `${search.mission ?? ""}:${search.cursor ?? ""}`}
+      errorComponent={DecisionQueueError}
+    >
+      <DecisionQueueBody
+        workspaceId={workspaceId}
+        search={search}
+        detailOpen={detailOpen}
+      />
+    </CatchBoundary>
   )
+}
+
+function DecisionQueueBody({
+  workspaceId,
+  search,
+  detailOpen,
+}: {
+  workspaceId: Id<"workspaces">
+  search: DecisionsSearch
+  detailOpen: boolean
+}) {
+  const navigate = useNavigate()
+
+  const page = useQuery(api.decisions.listOpen, {
+    workspaceId,
+    ...(search.mission === undefined
+      ? {}
+      : { missionId: search.mission as Id<"missions"> }),
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+  })
 
   const { activeKey, setActiveKey } = useQueueNavigation({
     items: page?.items ?? [],
@@ -54,10 +94,9 @@ export function DecisionQueue({ detailOpen }: { detailOpen: boolean }) {
     detailOpen,
   })
 
-  // `null` cannot reach here — `_workspace` redirects a membership-less user
-  // to setup — but the query types as nullable and loading is the only honest
-  // render for a case that resolves elsewhere.
-  if (current === undefined || current === null || page === undefined) {
+  // A skipped query (no workspace yet) leaves `page` undefined — loading is
+  // the only honest render for a case that resolves elsewhere.
+  if (page === undefined) {
     return (
       <LoadingState
         title="Loading decisions"
@@ -148,7 +187,7 @@ export function DecisionQueue({ detailOpen }: { detailOpen: boolean }) {
       {groups.map((group) => (
         <MissionGroup
           key={group.missionId}
-          workspaceId={current.workspace._id}
+          workspaceId={workspaceId}
           missionId={group.missionId}
           decisions={group.decisions}
           filtered={search.mission !== undefined}
@@ -361,5 +400,53 @@ function QueuePager({
           : "End of the queue."}
       </p>
     </div>
+  )
+}
+
+/**
+ * Expired/foreign cursor or a `?mission=` value that is not a mission — inside
+ * the queue, not the route. For a stale LINK the honest recovery is a link
+ * without it: a bare `reset` re-throws on the same args forever, so the button
+ * navigates to the unfiltered first page (which also remounts the boundary via
+ * `getResetKey`) instead of retrying a query that can never succeed.
+ */
+function DecisionQueueError({ error, reset }: ErrorComponentProps) {
+  const navigate = useNavigate()
+  const message = error instanceof Error ? error.message : ""
+  const cursorProblem = /cursor/i.test(message)
+  const badLink = cursorProblem || /id|argument|validator/i.test(message)
+  return (
+    <ErrorState
+      title={
+        cursorProblem
+          ? "This page link is no longer valid"
+          : badLink
+            ? "This link doesn't name a queue this workspace has"
+            : "The queue didn't load"
+      }
+      description={
+        cursorProblem
+          ? "The queue moved on since this link was made — the page cursor it carries no longer resolves."
+          : badLink
+            ? "The mission filter in this link does not resolve here — the unfiltered queue is the way back."
+            : "The queue could not be loaded. Nothing here was decided or changed."
+      }
+      onRetry={
+        badLink
+          ? () =>
+              void navigate({
+                to: "/decisions",
+                search: {},
+              })
+          : reset
+      }
+      retryLabel={
+        cursorProblem
+          ? "Back to the first page"
+          : badLink
+            ? "Show the whole queue"
+            : "Try again"
+      }
+    />
   )
 }
