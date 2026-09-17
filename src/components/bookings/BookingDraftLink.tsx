@@ -78,10 +78,8 @@ function BookingDraftLinkBody({
     (decision) =>
       decision.kind === "draft_approval" && decision.state === "open",
   )
-  const latestAttempt =
-    preflight.attempts.length === 0
-      ? undefined
-      : preflight.attempts[preflight.attempts.length - 1]
+  // `sending.preflight` returns attempts newest-first.
+  const latestAttempt = preflight.attempts[0]
   const superseded = draft.supersededAt !== undefined
   const pinnedStale =
     draft.bookingVersion !== undefined && draft.bookingVersion !== bookingVersion

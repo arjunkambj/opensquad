@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
@@ -219,10 +219,27 @@ function ActiveBookingCard({
   const [cancelOpen, setCancelOpen] = useState(false)
   const [outcomeOpen, setOutcomeOpen] = useState(false)
 
-  // Read once at mount — "has the meeting started" is a page-level fact for
-  // this render, not a ticking clock (a wall-clock re-check per render would
-  // also be an impure call).
-  const [now] = useState(() => Date.now())
+  // "Has the meeting started" must flip while the card stays mounted, so a
+  // confirmed booking ticks on a slow timer until its start arrives — then
+  // the interval clears itself rather than re-rendering forever (a wall-clock
+  // re-check per render would be an impure call).
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const startsAt = booking.startsAt
+    if (booking.state !== "confirmed" || startsAt === undefined) {
+      return
+    }
+    const tick = () => {
+      const at = Date.now()
+      setNow(at)
+      if (startsAt <= at) {
+        clearInterval(handle)
+      }
+    }
+    const handle = setInterval(tick, 15_000)
+    tick()
+    return () => clearInterval(handle)
+  }, [booking.state, booking.startsAt])
   const meetingPassed =
     booking.startsAt !== undefined && booking.startsAt <= now
 
