@@ -155,3 +155,19 @@ connection is the trusted-operator diagnostic surface only — the employee
 image contract above (`/etc/opensquad/worker.env`, the systemd unit, the
 pinned package set) ships NO MCP servers; the filtered workspace gateway is
 P07. See plan/evidence/P04.md for the deferred-OAuth state and resume steps.
+
+## P21 runtime exercise driver (NOT the employee image)
+
+`src/p21box.ts` puts the production daemon (`dist/main.js`) into one
+disposable Box bound to a real deployment bridge. Until a named worker
+snapshot exists, worker delivery is the manual half of provisioning; this
+driver is it. Subcommands: `up` (create; values staged in
+`worker/.p21box/worker.env` are written into the Box as worker.env — never
+inside the create body), `adopt <boxId>` (use a `connect`-provisioned Box;
+the env is reconstructed inside the Box from printenv or
+`/etc/opensquad/worker.env`), `bridge` (host probe: unauthenticated
+`POST /worker/claim` must answer 401), `bootstrap` (Node 24.21.0 +
+`@openai/codex@0.154.0` + the dependency-free dist bundle), `start`,
+`status`, `stop`, `down`. The driver default TTL is 7200 s — the trial
+account cap; `P21BOX_TTL_SECONDS` overrides. Deployment-side,
+`OPENSQUAD_BOX_TTL_SECONDS` bounds what `connect`/`reconnect` request.
