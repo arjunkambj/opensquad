@@ -1,11 +1,21 @@
-import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import {
+  CatchBoundary,
+  Link,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router"
+import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { formatInstant } from "@/components/decisions/decision-presentation"
 import { actorLabel } from "@/components/missions/MissionReceipts"
 import { OverviewDateRangePicker } from "@/components/overview/OverviewDateRangePicker"
-import { EmptyState, LoadingState } from "@/components/states/states"
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -74,13 +84,6 @@ export function ActivityFeed({
     timezone,
   )
 
-  const page = useQuery(api.activity.list, {
-    workspaceId,
-    from: bounds.from,
-    to: bounds.to,
-    ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
-  })
-
   const label =
     picker.value.start.getTime() === picker.value.end.getTime()
       ? dateFormatter.format(picker.value.start)
@@ -125,7 +128,54 @@ export function ActivityFeed({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {page === undefined ? (
+        {/* The `activity.list` query lives inside this boundary so a stale or
+            foreign `?cursor=` throws HERE — never the whole overview — the
+            same arrangement the leads/inbox/decisions lists use. */}
+        <CatchBoundary
+          getResetKey={() =>
+            `${range}:${search.from ?? ""}:${search.to ?? ""}:${search.cursor ?? ""}`
+          }
+          errorComponent={ActivityFeedError}
+        >
+          <ActivityFeedBody
+            workspaceId={workspaceId}
+            timezone={timezone}
+            bounds={bounds}
+            label={label}
+            cursor={search.cursor}
+          />
+        </CatchBoundary>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ActivityFeedBody({
+  workspaceId,
+  timezone,
+  bounds,
+  label,
+  cursor,
+}: {
+  workspaceId: Id<"workspaces">
+  timezone: string
+  bounds: { from: number; to: number }
+  label: string
+  cursor: string | undefined
+}) {
+  const search = useSearch({ from: OVERVIEW_ROUTE })
+  const navigate = useNavigate()
+
+  const page = useQuery(api.activity.list, {
+    workspaceId,
+    from: bounds.from,
+    to: bounds.to,
+    ...(cursor === undefined ? {} : { cursor }),
+  })
+
+  return (
+    <>
+      {page === undefined ? (
           <LoadingState
             title="Loading activity"
             description={`Reading receipts for ${label}.`}
@@ -217,7 +267,42 @@ export function ActivityFeed({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </>
+  )
+}
+
+/**
+ * Expired/foreign cursor or a failed page — inside the feed, not the route.
+ * A stale cursor re-throws on every bare `reset`, so the recovery navigates
+ * to the first page (which also remounts the boundary via `getResetKey`)
+ * rather than retrying a query that can never succeed.
+ */
+function ActivityFeedError({ error, reset }: ErrorComponentProps) {
+  const navigate = useNavigate()
+  const search = useSearch({ from: OVERVIEW_ROUTE })
+  const cursorProblem = error instanceof Error && /cursor/i.test(error.message)
+  return (
+    <ErrorState
+      title={
+        cursorProblem
+          ? "This page link is no longer valid"
+          : "The activity feed didn't load"
+      }
+      description={
+        cursorProblem
+          ? "The feed moved on since this link was made — the page cursor it carries no longer resolves."
+          : "Receipts could not be loaded. Nothing here was changed."
+      }
+      onRetry={
+        cursorProblem
+          ? () =>
+              void navigate({
+                to: "/overview",
+                search: { ...search, cursor: undefined },
+              })
+          : reset
+      }
+      retryLabel={cursorProblem ? "Back to the first page" : "Try again"}
+    />
   )
 }
