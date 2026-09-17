@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-17T09:32:00Z
+- **Last updated:** 2026-09-17T14:20:00Z
 
 ## Log
 
@@ -516,3 +516,28 @@ bounded readable reason line (`convex/lib/validators.ts`). Deferred honestly:
 the physical model run, fresh-Box recovery, browser scenarios and Apollo legs
 await owner credentials.
 Evidence: `plan/evidence/P14.md`.
+
+### 2026-09-17 - 56a9651
+
+**Post-merge audit sweep.** A four-lane review of the last day of commits
+(frontend/CRM, Convex call-site contract, worker runtime, hosting/demo) found
+real defects, all fixed in focused commits: the overdue due-window rebound
+its Convex query args every render and resubscribed in a loop; lead detail
+leaked version pins across ids; the owner picker and next-action form opened
+blank instead of prefilled (a bare save would have silently unscheduled);
+booking surfaces read the oldest send attempt and could lock "record outcome"
+forever; booking dialogs kept dismissed state on reopen; list/feed error
+boundaries retried stale cursors forever; `?campaign=`/`?mission=` params could
+throw inside `v.id` validation; the `?step=review` onboarding link dead-ended;
+OAuth sign-in dropped `after_auth_return_to`. Worker side: p21box could never
+recover from `down`/`stop` (fixed receipt key replayed a deleted Box), the
+hygiene probe reported clean on failure, `start` claimed success before the
+daemon proved it stayed up, env files were sourced unsafely, and the p04gate
+host watch expired before the widened in-box OAuth budget. On the unmerged
+P16 lane, demo workspaces can no longer spend the deployment's ASCII account
+(`connect`/`reconnect` refuse `demoMode`), a demo visitor can still create a
+real workspace, and `/worker/`/`/agentmail/` GETs can no longer fall through
+to the SPA shell. `pnpm lint`, `tsc` (app + convex + worker) and
+`pnpm plan check` are all green; plan state unchanged - P21 in progress, P04/
+P09/P16/P17 still blocked on owner credentials and publish authorization.
+Evidence: `plan/evidence/P16.md` (audit addendum).
