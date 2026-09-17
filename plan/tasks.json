@@ -605,7 +605,8 @@
         "plan/verification.md"
       ],
       "evidence": [
-        "PRE-PASS dispatched ahead of P09 (card gate stays open): backend-exercisable V-scenarios run on a local backend now; physical-model-run, fresh-Box recovery, browser and Apollo items remain deferred to the credentialed integrated gate. Tracker status left pending deliberately - in_progress would trip the dependency check while P09 is blocked."
+        "PRE-PASS dispatched ahead of P09 (card gate stays open): backend-exercisable V-scenarios run on a local backend now; physical-model-run, fresh-Box recovery, browser and Apollo items remain deferred to the credentialed integrated gate. Tracker status left pending deliberately - in_progress would trip the dependency check while P09 is blocked.",
+        "PRE-PASS MERGED at 57ff45c (branch opensquad/P14, head 6991c9d): every backend-exercisable V-scenario run on a local backend against the combined code - tenancy/roles, concurrency conflicts, delivery-uncertainty full loop, all send gates, worker bridge lease/scope/digest/credential-leak refusals, tool boundary budgets and URL admission, webhook signature+dedupe, CRM/booking OCC and lifecycle rules, payload/limit bounds, credential-hygiene sweep. DEFECT FIXED at 7ea657c: workflow error stacks were stored in user-facing fields; now one bounded readable reason line (errorReason/unwrapConvexErrorText). Integrator fix: suppression reason grammar. Card remains pending: physical model run, fresh-Box recovery, browser scenarios, Apollo and the integrated gate await owner credentials."
       ],
       "branch": "opensquad/P14",
       "worktree": "../opensquad-worktrees/P14",
