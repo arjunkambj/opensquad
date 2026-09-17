@@ -155,9 +155,166 @@ function zonedCalendarDay(atMs: number, timezone: string): Date {
     : localDateOf({ year: parts.year, month: parts.month, day: parts.day })
 }
 
+/**
+ * A civil wall-clock time — an input[type=date] plus an input[type=time]
+ * value — as a UTC instant in `timezone`, or the reason it cannot be one.
+ *
+ * The same converging guess `zonedStartOfDayMs` uses, generalised to any
+ * minute of day, with the result read BACK through the zone before it is
+ * trusted: a civil time inside a spring-forward gap resolves to a different
+ * wall time and is reported `impossible_time` rather than silently repaired;
+ * a fall-back hour that occurs twice resolves to the earlier instant and is
+ * flagged `ambiguous` so the caller can refuse or make the choice explicit
+ * (V24: ambiguous and invalid DST times are rejected, never guessed).
+ */
+export type CivilToUtcResult =
+  | { ok: true; ms: number; ambiguous: boolean }
+  | { ok: false; reason: "bad_input" | "unreadable_zone" | "impossible_time" }
+
+export function civilTimeToUtcMs(
+  date: string,
+  time: string,
+  timezone: string,
+): CivilToUtcResult {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim())
+  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(time.trim())
+  if (dateMatch === null || timeMatch === null) {
+    return { ok: false, reason: "bad_input" }
+  }
+  const year = Number(dateMatch[1])
+  const month = Number(dateMatch[2])
+  const day = Number(dateMatch[3])
+  const hours = Number(timeMatch[1])
+  const minutes = Number(timeMatch[2])
+  const probe = new Date(Date.UTC(year, month - 1, day))
+  if (
+    hours > 23 ||
+    minutes > 59 ||
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return { ok: false, reason: "bad_input" }
+  }
+  const minuteOfDay = hours * 60 + minutes
+  const desired = Date.UTC(year, month - 1, day) + minuteOfDay * 60_000
+
+  let guess = desired
+  for (let index = 0; index < 4; index += 1) {
+    const actual = zonedParts(guess, timezone)
+    if (actual === null) {
+      return { ok: false, reason: "unreadable_zone" }
+    }
+    const actualMs =
+      Date.UTC(actual.year, actual.month - 1, actual.day) +
+      actual.minuteOfDay * 60_000
+    const diff = desired - actualMs
+    if (diff === 0) {
+      break
+    }
+    guess += diff
+  }
+
+  // Read the answer back: a gap time converges to an instant that reads as a
+  // DIFFERENT wall time in the zone, which is the only honest way to know
+  // "14:30" never existed there.
+  const back = zonedParts(guess, timezone)
+  if (
+    back === null ||
+    Date.UTC(back.year, back.month - 1, back.day) + back.minuteOfDay * 60_000 !==
+      desired
+  ) {
+    return { ok: false, reason: "impossible_time" }
+  }
+  // A repeated wall time has two instants reading as it; the repeat sits one
+  // offset-step away — 30, 45 or 60 minutes depending on the zone.
+  let ambiguous = false
+  for (const offset of [1_800_000, 2_700_000, 3_600_000]) {
+    for (const candidate of [guess - offset, guess + offset]) {
+      const other = zonedParts(candidate, timezone)
+      if (
+        other !== null &&
+        Date.UTC(other.year, other.month - 1, other.day) +
+          other.minuteOfDay * 60_000 ===
+          desired
+      ) {
+        ambiguous = true
+      }
+    }
+  }
+  return { ok: true, ms: guess, ambiguous }
+}
+
 /** Today on the workspace's wall calendar — not necessarily the browser's. */
 export function todayInZone(timezone: string, now = new Date()): Date {
   return zonedCalendarDay(now.getTime(), timezone)
+}
+
+/* ------------------------------------------------------------------ */
+/* Due windows — the /leads "Due actions" mode                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The due-action lenses the lead list can name in `?due=`. `unscheduled` is
+ * a value of its own rather than a range: it names the absent
+ * `nextActionDueAt`, and the caller sends `unscheduled: true` to
+ * `prospects.list` instead of bounds — a lead with no due date is a
+ * first-class state, never a far-future sentinel (§4.3).
+ */
+export const DUE_WINDOWS = {
+  overdue: { label: "Overdue" },
+  today: { label: "Due today" },
+  next_7d: { label: "Due in the next 7 days" },
+  next_30d: { label: "Due in the next 30 days" },
+  unscheduled: { label: "Unscheduled — no due date" },
+} as const
+
+export type DueWindowId = keyof typeof DUE_WINDOWS
+
+export const DUE_WINDOW_IDS = Object.keys(DUE_WINDOWS) as readonly DueWindowId[]
+
+/**
+ * The epoch bounds a due window stands for, on the WORKSPACE's calendar —
+ * the same zone every due time on the page is printed in. `null` is
+ * "unscheduled", which is not a range at all. An absent `due` param in due
+ * mode means "everything with a due date" and is handled by the caller as an
+ * empty range, not by this map.
+ */
+export function dueWindowBounds(
+  id: DueWindowId,
+  timezone: string,
+  now = new Date(),
+): { from?: number; to?: number } | null {
+  if (id === "unscheduled") {
+    return null
+  }
+  const today = civilOf(todayInZone(timezone, now))
+  switch (id) {
+    case "overdue":
+      // Due strictly before now — something due later today is not overdue.
+      return { to: now.getTime() }
+    case "today":
+      return {
+        from: zonedStartOfDayMs(today, timezone),
+        to: zonedEndOfDayMs(today, timezone),
+      }
+    case "next_7d":
+      return {
+        from: zonedStartOfDayMs(today, timezone),
+        to: zonedEndOfDayMs(
+          civilOf(addDays(localDateOf(today), 6)),
+          timezone,
+        ),
+      }
+    case "next_30d":
+      return {
+        from: zonedStartOfDayMs(today, timezone),
+        to: zonedEndOfDayMs(
+          civilOf(addDays(localDateOf(today), 29)),
+          timezone,
+        ),
+      }
+  }
 }
 
 export function getPresetRange(
