@@ -19,10 +19,11 @@
  * AND-ed with the workspace limit). Demo workspaces additionally get small
  * owner-visible quotas at creation (`dailySendLimit`, `modelRunDailyLimit`).
  *
- * Execution uses the visitor's OWN connected runtime — `optIn` only creates
- * the isolated workspace; the normal owner-controlled runtime connection and
- * approval flow does the rest. A shared API-funded demo runtime is a separate
- * product/funding decision and is intentionally NOT built here.
+ * Execution needs a runtime the demo cannot have: `runtimeConnections.connect`
+ * and `reconnect` refuse `demoMode` workspaces, because those paths provision
+ * an ASCII Box on the DEPLOYMENT's account — an anonymous opt-in would be
+ * unbounded spend. A funded/shared demo runtime is a separate product and
+ * funding decision and is intentionally NOT built here.
  */
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
