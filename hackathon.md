@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-15T17:51:09Z
+- **Last updated:** 2026-09-17T05:40:00Z
 
 ## Log
 
@@ -450,3 +450,36 @@ without one threw inside a Workpool that does not retry mutations, and the
 `by_eventId` ledger then refused the resend - the mail was lost with nothing to
 drain and nothing to replay.
 Evidence: `plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P21.md`.
+
+### 2026-09-17 - 1e83b35
+
+Integrated four parallel lanes and accepted two cards. **P11 (done).** The reply
+path gate ran end to end on an isolated backend: `associateProspect` role and
+stale-version guards, `workspace_paused` resume block then idempotent dispatch,
+classify to draft revision to its own `draft_approval` with the worker slot
+released before the wait, request-changes redraft with a fresh approval, the
+send boundary, deterministic opt-out suppression, and parked state surviving a
+backend restart. Reply classification now renders through the shared
+`classify_reply` role template (`convex/inbox.ts`); the only residual is a
+provider-signed live inbound on the dev deployment. **P19 (done).** Lead CRM
+and booking backend: member-scoped list/search/detail reads on the declared
+`search_company_name` index, version- and requestId-guarded writes, append-only
+`leadEvents`, the five-state booking lifecycle with one active booking per lead
+and manual-only confirmation (no calendar sync implied), and booking-linked
+drafts revalidated at creation, approval and dispatch (`booking_not_current`).
+Exercised with role denials, stale versions, idempotent replays, cursor
+pagination, timezone/duration guards and a real `recordSendOutcome` driving a
+lead to `booking_proposed`; a real defect was found and fixed (undated leads
+sorted into overdue until the lower bound was pinned). **P13 (part A).**
+`/inbox` and `/inbox/$conversationId`, one shared Decisions implementation
+reused by inbox and mission detail, `?section=` settings with owner-only
+marking, and sidebar attention badges - all contract-verified against a seeded
+fixture workspace on the dev deployment; the signed-in browser walk awaits an
+owner session. A QA lane fixed seven frontend defects (duplicate SVG mask ids,
+reduced-motion smooth scroll, settings deep links, sign-in return-to
+sanitization, onboarding resume, queue keyboard navigation). The P17 lane
+staged the trial pack - invitation, 20-minute script, feedback intake template,
+V21 shot list, social draft and submission fields; nobody was contacted and no
+validation is claimed.
+Evidence: `plan/evidence/P11.md`, `plan/evidence/P19.md`,
+`plan/evidence/P13-inbox.md`, `plan/evidence/qa-web.md`, `plan/evidence/P17.md`.
