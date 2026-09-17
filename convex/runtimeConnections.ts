@@ -1001,6 +1001,28 @@ export const recordLifecycleOutcome = internalMutation({
     if (op === null) {
       return null;
     }
+    // A terminal op is final. A late second driver (a stale-accepted re-drive
+    // that raced the first) must not regress `completed`/`failed` back to
+    // `uncertain` — the sweep would re-drive an op the provider already
+    // applied — nor re-apply connection effects for a transition the row
+    // already recorded. Provider refs the terminal record lacks still merge,
+    // so orphan cleanup can find a box only the late driver ever saw.
+    if (op.state === "completed" || op.state === "failed") {
+      const merge: Record<string, unknown> = {};
+      if (args.boxRef !== undefined && op.boxRef === undefined) {
+        merge.boxRef = args.boxRef;
+      }
+      if (
+        args.providerOperationRef !== undefined &&
+        op.providerOperationRef === undefined
+      ) {
+        merge.providerOperationRef = args.providerOperationRef;
+      }
+      if (Object.keys(merge).length > 0) {
+        await ctx.db.patch("runtimeLifecycleOperations", op._id, merge);
+      }
+      return null;
+    }
     const now = Date.now();
     await ctx.db.patch("runtimeLifecycleOperations", op._id, {
       state: args.outcome,
@@ -1099,13 +1121,13 @@ export const retryLifecycleOperation = internalMutation({
     }
     // `uncertain` is always safe to re-drive. `accepted` means a driver is
     // possibly mid-flight on a multi-minute provider wait — only reschedule
-    // one that has been silent past the action timeout, otherwise a second
-    // driver races the still-executing first.
+    // one that has been silent past the maximum possible action lifetime,
+    // otherwise a second driver races the still-executing first.
     if (
       op.state !== "uncertain" &&
       !(
         op.state === "accepted" &&
-        op.updatedAt <= Date.now() - ASCII_READY_TIMEOUT_MS
+        op.updatedAt <= Date.now() - LIFECYCLE_ACCEPTED_STALE_MS
       )
     ) {
       return { rescheduled: false };
@@ -1126,6 +1148,18 @@ export const retryLifecycleOperation = internalMutation({
 /** A `pending` op unclaimed past this bound lost its scheduled driver —
  *  drivers claim within seconds of the scheduler firing. */
 const LIFECYCLE_PENDING_STALE_MS = 60_000;
+
+/**
+ * An `accepted` op silent past this bound has a dead driver. The bound must
+ * exceed the LONGEST a driver can legitimately hold the claim — Convex
+ * actions die at ~10 minutes, and a create/resume driver can spend nearly
+ * all of that in `waitForBoxReady` + `bootstrapBox` before its record write.
+ * Anything shorter re-drives a still-running driver: a duplicate provider
+ * call, a second bootstrap on the same Box, and two writers racing
+ * `recordLifecycleOutcome`. 12 minutes = action ceiling plus scheduler
+ * margin. (Nothing heartbeats `updatedAt` mid-wait — it doesn't need to.)
+ */
+const LIFECYCLE_ACCEPTED_STALE_MS = 12 * 60_000;
 
 /**
  * Lifecycle-op reconcile sweep (cron): re-drives `uncertain` ops, `accepted`
@@ -1149,7 +1183,7 @@ export const sweepLifecycleOperations = internalMutation({
         .withIndex("by_state_and_updatedAt", (q) =>
           q
             .eq("state", "accepted")
-            .lt("updatedAt", now - ASCII_READY_TIMEOUT_MS),
+            .lt("updatedAt", now - LIFECYCLE_ACCEPTED_STALE_MS),
         )
         .take(32),
       ctx.db
