@@ -706,6 +706,39 @@ for (const path of RESERVED_GET_PATHS) {
           }),
           {
             status: 405,
+            headers: {
+              "Content-Type": "application/json",
+              Allow: "POST",
+            },
+          },
+        ),
+    ),
+  });
+}
+
+// Prefix-level GET guards: the exact-path 405s above miss trailing slashes
+// (`/worker/claim/`) and any not-yet-defined `/worker/*` path — all of which
+// would otherwise fall through to the SPA shell and answer an API-looking
+// request with index.html. These namespaces are app-owned and POST-only, so
+// an unmatched GET is a plain 404; exact matches still win over the prefix,
+// keeping the 405s meaningful. `/firecrawl/` is NOT guarded here — that
+// prefix belongs to the component's `httpPrefix` mount, and an app-level
+// route could collide with the component's own at push time.
+for (const prefix of ["/worker/", "/agentmail/"] as const) {
+  http.route({
+    pathPrefix: prefix,
+    method: "GET",
+    handler: httpAction(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "NOT_FOUND",
+              message: "no such endpoint",
+            },
+          }),
+          {
+            status: 404,
             headers: { "Content-Type": "application/json" },
           },
         ),
