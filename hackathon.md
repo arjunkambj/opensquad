@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-17T05:40:00Z
+- **Last updated:** 2026-09-17T07:25:00Z
 
 ## Log
 
@@ -483,3 +483,20 @@ V21 shot list, social draft and submission fields; nobody was contacted and no
 validation is claimed.
 Evidence: `plan/evidence/P11.md`, `plan/evidence/P19.md`,
 `plan/evidence/P13-inbox.md`, `plan/evidence/qa-web.md`, `plan/evidence/P17.md`.
+
+### 2026-09-17 - 0fa89a2
+
+**P13 (done).** `/leads` is the real CRM and the signed-in home: pipeline and
+due-action list modes over the declared indexes (plus a new `unscheduled` lens
+and bounded `countOverdue`), a five-tab lead detail (record/stage/owner/
+next-action/notes, source-backed evidence, append-only event timeline, the
+lead's threads, booking), and the full booking lifecycle - propose, proposal
+draft through the shared `draft_approval` ask, human-recorded agreement,
+reschedule, cancel, outcome - where every write carries a pinned
+`expectedVersion` and per-intent `requestId`, and nothing implies calendar
+sync. Auth lands on `/leads`; `after_auth_return_to` keeps its same-origin
+check. Five bounded backend reads were added where no index could answer the
+UI (`conversations.listForProspect`, `missions.listForProspect`,
+`decisions.listForDraft`, `prospects.countOverdue`, `prospects.list`
+unscheduled) and are pushed to the dev deployment.
+Evidence: `plan/evidence/P13-inbox.md`, `plan/evidence/P13-leads.md`.
