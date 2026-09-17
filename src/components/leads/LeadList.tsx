@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
@@ -326,15 +326,22 @@ function CompanySearch({
   onCommit: (text: string) => void
 }) {
   const [draft, setDraft] = useState(committed)
+  // The parent's inline `onCommit` changes identity on every unrelated render
+  // (a live list update, a j/k keystroke) — keeping it in a ref stops those
+  // renders from cancelling and restarting the pending 350 ms commit.
+  const commitRef = useRef(onCommit)
+  useEffect(() => {
+    commitRef.current = onCommit
+  }, [onCommit])
 
   useEffect(() => {
     const trimmed = draft.trim()
     if (trimmed === committed.trim()) {
       return
     }
-    const handle = setTimeout(() => onCommit(trimmed), 350)
+    const handle = setTimeout(() => commitRef.current(trimmed), 350)
     return () => clearTimeout(handle)
-  }, [draft, committed, onCommit])
+  }, [draft, committed])
 
   return (
     <div className="min-w-56 flex-1 sm:max-w-xs">
@@ -443,12 +450,17 @@ function LeadListBody({
 
   // Build the due-mode slice: an absent `due` is "everything with a due
   // date" — the empty range — and `unscheduled` is its own arg, not a range.
-  const dueRange =
-    mode !== "due" || searching || search.due === "unscheduled"
-      ? undefined
-      : search.due === undefined
-        ? {}
-        : (dueWindowBounds(search.due, timezone) ?? undefined)
+  // Memoized on the filter inputs alone: `useQuery` compares args by value,
+  // so a `dueRange` rebuilt every render would re-subscribe on each render.
+  const dueRange = useMemo(
+    () =>
+      mode !== "due" || searching || search.due === "unscheduled"
+        ? undefined
+        : search.due === undefined
+          ? {}
+          : (dueWindowBounds(search.due, timezone) ?? undefined),
+    [mode, searching, search.due, timezone],
+  )
   const unscheduled =
     !searching && mode === "due" && search.due === "unscheduled"
 
@@ -775,6 +787,8 @@ function LeadListRow({
 /** Expired/foreign cursor, an unsupported combination or a failed page —
  *  inside the list, not the route. */
 function LeadListError({ error, reset }: ErrorComponentProps) {
+  const navigate = useNavigate()
+  const search = useSearch({ from: LEADS_ROUTE })
   const message = error instanceof Error ? error.message : ""
   const cursor = /cursor/i.test(message)
   const unsupported = /cannot combine|no index supports/i.test(message)
@@ -789,13 +803,25 @@ function LeadListError({ error, reset }: ErrorComponentProps) {
       }
       description={
         cursor
-          ? "The list moved on since this link was made — the page cursor it carries no longer resolves. Go back to the first page, or try loading it again."
+          ? "The list moved on since this link was made — the page cursor it carries no longer resolves."
           : unsupported
-            ? "This link asks for a filter combination no index backs — fix the filters rather than retry."
+            ? "This link asks for a filter combination no index backs — change a filter above to leave this page."
             : "The list could not be loaded. Nothing here was changed."
       }
-      onRetry={reset}
-      retryLabel="Try again"
+      {...(cursor
+        ? // A stale cursor re-throws on every retry — the honest recovery is
+          // the first page, reached by navigation (which remounts the boundary).
+          {
+            onRetry: () =>
+              void navigate({
+                to: "/leads",
+                search: { ...search, cursor: undefined },
+              }),
+            retryLabel: "Back to the first page",
+          }
+        : unsupported
+          ? {}
+          : { onRetry: reset, retryLabel: "Try again" })}
     />
   )
 }

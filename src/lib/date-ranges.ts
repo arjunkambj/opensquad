@@ -245,6 +245,27 @@ export function civilTimeToUtcMs(
   return { ok: true, ms: guess, ambiguous }
 }
 
+/**
+ * The inverse of `civilTimeToUtcMs`: an instant as the `input[type=date]` and
+ * `input[type=time]` values a form should prefill with, on the workspace's
+ * wall clock. `null` when the zone cannot be read — the form then starts
+ * empty rather than prefilling in the wrong zone.
+ */
+export function civilInputsInZone(
+  atMs: number,
+  timezone: string,
+): { date: string; time: string } | null {
+  const parts = zonedParts(atMs, timezone)
+  if (parts === null) {
+    return null
+  }
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return {
+    date: `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`,
+    time: `${pad(Math.floor(parts.minuteOfDay / 60))}:${pad(parts.minuteOfDay % 60)}`,
+  }
+}
+
 /** Today on the workspace's wall calendar — not necessarily the browser's. */
 export function todayInZone(timezone: string, now = new Date()): Date {
   return zonedCalendarDay(now.getTime(), timezone)
@@ -292,7 +313,11 @@ export function dueWindowBounds(
   switch (id) {
     case "overdue":
       // Due strictly before now — something due later today is not overdue.
-      return { to: now.getTime() }
+      // The bound is floored to the minute: a millisecond-exact `now` would
+      // give every render fresh query args and force a Convex re-subscription
+      // per render; the minute bucket keeps the args stable, lets concurrent
+      // viewers share one cached query, and stays fresh within the minute.
+      return { to: Math.floor(now.getTime() / 60_000) * 60_000 }
     case "today":
       return {
         from: zonedStartOfDayMs(today, timezone),
