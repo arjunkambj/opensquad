@@ -483,3 +483,26 @@ V21 shot list, social draft and submission fields; nobody was contacted and no
 validation is claimed.
 Evidence: `plan/evidence/P11.md`, `plan/evidence/P19.md`,
 `plan/evidence/P13-inbox.md`, `plan/evidence/qa-web.md`, `plan/evidence/P17.md`.
+
+### 2026-09-17 - 7501440 (lane: opensquad/P13-leads, unmerged)
+
+**P13 (part B, awaiting acceptance).** `/leads` is now the real CRM and the
+signed-in home: pipeline and due-action list modes over the exact declared
+indexes (plus the new `unscheduled` lens and a bounded `countOverdue`), the
+lead detail's five tabs (record/stage/owner/next-action/notes, source-backed
+evidence, the append-only event timeline, the lead's threads, and the
+booking), and the whole booking lifecycle - propose, proposal draft with its
+shared `draft_approval` ask, human-recorded agreement, reschedule, cancel
+and outcome - where every write carries a pinned `expectedVersion` and a
+per-intent `requestId`, and nothing anywhere implies calendar sync. Auth
+lands on `/leads`; `after_auth_return_to` keeps its same-origin check. Five
+bounded backend reads were added because no index could answer them; they
+are codegen-typed but NOT deployed, so the new queries sit behind scoped
+boundaries that degrade honestly until the integrator pushes.
+
+Verified: lint silent, `tsc -b`, convex and worker typechecks, `vite build`,
+signed-out routes served on the dev server. Honest limits: no Hexclave
+session exists here, so every signed-in walk (list filters, a stage move,
+propose → approve → confirm → reschedule → outcome) awaits an operator
+session plus the deployment push of the new reads.
+Evidence: `plan/evidence/P13-leads.md`.
