@@ -387,15 +387,25 @@ async function cmdUp(adapter: BoxLifecycleAdapter) {
         box = inspected.value;
         line("box.reused", { boxId: box.boxId, state: box.state });
       }
-    } else {
-      // The recorded Box is gone — deleted outside this driver or by `down`
-      // on another checkout. Mark it and fall through to a FRESH lifecycle.
+    } else if (inspected.error.kind === "http" && inspected.error.status === 404) {
+      // Definitively gone — deleted outside this driver or by `down` on
+      // another checkout. Mark it and fall through to a FRESH lifecycle.
+      // Any OTHER failure (transport blip, 5xx, 429) is not proof the box
+      // died: treating it as gone would bill a duplicate Box while the
+      // recorded one may still be alive.
       state.boxDeleted = true;
       saveState(state);
       line("box.gone", {
         boxId: state.boxId,
         error: `${inspected.error.code ?? inspected.error.kind}: ${inspected.error.message}`,
       });
+    } else {
+      line("box.inspectFailed", {
+        boxId: state.boxId,
+        error: `${inspected.error.code ?? inspected.error.kind}: ${inspected.error.message}`,
+      });
+      process.exitCode = 1;
+      return;
     }
   }
   if (box === undefined) {

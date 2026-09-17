@@ -161,13 +161,23 @@ P07. See plan/evidence/P04.md for the deferred-OAuth state and resume steps.
 `src/p21box.ts` puts the production daemon (`dist/main.js`) into one
 disposable Box bound to a real deployment bridge. Until a named worker
 snapshot exists, worker delivery is the manual half of provisioning; this
-driver is it. Subcommands: `up` (create; values staged in
-`worker/.p21box/worker.env` are written into the Box as worker.env — never
-inside the create body), `adopt <boxId>` (use a `connect`-provisioned Box;
-the env is reconstructed inside the Box from printenv or
-`/etc/opensquad/worker.env`), `bridge` (host probe: unauthenticated
-`POST /worker/claim` must answer 401), `bootstrap` (Node 24.21.0 +
-`@openai/codex@0.154.0` + the dependency-free dist bundle), `start`,
-`status`, `stop`, `down`. The driver default TTL is 7200 s — the trial
-account cap; `P21BOX_TTL_SECONDS` overrides. Deployment-side,
+driver is it. Subcommands: `up` (create, resume an archived Box, or reuse a
+live one — the recorded lifecycle is only replaced after a definitive 404;
+values staged in `worker/.p21box/worker.env` are written into the Box as
+worker.env — never inside the create body), `adopt <boxId>` (use a
+`connect`-provisioned Box; the env is reconstructed inside the Box from
+printenv or `/etc/opensquad/worker.env`), `bridge` (host probe:
+unauthenticated `POST /worker/claim` must answer 401), `bootstrap`
+(Node 24.21.0 + `@openai/codex@0.154.0` + the dependency-free dist bundle),
+`start` (env is read line-wise, never sourced; the daemon must still be
+alive ~10 s after spawn or `start` reports the exit), `status`, `stop`,
+`down`. The driver default TTL is 7200 s — the trial account cap;
+`--ttl <seconds>` or `P21BOX_TTL_SECONDS` overrides (integer, 60–86400,
+validated before any provider call). Deployment-side,
 `OPENSQUAD_BOX_TTL_SECONDS` bounds what `connect`/`reconnect` request.
+
+`p04gate auth` relays the Apollo OAuth URL and polls until the in-box probe
+finishes; `--auth-budget-ms` (in-box phase budget, default 55 min) and
+`--oauth-timeout-secs` (OAuth leg, default 2400 s) are validated and
+forwarded to the probe, and the host watch outlives the forwarded budget by
+20 minutes so the callback ferry never dies before the probe does.
