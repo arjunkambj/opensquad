@@ -353,6 +353,50 @@ export const get = query({
 });
 
 /**
+ * The missions that registered a branch for this lead — the sales missions
+ * that discovered or worked it — through `missionProspects.by_prospectId`.
+ * `missionProspects.prospectId` is a string key (P21 stores real doc ids in
+ * it; a legacy `dev-prospect-*` key simply matches nothing here). The booking
+ * surface needs this to name the live mission a proposal draft is bound
+ * under; a foreign or missing prospect is NOT_FOUND, never an empty list.
+ * Bounded like every read model: `hasMore` says the page was truncated.
+ */
+export const listForProspect = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    prospectId: v.id("prospects"),
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({
+    items: v.array(vMissionDoc),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const prospect = await ctx.db.get("prospects", args.prospectId);
+    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "prospect not found");
+    }
+    const limit = boundedLimit(args.limit);
+    const branches = await ctx.db
+      .query("missionProspects")
+      .withIndex("by_prospectId", (q) =>
+        q.eq("prospectId", args.prospectId),
+      )
+      .take(limit + 1);
+    const missions: Doc<"missions">[] = [];
+    for (const branch of branches.slice(0, limit)) {
+      const mission = await ctx.db.get("missions", branch.missionId);
+      // A dangling or cross-workspace branch resolves to nothing, not a leak.
+      if (mission !== null && mission.workspaceId === args.workspaceId) {
+        missions.push(mission);
+      }
+    }
+    return { items: missions, hasMore: branches.length > limit };
+  },
+});
+
+/**
  * One board column, most recently updated first. Cursor-paginated
  * independently per column; `campaignId` optionally scopes to one campaign.
  * Older active missions are never hidden by an activity-date filter — the

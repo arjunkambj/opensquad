@@ -38,6 +38,7 @@ import {
   boundedString,
   domainError,
   invalid,
+  MAX_LIST_LIMIT,
   vDecisionAnswer,
   vDecisionKind,
 } from "./lib/validators";
@@ -552,6 +553,38 @@ export const listForMission = query({
       cursor: result.isDone ? null : result.continueCursor,
       hasMore: !result.isDone,
     };
+  },
+});
+
+/**
+ * The asks bound to one draft — how the booking surface and the thread view
+ * get from `booking.draftId` / `currentDraftId` to the open `draft_approval`
+ * on `/decisions/$decisionId`. `by_draftId` is the same index the retirement
+ * path uses; `draftId` is the forward string reference the schema declares,
+ * taken here as the draft's real id. Bounded: a draft's ask history is small,
+ * but the take is still capped and `hasMore` reports truncation honestly.
+ */
+export const listForDraft = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    draftId: v.id("drafts"),
+  },
+  returns: v.object({
+    items: v.array(vDecisionDoc),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const rows = await ctx.db
+      .query("decisions")
+      .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
+      .take(MAX_LIST_LIMIT + 1);
+    // Decisions of a foreign draft resolve to nothing — existence stays
+    // inside the workspace that owns the ask.
+    const items = rows
+      .filter((row) => row.workspaceId === args.workspaceId)
+      .slice(0, MAX_LIST_LIMIT);
+    return { items, hasMore: rows.length > MAX_LIST_LIMIT };
   },
 });
 
