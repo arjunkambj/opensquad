@@ -41,6 +41,7 @@ import {
 } from "@/constants/sidebar-menu"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 import { useInboxAttention } from "@/hooks/use-inbox-attention"
+import { boundedCount } from "@/lib/bounded-count"
 import { isTypingTarget } from "@/lib/keyboard"
 import Logo from "./Logo"
 
@@ -146,7 +147,13 @@ export function AppSidebar() {
         ) : null}
         {item.href === "/inbox" && inboxAttention !== undefined ? (
           <SidebarMenuBadge>
-            {inboxAttention.needsAttention}
+            {/* `attentionCounts` caps at MAX_LIST_LIMIT — render the same
+                bounded form every other surface does, never an exact-looking
+                "50" that is really "50+". */}
+            {boundedCount(
+              inboxAttention.needsAttention,
+              inboxAttention.needsAttentionHasMore,
+            )}
             <span className="sr-only"> threads need attention</span>
           </SidebarMenuBadge>
         ) : null}
