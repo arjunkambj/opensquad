@@ -541,3 +541,17 @@ to the SPA shell. `pnpm lint`, `tsc` (app + convex + worker) and
 `pnpm plan check` are all green; plan state unchanged - P21 in progress, P04/
 P09/P16/P17 still blocked on owner credentials and publish authorization.
 Evidence: `plan/evidence/P16.md` (audit addendum).
+
+### 2026-09-17 - 0834447
+
+**Backend audit follow-through.** The Convex review lane found three defects,
+all fixed: the lifecycle reconcile sweep re-drove `accepted` Box operations
+at 7 minutes while a healthy create/resume driver legitimately holds its
+claim for nearly the ~10-minute action ceiling - the bound is now 12 minutes
+and `recordLifecycleOutcome` refuses to regress a terminal op (provider refs
+a late driver alone saw still merge). A `delivery_uncertain` ask can now open
+on a terminal mission, so a mission cancelled while a send was in flight no
+longer wedges the conversation on `missing_replacement_authorization` with no
+operator recovery. And the `booking_proposed` history event is keyed per send
+attempt instead of per booking, so re-advancing a corrected lead records the
+event the row shows.
