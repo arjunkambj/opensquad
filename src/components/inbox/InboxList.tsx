@@ -418,20 +418,33 @@ function ConversationRow({
 
 /** Expired/foreign cursor or a failed page — inside the list, not the route. */
 function InboxListError({ error, reset }: ErrorComponentProps) {
-  const description =
-    error instanceof Error && /cursor/i.test(error.message)
-      ? "The list moved on since this link was made — the page cursor it carries no longer resolves. Go back to the first page, or try loading it again."
-      : "The inbox could not be loaded. Nothing here was sent or changed."
+  const navigate = useNavigate()
+  const search = useSearch({ from: INBOX_ROUTE })
+  // A stale cursor re-throws on every retry — the honest recovery is the
+  // first page, reached by navigation (which also remounts the boundary).
+  const cursorProblem = error instanceof Error && /cursor/i.test(error.message)
   return (
     <ErrorState
       title={
-        error instanceof Error && /cursor/i.test(error.message)
+        cursorProblem
           ? "This page link is no longer valid"
           : "The inbox didn't load"
       }
-      description={description}
-      onRetry={reset}
-      retryLabel="Try again"
+      description={
+        cursorProblem
+          ? "The list moved on since this link was made — the page cursor it carries no longer resolves."
+          : "The inbox could not be loaded. Nothing here was sent or changed."
+      }
+      onRetry={
+        cursorProblem
+          ? () =>
+              void navigate({
+                to: "/inbox",
+                search: { ...search, cursor: undefined },
+              })
+          : reset
+      }
+      retryLabel={cursorProblem ? "Back to the first page" : "Try again"}
     />
   )
 }

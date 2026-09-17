@@ -256,12 +256,19 @@ function LoadedConversation({
         </div>
       ) : null}
 
-      <ConversationThread
-        workspaceId={workspaceId}
-        entries={thread?.items ?? []}
-        hasMore={thread?.hasMore ?? false}
-        pendingDraftId={conversation.currentDraftId}
-      />
+      {thread === undefined ? (
+        <LoadingState
+          title="Loading messages"
+          description="Reading this thread's history."
+        />
+      ) : (
+        <ConversationThread
+          workspaceId={workspaceId}
+          entries={thread.items}
+          hasMore={thread.hasMore}
+          pendingDraftId={conversation.currentDraftId}
+        />
+      )}
 
       {stale ? (
         <p className="max-w-3xl text-sm text-muted-foreground">
