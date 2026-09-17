@@ -2,7 +2,7 @@ import { ArrowRight01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-ic
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc } from "../../../convex/_generated/dataModel"
 import {
@@ -16,6 +16,7 @@ import { ReviewStep } from "@/components/onboarding/ReviewStep"
 import { WorkspaceStep } from "@/components/onboarding/WorkspaceStep"
 import {
   type CampaignScopeForm,
+  campaignFormProblems,
   defaultCampaignForm,
 } from "@/components/onboarding/onboarding-model"
 import { Button } from "@/components/ui/button"
@@ -146,6 +147,23 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
     useState<CampaignScopeForm>(defaultCampaignForm)
   const [completed, setCompleted] = useState(false)
 
+  // `?step=review` on a fresh mount is a dead end: the campaign scope lives
+  // only in this component's state, so a reload or shared link arrives with
+  // an empty form whose confirm can never pass. Send the visitor back to the
+  // step the review actually needs rather than rendering an unwinnable
+  // confirm.
+  const reviewBlocked =
+    step === "review" && campaignFormProblems(campaignForm).length > 0
+  useEffect(() => {
+    if (reviewBlocked) {
+      void navigate({
+        to: "/onboarding",
+        search: { step: "campaign" },
+        replace: true,
+      })
+    }
+  }, [reviewBlocked, navigate])
+
   if (profile === undefined) {
     return (
       <LoadingState
@@ -194,6 +212,17 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
           </Button>
         </CardContent>
       </Card>
+    )
+  }
+
+  if (reviewBlocked) {
+    // One render while the effect above moves the URL to `campaign` — the
+    // review step must never draw an empty form whose confirm cannot pass.
+    return (
+      <LoadingState
+        title="Back to the campaign step"
+        description="The review needs the campaign scope filled in first."
+      />
     )
   }
 
