@@ -389,7 +389,7 @@
       "id": "P09",
       "title": "Apollo discovery and contact enrichment",
       "tier": "core",
-      "status": "in_progress",
+      "status": "blocked",
       "owner": "subagent-P21-runtime",
       "dependsOn": [
         "P04",
@@ -410,7 +410,8 @@
       "evidence": [],
       "branch": "opensquad/P21-runtime",
       "worktree": "../opensquad-worktrees/P21-runtime",
-      "baseRef": "8f6f0f4"
+      "baseRef": "8f6f0f4",
+      "blocker": "Owner-deferred Apollo OAuth grant (P04) and P21 runtime credentials; lane prepared, awaiting user go-ahead on opensquad/P21-runtime."
     },
     {
       "id": "P10",
@@ -558,8 +559,7 @@
       "dependsOn": [
         "P11",
         "P12",
-        "P19",
-        "P21"
+        "P19"
       ],
       "skills": [
         "opensquad-build",
@@ -631,7 +631,7 @@
       "id": "P16",
       "title": "Constrained public deployment",
       "tier": "core",
-      "status": "in_progress",
+      "status": "blocked",
       "owner": "subagent-P16",
       "dependsOn": [
         "P14"
@@ -651,13 +651,14 @@
       ],
       "branch": "opensquad/P16-hosting",
       "worktree": "../opensquad-worktrees/P16-hosting",
-      "baseRef": "8f6f0f4"
+      "baseRef": "8f6f0f4",
+      "blocker": "Prep complete on opensquad/P16-hosting (static hosting, route guards, demo flags, release checklist); awaiting owner publish authorization and P14 in merge order."
     },
     {
       "id": "P17",
       "title": "Agency trial, fixes and video",
       "tier": "core",
-      "status": "in_progress",
+      "status": "blocked",
       "owner": "subagent-P17",
       "dependsOn": [
         "P16"
@@ -674,7 +675,8 @@
       ],
       "branch": "opensquad/P17-feedback",
       "worktree": "../opensquad-worktrees/P17-feedback",
-      "baseRef": "8f6f0f4"
+      "baseRef": "8f6f0f4",
+      "blocker": "Prep pack merged; awaiting owner decisions - invitee/sender/timing/send, waitlist form yes/no, publish authorization."
     },
     {
       "id": "P18",

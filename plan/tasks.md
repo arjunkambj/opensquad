@@ -464,7 +464,7 @@ second board state store. `/overview` is the execution surface supporting Leads.
 
 ## P13 — Connect the Leads CRM, booking and supervision UI
 
-Dependencies: P11, P12, P19, P21. Owner: frontend/integrator.
+Dependencies: P11, P12, P19. Owner: frontend/integrator.
 Skills: shadcn; review auth of every new query.
 
 1. Build `/leads` as the working CRM home: pipeline/list and due-action modes,
