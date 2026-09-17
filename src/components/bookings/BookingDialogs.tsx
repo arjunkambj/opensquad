@@ -37,6 +37,9 @@ import { detectLocalTimezone, timezoneOptions } from "@/lib/workspace-time"
  *   clobbering.
  * - `requestId` is per intent (`useIntentId`): a retry replays the same
  *   intent, a success rotates it.
+ * - Reopening is a new intent: every form's state lives in a `*Form` child
+ *   inside `DialogContent`, which unmounts on close — a dismissed attempt
+ *   leaves nothing behind in the fields, the banner, or the requestId.
  */
 
 function mutationErrorMessage(error: unknown): string {
@@ -103,6 +106,39 @@ export function ProposeBookingDialog({
   prospectId: Id<"prospects">
   leadExpectedVersion: number
   open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Propose a booking</DialogTitle>
+          <DialogDescription>
+            Record what you mean to offer — a public booking link, or up to
+            three times the lead could pick. Recording this sends nothing and
+            agrees nothing; the proposal goes out on an approved email.
+          </DialogDescription>
+        </DialogHeader>
+        <ProposeBookingForm
+          workspaceId={workspaceId}
+          prospectId={prospectId}
+          leadExpectedVersion={leadExpectedVersion}
+          onOpenChange={onOpenChange}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ProposeBookingForm({
+  workspaceId,
+  prospectId,
+  leadExpectedVersion,
+  onOpenChange,
+}: {
+  workspaceId: Id<"workspaces">
+  prospectId: Id<"prospects">
+  leadExpectedVersion: number
   onOpenChange: (open: boolean) => void
 }) {
   const propose = useMutation(api.bookings.propose)
@@ -179,18 +215,8 @@ export function ProposeBookingDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Propose a booking</DialogTitle>
-          <DialogDescription>
-            Record what you mean to offer — a public booking link, or up to
-            three times the lead could pick. Recording this sends nothing and
-            agrees nothing; the proposal goes out on an approved email.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-3">
+    <>
+      <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor="proposal-kind">Offer as</Label>
             <NativeSelect
@@ -288,8 +314,7 @@ export function ProposeBookingDialog({
             Record the proposal
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
 
@@ -394,6 +419,44 @@ export function ConfirmBookingDialog({
   onOpenChange: (open: boolean) => void
   reschedule?: boolean
 }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {reschedule ? "Reschedule the meeting" : "Record the agreed time"}
+          </DialogTitle>
+          <DialogDescription>
+            {reschedule
+              ? "Move the confirmed meeting. Any unsent draft still offering the old times is retired with it — a draft can never offer a time that is no longer the agreement."
+              : "The lead agreed to a time — record it. Nothing is sent and no calendar is touched; this is the record of the agreement, not the mechanism of it."}
+          </DialogDescription>
+        </DialogHeader>
+        <ConfirmBookingForm
+          workspaceId={workspaceId}
+          booking={booking}
+          expectedVersion={expectedVersion}
+          onOpenChange={onOpenChange}
+          reschedule={reschedule}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ConfirmBookingForm({
+  workspaceId,
+  booking,
+  expectedVersion,
+  onOpenChange,
+  reschedule,
+}: {
+  workspaceId: Id<"workspaces">
+  booking: Doc<"bookings">
+  expectedVersion: number
+  onOpenChange: (open: boolean) => void
+  reschedule: boolean
+}) {
   const confirm = useMutation(api.bookings.confirm)
   const rescheduleMutation = useMutation(api.bookings.reschedule)
   const [requestId, rotateIntent] = useIntentId()
@@ -488,20 +551,8 @@ export function ConfirmBookingDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {reschedule ? "Reschedule the meeting" : "Record the agreed time"}
-          </DialogTitle>
-          <DialogDescription>
-            {reschedule
-              ? "Move the confirmed meeting. Any unsent draft still offering the old times is retired with it — a draft can never offer a time that is no longer the agreement."
-              : "The lead agreed to a time — record it. Nothing is sent and no calendar is touched; this is the record of the agreement, not the mechanism of it."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col gap-3">
+    <>
+      <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
               <Label htmlFor="bk-date">Date</Label>
@@ -594,8 +645,7 @@ export function ConfirmBookingDialog({
             {reschedule ? "Reschedule" : "Record the agreement"}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
 
@@ -622,6 +672,46 @@ export function CancelBookingDialog({
   booking: Doc<"bookings">
   expectedVersion: number
   open: boolean
+  onOpenChange: (open: boolean) => void
+  timezone: string
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {booking.state === "confirmed"
+              ? "Cancel the booking"
+              : "Cancel the proposal"}
+          </DialogTitle>
+          <DialogDescription>
+            {booking.state === "confirmed"
+              ? `The agreed time — ${booking.startsAt !== undefined && booking.timezone !== undefined ? formatInstant(booking.startsAt, booking.timezone) : "the meeting"} — is called off. Any unsent draft still offering it is retired in the same step. The record keeps the times and your reason.`
+              : "The proposal is withdrawn — nothing it offered is still open. Any unsent draft carrying it is retired in the same step."}
+          </DialogDescription>
+        </DialogHeader>
+        <CancelBookingForm
+          workspaceId={workspaceId}
+          booking={booking}
+          expectedVersion={expectedVersion}
+          onOpenChange={onOpenChange}
+          timezone={timezone}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CancelBookingForm({
+  workspaceId,
+  booking,
+  expectedVersion,
+  onOpenChange,
+  timezone,
+}: {
+  workspaceId: Id<"workspaces">
+  booking: Doc<"bookings">
+  expectedVersion: number
   onOpenChange: (open: boolean) => void
   timezone: string
 }) {
@@ -655,21 +745,8 @@ export function CancelBookingDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {booking.state === "confirmed"
-              ? "Cancel the booking"
-              : "Cancel the proposal"}
-          </DialogTitle>
-          <DialogDescription>
-            {booking.state === "confirmed"
-              ? `The agreed time — ${booking.startsAt !== undefined && booking.timezone !== undefined ? formatInstant(booking.startsAt, booking.timezone) : "the meeting"} — is called off. Any unsent draft still offering it is retired in the same step. The record keeps the times and your reason.`
-              : "The proposal is withdrawn — nothing it offered is still open. Any unsent draft carrying it is retired in the same step."}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-1">
+    <>
+      <div className="flex flex-col gap-1">
           <Label htmlFor="bk-cancel-reason">Reason — required</Label>
           <Textarea
             id="bk-cancel-reason"
@@ -698,8 +775,7 @@ export function CancelBookingDialog({
             Cancel the booking
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
 
@@ -725,6 +801,46 @@ export function OutcomeDialog({
   booking: Doc<"bookings">
   expectedVersion: number
   open: boolean
+  onOpenChange: (open: boolean) => void
+  timezone: string
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Record the outcome</DialogTitle>
+          <DialogDescription>
+            The meeting at{" "}
+            {booking.startsAt !== undefined && booking.timezone !== undefined
+              ? formatInstant(booking.startsAt, booking.timezone)
+              : "the agreed time"}{" "}
+            has happened or not — record which. The lead's next action follows
+            the outcome (follow-up after a meeting, rebooking after a
+            no-show); the history keeps both.
+          </DialogDescription>
+        </DialogHeader>
+        <OutcomeForm
+          workspaceId={workspaceId}
+          booking={booking}
+          expectedVersion={expectedVersion}
+          onOpenChange={onOpenChange}
+          timezone={timezone}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function OutcomeForm({
+  workspaceId,
+  booking,
+  expectedVersion,
+  onOpenChange,
+  timezone,
+}: {
+  workspaceId: Id<"workspaces">
+  booking: Doc<"bookings">
+  expectedVersion: number
   onOpenChange: (open: boolean) => void
   timezone: string
 }) {
@@ -760,21 +876,8 @@ export function OutcomeDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Record the outcome</DialogTitle>
-          <DialogDescription>
-            The meeting at{" "}
-            {booking.startsAt !== undefined && booking.timezone !== undefined
-              ? formatInstant(booking.startsAt, booking.timezone)
-              : "the agreed time"}{" "}
-            has happened or not — record which. The lead's next action follows
-            the outcome (follow-up after a meeting, rebooking after a
-            no-show); the history keeps both.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-1">
+    <>
+      <div className="flex flex-col gap-1">
           <Label htmlFor="bk-outcome">How it went</Label>
           <NativeSelect
             id="bk-outcome"
@@ -801,7 +904,6 @@ export function OutcomeDialog({
             Record the outcome
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
