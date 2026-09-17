@@ -449,7 +449,29 @@ async function cmdAuth(client: AsciiBoxClient) {
   if (state.boxId === undefined) throw new Error("no box — run `up` first");
   const boxId = state.boxId;
 
-  const started = await startProbe(client, boxId, "--phase auth");
+  // Validate the flags BEFORE forwarding — boxmcp reads them with a bare
+  // Number() that would turn a malformed value into NaN and zero its in-box
+  // deadline. The in-box phase budget defaults to 55min (boxmcp
+  // AUTH_BUDGET_MS); the OAuth leg inside it defaults to 40min.
+  const oauthTimeoutSecs = Number(argOf("oauth-timeout-secs"));
+  const authBudgetMs = Number(argOf("auth-budget-ms"));
+  const validOauthSecs =
+    Number.isFinite(oauthTimeoutSecs) && oauthTimeoutSecs > 0
+      ? Math.floor(oauthTimeoutSecs)
+      : undefined;
+  const inBoxBudgetMs =
+    Number.isFinite(authBudgetMs) && authBudgetMs > 0
+      ? Math.floor(authBudgetMs)
+      : 55 * 60_000;
+
+  const probeArgs = [
+    "--phase auth",
+    `--auth-budget-ms ${inBoxBudgetMs}`,
+    ...(validOauthSecs !== undefined
+      ? [`--oauth-timeout-secs ${validOauthSecs}`]
+      : []),
+  ].join(" ");
+  const started = await startProbe(client, boxId, probeArgs);
   if (!started.ok) {
     line("auth.startFailed", { error: started.error });
     process.exitCode = 1;
@@ -458,17 +480,9 @@ async function cmdAuth(client: AsciiBoxClient) {
   line("auth.started", { processId: started.processId });
 
   // The host watch must outlive the in-box budget it relays for — a wider
-  // --auth-budget-ms / --oauth-timeout-secs is pointless if this ferry stops
-  // watching at its own 60-minute deadline first. The in-box default is 40
-  // minutes; 20 minutes of margin covers the status write and callback leg.
-  const oauthTimeoutSecs = Number(argOf("oauth-timeout-secs"));
-  const authBudgetMs = Number(argOf("auth-budget-ms"));
-  const inBoxBudgetMs =
-    Number.isFinite(authBudgetMs) && authBudgetMs > 0
-      ? authBudgetMs
-      : Number.isFinite(oauthTimeoutSecs) && oauthTimeoutSecs > 0
-        ? oauthTimeoutSecs * 1000
-        : 40 * 60_000;
+  // --auth-budget-ms is pointless if this ferry stops watching first. Twenty
+  // minutes of margin covers the status write and the callback leg after the
+  // in-box wait ends.
   const deadline = Date.now() + inBoxBudgetMs + 20 * 60_000;
   let lastUrl: string | undefined;
   let lastStage: string | undefined;

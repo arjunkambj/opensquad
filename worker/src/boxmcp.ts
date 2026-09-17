@@ -80,8 +80,14 @@ const CODEX_HOME = join(GATE_DIR, "codex-home");
 const STATUS_PATH = join(GATE_DIR, `mcp-status-${PHASE}.json`);
 const CALLBACK_PATH = join(GATE_DIR, "callback-url.txt");
 const TOOLS_PATH = join(GATE_DIR, "apollo-tools.json");
-const AUTH_BUDGET_MS = Number(arg("auth-budget-ms") ?? 55 * 60_000);
-const OAUTH_TIMEOUT_SECS = Number(arg("oauth-timeout-secs") ?? 2400);
+// Budgets guard with a finite/positive check — a bare Number("abc") is NaN,
+// and `Date.now() + NaN` would make every wait loop exit instantly.
+function boundedArg(name: string, fallback: number): number {
+  const parsed = Number(arg(name));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+const AUTH_BUDGET_MS = boundedArg("auth-budget-ms", 55 * 60_000);
+const OAUTH_TIMEOUT_SECS = boundedArg("oauth-timeout-secs", 2400);
 const WORKER_VERSION = "0.1.0";
 
 mkdirSync(GATE_DIR, { recursive: true });
