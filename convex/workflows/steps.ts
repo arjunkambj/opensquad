@@ -28,6 +28,7 @@ import {
   boardColumnForMission,
   boundedString,
   domainError,
+  errorReason,
   invalid,
   vMissionOutcome,
   vMissionProspectOutcome,
@@ -773,7 +774,10 @@ export const onMissionWorkflowComplete = internalMutation({
         await completeMissionTx(ctx, mission);
       }
     } else if (args.result.kind === "failed") {
-      await failMission(ctx, mission, args.result.error);
+      // The component serializes the thrown error WITH its stack; only the
+      // first line is a reason. Storing the stack would leak internal file
+      // layout into `failure`, `progressSummary` and the activity feed.
+      await failMission(ctx, mission, errorReason(args.result.error, 500));
     } else {
       // canceled — only reconcile if the cancel didn't already land.
       if (mission.state !== "cancelled" && mission.state !== "completed") {
@@ -819,11 +823,12 @@ export const onProspectWorkflowComplete = internalMutation({
         "child workflow completed without recording an outcome",
       );
     } else if (args.result.kind === "failed") {
+      // Same stack-trace boundary as the mission-level reconcile above.
       await finalizeBranch(
         ctx,
         branch,
         "failed",
-        args.result.error.slice(0, 300),
+        errorReason(args.result.error, 300),
       );
     } else {
       await finalizeBranch(ctx, branch, "cancelled", "child workflow canceled");
