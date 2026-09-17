@@ -262,6 +262,24 @@ export const getCurrent = query({
     if (memberships.length === 0) {
       return null;
     }
+    // Prefer the caller's REAL workspace: a demo-mode row is always created
+    // first (optIn refuses anyone already owning one), so the insertion-ordered
+    // `find` would resolve a demo+real owner to the demo forever — with no
+    // workspace switcher in the app, that strands them on a workspace that
+    // cannot connect a runtime.
+    for (const entry of memberships) {
+      if (entry.role !== "owner") {
+        continue;
+      }
+      const candidate = await ctx.db.get("workspaces", entry.workspaceId);
+      if (candidate !== null && candidate.demoMode !== true) {
+        return {
+          workspace: candidate,
+          role: entry.role,
+          membershipId: entry._id,
+        };
+      }
+    }
     const membership =
       memberships.find((entry) => entry.role === "owner") ?? memberships[0];
     const workspace = await ctx.db.get("workspaces", membership.workspaceId);

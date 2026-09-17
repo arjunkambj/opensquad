@@ -267,9 +267,11 @@ export const executionStatus = query({
  *    demo must never blur into a real workspace's quotas or data;
  *  - `demoMode` can only be set by this bootstrap (and is never unset).
  *
- * The workspace starts paused with the smallest quotas in the product; the
- * visitor still connects their own runtime and approves every send through
- * the normal owner flow.
+ * The workspace starts paused with the smallest quotas in the product. It
+ * CANNOT connect a runtime — `runtimeConnections.connect`/`reconnect` refuse
+ * `demoMode` workspaces because provisioning spends the deployment's ASCII
+ * account. The opt-in demos the pipeline shell and approval UX; a funded
+ * demo runtime is a separate decision (see the module header).
  */
 export const optIn = mutation({
   args: {
