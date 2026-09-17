@@ -286,22 +286,24 @@ async function retireRuntimeInternals(
   // The cancellation must go through the mission-level canceller so each
   // run receipt is finished AND the awaiting workflow's continuation event
   // fires — patching the row alone would leave the workflow parked on an
-  // awaitEvent that can never resolve.
-  const requests = await ctx.db
-    .query("workerRequests")
-    .withIndex("by_workspaceId_and_state_and_createdAt", (q) =>
-      q.eq("workspaceId", connection.workspaceId),
-    )
-    .take(64);
+  // awaitEvent that can never resolve. Iterate per live state: a bounded
+  // take on the unfiltered index reads terminal history first (states sort
+  // before "leased"/"pending"/"running"), so a busy workspace would let
+  // dead rows crowd the live ones out of the scan entirely.
   const missionIds = new Set<Id<"missions">>();
-  for (const request of requests) {
-    if (
-      request.runtimeConnectionId === connection._id &&
-      (request.state === "pending" ||
-        request.state === "leased" ||
-        request.state === "running")
-    ) {
-      missionIds.add(request.missionId);
+  for (const state of ["pending", "leased", "running"] as const) {
+    const requests = await ctx.db
+      .query("workerRequests")
+      .withIndex("by_workspaceId_and_state_and_createdAt", (q) =>
+        q
+          .eq("workspaceId", connection.workspaceId)
+          .eq("state", state),
+      )
+      .collect();
+    for (const request of requests) {
+      if (request.runtimeConnectionId === connection._id) {
+        missionIds.add(request.missionId);
+      }
     }
   }
   for (const missionId of missionIds) {
@@ -426,11 +428,14 @@ export const connect = mutation({
               op.state === "completed"),
         );
         if (!covered) {
+          // Keyed per GENERATION: a `failed` orphan-stop from a prior revive
+          // is terminal and never re-driven — reusing its operationKey would
+          // dedupe this open and leave the box running until provider TTL.
           await openLifecycleOperation(ctx, {
             workspaceId: args.workspaceId,
             connection: prior,
             operation: "stop",
-            operationKey: `stop:${prior._id}:orphan:${boxRef}`,
+            operationKey: `stop:${prior._id}:orphan:${boxRef}:gen${generation}`,
             requestConfig: { ttlSeconds: boxTtlSeconds(), envNames: [] },
             targetBoxRef: boxRef,
           });
