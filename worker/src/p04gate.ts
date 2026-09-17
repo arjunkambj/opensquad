@@ -457,7 +457,19 @@ async function cmdAuth(client: AsciiBoxClient) {
   }
   line("auth.started", { processId: started.processId });
 
-  const deadline = Date.now() + 60 * 60_000;
+  // The host watch must outlive the in-box budget it relays for — a wider
+  // --auth-budget-ms / --oauth-timeout-secs is pointless if this ferry stops
+  // watching at its own 60-minute deadline first. The in-box default is 40
+  // minutes; 20 minutes of margin covers the status write and callback leg.
+  const oauthTimeoutSecs = Number(argOf("oauth-timeout-secs"));
+  const authBudgetMs = Number(argOf("auth-budget-ms"));
+  const inBoxBudgetMs =
+    Number.isFinite(authBudgetMs) && authBudgetMs > 0
+      ? authBudgetMs
+      : Number.isFinite(oauthTimeoutSecs) && oauthTimeoutSecs > 0
+        ? oauthTimeoutSecs * 1000
+        : 40 * 60_000;
+  const deadline = Date.now() + inBoxBudgetMs + 20 * 60_000;
   let lastUrl: string | undefined;
   let lastStage: string | undefined;
   let callbackForwarded = false;
