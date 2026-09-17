@@ -506,8 +506,11 @@ function OwnerControl({
           >
             {/* The current owner always renders, even a revoked one — the
                 select's value must name a real option, and a membership id
-                is what `assign` consumes. */}
-            {currentMembership === undefined ? (
+                is what `assign` consumes. While members are still loading
+                the fallback names the state, not a revoked membership. */}
+            {members === undefined ? (
+              <option value="">Loading members…</option>
+            ) : currentMembership === undefined ? (
               <option value="">
                 {memberLabel(currentOwner)} (no longer a member)
               </option>
@@ -614,6 +617,8 @@ function NextActionControl({
   const hasAction = description.trim().length > 0
   // The date/time inputs express minutes only, so the comparison happens in
   // minute buckets — a stored instant's seconds must not read as a change.
+  // Descriptions compare trimmed like the submit path writes them — a
+  // whitespace-only edit must not arm Save for a semantic no-op.
   const storedDueMinute =
     prospect.nextActionDueAt === undefined
       ? undefined
@@ -621,7 +626,7 @@ function NextActionControl({
   const inputDueMinute =
     dueMs === undefined ? undefined : Math.floor(dueMs / 60_000)
   const changed =
-    description !== (prospect.nextAction?.description ?? "") ||
+    description.trim() !== (prospect.nextAction?.description ?? "") ||
     (hasAction &&
       prospect.nextAction !== undefined &&
       kind !== prospect.nextAction.kind) ||
