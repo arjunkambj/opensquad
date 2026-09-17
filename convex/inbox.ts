@@ -1969,11 +1969,11 @@ function clipSummary(value: string): string {
  * the reviewer approved therefore threw away that reviewer's explicitly
  * approved reply as soon as the send had to wait for the window.
  *
- * The same terminal mission also silences the uncertainty path:
- * `sending.openDeliveryUncertainAsk` returns `{opened: false}` for a completed
- * mission, so a lost acknowledgement would open no ask at all, and
- * `completeReplyMission`'s own `retireAllOpenDecisions` would retire one that
- * had already been opened.
+ * The same terminal transition also retires the uncertainty path:
+ * `openDeliveryUncertainAsk` can open on a terminal mission, but
+ * `completeReplyMission`'s own `retireAllOpenDecisions` runs first and would
+ * cancel a `delivery_uncertain` ask mid-flight — and a cancelled ask cannot
+ * be resolved (`resolveDeliveryUncertainty` requires `open`).
  *
  * So the workflow polls this until the send reaches a state worth stating,
  * and only then completes. Attempts are read by PRECEDENCE, not recency, so

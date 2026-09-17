@@ -368,9 +368,9 @@ export const replyMissionWorkflow = workflow
         // `completed` mission with `mission_inactive`, on which `beginDispatch`
         // CANCELS the attempt. Completing here therefore discarded the
         // reviewer's explicitly approved reply the moment the send had to
-        // wait. A terminal mission also makes
-        // `sending.openDeliveryUncertainAsk` open nothing, and
-        // `completeReplyMission` retires an ask already open.
+        // wait. A terminal transition also retires a `delivery_uncertain`
+        // ask mid-flight via `completeReplyMission`'s `retireAllOpenDecisions`
+        // — and a cancelled ask cannot be resolved.
         //
         // So the mission stays non-terminal until the send settles: polled
         // through a journaled read-only step, slept on durably while parked,

@@ -2726,15 +2726,29 @@ export const resolveDeliveryUncertainty = mutation({
         answer,
         resolvedBy: identityKey,
       });
-      await ctx.scheduler.runAfter(
-        0,
-        internal.sending.sendApprovedDraft,
-        {
-          draftId: replacement._id,
-          replacementDecisionId: decision._id,
-        },
+      // The resolution is recorded either way; whether a dispatch can follow
+      // depends on the replacement's own mission — `sendApprovedDraft`'s
+      // gates refuse a terminal mission outright, so don't claim one here.
+      const replacementMission = await ctx.db.get(
+        "missions",
+        replacement.missionId,
       );
-      dispatched = true;
+      const missionLive =
+        replacementMission !== null &&
+        replacementMission.state !== "completed" &&
+        replacementMission.state !== "cancelled" &&
+        replacementMission.state !== "failed";
+      if (missionLive) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.sending.sendApprovedDraft,
+          {
+            draftId: replacement._id,
+            replacementDecisionId: decision._id,
+          },
+        );
+        dispatched = true;
+      }
     } else {
       await ctx.runMutation(internal.decisions.resolveBound, {
         workspaceId: args.workspaceId,
