@@ -554,7 +554,7 @@
       "title": "Connected lead CRM, booking, decisions and inbox UI",
       "tier": "core",
       "status": "in_progress",
-      "owner": "subagent-P13-inbox",
+      "owner": "subagent-P13-leads",
       "dependsOn": [
         "P11",
         "P12",
@@ -579,9 +579,9 @@
         "Known gaps left for P13 in that surface: no Edit draft (drafts.revise with expectedRevision and the withdraw-approval affordance); no list-beside-detail split at ≥1280px; no j/k queue navigation; no sidebar count badge (the nav number and the home attention block must come from one decisions.listOpen call or they will disagree); no kind filter or resolved-history view until an index supports them.",
         "PART A ACCEPTED at merge 4e39904 (branch opensquad/P13-inbox, head 0e7a576 on base 4ac81cb): /inbox + /inbox/$conversationId (4-tab slicing, safe thread render, notes, takeover/resume/close, unassigned-queue associateProspect with explicit resume), shared Decisions (queue/detail split, EditDraftDialog to drafts.revise, revision conflicts, rejection reasons) reused by inbox and mission detail, settings ?section= rendering with owner-only marking and honest runtime/integration sections, sidebar Inbox (attention badge) + Leads placeholder, /prospects redirect. Contract-level verification run against dev:flexible-grasshopper-949 with seeded fixture workspace jn7c5sj0rh7rza1ssz9yxsea898ee1pz. DEFERRED: signed-in browser walk of J3/J4/J6 (needs owner Hexclave session); missing bounded queries recorded in evidence for later cards; /leads real surface + sign-in redirect are part B after P19 (now unblocked)."
       ],
-      "branch": "opensquad/P13-inbox",
-      "worktree": "../opensquad-worktrees/P13-inbox",
-      "baseRef": "8f6f0f4"
+      "branch": "opensquad/P13-leads",
+      "worktree": "../opensquad-worktrees/P13-leads",
+      "baseRef": "1e83b35"
     },
     {
       "id": "P14",
