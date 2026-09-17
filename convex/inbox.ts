@@ -440,6 +440,20 @@ async function applyToConversation(
     facts.optOutSignal,
   );
 
+  // 4b. The reply FACT, independent of the automation verdict (P19 §8): a
+  //     verified inbound on a lead-bound thread stamps `lastReplyAt` and
+  //     advances the lead to `replied` even when the gate freezes drafting —
+  //     takeover, suppression and hold states stop model work, they do not
+  //     un-reply the reply. Keyed on the message ref so the receipt drain's
+  //     replay dedupes.
+  if (settled.prospectId !== undefined) {
+    await ctx.runMutation(internal.prospects.markReplied, {
+      conversationId: settled._id,
+      messageRef: receipt.providerMessageRef,
+      at: receipt.receivedAt,
+    });
+  }
+
   // 5. The dispatch point, and the only one. Everything above has committed
   //    to this transaction before a mission exists to hang model work off.
   if (!replyWork.start) {

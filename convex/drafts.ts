@@ -182,6 +182,10 @@ async function installRevision(
     replyToMessageRef?: string;
     createdBy: string;
     requestId?: string;
+    /** Booking-proposal link (§4.3): already validated by the caller —
+     *  the approval and dispatch gates re-check it against live state. */
+    bookingId?: Id<"bookings">;
+    bookingVersion?: number;
     /** Workflow that should wait on the fresh approval ask. */
     targetWorkflowId?: string;
     openDecision: boolean;
@@ -260,6 +264,10 @@ async function installRevision(
     createdBy: args.createdBy,
     createdAt: now,
     ...(replyToMessageRef !== undefined ? { replyToMessageRef } : {}),
+    ...(args.bookingId !== undefined ? { bookingId: args.bookingId } : {}),
+    ...(args.bookingVersion !== undefined
+      ? { bookingVersion: args.bookingVersion }
+      : {}),
     ...(args.requestId !== undefined ? { requestId: args.requestId } : {}),
   });
   await ctx.db.patch("conversations", args.conversation._id, {
@@ -305,6 +313,46 @@ async function installRevision(
     });
   }
   return draft;
+}
+
+/**
+ * Prove a draft may carry a `bookingId`/`bookingVersion` link (§4.3): the
+ * booking lives in this workspace, is still `proposed`, is still the version
+ * the content was written against, and belongs to the lead this conversation
+ * is bound to. The same check re-runs at approval and at dispatch, so a
+ * booking that moved on between draft and send can never be mailed.
+ */
+async function assertBookingLink(
+  ctx: AuthCtx,
+  conversation: Doc<"conversations">,
+  bookingId: Id<"bookings">,
+  bookingVersion: number,
+): Promise<void> {
+  const booking = await ctx.db.get("bookings", bookingId);
+  if (booking === null || booking.workspaceId !== conversation.workspaceId) {
+    throw domainError("NOT_FOUND", "booking not found");
+  }
+  if (booking.state !== "proposed") {
+    throw domainError(
+      "CONFLICT",
+      `booking is ${booking.state}; a draft can only carry a live proposal`,
+    );
+  }
+  if (booking.version !== bookingVersion) {
+    throw domainError(
+      "CONFLICT",
+      `booking version is ${booking.version}, not ${bookingVersion} — draft a fresh proposal`,
+    );
+  }
+  if (
+    conversation.prospectId === undefined ||
+    booking.prospectId !== conversation.prospectId
+  ) {
+    throw domainError(
+      "CONFLICT",
+      "the booking belongs to a different lead than the conversation",
+    );
+  }
 }
 
 /** Request-id replay: a committed revision returns itself. */
@@ -502,6 +550,33 @@ export const revise = mutation({
       throw domainError("NOT_FOUND", "campaign not found");
     }
 
+    // The booking link survives a content edit ONLY while it still names a
+    // live proposal at the version the draft was written against. A
+    // confirmed/rescheduled/cancelled booking drops the link instead of
+    // stranding the thread — the new revision is a plain message that can
+    // never advance the lead to booking_proposed.
+    let bookingLink:
+      | { bookingId: Id<"bookings">; bookingVersion: number }
+      | undefined;
+    if (
+      current.bookingId !== undefined &&
+      current.bookingVersion !== undefined
+    ) {
+      const booking = await ctx.db.get("bookings", current.bookingId);
+      if (
+        booking !== null &&
+        booking.workspaceId === conversation.workspaceId &&
+        booking.state === "proposed" &&
+        booking.version === current.bookingVersion &&
+        booking.prospectId === conversation.prospectId
+      ) {
+        bookingLink = {
+          bookingId: booking._id,
+          bookingVersion: booking.version,
+        };
+      }
+    }
+
     const draft = await installRevision(ctx, {
       workspace,
       conversation,
@@ -515,6 +590,7 @@ export const revise = mutation({
       createdBy: identityKey,
       requestId,
       openDecision: true,
+      ...(bookingLink !== undefined ? bookingLink : {}),
     });
 
     await recordActivityEvent(ctx, {
@@ -559,6 +635,12 @@ export const createRevision = internalMutation({
     createdBy: v.optional(v.string()),
     targetWorkflowId: v.optional(v.string()),
     openDecision: v.optional(v.boolean()),
+    /** Booking-proposal link (§4.3, P19): the proposal this content offers
+     *  and the booking version it was written against. Validated against
+     *  live state here, then AGAIN at approval and dispatch — a rescheduled
+     *  or cancelled booking can never go out under the old content. */
+    bookingId: v.optional(v.id("bookings")),
+    bookingVersion: v.optional(v.number()),
   },
   returns: vDraftDoc,
   handler: async (ctx, args) => {
@@ -569,6 +651,9 @@ export const createRevision = internalMutation({
     const mission = await ctx.db.get("missions", args.missionId);
     if (mission === null || mission.workspaceId !== conversation.workspaceId) {
       throw domainError("NOT_FOUND", "mission not found");
+    }
+    if ((args.bookingId === undefined) !== (args.bookingVersion === undefined)) {
+      throw invalid("bookingId and bookingVersion must be supplied together");
     }
     const requestId =
       args.requestId === undefined
@@ -592,6 +677,17 @@ export const createRevision = internalMutation({
         return replayed;
       }
     }
+    // After the replay check: a retried create returns its committed draft
+    // even when the booking has since moved; a FRESH link is always proved
+    // against live state.
+    if (args.bookingId !== undefined && args.bookingVersion !== undefined) {
+      await assertBookingLink(
+        ctx,
+        conversation,
+        args.bookingId,
+        args.bookingVersion,
+      );
+    }
     const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
     const campaign = await ctx.db.get("campaigns", mission.campaignId);
     if (workspace === null || campaign === null) {
@@ -614,6 +710,9 @@ export const createRevision = internalMutation({
       requestId,
       targetWorkflowId: args.targetWorkflowId,
       openDecision: args.openDecision ?? true,
+      ...(args.bookingId !== undefined && args.bookingVersion !== undefined
+        ? { bookingId: args.bookingId, bookingVersion: args.bookingVersion }
+        : {}),
     });
     await recordActivityEvent(ctx, {
       workspaceId: workspace._id,

@@ -10,6 +10,7 @@
 
 import type * as activity from "../activity.js";
 import type * as approvals from "../approvals.js";
+import type * as bookings from "../bookings.js";
 import type * as businessProfiles from "../businessProfiles.js";
 import type * as campaigns from "../campaigns.js";
 import type * as conversations from "../conversations.js";
@@ -22,6 +23,7 @@ import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
 import type * as integrations_firecrawl from "../integrations/firecrawl.js";
+import type * as leadEvents from "../leadEvents.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_roleTemplates from "../lib/roleTemplates.js";
 import type * as lib_validators from "../lib/validators.js";
@@ -55,6 +57,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   approvals: typeof approvals;
+  bookings: typeof bookings;
   businessProfiles: typeof businessProfiles;
   campaigns: typeof campaigns;
   conversations: typeof conversations;
@@ -67,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   inbox: typeof inbox;
   "integrations/agentmail": typeof integrations_agentmail;
   "integrations/firecrawl": typeof integrations_firecrawl;
+  leadEvents: typeof leadEvents;
   "lib/auth": typeof lib_auth;
   "lib/roleTemplates": typeof lib_roleTemplates;
   "lib/validators": typeof lib_validators;

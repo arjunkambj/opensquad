@@ -3494,6 +3494,24 @@ export function salesStageRank(stage: SalesStage): number {
 }
 
 /**
+ * The stage an AUTOMATIC transition may land on, or the current one. A later
+ * scrape may never move a lead backwards, and an automatic transition never
+ * enters or leaves `won`/`lost` — both halves of what `salesStageRank` is
+ * load-bearing for. Returning the CURRENT stage rather than throwing is
+ * deliberate: a branch that re-runs research on an already-contacted lead
+ * should record its finding, not fail. Human corrections do not come through
+ * here — `prospects.updateStage` moves to ANY stage with a stated reason.
+ */
+export function advancedStage(
+  current: SalesStage,
+  target: SalesStage,
+): SalesStage {
+  if (TERMINAL_SALES_STAGES.includes(current)) return current;
+  if (TERMINAL_SALES_STAGES.includes(target)) return current;
+  return salesStageRank(target) > salesStageRank(current) ? target : current;
+}
+
+/**
  * Qualification is orthogonal to `salesStage` and to contact availability: a
  * missing email must not erase fit evidence, and a qualified lead with no
  * address is `contact_needed`, not `rejected` (§4.3).
@@ -3804,6 +3822,7 @@ export const NEXT_ACTION_KINDS = [
   "enrich_contact",
   "propose_booking",
   "confirm_booking",
+  "attend_meeting",
   "review",
 ] as const;
 
@@ -3815,6 +3834,7 @@ export const vNextActionKind = v.union(
   v.literal("enrich_contact"),
   v.literal("propose_booking"),
   v.literal("confirm_booking"),
+  v.literal("attend_meeting"),
   v.literal("review"),
 );
 
@@ -3890,6 +3910,8 @@ export const LEAD_EVENT_KINDS = [
   "next_action_cleared",
   "research_applied",
   "contact_enriched",
+  "send_accepted",
+  "reply_received",
   "booking_proposed",
   "booking_confirmed",
   "booking_rescheduled",
@@ -3905,6 +3927,8 @@ export const vLeadEventKind = v.union(
   v.literal("next_action_cleared"),
   v.literal("research_applied"),
   v.literal("contact_enriched"),
+  v.literal("send_accepted"),
+  v.literal("reply_received"),
   v.literal("booking_proposed"),
   v.literal("booking_confirmed"),
   v.literal("booking_rescheduled"),
@@ -4028,6 +4052,13 @@ export function assertConfirmationSourceEnabled(
 export const BOOKING_SLOTS_MAX = 3;
 export const BOOKING_CONFIRMATION_NOTE_MAX_LENGTH = 300;
 export const BOOKING_CANCELLATION_REASON_MAX_LENGTH = 500;
+/**
+ * A confirmed meeting longer than this is not a sales call — it is a data
+ * error the operator should fix before it is recorded.
+ * `assertRequiredBookingTimes` enforces it alongside `endsAt > startsAt`
+ * ("invalid duration", V24).
+ */
+export const BOOKING_DURATION_MAX_MS = 24 * 60 * 60 * 1000;
 
 /**
  * `bookings.proposal` (§4.3): a booking link, or up to three future intervals
@@ -4078,6 +4109,11 @@ export function assertBookingProposal(
       if (endsAt <= startsAt) {
         throw invalid(`${at}.endsAt must be after startsAt`);
       }
+      if (endsAt - startsAt > BOOKING_DURATION_MAX_MS) {
+        throw invalid(
+          `${at} duration exceeds ${BOOKING_DURATION_MAX_MS / 3_600_000} hours`,
+        );
+      }
       if (startsAt <= options.now) {
         throw invalid(`${at}.startsAt must be in the future`);
       }
@@ -4119,6 +4155,11 @@ export function assertRequiredBookingTimes(
   const endsAt = assertEpochMs(times.endsAt, `${field}.endsAt`);
   if (endsAt <= startsAt) {
     throw invalid(`${field}.endsAt must be after startsAt`);
+  }
+  if (endsAt - startsAt > BOOKING_DURATION_MAX_MS) {
+    throw invalid(
+      `${field} duration exceeds ${BOOKING_DURATION_MAX_MS / 3_600_000} hours`,
+    );
   }
   return {
     startsAt,

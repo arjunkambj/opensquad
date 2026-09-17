@@ -1465,7 +1465,11 @@ export default defineSchema({
     .index("by_conversationId_and_revision", ["conversationId", "revision"])
     .index("by_missionId", ["missionId"])
     // requestId dedupe for revise/createRevision retries.
-    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
+    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"])
+    // Booking-linked drafts (P19): the invalidation path needs every draft
+    // still proposing a booking as one exact range, and a lead can hold
+    // several conversations — no conversation-scoped index can find them all.
+    .index("by_bookingId", ["bookingId"]),
 
   approvals: defineTable(approvalFields)
     .index("by_draftId", ["draftId"])
