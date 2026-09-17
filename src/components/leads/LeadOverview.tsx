@@ -29,7 +29,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
-import { civilTimeToUtcMs } from "@/lib/date-ranges"
+import { civilInputsInZone, civilTimeToUtcMs } from "@/lib/date-ranges"
 import { useIntentId } from "@/lib/use-intent-id"
 import { cn } from "@/lib/utils"
 
@@ -451,11 +451,17 @@ function OwnerControl({
     (member) => member.identityKey === currentOwner,
   )
 
-  const [target, setTarget] = useState<string>(currentMembership?._id ?? "")
+  // `null` is "untouched": `members` streams in after mount, so an untouched
+  // pick follows the current owner's membership once it resolves instead of
+  // stranding the select on a value that has no option to display.
+  const [target, setTarget] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const targetMembership = active.find((member) => member._id === target)
+  const effectiveTarget = target ?? currentMembership?._id ?? ""
+  const targetMembership = active.find(
+    (member) => member._id === effectiveTarget,
+  )
   const canSubmit =
     canEdit &&
     !stale &&
@@ -494,7 +500,7 @@ function OwnerControl({
           </Label>
           <NativeSelect
             id="owner-target"
-            value={target}
+            value={effectiveTarget}
             disabled={!canEdit || busy || members === undefined}
             onChange={(event) => setTarget(event.target.value)}
           >
@@ -570,8 +576,15 @@ function NextActionControl({
   const [description, setDescription] = useState(
     prospect.nextAction?.description ?? "",
   )
-  const [dueDate, setDueDate] = useState("")
-  const [dueTime, setDueTime] = useState("")
+  // Prefilled from the stored due instant on the workspace's wall clock, so
+  // an untouched form submits nothing new — an empty start would silently
+  // turn any "Save" into an unschedule.
+  const storedDue =
+    prospect.nextActionDueAt === undefined
+      ? null
+      : civilInputsInZone(prospect.nextActionDueAt, timezone)
+  const [dueDate, setDueDate] = useState(storedDue?.date ?? "")
+  const [dueTime, setDueTime] = useState(storedDue?.time ?? "")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -599,11 +612,20 @@ function NextActionControl({
       : undefined
 
   const hasAction = description.trim().length > 0
+  // The date/time inputs express minutes only, so the comparison happens in
+  // minute buckets — a stored instant's seconds must not read as a change.
+  const storedDueMinute =
+    prospect.nextActionDueAt === undefined
+      ? undefined
+      : Math.floor(prospect.nextActionDueAt / 60_000)
+  const inputDueMinute =
+    dueMs === undefined ? undefined : Math.floor(dueMs / 60_000)
   const changed =
-    kind !== prospect.nextAction?.kind ||
     description !== (prospect.nextAction?.description ?? "") ||
-    dueMs !== prospect.nextActionDueAt ||
-    (!hasDueInput && dueTime === "" && prospect.nextActionDueAt !== undefined)
+    (hasAction &&
+      prospect.nextAction !== undefined &&
+      kind !== prospect.nextAction.kind) ||
+    (hasAction && inputDueMinute !== storedDueMinute)
   const canSubmit = canEdit && !stale && changed && !busy && dueError === null
 
   const submit = () => {

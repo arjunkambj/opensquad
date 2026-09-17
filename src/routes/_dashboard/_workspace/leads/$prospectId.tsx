@@ -13,5 +13,8 @@ export const Route = createFileRoute("/_dashboard/_workspace/leads/$prospectId")
 
 function LeadDetailPage() {
   const { prospectId } = Route.useParams()
-  return <LeadDetail prospectId={prospectId} />
+  // Keyed on the id so every per-lead ref — the seen-version pin, form epoch
+  // and minted intent ids — is fresh when the route param changes without
+  // unmounting the component (the same reason decisions key on decisionId).
+  return <LeadDetail key={prospectId} prospectId={prospectId} />
 }

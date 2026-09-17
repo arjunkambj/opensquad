@@ -186,7 +186,10 @@ export function LeadDetail({ prospectId }: { prospectId: string }) {
           ))}
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4">
+        {/* keepMounted: an inactive panel that unmounted would throw away a
+            half-written note or an edited next action — J7's "typed answers
+            are never thrown away" applies across tabs, not just versions. */}
+        <TabsContent value="overview" className="mt-4" keepMounted>
           <LeadOverview
             key={`overview:${formEpoch}`}
             workspaceId={current.workspace._id}
@@ -198,27 +201,27 @@ export function LeadDetail({ prospectId }: { prospectId: string }) {
             timezone={current.workspace.timezone}
           />
         </TabsContent>
-        <TabsContent value="evidence" className="mt-4">
+        <TabsContent value="evidence" className="mt-4" keepMounted>
           <LeadEvidence
             workspaceId={current.workspace._id}
             prospect={prospect}
             timezone={current.workspace.timezone}
           />
         </TabsContent>
-        <TabsContent value="activity" className="mt-4">
+        <TabsContent value="activity" className="mt-4" keepMounted>
           <LeadActivity
             workspaceId={current.workspace._id}
             prospectId={prospect._id}
             timezone={current.workspace.timezone}
           />
         </TabsContent>
-        <TabsContent value="conversation" className="mt-4">
+        <TabsContent value="conversation" className="mt-4" keepMounted>
           <LeadConversations
             workspaceId={current.workspace._id}
             prospectId={prospect._id}
           />
         </TabsContent>
-        <TabsContent value="booking" className="mt-4">
+        <TabsContent value="booking" className="mt-4" keepMounted>
           <BookingPanel
             key={`booking:${formEpoch}`}
             workspaceId={current.workspace._id}
