@@ -450,26 +450,3 @@ without one threw inside a Workpool that does not retry mutations, and the
 `by_eventId` ledger then refused the resend - the mail was lost with nothing to
 drain and nothing to replay.
 Evidence: `plan/evidence/P11.md`, `plan/evidence/P12.md`, `plan/evidence/P21.md`.
-
-### 2026-09-17 - 50c05df
-
-**P19 (in progress).** The lead CRM and booking backend: `prospects.ts` gained
-the member-scoped list/search/detail reads (the declared `search_company_name`
-index with in-index equality filters, plus a due-action slice that required a
-real fix - undated rows sorted into "overdue" until the lower bound pinned
-`gte(nextActionDueAt, 0)`), the version- and requestId-guarded writes
-(`updateStage`, `assign`, `setNextAction`, `addNote`), and the two fact writers
-that are the ONLY `lastContactedAt`/`lastReplyAt` authors - provider send
-acceptance and verified inbound replies, wired into `recordSendOutcome`,
-`applyToConversation` and `associateProspect`. `leadEvents.ts` is the
-append-only history whose `operationKey` doubles as mutation idempotency.
-`bookings.ts` owns the five-state lifecycle: one active booking per lead,
-manual-only confirmation (agreed start/end, IANA timezone, basis - no calendar
-sync implied), post-start outcomes, and reschedule/cancel retiring stale
-booking-linked drafts through `drafts.by_bookingId`. Booking links are
-re-validated at draft creation, approval AND dispatch (`booking_not_current`).
-Exercised end to end on an isolated local backend: role denials, stale
-versions, idempotent replays, cursor pagination, timezone/duration/false-
-confirmation guards, the one-active invariant, draft retirement on cancel, and
-a real `recordSendOutcome` acceptance driving the lead to `booking_proposed`.
-Evidence: `plan/evidence/P19.md`.
