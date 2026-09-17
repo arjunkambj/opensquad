@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router"
 import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
 import { MissionBoard } from "@/components/missions/MissionBoard"
 import { ActivityFeed } from "@/components/overview/ActivityFeed"
-import { AttentionBlock } from "@/components/overview/AttentionBlock"
 import { LoadingState } from "@/components/states/states"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 
@@ -11,10 +10,11 @@ import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
  * `overview.tsx`, so this route and the mission detail beside it share one
  * definition and cannot drift — the same arrangement `decisions.tsx` uses.
  *
- * The order on the page is the order of the operator's questions: what is
- * waiting on me, can anything run at all, what is the state of the work, and
- * only then what already happened. The date picker belongs to that last
- * section and to nothing above it.
+ * The order on the page is the order of the operator's questions once the
+ * pipeline is known: can anything run at all, what is the state of the work,
+ * and only then what already happened. The "what needs a person" strip lives
+ * on `/leads` — the signed-in home — not here; the date picker belongs to the
+ * activity section and to nothing above it.
  */
 export const Route = createFileRoute("/_dashboard/_workspace/overview/")({
   component: OverviewPage,
@@ -40,7 +40,6 @@ function OverviewPage() {
         />
       ) : (
         <>
-          <AttentionBlock workspaceId={current.workspace._id} />
           <MissionBoard />
           <ActivityFeed
             workspaceId={current.workspace._id}

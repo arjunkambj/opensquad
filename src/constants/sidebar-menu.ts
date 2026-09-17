@@ -29,8 +29,8 @@ export type MenuCategory = {
 
 // The work band, in §3 order: Leads, Inbox, Decisions, Mission Control. Each
 // item lands in the same change as its route — never before, or the nav
-// promises a page that 404s. `/leads` is the labelled placeholder until P19
-// ships the pipeline; `/prospects` is a redirect, not a second entry.
+// promises a page that 404s. `/leads` is the CRM home; `/prospects` is a
+// redirect, not a second entry.
 //
 // Neither count badge is declared here, and deliberately so: Decisions' badge
 // comes from `useOpenDecisionCount` and Inbox's from `useInboxAttention` —

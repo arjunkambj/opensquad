@@ -3,6 +3,7 @@ import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { useInboxAttention } from "@/hooks/use-inbox-attention"
+import { useOpenDecisionCount } from "@/hooks/use-open-decision-count"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -11,52 +12,26 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { boundedCount } from "@/lib/bounded-count"
 
 /**
- * One page of open decisions, and exactly one arg shape.
+ * "What needs a person", in three bounded counts — the first thing the
+ * operator sees on `/leads`, the signed-in home (`plan/ux.md` §161). Moved
+ * from `/overview`, which is Mission Control for execution rather than the
+ * first surface.
  *
- * The sidebar badge and this block must read the **same call**: two numbers
- * for one thing is a defect (`plan/ux.md` §3), and Convex serves one
- * subscription only when the arguments match byte for byte. That is why this
- * is a hook rather than two call sites agreeing to use the same literal.
+ * Each slot shows what its count is OF, because a bare number cannot be
+ * checked:
  *
- * It counts **open decisions of every kind, required or not**. `listOpen`
- * filters on state only and has no `required` argument, and filtering a
- * truncated page client-side would present a subset of one page as a filtered
- * total — which `plan/ux.md` §6 forbids. So the number is labelled for what it
- * actually is.
- */
-export function useOpenDecisionCount(
-  workspaceId: Id<"workspaces"> | undefined,
-): string | undefined {
-  const page = useQuery(
-    api.decisions.listOpen,
-    workspaceId === undefined ? "skip" : { workspaceId, limit: 25 },
-  )
-  return page === undefined
-    ? undefined
-    : boundedCount(page.items.length, page.hasMore)
-}
-
-/**
- * What is waiting on a person, in three counts.
- *
- * It owns its own queries and takes only a workspace id, so P13 can drop it
- * onto `/leads` unchanged.
- *
- * Two of the three slots have no backing query at all and say so. That
- * distinction is the whole point of the shape: a `0` means *we asked, and
- * nothing is waiting*; "not available yet" means *we cannot ask*. Rendering a
- * `0` for the second would be a fabricated number, and fabricating a number is
- * the failure this product can least afford.
- *
+ * - **Open decisions** — `decisions.listOpen`, the same hook the sidebar's
+ *   Decisions badge uses. Any drill-down lives on the queue itself; the tile
+ *   links there, not to a filtered sub-view.
  * - **Unassigned mail** — `conversations.attentionCounts.unassigned`, the
  *   exact bucket for threads no lead has claimed (bounded at 50+). The
  *   sidebar Inbox badge shows the *different* `needsAttention` sum — same
  *   query, deliberately different number, each labelled for what it is.
- * - **Overdue next actions** — `nextActionDueAt` lives on `prospects` and no
- *   query exposes it yet.
+ * - **Overdue next actions** — `prospects.countOverdue`, the bounded count of
+ *   leads whose `nextActionDueAt` is past. The tile links to the Due list
+ *   pre-filtered to `?mode=due&due=overdue`.
  */
 export function AttentionBlock({
   workspaceId,
@@ -65,6 +40,7 @@ export function AttentionBlock({
 }) {
   const decisions = useOpenDecisionCount(workspaceId)
   const inboxAttention = useInboxAttention(workspaceId)
+  const overdue = useQuery(api.prospects.countOverdue, { workspaceId })
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -128,37 +104,39 @@ export function AttentionBlock({
         </CardContent>
       </Card>
 
-      <UnavailableCount
-        label="Overdue next actions"
-        reason="A lead's next action lives on the CRM record, and no query reads it yet. A zero here would be invented, so there is none."
-      />
+      <Card>
+        <CardHeader>
+          <CardDescription>Overdue next actions</CardDescription>
+          <CardTitle
+            className="font-heading text-3xl tabular-nums"
+            aria-live="polite"
+          >
+            {overdue === undefined
+              ? "—"
+              : overdue.hasMore
+                ? `${overdue.count}+`
+                : overdue.count}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-start gap-2">
+          <p className="text-sm text-muted-foreground">
+            {overdue === undefined
+              ? "Counting leads past their next action's due time."
+              : overdue.count === 0
+                ? "Nothing is past its due time."
+                : "Leads whose next action is past its due time, most overdue first on the due list."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            render={
+              <Link to="/leads" search={{ mode: "due", due: "overdue" }} />
+            }
+          >
+            Open the due list
+          </Button>
+        </CardContent>
+      </Card>
     </div>
-  )
-}
-
-/**
- * A slot with no number, deliberately. It is a card rather than a hidden
- * element so the operator can see that the product knows about this count and
- * has not silently dropped it.
- */
-function UnavailableCount({
-  label,
-  reason,
-}: {
-  label: string
-  reason: string
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="font-heading text-lg text-muted-foreground">
-          Not available yet
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{reason}</p>
-      </CardContent>
-    </Card>
   )
 }

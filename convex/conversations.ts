@@ -317,6 +317,49 @@ export const list = query({
 });
 
 /**
+ * A lead's threads, newest first — the lead detail's conversation tab and the
+ * booking proposal flow's "which thread does this draft go on" pick both read
+ * it. `by_prospectId` is an exact range, so no page is ever post-filtered. A
+ * foreign or missing prospect is NOT_FOUND rather than an empty list —
+ * existence must not leak across a workspace boundary.
+ */
+export const listForProspect = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    prospectId: v.id("prospects"),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({
+    items: v.array(vConversationSummary),
+    cursor: v.union(v.string(), v.null()),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const prospect = await ctx.db.get("prospects", args.prospectId);
+    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "prospect not found");
+    }
+    const limit = boundedLimit(args.limit);
+    const result = await ctx.db
+      .query("conversations")
+      .withIndex("by_prospectId", (q) => q.eq("prospectId", args.prospectId))
+      .order("desc")
+      .paginate({ numItems: limit, cursor: args.cursor ?? null });
+    const items: ConversationSummary[] = [];
+    for (const conversation of result.page) {
+      items.push(await summarize(ctx, conversation));
+    }
+    return {
+      items,
+      cursor: result.isDone ? null : result.continueCursor,
+      hasMore: !result.isDone,
+    };
+  },
+});
+
+/**
  * One thread's record, with its lead and campaign resolved so the detail
  * screen needs a single round trip.
  *

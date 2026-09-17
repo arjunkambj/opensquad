@@ -2,7 +2,7 @@ import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
-import { useOpenDecisionCount } from "@/components/overview/AttentionBlock"
+import { useOpenDecisionCount } from "@/hooks/use-open-decision-count"
 import { Button } from "@/components/ui/button"
 import {
   Command,

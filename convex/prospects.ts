@@ -70,7 +70,9 @@ import {
   vQualification,
   vSalesStage,
   DEFAULT_LIST_LIMIT,
+  EPOCH_MS_MIN,
   LEAD_EVENT_NOTE_MAX_LENGTH,
+  MAX_LIST_LIMIT,
   PROSPECT_COMPANY_NAME_MAX_LENGTH,
   PROSPECT_FIT_REASON_MAX_LENGTH,
   PROSPECT_IMPORT_CANDIDATES_MAX,
@@ -112,6 +114,7 @@ type ListPageArgs = {
   salesStage?: SalesStage;
   owner?: string;
   dueRange?: { from?: number; to?: number };
+  unscheduled?: boolean;
   cursor?: string | null;
   limit?: number;
 };
@@ -147,6 +150,51 @@ async function listPage(
     numItems: boundedLimit(args.limit),
     cursor: args.cursor ?? null,
   };
+
+  if (args.unscheduled === true) {
+    if (
+      args.dueRange !== undefined ||
+      args.salesStage !== undefined ||
+      args.campaignId !== undefined
+    ) {
+      throw invalid(
+        "unscheduled listing cannot combine with dueRange, salesStage or campaignId — no index supports that combination",
+      );
+    }
+    // `undefined` sorts below every bound on these indexes, and every stored
+    // `nextActionDueAt` is ≥ EPOCH_MS_MIN, so `lt(EPOCH_MS_MIN)` names exactly
+    // the rows with no due time — the "unscheduled" state as a first-class
+    // slice rather than a sentinel date the reader has to know about.
+    const owner = args.owner;
+    const result =
+      owner !== undefined
+        ? await ctx.db
+            .query("prospects")
+            .withIndex(
+              "by_workspaceId_and_ownerIdentityKey_and_nextActionDueAt",
+              (q) =>
+                q
+                  .eq("workspaceId", args.workspaceId)
+                  .eq("ownerIdentityKey", owner)
+                  .lt("nextActionDueAt", EPOCH_MS_MIN),
+            )
+            .order("desc")
+            .paginate(paginate)
+        : await ctx.db
+            .query("prospects")
+            .withIndex("by_workspaceId_and_nextActionDueAt", (q) =>
+              q
+                .eq("workspaceId", args.workspaceId)
+                .lt("nextActionDueAt", EPOCH_MS_MIN),
+            )
+            .order("desc")
+            .paginate(paginate);
+    return {
+      items: result.page,
+      cursor: result.isDone ? null : result.continueCursor,
+      hasMore: !result.isDone,
+    };
+  }
 
   if (args.dueRange !== undefined) {
     if (args.salesStage !== undefined || args.campaignId !== undefined) {
@@ -290,6 +338,10 @@ export const list = query({
         to: v.optional(v.number()),
       }),
     ),
+    /** The complementary due-mode slice: leads with NO `nextActionDueAt`,
+     *  newest first. Combines with `owner` only — a due-state filter is not a
+     *  pipeline filter. */
+    unscheduled: v.optional(v.boolean()),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
   },
@@ -297,6 +349,40 @@ export const list = query({
   handler: async (ctx, args) => {
     await requireWorkspaceMember(ctx, args.workspaceId);
     return await listPage(ctx, args);
+  },
+});
+
+/**
+ * How many leads have a next action due at or before now — the "Overdue next
+ * actions" count the CRM home's attention block renders (J2). Bounded at
+ * `MAX_LIST_LIMIT` like every workspace count: `hasMore` means the number is
+ * the bound, not the total, and the UI renders "50+". Undated leads can never
+ * satisfy the range, so they can never inflate it either.
+ */
+export const countOverdue = query({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.object({
+    count: v.number(),
+    hasMore: v.boolean(),
+    bound: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("prospects")
+      .withIndex("by_workspaceId_and_nextActionDueAt", (q) =>
+        q
+          .eq("workspaceId", args.workspaceId)
+          .gte("nextActionDueAt", 0)
+          .lte("nextActionDueAt", now),
+      )
+      .take(MAX_LIST_LIMIT + 1);
+    return {
+      count: Math.min(rows.length, MAX_LIST_LIMIT),
+      hasMore: rows.length > MAX_LIST_LIMIT,
+      bound: MAX_LIST_LIMIT,
+    };
   },
 });
 

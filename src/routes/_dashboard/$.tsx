@@ -31,7 +31,7 @@ function DashboardNotFound() {
       <EmptyState
         title={attempted ?? "Page not found"}
         description="Check the address, or pick a page from the sidebar. Some parts of OpenSquad are still being built."
-        action={<Button render={<Link to="/overview" />}>Go to Overview</Button>}
+        action={<Button render={<Link to="/leads" />}>Go to Leads</Button>}
       />
     </>
   )
