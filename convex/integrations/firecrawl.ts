@@ -51,6 +51,7 @@ import {
   receiptNamesRun,
   researchPageLimit,
   sha256Hex,
+  unwrapConvexErrorText,
   PROVIDER_OPERATION_RUN_HISTORY_MAX,
   vProviderOperationState,
   vRetrievedPage,
@@ -901,14 +902,9 @@ export const retrieveProspectPages = internalAction({
  *
  * `ConvexError.data` is read FIRST: a `ConvexError` is also an `Error` whose
  * `.message` is the serialized `{code, message}` envelope, so reading
- * `.message` first would put JSON where a reason belongs.
- *
- * Crossing an ACTION boundary loses `data` entirely — `ctx.runAction` rethrows
- * a plain `Error` whose text is `Uncaught ConvexError: {"code":…,"message":…}`,
- * sometimes nested twice. So the envelope is unwrapped from the text as well;
- * otherwise this reason reaches a branch's `outcomeReason` and a lead's
- * `fitReason` as JSON with a stack-trace prefix, which is not a reason anybody
- * can read.
+ * `.message` first would put JSON where a reason belongs. Rethrown envelopes
+ * are unwrapped by the shared `unwrapConvexErrorText` in lib/validators —
+ * see that file for the boundary notes.
  */
 function refusalMessage(error: unknown): string {
   const data =
@@ -920,69 +916,6 @@ function refusalMessage(error: unknown): string {
   }
   const raw = error instanceof Error ? error.message : String(error);
   return unwrapConvexErrorText(raw).slice(0, 500);
-}
-
-/**
- * Pull the innermost `{code, message}` envelope out of a rethrown
- * `ConvexError`'s text. Returns the input unchanged when there is none.
- *
- * The envelope is followed by a stack trace, so the object's extent is found
- * by scanning for its own balanced closing brace (string- and escape-aware)
- * rather than by parsing to the end of the text, which never succeeds.
- */
-function unwrapConvexErrorText(raw: string): string {
-  let text = raw;
-  for (let depth = 0; depth < 4; depth += 1) {
-    const start = text.indexOf('{"code":');
-    if (start === -1) break;
-    const end = balancedObjectEnd(text, start);
-    if (end === -1) break;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text.slice(start, end));
-    } catch {
-      break;
-    }
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      typeof (parsed as { message?: unknown }).message !== "string"
-    ) {
-      break;
-    }
-    text = (parsed as { message: string }).message;
-  }
-  return text;
-}
-
-/** Index just past the `}` that closes the object starting at `start`, or
- *  -1 when the text never closes it. */
-function balancedObjectEnd(text: string, start: number): number {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i += 1) {
-    const ch = text[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (ch === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return i + 1;
-    }
-  }
-  return -1;
 }
 
 type BeginFirecrawlOperationResult =

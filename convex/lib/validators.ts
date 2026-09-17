@@ -77,6 +77,99 @@ export function boundedStringList(
 }
 
 /* ------------------------------------------------------------------ */
+/* Thrown-error text                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pull the innermost `{code, message}` envelope out of a rethrown
+ * `ConvexError`'s text. Returns the input unchanged when there is none.
+ *
+ * Crossing an action boundary loses `data` entirely — `ctx.runAction` rethrows
+ * a plain `Error` whose text is `Uncaught ConvexError: {"code":…,"message":…}`,
+ * sometimes nested twice. So the envelope is unwrapped from the text as well;
+ * otherwise a reason stored from it reads as JSON with a stack-trace prefix.
+ *
+ * The envelope is followed by a stack trace, so the object's extent is found
+ * by scanning for its own balanced closing brace (string- and escape-aware)
+ * rather than by parsing to the end of the text, which never succeeds.
+ */
+export function unwrapConvexErrorText(raw: string): string {
+  let text = raw;
+  for (let depth = 0; depth < 4; depth += 1) {
+    const start = text.indexOf('{"code":');
+    if (start === -1) break;
+    const end = balancedObjectEnd(text, start);
+    if (end === -1) break;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text.slice(start, end));
+    } catch {
+      break;
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as { message?: unknown }).message !== "string"
+    ) {
+      break;
+    }
+    text = (parsed as { message: string }).message;
+  }
+  return text;
+}
+
+/** Index just past the `}` that closes the object starting at `start`, or
+ *  -1 when the text never closes it. */
+export function balancedObjectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+/**
+ * The one-line, storable reason inside a thrown error's serialized text.
+ *
+ * Workflow/runner failures arrive as `message\n<stack>` — the stack names
+ * internal file layout and library versions, so it is not a reason and does
+ * not belong in a user-facing `failure`, `outcomeReason` or activity summary.
+ * A rethrown `ConvexError` envelope is unwrapped to its message first; the
+ * surviving first line, minus its `Error:`/`Uncaught` prefix, is bounded to
+ * `max` characters. An empty or stack-only input becomes "unknown error"
+ * rather than storing whitespace.
+ */
+export function errorReason(raw: string, max: number): string {
+  const unwrapped = unwrapConvexErrorText(raw);
+  const firstLine = (unwrapped.split("\n", 1)[0] ?? "").trim();
+  const reason = firstLine
+    .replace(/^uncaught\s+/i, "")
+    .replace(/^[\w$]*Error:\s*/i, "");
+  const bounded = (reason.length > 0 ? reason : "unknown error").slice(0, max);
+  return bounded;
+}
+
+/* ------------------------------------------------------------------ */
 /* URLs                                                                */
 /* ------------------------------------------------------------------ */
 
