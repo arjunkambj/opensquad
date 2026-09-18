@@ -3,16 +3,16 @@
 - **Project:** OpenSquad
 - **Event:** Convex All Gas Hackathon
 - **What it does:** A squad of AI employees that handles sales research and outreach, with a built-in CRM to track leads, conversations, and next steps.
-- **Live app:** https://flexible-grasshopper-949.convex.site
+- **Live app:** https://proficient-porcupine-63.convex.site
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** Convex static hosting
-- **Convex deployment:** https://flexible-grasshopper-949.convex.cloud
+- **Convex deployment:** https://proficient-porcupine-63.convex.cloud
 - **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/workflow, @convex-dev/static-hosting
 - **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions, crons, scheduled functions, durable workflows
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-18T09:55:00Z
+- **Last updated:** 2026-09-18T10:15:00Z
 
 ## Log
 
@@ -616,4 +616,16 @@ falls back to `index.html`; missing `.js` assets 404; `GET /worker/claim`
 returns 405 JSON and an unsigned AgentMail/Firecrawl webhook returns 401.
 No separate production deployment was created. Demo tour/execution flags
 stay off. Components: @convex-dev/static-hosting.
+Evidence: `plan/evidence/P16.md`.
+
+### 2026-09-18 - e5a428e
+
+**Production Convex static hosting.** Ran `pnpm run deploy` against
+`prod:proficient-porcupine-63`. Backend and 135 Vite files are on
+`https://proficient-porcupine-63.convex.site`. Smoke: `/` `/leads`
+`/sign-in` 200 HTML; missing `.js` 404; `GET /worker/claim` 405 JSON;
+unsigned AgentMail and Firecrawl webhooks 401. The earlier
+flexible-grasshopper development host is still up as staging. Hexclave
+allowed origins and the AgentMail webhook URL still need the production
+site origin. Components: @convex-dev/static-hosting.
 Evidence: `plan/evidence/P16.md`.
