@@ -22,6 +22,7 @@ import type * as evidence from "../evidence.js";
 import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
+import type * as integrations_apollo from "../integrations/apollo.js";
 import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as leadEvents from "../leadEvents.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inbox: typeof inbox;
   "integrations/agentmail": typeof integrations_agentmail;
+  "integrations/apollo": typeof integrations_apollo;
   "integrations/firecrawl": typeof integrations_firecrawl;
   leadEvents: typeof leadEvents;
   "lib/auth": typeof lib_auth;
