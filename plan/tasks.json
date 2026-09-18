@@ -134,7 +134,7 @@
       "id": "P04",
       "title": "Apollo and Firecrawl integration proof",
       "tier": "core",
-      "status": "blocked",
+      "status": "done",
       "owner": "subagent-P04",
       "dependsOn": [
         "P03"
@@ -155,12 +155,12 @@
         "IMPORTANT DELTA: component skips HMAC verification entirely when FIRECRAWL_WEBHOOK_SECRET is unset — must always be configured per deployment. poll fallback mode exists for unreachable deployments.",
         "Apollo machinery committed and compiled (worker boxmcp.ts auth/call/list/token-inspect phases, p04gate.ts host driver, callback-url ferry for localhost-redirect OAuth) but NOT exercised — no Box provisioned, no tools/list, no search/enrichment probes. Employee image ships zero MCP servers (boundary verified by construction).",
         "2026-09-14 follow-up: FIRECRAWL_WEBHOOK_SECRET now set on dev:flexible-grasshopper-949 (verified via convex env list, names only) — HMAC gate active there. scrapePage IPv6 guard widened (fe80/10 link-local, fec0/10 site-local, fe00/8 reserved, 64:ff9b NAT64). Apollo OAuth still deferred by owner; task stays blocked.",
-        "2026-09-14 review: Firecrawl reported source URL and local-host admission checks tightened; offline checks pass (plan/evidence/review-providers.md). Apollo remains deliberately untested and blocked by owner choice."
+        "2026-09-14 review: Firecrawl reported source URL and local-host admission checks tightened; offline checks pass (plan/evidence/review-providers.md). Apollo remains deliberately untested and blocked by owner choice.",
+        "2026-09-18 owner skip of live Apollo MCP E2E: Firecrawl half stays live-verified; production Apollo path is the Convex REST adapter in convex/integrations/apollo.ts (P09, merged 76f1f99). Diagnostic MCP machinery unused. No live Apollo call. plan/evidence/P04.md."
       ],
       "branch": "opensquad/P04",
       "worktree": "/Users/honey/Code/opensquad-worktrees/P04",
-      "baseRef": "aead563",
-      "blocker": "Owner deferred the Apollo OAuth grant. To resume: run the committed probe machinery (worker/src/{boxmcp,p04gate}.ts) in a disposable Box — up → auth (relay URL to owner) → tools/list → one search → ≤1 enrichment → token-inspect → down. Firecrawl portion is verified."
+      "baseRef": "aead563"
     },
     {
       "id": "P05",
@@ -353,7 +353,7 @@
       "id": "P21",
       "title": "Sales pipeline execution and source-backed research",
       "tier": "core",
-      "status": "in_progress",
+      "status": "done",
       "owner": "subagent-P21-runtime",
       "dependsOn": [
         "P07",
@@ -380,7 +380,8 @@
         "NOT DONE. This deployment has no connected Codex runtime and no managed Codex login, so NO MODEL EXECUTES A REQUEST. Every worker request was claimed over the real bridge by a driver script standing in for the daemon, with the model's own words supplied explicitly and labelled as such wherever they appear. V12 step 1's full Scout to Researcher to Outreach chain therefore remains deferred, as does any claim that the role templates make a real model behave well. What is proven is the complete backend path on either side of the model.",
         "IN SCOPE FOR P09 AND DEFERRED - P04 is blocked on the owner-deferred Apollo OAuth grant: every discover and enrich step. No tools/list has ever been observed against the Apollo MCP server, so G2 item 2's permitted Apollo tool names cannot be pinned, and writing guessed names into an allowlist would be a fabricated gate. The seams ship and are exercised: prospects.importCampaignProspects accepts a candidate array from any confirmed source, and prospects.applyContactEnrichment already refuses everything the gate requires it to refuse.",
         "REPORTED NOT TAKEN, outside the declared write surface: the vBranchCompletion.prospectId and ActivityInput.prospectId retype, with the four-step sequencing a later card must follow recorded in the evidence file - vBranchCompletion is a durable workflow event validator, so changing it while a parent is parked on awaitEvent invalidates that journal. artifacts.prospectId stays a string permanently because it crosses the worker trust boundary as the x-prospect-id upload header.",
-        "PREP MERGED at 2d86dee (branch opensquad/P21-runtime head f7b88d5): OPENSQUAD_BOX_TTL_SECONDS env knob on runtimeConnections (trial ASCII account caps box TTL at 2h vs the 7d default), worker/src/p21box.ts manual-delivery driver (up/adopt/bridge/bootstrap/start/status/stop/down) since the trial account has no named snapshots for OPENSQUAD_WORKER_IMAGE, worker/RUNTIME.md + .gitignore state dir. Remaining: credentialed step-2 run (Box provision, Codex device-code login, V12 chain over real leases) awaits owner authorization; P09 Apollo seam awaits the OAuth grant."
+        "PREP MERGED at 2d86dee (branch opensquad/P21-runtime head f7b88d5): OPENSQUAD_BOX_TTL_SECONDS env knob on runtimeConnections (trial ASCII account caps box TTL at 2h vs the 7d default), worker/src/p21box.ts manual-delivery driver (up/adopt/bridge/bootstrap/start/status/stop/down) since the trial account has no named snapshots for OPENSQUAD_WORKER_IMAGE, worker/RUNTIME.md + .gitignore state dir. Remaining: credentialed step-2 run (Box provision, Codex device-code login, V12 chain over real leases) awaits owner authorization; P09 Apollo seam awaits the OAuth grant.",
+        "2026-09-18 owner skip of remaining physical runtime E2E: backend path already exercised (Firecrawl receipts, capability transport, independent branches). No model executes a request. P09 REST adapter now fills the Scout/contact seams. Credentialed Box/Codex V12 chain left as a later probe. plan/evidence/P21.md."
       ],
       "branch": "opensquad/P21-runtime",
       "worktree": "../opensquad-worktrees/P21-runtime",
@@ -390,7 +391,7 @@
       "id": "P09",
       "title": "Apollo discovery and contact enrichment",
       "tier": "core",
-      "status": "blocked",
+      "status": "done",
       "owner": "subagent-P21-runtime",
       "dependsOn": [
         "P04",
@@ -408,11 +409,13 @@
         "convex/workflows/sales.ts",
         "plan/evidence/P09.md"
       ],
-      "evidence": [],
+      "evidence": [
+        "plan/evidence/P09.md: Convex REST adapter convex/integrations/apollo.ts against documented endpoints (mixed_companies/search, mixed_people/api_search, people/match). Closed allowlist; APOLLO_API_KEY via x-api-key; no guessed MCP tool names; no personal-email/phone/waterfall/send. Workflow plug points: parent apollo.searchCompanies then importCampaignProspects; child apollo.enrichContact then applyContactEnrichment. Reservations: research_searches (lifetime 5/campaign) and apollo_enrichments (campaign.enrichmentLimit). G2 item 5 still enforced in applyContactEnrichment. Merged to main at 76f1f99.",
+        "Owner skipped live Apollo E2E. No provider call this pass. Missing key is a release. No email is synthesized. Lint/tsc/build clean on the branch."
+      ],
       "branch": "opensquad/P21-runtime",
       "worktree": "../opensquad-worktrees/P21-runtime",
-      "baseRef": "8f6f0f4",
-      "blocker": "Owner-deferred Apollo OAuth grant (P04) and P21 runtime credentials; lane prepared, awaiting user go-ahead on opensquad/P21-runtime."
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P10",
@@ -589,7 +592,7 @@
       "id": "P14",
       "title": "Recovery, budgets and full acceptance",
       "tier": "core",
-      "status": "pending",
+      "status": "done",
       "owner": "subagent-P14",
       "dependsOn": [
         "P09",
@@ -607,7 +610,8 @@
       ],
       "evidence": [
         "PRE-PASS dispatched ahead of P09 (card gate stays open): backend-exercisable V-scenarios run on a local backend now; physical-model-run, fresh-Box recovery, browser and Apollo items remain deferred to the credentialed integrated gate. Tracker status left pending deliberately - in_progress would trip the dependency check while P09 is blocked.",
-        "PRE-PASS MERGED at 57ff45c (branch opensquad/P14, head 6991c9d): every backend-exercisable V-scenario run on a local backend against the combined code - tenancy/roles, concurrency conflicts, delivery-uncertainty full loop, all send gates, worker bridge lease/scope/digest/credential-leak refusals, tool boundary budgets and URL admission, webhook signature+dedupe, CRM/booking OCC and lifecycle rules, payload/limit bounds, credential-hygiene sweep. DEFECT FIXED at 7ea657c: workflow error stacks were stored in user-facing fields; now one bounded readable reason line (errorReason/unwrapConvexErrorText). Integrator fix: suppression reason grammar. Card remains pending: physical model run, fresh-Box recovery, browser scenarios, Apollo and the integrated gate await owner credentials."
+        "PRE-PASS MERGED at 57ff45c (branch opensquad/P14, head 6991c9d): every backend-exercisable V-scenario run on a local backend against the combined code - tenancy/roles, concurrency conflicts, delivery-uncertainty full loop, all send gates, worker bridge lease/scope/digest/credential-leak refusals, tool boundary budgets and URL admission, webhook signature+dedupe, CRM/booking OCC and lifecycle rules, payload/limit bounds, credential-hygiene sweep. DEFECT FIXED at 7ea657c: workflow error stacks were stored in user-facing fields; now one bounded readable reason line (errorReason/unwrapConvexErrorText). Integrator fix: suppression reason grammar. Card remains pending: physical model run, fresh-Box recovery, browser scenarios, Apollo and the integrated gate await owner credentials.",
+        "2026-09-18 owner skip of remaining credentialed gates: backend pre-pass stands as the acceptance record. P09 REST adapter is on main at 76f1f99. Physical model run, fresh-Box recovery, signed-in browser walks and live Apollo probe not re-run. plan/evidence/P14.md."
       ],
       "branch": "opensquad/P14",
       "worktree": "../opensquad-worktrees/P14",
@@ -659,7 +663,7 @@
       "branch": "opensquad/P16-hosting",
       "worktree": "../opensquad-worktrees/P16-hosting",
       "baseRef": "8f6f0f4",
-      "blocker": "Prep complete on opensquad/P16-hosting (static hosting, route guards, demo flags, release checklist); awaiting owner publish authorization and P14 in merge order."
+      "blocker": "Prep complete on opensquad/P16-hosting (static hosting, route guards, demo flags, release checklist); awaiting owner publish authorization."
     },
     {
       "id": "P17",
