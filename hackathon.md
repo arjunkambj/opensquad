@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-18T09:40:00Z
+- **Last updated:** 2026-09-18T09:50:00Z
 
 ## Log
 
@@ -593,3 +593,15 @@ and P14 marked done with that honesty. Convex features: internal actions,
 mutations, durable workflows (`convex/integrations/apollo.ts`,
 `convex/workflows/sales.ts`).
 Evidence: `plan/evidence/P09.md`.
+
+### 2026-09-18 - debdb83
+
+**Static hosting prep landed on main.** The Vite `dist` can now be served
+from Convex static hosting with app-owned root routing: worker, AgentMail
+and Firecrawl HTTP paths stay reserved, GET on those namespaces no longer
+falls through to the SPA shell, and a flag-gated `/tour` read model is in
+place. `@convex-dev/static-hosting@0.2.1` is registered. Nothing was
+published; a live `convex.site` URL still needs owner authorization.
+Optional schedule/follow-up (P15) was skipped as stretch so it cannot
+delay release. Components: @convex-dev/static-hosting.
+Evidence: `plan/evidence/P16.md`.
