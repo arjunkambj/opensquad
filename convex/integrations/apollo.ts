@@ -640,11 +640,19 @@ function fitReasonFromFilters(args: {
 
 function peopleRecords(body: unknown): Record<string, unknown>[] {
   const record = asRecord(body);
-  const raw = arrayField(record, "people");
+  const raw = [
+    ...arrayField(record, "people"),
+    ...arrayField(record, "contacts"),
+  ];
   const out: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
   for (const entry of raw) {
     const person = asRecord(entry);
-    if (person !== null) out.push(person);
+    if (person === null) continue;
+    const id = idField(person, "id") ?? personName(person) ?? "";
+    if (id.length > 0 && seen.has(id)) continue;
+    if (id.length > 0) seen.add(id);
+    out.push(person);
   }
   return out;
 }
@@ -706,7 +714,14 @@ function pickMatchingPerson(
   people: SanitizedPerson[],
   canonicalDomain: string,
 ): SanitizedPerson | undefined {
-  const matched = people.filter((person) => person.domain === canonicalDomain);
+  // The people search already filtered by this domain. A missing domain on
+  // the person record is not a different company — drop only an explicit
+  // mismatch so a result that omitted organization.primary_domain is not
+  // discarded.
+  const matched = people.filter(
+    (person) =>
+      person.domain === undefined || person.domain === canonicalDomain,
+  );
   if (matched.length === 0) return undefined;
   let best = matched[0];
   let bestScore = titleScore(best.title);

@@ -1575,6 +1575,24 @@ export const salesMissionWorkflow = workflow
         // Retired underneath us — fall through and complete with what the
         // mission actually has rather than propagating.
       }
+      const rediscovered = await step.runAction(
+        internal.integrations.apollo.searchCompanies,
+        { missionId: args.missionId },
+        { name: "apollo.searchCompanies:retry" },
+      );
+      if (
+        rediscovered.action === "done" &&
+        rediscovered.candidates.length > 0
+      ) {
+        await step.runMutation(
+          internal.prospects.importCampaignProspects,
+          {
+            missionId: args.missionId,
+            candidates: rediscovered.candidates,
+          },
+          { name: "importCampaignProspects:retry" },
+        );
+      }
       sourced = await step.runMutation(
         internal.workflows.sales.sourceProspects,
         { missionId: args.missionId },
