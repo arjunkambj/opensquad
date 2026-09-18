@@ -19,6 +19,7 @@ import { Route as DashboardProspectsRouteImport } from './routes/_dashboard/pros
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
 import { Route as DashboardSquadsRouteImport } from './routes/_dashboard/squads'
 import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
+import { Route as MarketingTourRouteImport } from './routes/_marketing/tour'
 import { Route as HandlerSplatRouteImport } from './routes/handler.$'
 import { Route as DashboardWorkspaceDecisionsRouteImport } from './routes/_dashboard/_workspace/decisions'
 import { Route as DashboardWorkspaceEmployeesRouteImport } from './routes/_dashboard/_workspace/employees'
@@ -79,6 +80,11 @@ const DashboardSquadsRoute = DashboardSquadsRouteImport.update({
 const MarketingIndexRoute = MarketingIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => MarketingRoute,
+} as any)
+const MarketingTourRoute = MarketingTourRouteImport.update({
+  id: '/tour',
+  path: '/tour',
   getParentRoute: () => MarketingRoute,
 } as any)
 const HandlerSplatRoute = HandlerSplatRouteImport.update({
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/prospects': typeof DashboardProspectsRoute
   '/settings': typeof DashboardSettingsRoute
   '/squads': typeof DashboardSquadsRoute
+  '/tour': typeof MarketingTourRoute
   '/handler/$': typeof HandlerSplatRoute
   '/decisions': typeof DashboardWorkspaceDecisionsRouteWithChildren
   '/employees': typeof DashboardWorkspaceEmployeesRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/prospects': typeof DashboardProspectsRoute
   '/settings': typeof DashboardSettingsRoute
   '/squads': typeof DashboardSquadsRoute
+  '/tour': typeof MarketingTourRoute
   '/handler/$': typeof HandlerSplatRoute
   '/employees': typeof DashboardWorkspaceEmployeesRoute
   '/decisions/$decisionId': typeof DashboardWorkspaceDecisionsDecisionIdRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   '/_dashboard/prospects': typeof DashboardProspectsRoute
   '/_dashboard/settings': typeof DashboardSettingsRoute
   '/_dashboard/squads': typeof DashboardSquadsRoute
+  '/_marketing/tour': typeof MarketingTourRoute
   '/handler/$': typeof HandlerSplatRoute
   '/_marketing/': typeof MarketingIndexRoute
   '/_dashboard/_workspace/decisions': typeof DashboardWorkspaceDecisionsRouteWithChildren
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/prospects'
     | '/settings'
     | '/squads'
+    | '/tour'
     | '/handler/$'
     | '/decisions'
     | '/employees'
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | '/prospects'
     | '/settings'
     | '/squads'
+    | '/tour'
     | '/handler/$'
     | '/employees'
     | '/decisions/$decisionId'
@@ -286,6 +297,7 @@ export interface FileRouteTypes {
     | '/_dashboard/prospects'
     | '/_dashboard/settings'
     | '/_dashboard/squads'
+    | '/_marketing/tour'
     | '/handler/$'
     | '/_marketing/'
     | '/_dashboard/_workspace/decisions'
@@ -380,6 +392,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof MarketingIndexRouteImport
+      parentRoute: typeof MarketingRoute
+    }
+    '/_marketing/tour': {
+      id: '/_marketing/tour'
+      path: '/tour'
+      fullPath: '/tour'
+      preLoaderRoute: typeof MarketingTourRouteImport
       parentRoute: typeof MarketingRoute
     }
     '/handler/$': {
@@ -595,10 +614,12 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 )
 
 interface MarketingRouteChildren {
+  MarketingTourRoute: typeof MarketingTourRoute
   MarketingIndexRoute: typeof MarketingIndexRoute
 }
 
 const MarketingRouteChildren: MarketingRouteChildren = {
+  MarketingTourRoute: MarketingTourRoute,
   MarketingIndexRoute: MarketingIndexRoute,
 }
 

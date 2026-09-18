@@ -16,6 +16,7 @@ import type * as campaigns from "../campaigns.js";
 import type * as conversations from "../conversations.js";
 import type * as crons from "../crons.js";
 import type * as decisions from "../decisions.js";
+import type * as demo from "../demo.js";
 import type * as drafts from "../drafts.js";
 import type * as employees from "../employees.js";
 import type * as evidence from "../evidence.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   conversations: typeof conversations;
   crons: typeof crons;
   decisions: typeof decisions;
+  demo: typeof demo;
   drafts: typeof drafts;
   employees: typeof employees;
   evidence: typeof evidence;
@@ -128,4 +130,5 @@ export declare const components: {
   agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
   firecrawl: import("@firecrawl/firecrawl-convex/_generated/component.js").ComponentApi<"firecrawl">;
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
 };

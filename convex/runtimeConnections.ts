@@ -354,7 +354,16 @@ export const connect = mutation({
   },
   returns: vStatusReturn,
   handler: async (ctx, args) => {
-    await requireWorkspaceOwner(ctx, args.workspaceId);
+    const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
+    if (workspace.demoMode === true) {
+      // A demo workspace must never spend the deployment's ASCII account —
+      // `connect` provisions a Box on OPENSQUAD's key. Demo execution needs a
+      // separate funded-runtime decision, so the honest answer is a refusal.
+      throw domainError(
+        "FORBIDDEN",
+        "demo workspaces cannot connect a runtime — there is no shared demo Box, and this path would provision one at the deployment's expense",
+      );
+    }
     const now = Date.now();
     let connection = await ctx.db
       .query("runtimeConnections")
@@ -510,7 +519,13 @@ export const reconnect = mutation({
   },
   returns: vStatusReturn,
   handler: async (ctx, args) => {
-    await requireWorkspaceOwner(ctx, args.workspaceId);
+    const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
+    if (workspace.demoMode === true) {
+      throw domainError(
+        "FORBIDDEN",
+        "demo workspaces cannot connect a runtime — there is no shared demo Box, and this path would provision one at the deployment's expense",
+      );
+    }
     const connection = await getConnectionInWorkspace(ctx, args.workspaceId);
     if (connection.state === "provisioning") {
       return {

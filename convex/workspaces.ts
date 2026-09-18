@@ -47,14 +47,16 @@ export const vMembershipDoc = v.object({
 /* Employee templates created with every workspace                     */
 /* ------------------------------------------------------------------ */
 
-type EmployeeSeed = {
+export type EmployeeSeed = {
   template: EmployeeTemplate;
   name: string;
   instructions: string;
   capabilities: readonly CapabilityId[];
 };
 
-const EMPLOYEE_SEEDS: readonly EmployeeSeed[] = [
+/** Exported for the flag-gated demo bootstrap in `convex/demo.ts` (P16) —
+ *  demo workspaces are provisioned with the same employee templates. */
+export const EMPLOYEE_SEEDS: readonly EmployeeSeed[] = [
   {
     template: "scout",
     name: "Scout",
@@ -135,9 +137,17 @@ async function ensureWorkspaceImpl(
       q.eq("identityKey", identityKey).eq("status", "active"),
     )
     .collect();
-  const owned = existing.find((membership) => membership.role === "owner");
-  if (owned !== undefined) {
-    return { workspaceId: owned.workspaceId, created: false };
+  // A DEMO workspace does not satisfy "already owns one" — opting into the
+  // public demo must not strand the visitor without a real workspace (the
+  // demo row itself is created by `demo.optIn`, not this path).
+  const ownedMemberships = existing.filter(
+    (membership) => membership.role === "owner",
+  );
+  for (const membership of ownedMemberships) {
+    const workspace = await ctx.db.get("workspaces", membership.workspaceId);
+    if (workspace !== null && workspace.demoMode !== true) {
+      return { workspaceId: workspace._id, created: false };
+    }
   }
 
   const name =
@@ -251,6 +261,24 @@ export const getCurrent = query({
       .collect();
     if (memberships.length === 0) {
       return null;
+    }
+    // Prefer the caller's REAL workspace: a demo-mode row is always created
+    // first (optIn refuses anyone already owning one), so the insertion-ordered
+    // `find` would resolve a demo+real owner to the demo forever — with no
+    // workspace switcher in the app, that strands them on a workspace that
+    // cannot connect a runtime.
+    for (const entry of memberships) {
+      if (entry.role !== "owner") {
+        continue;
+      }
+      const candidate = await ctx.db.get("workspaces", entry.workspaceId);
+      if (candidate !== null && candidate.demoMode !== true) {
+        return {
+          workspace: candidate,
+          role: entry.role,
+          membershipId: entry._id,
+        };
+      }
     }
     const membership =
       memberships.find((entry) => entry.role === "owner") ?? memberships[0];
