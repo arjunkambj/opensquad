@@ -621,8 +621,8 @@
       "id": "P15",
       "title": "One optional schedule or follow-up",
       "tier": "stretch",
-      "status": "pending",
-      "owner": "",
+      "status": "skipped",
+      "owner": "integrator",
       "dependsOn": [
         "P14"
       ],
@@ -636,7 +636,9 @@
         "convex/crons.ts",
         "src/components/schedules/"
       ],
-      "evidence": []
+      "evidence": [
+        "plan/evidence/P15.md: skipped as optional stretch, never a release prerequisite. Core Apollo/P14 path is on main; remaining release work is owner publish (P16) and agency trial (P17). Neither recurring discovery nor suggested follow-up was selected."
+      ]
     },
     {
       "id": "P16",
@@ -658,7 +660,8 @@
         "plan/evidence/P16.md"
       ],
       "evidence": [
-        "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort — treat it as a release action, not a task to schedule around."
+        "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort — treat it as a release action, not a task to schedule around.",
+        "PREP MERGED to main at debdb83 (branch opensquad/P16-hosting). @convex-dev/static-hosting@0.2.1 registered with app-owned root routing, reserved-path GET guards, flag-gated /tour demo, deploy scripts, plan/release.md. Lint and tsc clean on the combined tree. Publish still awaits owner authorization."
       ],
       "branch": "opensquad/P16-hosting",
       "worktree": "../opensquad-worktrees/P16-hosting",
