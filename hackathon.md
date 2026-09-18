@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-17T14:20:00Z
+- **Last updated:** 2026-09-18T09:40:00Z
 
 ## Log
 
@@ -575,3 +575,21 @@ longer bills a duplicate Box. On the P16 lane, a demo+real owner now resolves
 to the real workspace (there is no switcher) and the tour copy no longer
 promises a runtime the demo cannot have. All checks green.
 Evidence: code review reports (four read-only lanes).
+
+### 2026-09-18 - 8f1c4d0
+
+**Apollo discovery and enrichment adapter, without a live provider probe.**
+Scout and Outreach no longer stop at a deferred OAuth grant. The sales
+workflow now runs a Convex-owned company search before branching, and a
+one-person enrichment after a lead is qualified, through a closed REST
+allowlist (`mixed_companies/search`, `mixed_people/api_search`,
+`people/match`). Paid calls reserve `research_searches` or
+`apollo_enrichments` before they leave Convex; missing `APOLLO_API_KEY` is
+a release; no email is synthesized; qualification evidence is still
+required before enrichment. Owner skipped the live Apollo MCP OAuth and
+remaining physical Codex E2E. Firecrawl research, AgentMail send, and the
+backend P14 pre-pass stay the live-verified halves. Plan: P04, P09, P21
+and P14 marked done with that honesty. Convex features: internal actions,
+mutations, durable workflows (`convex/integrations/apollo.ts`,
+`convex/workflows/sales.ts`).
+Evidence: `plan/evidence/P09.md`.
