@@ -19,13 +19,13 @@
  * They are internal mutations either way and the workflow component does not
  * care which module registers them.
  *
- * WHAT COMPANY DISCOVERY AND CONTACT ENRICHMENT DO HERE: NOTHING. Both are
- * Apollo stages owned by P09 and explicitly out of this card's scope. What
- * this file ships is the two seams they plug into, each a single commented
- * call site inside a stage that already runs — see `sourceProspects` and
- * `checkContact`. The importer, the `leadLimit` ceiling, the canonical-domain
- * dedupe, the provenance merge and the qualification-before-enrichment
- * refusal are all shipped and exercised; the provider call is not.
+ * COMPANY DISCOVERY AND CONTACT ENRICHMENT. The parent runs
+ * `apollo.searchCompanies` then `importCampaignProspects` before
+ * `sourceProspects`. The child runs `apollo.enrichContact` then
+ * `applyContactEnrichment` after a lead is qualified and before
+ * `checkContact`. Both actions live in `convex/integrations/apollo.ts`
+ * (REST, not guessed MCP tool names). Mutations cannot `runAction`, so
+ * these are workflow steps, not calls from `sourceProspects`/`checkContact`.
  *
  * THE FIVE RULES THIS FILE IS BUILT AROUND, EACH LEARNED FROM A REAL HAZARD:
  *
@@ -438,21 +438,11 @@ const CAMPAIGN_PROSPECT_SCAN_LIMIT = 64;
  * ask the row.
  *
  * ── THE APOLLO DISCOVERY SEAM (P09) ──────────────────────────────────────
- * P09 plugs Apollo company search in HERE, and only here:
- *
- *     const discovered = await ctx.runAction(
- *       internal.integrations.apollo.searchCompanies, { ... });
- *     await ctx.runMutation(internal.prospects.importCampaignProspects, {
- *       missionId: mission._id,
- *       candidates: apolloCandidatesFrom(discovered),
- *     });
- *
- * P21 ships `importCampaignProspects`, the `leadLimit` ceiling, the
- * canonical-domain dedupe, the provenance merge and this run receipt. It
- * ships no Apollo call, because P04's OAuth grant is deferred (tasks.json
- * P04 `blocked`). With no Apollo the stage finishes `succeeded` against
- * whatever the campaign already holds and says so in `progressSummary` — an
- * honest, visible gap rather than a silent one.
+ * The parent workflow runs `apollo.searchCompanies` then
+ * `importCampaignProspects` BEFORE this mutation. This stage re-reads the
+ * campaign's persisted leads (including newly imported ones), applies the
+ * `leadLimit` ceiling, and records the selected count. It never calls
+ * Apollo itself — mutations cannot `runAction`.
  */
 export const sourceProspects = internalMutation({
   args: { missionId: v.id("missions") },
@@ -509,14 +499,11 @@ export const sourceProspects = internalMutation({
     const summary =
       prospectIds.length === 0
         ? apolloConfirmed
-          ? "No lead is persisted for this campaign and Apollo discovery is deferred (P04 OAuth grant)."
+          ? "No lead is persisted for this campaign after Apollo discovery."
           : "No lead is persisted for this campaign and its confirmed plan names no enabled discovery source."
         : `${prospectIds.length} of at most ${campaign.leadLimit} leads selected for research`;
     await finishRun(ctx, run, "succeeded", {
-      outputRefs: [
-        `scout:selected:${prospectIds.length}`,
-        ...(apolloConfirmed ? ["scout:deferred:apollo"] : []),
-      ],
+      outputRefs: [`scout:selected:${prospectIds.length}`],
       usage: { toolCalls: 0, modelCalls: 0 },
     });
     await ctx.db.patch("missions", mission._id, {
@@ -1123,20 +1110,13 @@ type ContactGateResult = Infer<typeof vContactGateResult>;
  * Does this qualified lead have an address to write to?
  *
  * ── THE APOLLO ENRICHMENT SEAM (P09) ─────────────────────────────────────
- * P09 plugs paid contact enrichment in HERE, and only here:
- *
- *     const found = await ctx.runAction(
- *       internal.integrations.apollo.enrichContact, { ... });
- *     await ctx.runMutation(internal.prospects.applyContactEnrichment, {
- *       prospectId, missionId, runId, expectedVersion, contact: found,
- *     });
- *
- * `applyContactEnrichment` is already shipped and already refuses unless the
- * lead is `qualified` AND Convex has accepted at least one evidence row for
- * it — G2 item 5 made mechanical, and provable with Apollo blocked, which is
- * the half P21 owns. Without enrichment a qualified lead with no address is
- * `contact_needed` with an `enrich_contact` next action and NO due time:
- * absence is the explicit unscheduled state, never a far-future sentinel.
+ * The child workflow runs `apollo.enrichContact` then
+ * `applyContactEnrichment` BEFORE this mutation, once the lead is
+ * `qualified`. This stage only reads the stored contact: an address means
+ * ready; absence becomes `contact_needed` with an `enrich_contact` next
+ * action and NO due time. It never calls Apollo itself — mutations cannot
+ * `runAction`. `applyContactEnrichment` still refuses unless the lead is
+ * `qualified` AND Convex has accepted evidence for it (G2 item 5).
  */
 export const checkContact = internalMutation({
   args: {
@@ -1158,7 +1138,7 @@ export const checkContact = internalMutation({
       return { action: "ready", recipient: email };
     }
     const reason =
-      "No contact address is recorded for this lead; paid enrichment is deferred (P04 Apollo OAuth grant).";
+      "No business address returned by any confirmed source";
     await ctx.runMutation(internal.prospects.setContactNeeded, {
       prospectId,
       missionId: mission._id,
@@ -1525,7 +1505,22 @@ export const salesMissionWorkflow = workflow
       return { outcome: "cancelled" as const };
     }
 
-    // 2. Source the prospects this mission will branch on.
+    // 2. Apollo company discovery, then source the persisted leads.
+    const discovered = await step.runAction(
+      internal.integrations.apollo.searchCompanies,
+      { missionId: args.missionId },
+      { name: "apollo.searchCompanies" },
+    );
+    if (discovered.action === "done" && discovered.candidates.length > 0) {
+      await step.runMutation(
+        internal.prospects.importCampaignProspects,
+        {
+          missionId: args.missionId,
+          candidates: discovered.candidates,
+        },
+        { name: "importCampaignProspects" },
+      );
+    }
     let sourced = await step.runMutation(
       internal.workflows.sales.sourceProspects,
       { missionId: args.missionId },
@@ -1554,11 +1549,11 @@ export const salesMissionWorkflow = workflow
           missionId: args.missionId,
           kind: "missing_information",
           reason:
-            "This campaign has no persisted leads to research. Apollo " +
-            "discovery is deferred until its OAuth grant is connected, so " +
-            "leads must come from a confirmed source that is already " +
-            "enabled. Add leads to the campaign, then answer `source` to " +
-            "re-check. Nothing is contacted either way.",
+            "This campaign has no persisted leads to research. Leads must " +
+            "come from the confirmed Apollo search or another persisted " +
+            "source. If discovery was unavailable, set APOLLO_API_KEY on " +
+            "this Convex deployment. Add leads to the campaign, then " +
+            "answer `source` to re-check. Nothing is contacted either way.",
           askKey: "sales:no_prospects",
           required: true,
           requestedFields: ["source"],
@@ -1970,9 +1965,43 @@ export const salesProspectWorkflow = workflow
       }
     }
 
-    // 7. The contact gate. A qualified lead with no address is
-    //    `contact_needed` with an `enrich_contact` next action — an explicit
-    //    state, never a manufactured address.
+    // 7. The contact gate. Paid Apollo enrichment runs first; a qualified
+    //    lead with no address is then `contact_needed` with an
+    //    `enrich_contact` next action — an explicit state, never a
+    //    manufactured address.
+    const enriched = await step.runAction(
+      internal.integrations.apollo.enrichContact,
+      { branchId: args.branchId, runId },
+      { name: "apollo.enrichContact" },
+    );
+    if (enriched.action === "ready") {
+      await step.runMutation(
+        internal.prospects.applyContactEnrichment,
+        {
+          prospectId: enriched.prospectId,
+          missionId: args.missionId,
+          runId,
+          expectedVersion: enriched.expectedVersion,
+          contact: enriched.contact,
+        },
+        { name: "applyContactEnrichment" },
+      );
+    } else if (
+      enriched.action === "no_address" &&
+      enriched.contact !== undefined
+    ) {
+      await step.runMutation(
+        internal.prospects.applyContactEnrichment,
+        {
+          prospectId: enriched.prospectId,
+          missionId: args.missionId,
+          runId,
+          expectedVersion: enriched.expectedVersion,
+          contact: enriched.contact,
+        },
+        { name: "applyContactEnrichment" },
+      );
+    }
     const contact = await step.runMutation(
       internal.workflows.sales.checkContact,
       { branchId: args.branchId, runId },
