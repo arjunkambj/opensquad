@@ -3,16 +3,16 @@
 - **Project:** OpenSquad
 - **Event:** Convex All Gas Hackathon
 - **What it does:** A squad of AI employees that handles sales research and outreach, with a built-in CRM to track leads, conversations, and next steps.
-- **Live app:** not deployed
+- **Live app:** https://flexible-grasshopper-949.convex.site
 - **Repo:** https://github.com/arjunkambj/opensquad
-- **Frontend:** not deployed
-- **Convex deployment:** not deployed
-- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/workflow
+- **Frontend:** Convex static hosting
+- **Convex deployment:** https://flexible-grasshopper-949.convex.cloud
+- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/workflow, @convex-dev/static-hosting
 - **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions, crons, scheduled functions, durable workflows
 - **Auth:** Other
 - **AI models:** gpt-6-astra
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-18T09:50:00Z
+- **Last updated:** 2026-09-18T09:55:00Z
 
 ## Log
 
@@ -604,4 +604,16 @@ place. `@convex-dev/static-hosting@0.2.1` is registered. Nothing was
 published; a live `convex.site` URL still needs owner authorization.
 Optional schedule/follow-up (P15) was skipped as stretch so it cannot
 delay release. Components: @convex-dev/static-hosting.
+Evidence: `plan/evidence/P16.md`.
+
+### 2026-09-18 - 5da0bd1
+
+**Public site is live on Convex static hosting.** Pushed the backend
+(including the `staticHosting` component) to
+`dev:flexible-grasshopper-949` and uploaded 135 Vite `dist` files.
+`https://flexible-grasshopper-949.convex.site` serves the SPA; `/leads`
+falls back to `index.html`; missing `.js` assets 404; `GET /worker/claim`
+returns 405 JSON and an unsigned AgentMail/Firecrawl webhook returns 401.
+No separate production deployment was created. Demo tour/execution flags
+stay off. Components: @convex-dev/static-hosting.
 Evidence: `plan/evidence/P16.md`.
