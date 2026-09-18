@@ -644,8 +644,8 @@
       "id": "P16",
       "title": "Constrained public deployment",
       "tier": "core",
-      "status": "blocked",
-      "owner": "subagent-P16",
+      "status": "done",
+      "owner": "integrator",
       "dependsOn": [
         "P14"
       ],
@@ -661,12 +661,12 @@
       ],
       "evidence": [
         "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort — treat it as a release action, not a task to schedule around.",
-        "PREP MERGED to main at debdb83 (branch opensquad/P16-hosting). @convex-dev/static-hosting@0.2.1 registered with app-owned root routing, reserved-path GET guards, flag-gated /tour demo, deploy scripts, plan/release.md. Lint and tsc clean on the combined tree. Publish still awaits owner authorization."
+        "PREP MERGED to main at debdb83 (branch opensquad/P16-hosting). @convex-dev/static-hosting@0.2.1 registered with app-owned root routing, reserved-path GET guards, flag-gated /tour demo, deploy scripts, plan/release.md. Lint and tsc clean on the combined tree. Publish still awaits owner authorization.",
+        "PUBLISHED 2026-09-18 from 5da0bd1 to dev:flexible-grasshopper-949. Live app https://flexible-grasshopper-949.convex.site (135 files uploaded). Smoke: GET / /leads /sign-in 200 HTML; GET /missing.js 404; GET /worker/claim 405 JSON; POST /worker/claim 401; unsigned AgentMail/Firecrawl webhooks 401. No separate prod: deployment. plan/evidence/P16.md."
       ],
       "branch": "opensquad/P16-hosting",
       "worktree": "../opensquad-worktrees/P16-hosting",
-      "baseRef": "8f6f0f4",
-      "blocker": "Prep complete on opensquad/P16-hosting (static hosting, route guards, demo flags, release checklist); awaiting owner publish authorization."
+      "baseRef": "8f6f0f4"
     },
     {
       "id": "P17",
@@ -690,7 +690,7 @@
       "branch": "opensquad/P17-feedback",
       "worktree": "../opensquad-worktrees/P17-feedback",
       "baseRef": "8f6f0f4",
-      "blocker": "Prep pack merged; awaiting owner decisions - invitee/sender/timing/send, waitlist form yes/no, publish authorization."
+      "blocker": "Prep pack merged; public site is live. Awaiting owner decisions - invitee/sender/timing/send, waitlist form yes/no."
     },
     {
       "id": "P18",

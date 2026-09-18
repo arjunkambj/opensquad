@@ -1,9 +1,10 @@
 # OpenSquad public release runbook (P16)
 
-Status: **prepared, not published.** This document is the release procedure and
-production checklist for the constrained public deployment. Executing the
-"Publish" section creates a production deployment and sets public traffic live —
-do not run it until the user authorizes publishing through the integrator.
+Status: **published on the existing cloud development deployment**
+(`dev:flexible-grasshopper-949` →
+`https://flexible-grasshopper-949.convex.site`, 2026-09-18, commit
+`5da0bd1`). A separate `prod:` deployment was not created. This document
+remains the release procedure and production checklist.
 
 ## Release target
 
