@@ -30,7 +30,7 @@ page states. Re-read the form itself at submit time (P18 owns submission).
 | Project name | OpenSquad |
 | Tagline | A supervised AI sales squad for small agencies — it finds, researches and drafts, but a human approves every word that sends. |
 | Repository URL | `https://github.com/arjunkambj/opensquad` — **verify public visibility in a private window before submitting** |
-| Live app URL | `{{pending P16}}` — the `.convex.site` static-hosting URL, must resolve signed-out |
+| Live app URL | `https://proficient-porcupine-63.convex.site` — production Convex static hosting |
 | Video URL | `{{pending P17 recording}}` — under 3:00, per `plan/feedback/video-shot-list.md` |
 | Social post URL | `{{pending authorized publish}}` — draft at `plan/feedback/social-post.md` |
 | Build log | root `hackathon.md` in the repo |

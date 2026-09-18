@@ -662,7 +662,8 @@
       "evidence": [
         "2026-09-15 owner scoping: Convex static hosting for the Vite dist is a minutes-long publish, not a build slice. It stays core because a live convex.site URL is a hard submission requirement, but it carries no engineering effort — treat it as a release action, not a task to schedule around.",
         "PREP MERGED to main at debdb83 (branch opensquad/P16-hosting). @convex-dev/static-hosting@0.2.1 registered with app-owned root routing, reserved-path GET guards, flag-gated /tour demo, deploy scripts, plan/release.md. Lint and tsc clean on the combined tree. Publish still awaits owner authorization.",
-        "PUBLISHED 2026-09-18 from 5da0bd1 to dev:flexible-grasshopper-949. Live app https://flexible-grasshopper-949.convex.site (135 files uploaded). Smoke: GET / /leads /sign-in 200 HTML; GET /missing.js 404; GET /worker/claim 405 JSON; POST /worker/claim 401; unsigned AgentMail/Firecrawl webhooks 401. No separate prod: deployment. plan/evidence/P16.md."
+        "PUBLISHED 2026-09-18 from 5da0bd1 to dev:flexible-grasshopper-949. Live app https://flexible-grasshopper-949.convex.site (135 files uploaded). Smoke: GET / /leads /sign-in 200 HTML; GET /missing.js 404; GET /worker/claim 405 JSON; POST /worker/claim 401; unsigned AgentMail/Firecrawl webhooks 401. No separate prod: deployment. plan/evidence/P16.md.",
+        "PRODUCTION 2026-09-18 pnpm run deploy to prod:proficient-porcupine-63 from e5a428e. Live app https://proficient-porcupine-63.convex.site (135 files). Same smoke matrix on the prod origin. Staging grasshopper host left in place. plan/evidence/P16.md."
       ],
       "branch": "opensquad/P16-hosting",
       "worktree": "../opensquad-worktrees/P16-hosting",

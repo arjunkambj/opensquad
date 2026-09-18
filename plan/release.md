@@ -1,9 +1,8 @@
 # OpenSquad public release runbook (P16)
 
-Status: **published on the existing cloud development deployment**
-(`dev:flexible-grasshopper-949` →
-`https://flexible-grasshopper-949.convex.site`, 2026-09-18, commit
-`5da0bd1`). A separate `prod:` deployment was not created. This document
+Status: **production published** (`prod:proficient-porcupine-63` →
+`https://proficient-porcupine-63.convex.site`, 2026-09-18, commit
+`e5a428e`). Staging remains `dev:flexible-grasshopper-949`. This document
 remains the release procedure and production checklist.
 
 ## Release target
@@ -11,9 +10,9 @@ remains the release procedure and production checklist.
 | Item | Value |
 |---|---|
 | Convex project | `opensquad` (team `arjun-kamboj-43d32`) |
-| Deployment | the project's **production** deployment (`prod:*`), created by the first authorized `pnpm run deploy` — its generated name is recorded here after creation |
-| Public URL | `https://<prod-name>.convex.site` (HTTP actions + static frontend on one origin) |
-| Client API origin | `https://<prod-name>.convex.cloud` (embedded in the bundle as `VITE_CONVEX_URL` by the deploy build) |
+| Deployment | `prod:proficient-porcupine-63` |
+| Public URL | `https://proficient-porcupine-63.convex.site` (HTTP actions + static frontend on one origin) |
+| Client API origin | `https://proficient-porcupine-63.convex.cloud` (embedded in the bundle as `VITE_CONVEX_URL` by the deploy build) |
 | What is public | the Vite SPA (`/`, `/tour` when flag-enabled, `/sign-in`, `/handler/*`, signed-in app routes), the authenticated worker bridge `POST /worker/*`, `POST /agentmail/webhook` (Svix-signed), `POST /firecrawl/webhook` (HMAC + per-crawl token) |
 | What is never public | provider secrets, `OPENSQUAD_*` worker credentials, `HEXCLAVE_SECRET_SERVER_KEY`, `CONVEX_DEPLOY_KEY`, workspace records without auth |
 
