@@ -23,8 +23,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
-import { ACTION_PRICES } from "../lib/limits";
-import type { ProviderUnits } from "../lib/limits";
+import type { PaidAction, ProviderUnits } from "../lib/limits";
 import type { PaidCallOutcome, PaidWork } from "./paidCall";
 import { vPaidOutcome, vProviderUnits, vRefundReason } from "./paidCall";
 import type { BeginResult } from "./reserve";
@@ -70,7 +69,7 @@ export async function withCredits<R>(
   ctx: ActionCtx,
   args: {
     workspaceId: Id<"workspaces">;
-    action: keyof typeof ACTION_PRICES;
+    action: PaidAction;
     operationKey: string;
     worstCaseProviderUnits?: ProviderUnits;
   },
