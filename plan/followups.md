@@ -6,6 +6,7 @@ running list that pass starts from. Items come from task hand-offs
 ("unverified", deferred decisions) and from integrator checks. Tick when fixed.
 
 ## Decisions waiting on the owner
+- [ ] `inbox.connection.getInboxConnection` is owner-only, so operators/viewers see a permission note and no "connect inbox" banner. Relax to any member? (one line in `convex/inbox/connection.ts`)
 - [ ] Set `SECRETS_ENCRYPTION_KEY` on dev (`npx convex env set SECRETS_ENCRYPTION_KEY "$(openssl rand -base64 32)"`). Nothing in the inbox connect flow works without it; it fails closed with `secrets_unconfigured`.
 - [ ] Backfilled threads import identity, sender and timestamps but **no message bodies** (one message store; imported history has no component row). Decide whether imported history needs bodies before the Inbox UI (T41) is judged.
 - [ ] Restore rehearsal on dev (T06): no pre-clear export exists. Accept the
@@ -26,6 +27,7 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T03: `npx convex run ai/health:check '{"workspaceId":"…"}'` happy path, unknown-model refund, billed-and-retried, kill switch, budget, replay — needs a real workspace.
 - [ ] T11 (partly done 2026-09-20 on dev, real provider): catalogue refresh → 46 filters / 38 with values ✔; wallet 10,000 ✔; real count 89,731 for the spike's ICP ✔; wrong-case `jobLevel`, the silently-zero `jobFunction: "Marketing"` and an unknown key all refused with no network call ✔; balance watchdog `tripped: false` at floor 300 ✔. **Still owed (need a workspace):** `findLeads … summaryOnly` with the balance unchanged before/after (proves pages 1–3 cost 0), a one-lead reveal debiting 15 credits / 10 provider units, the breaker trip/release via `ENRICH_BALANCE_FLOOR`, and the two crons visible in the dashboard.
 - [ ] T10: the whole 18-step connect checklist in the T10 hand-off (connect, one webhook on reconnect, real mail arrives, bad signature/unknown token → 401, foreign `inbox_id` quarantined, backfill, second workspace refused, concurrent connects, backfill+webhook race, legacy route 401 without its secret, 401 at send time, rotate with overlap, disconnect) — needs the owner's real AgentMail key.
+- [ ] T22: the connect flow from Settings → Inbox AND onboarding dot 3 with a real key (16 steps in its hand-off: verify, pick/create inbox, sync line, one webhook, inbound proof, rotate same/different account, disconnect, bad key, rate limit, one-inbox-one-workspace, failed import + resume, skip path keeps `sourcing_only`, goals save bumps `revision` only on a real change).
 - [ ] T20: the eleven click/CLI checks in its hand-off (real site fills the form, refresh resumes, first run free then Regenerate = 3 credits, failure + no-website paths, step gate, finished-user redirect).
 - [ ] T12: 1-page and 4-page real scrapes (sizes/titles only), replay with the same key, and the four refused URLs leaving no operation row — exact commands in the T12 hand-off; needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
@@ -33,6 +35,7 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] Integrator: register T22's `ConnectInboxStep` (`outreach_inbox`) and `GoalsStep` (`outreach_goals`) in `ONBOARDING_STEP_REGISTRY` once T21 has merged (both touch that file); mount `InboxConnectionBanner` on Contacts (T31) and Agent (T32).
 - [ ] T20: the Analyze/Regenerate button disables on credits only; when the hidden per-workspace cap is what refuses, the run fails with the "no credits" copy. A read-only billing preflight would let the button explain itself up front (PLAN §6: "Trial limit … reached" vs "out of credits").
 - [ ] T20: social proof is not marked required (ref 02 stars it) — deliberate, to avoid invented customers; confirm with the owner.
 - [ ] T20: a failed Regenerate followed by Retry replays the ORIGINAL pages, not the fresh ones. A run token on `businessProfiles` would fix it.
