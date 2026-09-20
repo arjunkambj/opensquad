@@ -112,10 +112,11 @@ export async function loadRepliedConversations(
     }
   }
   rows.sort((a, b) => (b.lastInboundAt ?? 0) - (a.lastInboundAt ?? 0));
-  return {
-    rows,
-    bounded: { count: Math.min(rows.length, DASHBOARD_SCAN_BOUND), hasMore },
-  };
+  // Not clamped to the bound. The bound is per state range, and three ranges
+  // can together hold more replied threads than one of them may read; the
+  // count is what was actually found, and `hasMore` is what says a range
+  // filled and rows in the window went unread.
+  return { rows, bounded: { count: rows.length, hasMore } };
 }
 
 /* ------------------------------------------------------------------ */
