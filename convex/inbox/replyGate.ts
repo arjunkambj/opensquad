@@ -4,10 +4,26 @@
  * Read AFTER the inbound message has been applied, so it sees the takeover,
  * opt-out and context changes that message just caused. Every refusal is an
  * explicit block code — the gate never guesses.
+ *
+ * TWO GATES, and the difference between them is the whole of PLAN §9.4
+ * "Never answer history".
+ *
+ *   `evaluateReplyHistory` — may reply handling TOUCH this message at all?
+ *   Live, after the connection, on a thread one of our own accepted sends
+ *   started, to a lead we know, from someone who is not us, not already
+ *   handled. A refusal here stops even the free rules, because a backfilled
+ *   message and a mail in a thread we did not start are readable in the Inbox
+ *   and nothing more.
+ *
+ *   `evaluateReplyAutomation` (+ `evaluateReplyAnswerGate`) — may the agent
+ *   SPEAK? Takeover, association, mode, pause, suppression, and the sender
+ *   being the person we actually mailed. A refusal here still lets the free
+ *   rules run: an org whose agent is paused must still stop mailing
+ *   someone who asked it to.
  */
 import type { Doc } from "../_generated/dataModel";
 import type { AuthCtx } from "../lib/auth";
-import { SENDING_AGENT_MODES } from "../lib/validators";
+import { parseInboundSender, SENDING_AGENT_MODES } from "../lib/validators";
 import type { OptOutSignal } from "../lib/validators";
 import { matchSuppression } from "../outreach/suppressions";
 import { resolveOutboundRecipient } from "./conversationsModel";
@@ -36,6 +52,8 @@ export const REPLY_GATE_BLOCK_CODES = [
   "inbox_unassigned",
   "inbox_mismatch",
   "recipient_unknown",
+  "sender_unverified",
+  "sender_contact_mismatch",
   "suppressed_email",
   "suppressed_domain",
 ] as const;
@@ -55,6 +73,8 @@ export const vReplyGateBlockCode = v.union(
   v.literal("inbox_unassigned"),
   v.literal("inbox_mismatch"),
   v.literal("recipient_unknown"),
+  v.literal("sender_unverified"),
+  v.literal("sender_contact_mismatch"),
   v.literal("suppressed_email"),
   v.literal("suppressed_domain"),
 );
@@ -164,6 +184,184 @@ export async function evaluateReplyAutomation(
   return { start: true };
 }
 
+/* ------------------------------------------------------------------ */
+/* "Never answer history" (PLAN §9.4)                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Why reply handling did not even LOOK at this message.
+ *
+ * - `message_superseded` — a newer inbound has landed; that one drives.
+ * - `already_handled` — this message already carries a disposition.
+ * - `not_live_source` — a backfilled import. History is read, never answered.
+ * - `before_connection` — older than `orgs.connectedAt`, or the
+ *   org has no connection time at all.
+ * - `thread_not_ours` — no accepted send of ours started this thread, or it
+ *   is not bound to a lead. Someone else's conversation is not ours to work.
+ * - `sender_is_us` — our own inbox address. An echo is not a reply.
+ * - `sender_unverified` — the `From` header did not name exactly one address,
+ *   so there is nobody to attribute the message to.
+ */
+export const REPLY_HISTORY_BLOCK_CODES = [
+  "message_superseded",
+  "already_handled",
+  "not_live_source",
+  "before_connection",
+  "thread_not_ours",
+  "sender_is_us",
+  "sender_unverified",
+] as const;
+
+export type ReplyHistoryBlockCode = (typeof REPLY_HISTORY_BLOCK_CODES)[number];
+
+export const vReplyHistoryBlockCode = v.union(
+  v.literal("message_superseded"),
+  v.literal("already_handled"),
+  v.literal("not_live_source"),
+  v.literal("before_connection"),
+  v.literal("thread_not_ours"),
+  v.literal("sender_is_us"),
+  v.literal("sender_unverified"),
+);
+
+export const vReplyHistoryVerdict = v.union(
+  v.object({ handle: v.literal(true) }),
+  v.object({ handle: v.literal(false), blockedBy: vReplyHistoryBlockCode }),
+);
+
+export type ReplyHistoryVerdict = typeof vReplyHistoryVerdict.type;
+
+/**
+ * How many send attempts are read looking for one of ours that left us.
+ * A thread we started has one in its first few rows by construction, so this
+ * bound answers the question rather than truncating it.
+ */
+const STARTED_BY_US_SCAN_MAX = 16;
+
+/**
+ * Did one of OUR sends start this thread?
+ *
+ * `acknowledged` is the only state that means the provider took the message —
+ * a reserved, requesting or failed attempt never reached anyone, so it cannot
+ * be what a reply is replying to. A conversation the unassigned queue minted
+ * from a stranger's mail has no attempts at all, which is exactly the case
+ * this refuses.
+ */
+async function threadStartedByUs(
+  ctx: AuthCtx,
+  conversation: Doc<"conversations">,
+): Promise<boolean> {
+  const attempts = await ctx.db
+    .query("sendAttempts")
+    .withIndex("by_conversationId_and_createdAt", (q) =>
+      q.eq("conversationId", conversation._id),
+    )
+    .order("asc")
+    .take(STARTED_BY_US_SCAN_MAX);
+  return attempts.some(
+    (attempt) =>
+      attempt.state === "acknowledged" &&
+      attempt.orgId === conversation.orgId,
+  );
+}
+
+/**
+ * THE history gate. Everything it reads is a fact the application recorded —
+ * the receipt's own source and arrival time, our send attempts, the
+ * org's connection time — except the sender, which is compared against
+ * our own inbox address and can only ever cause a refusal.
+ */
+export async function evaluateReplyHistory(
+  ctx: AuthCtx,
+  args: {
+    conversation: Doc<"conversations">;
+    org: Doc<"orgs">;
+    receipt: Doc<"emailEventReceipts">;
+    fromAddress: string | undefined;
+  },
+): Promise<ReplyHistoryVerdict> {
+  const blocked = (blockedBy: ReplyHistoryBlockCode): ReplyHistoryVerdict => ({
+    handle: false,
+    blockedBy,
+  });
+  const { conversation, org, receipt } = args;
+
+  if (conversation.lastInboundMessageRef !== receipt.providerMessageRef) {
+    return blocked("message_superseded");
+  }
+  if (
+    conversation.lastDispositionAt !== undefined &&
+    conversation.lastInboundAt !== undefined &&
+    conversation.lastDispositionAt >= conversation.lastInboundAt
+  ) {
+    // A disposition is only ever written for the LATEST inbound, so a stamp
+    // at or after this message's arrival is that message's own verdict.
+    return blocked("already_handled");
+  }
+  if (receipt.source !== "live") {
+    return blocked("not_live_source");
+  }
+  const connectedAt = org.connectedAt;
+  if (connectedAt === undefined || receipt.receivedAt <= connectedAt) {
+    return blocked("before_connection");
+  }
+  if (conversation.prospectId === undefined || !(await threadStartedByUs(ctx, conversation))) {
+    return blocked("thread_not_ours");
+  }
+  if (args.fromAddress === undefined) {
+    return blocked("sender_unverified");
+  }
+  // AgentMail inbox ids ARE addresses (`integrations/agentmailApi.ts`), so
+  // the org's own inbox is the one address a reply may never come from.
+  // Parsed rather than trusted: a ref that does not normalize simply fails to
+  // match, which can only ever let a message through to the other checks.
+  const ourAddress = parseInboundSender(org.inboxRef);
+  if (ourAddress !== undefined && ourAddress === args.fromAddress) {
+    return blocked("sender_is_us");
+  }
+  return { handle: true };
+}
+
+/* ------------------------------------------------------------------ */
+/* May the agent speak?                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The automation gate plus the verified-sender check `conversations.resume`
+ * already applies: the agent answers the person it mailed, and nobody else.
+ *
+ * A colleague on cc, an assistant forwarding the thread or a delivery daemon
+ * can all land verified mail on an associated thread. Answering any of them
+ * would put our words in front of someone the org never chose to
+ * contact, so the address must match either the lead's contact or the
+ * address the last revision was authorized against. It can refuse, never
+ * grant — the send recipient is always resolved by the application.
+ */
+export async function evaluateReplyAnswerGate(
+  ctx: AuthCtx,
+  conversation: Doc<"conversations">,
+  optOutSignal: OptOutSignal,
+  fromAddress: string | undefined,
+): Promise<ReplyGateVerdict> {
+  const verdict = await evaluateReplyAutomation(ctx, conversation, optOutSignal);
+  if (!verdict.start) {
+    return verdict;
+  }
+  const { recipient, latestDraft } = await resolveOutboundRecipient(
+    ctx,
+    conversation,
+  );
+  if (fromAddress === undefined) {
+    return { start: false, blockedBy: "sender_unverified" };
+  }
+  const matches =
+    fromAddress === recipient ||
+    (latestDraft !== null && fromAddress === latestDraft.normalizedRecipient);
+  return matches
+    ? { start: true }
+    : { start: false, blockedBy: "sender_contact_mismatch" };
+}
+
 /**
  * Blockers worth a note on the thread.
  *
@@ -182,6 +380,8 @@ export const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<ReplyGateBlockCode> = new Set<
   "inbox_unassigned",
   "inbox_mismatch",
   "recipient_unknown",
+  "sender_unverified",
+  "sender_contact_mismatch",
   "suppressed_email",
   "suppressed_domain",
 ]);

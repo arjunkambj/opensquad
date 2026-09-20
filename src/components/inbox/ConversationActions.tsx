@@ -11,6 +11,7 @@ import type { FunctionReturnType } from "convex/server"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
+import { MARK_INTERESTED_COPY } from "@/components/inbox/inbox-presentation"
 import { MarkAsBookedDialog } from "@/components/inbox/MarkAsBookedDialog"
 import { resumeBlockCopy } from "@/components/inbox/thread/resume-block-copy"
 import { FormError } from "@/components/states/states"
@@ -40,6 +41,7 @@ export function ConversationActions({
   prospect: Detail["prospect"]
   expectedContextVersion: number
 }) {
+  const markInterested = useMutation(api.inbox.replies.markInterested)
   const setTakeover = useMutation(api.inbox.conversationLifecycle.setTakeover)
   const resume = useMutation(api.inbox.conversationResume.resume)
   const close = useMutation(api.inbox.conversationLifecycle.close)
@@ -65,6 +67,10 @@ export function ConversationActions({
   const [error, setError] = useState<string | null>(null)
 
   const closed = conversation.state === "closed"
+  // The tag is the thread's own fact, written by the classifier or by this
+  // button. Once it is there the button would change nothing, so it is
+  // replaced by the sentence that says what to do next.
+  const alreadyInterested = conversation.lastDisposition === "interested"
 
   const run = (work: Promise<unknown>, title: string, failure: string) => {
     setBusy(true)
@@ -94,6 +100,30 @@ export function ConversationActions({
                 onClick={() => setBooking(true)}
               >
                 Mark as booked
+              </Button>
+            )}
+            {prospect === null || alreadyInterested ? null : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || closed}
+                onClick={() =>
+                  run(
+                    markInterested({
+                      orgId,
+                      conversationId: conversation._id,
+                      expectedContextVersion,
+                      requestId: intentId(conversation._id, "mark-interested"),
+                    }),
+                    MARK_INTERESTED_COPY.success,
+                    MARK_INTERESTED_COPY.failure,
+                  )
+                }
+              >
+                {busy ? <Spinner data-icon="inline-start" /> : null}
+                {busy
+                  ? MARK_INTERESTED_COPY.pending
+                  : MARK_INTERESTED_COPY.label}
               </Button>
             )}
             {conversation.humanTakeover ? (
@@ -177,6 +207,11 @@ export function ConversationActions({
               {closed ? "Reopen" : "Close"}
             </Button>
           </div>
+        {prospect !== null && alreadyInterested ? (
+          <p className="text-muted-foreground text-sm">
+            {MARK_INTERESTED_COPY.already}
+          </p>
+        ) : null}
         <FormError message={error} />
       </CardContent>
 
