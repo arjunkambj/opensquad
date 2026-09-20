@@ -1,5 +1,11 @@
+/**
+ * Settings — workspace, sending policy, automation, members and integrations.
+ *
+ * One card per section, chosen by the route's `?section=` contract. Account
+ * is the only section that is not workspace-scoped.
+ */
 import { Link } from "@tanstack/react-router"
-import type { SettingsSection } from "@/routes/_dashboard/settings"
+import type { SettingsSection } from "@/components/settings/settings-model"
 import { AutomationSection } from "@/components/settings/AutomationSection"
 import { IntegrationsSection } from "@/components/settings/IntegrationsSection"
 import { MembersSection } from "@/components/settings/MembersSection"

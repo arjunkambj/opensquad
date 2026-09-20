@@ -1,3 +1,10 @@
+/**
+ * Onboarding — the setup wizard: the workspace, the business and what the
+ * squad may do before anything runs.
+ *
+ * Each step owns its own save; the wizard owns which step is current and
+ * derives the starting step from what is already saved.
+ */
 import { ArrowRight01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
@@ -83,7 +90,7 @@ export function OnboardingWizard() {
 
 /** Explicit, idempotent workspace creation — the only way in for a new user. */
 function ProvisionWorkspace() {
-  const ensureWorkspace = useMutation(api.workspaces.ensureWorkspace)
+  const ensureWorkspace = useMutation(api.workspaces.mutations.ensureWorkspace)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -127,7 +134,7 @@ function ProvisionWorkspace() {
 }
 
 function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
-  const profile = useQuery(api.businessProfiles.get, {
+  const profile = useQuery(api.company.queries.get, {
     workspaceId: workspace._id,
   })
   const search = useSearch({ from: "/_dashboard/onboarding" })
@@ -139,8 +146,8 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   // nothing), so the honest resume point after a saved profile is the
   // workspace step itself.
   const step: StepId = search.step ?? (profile ? "workspace" : "business")
-  const agent = useQuery(api.agents.get, { workspaceId: workspace._id })
-  const createAgent = useMutation(api.agents.createDraft)
+  const agent = useQuery(api.agents.queries.get, { workspaceId: workspace._id })
+  const createAgent = useMutation(api.agents.mutations.createDraft)
   const [completed, setCompleted] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [finishError, setFinishError] = useState<string | null>(null)

@@ -46,7 +46,7 @@ export function BusinessStep({
   profile: Doc<"businessProfiles"> | null
   onDone: () => void
 }) {
-  const updateProfile = useMutation(api.businessProfiles.update)
+  const updateProfile = useMutation(api.company.mutations.update)
 
   const [form, setForm] = useState<BusinessProfileForm>(() =>
     profileToForm(profile),

@@ -1,14 +1,5 @@
-import { useUser } from "@hexclave/react"
-import {
-  Navigate,
-  createFileRoute,
-  useNavigate,
-  useSearch,
-} from "@tanstack/react-router"
-import { Suspense, useEffect } from "react"
-import { SignInForm } from "@/components/auth/SignInForm"
-import { AuthLayout } from "@/components/Layout/AuthLayout"
-import { Spinner } from "@/components/ui/spinner"
+import { createFileRoute } from "@tanstack/react-router"
+import { SignInPage } from "@/components/auth/SignInPage"
 
 /**
  * A same-origin path only — a `//` prefix or a scheme would turn the
@@ -32,40 +23,3 @@ export const Route = createFileRoute("/sign-in")({
   }),
   component: SignInPage,
 })
-
-function SignInPage() {
-  return (
-    <AuthLayout>
-      <Suspense fallback={<Spinner className="mx-auto" />}>
-        <SignInGate />
-      </Suspense>
-    </AuthLayout>
-  )
-}
-
-function SignInGate() {
-  const user = useUser()
-  const { after_auth_return_to } = useSearch({ from: "/sign-in" })
-  const navigate = useNavigate()
-
-  // `to` only accepts a registered route literal, so the caller's return path
-  // goes through `href` — it is already sanitised to a same-origin path by
-  // `validateSearch`.
-  useEffect(() => {
-    if (user && after_auth_return_to !== undefined) {
-      void navigate({ href: after_auth_return_to, replace: true })
-    }
-  }, [user, after_auth_return_to, navigate])
-
-  if (user) {
-    // No return path means the signed-in home — `/leads`, not Overview,
-    // which is a deliberate step from the CRM's top bar.
-    return after_auth_return_to === undefined ? (
-      <Navigate to="/leads" replace />
-    ) : (
-      <Spinner className="mx-auto" />
-    )
-  }
-
-  return <SignInForm />
-}

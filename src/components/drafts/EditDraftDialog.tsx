@@ -1,3 +1,10 @@
+/**
+ * Drafts — editing the exact text of one outgoing message before it is
+ * approved.
+ *
+ * The dialog owns its own mutation and request intent; approving or sending
+ * belongs to the inbox and outreach surfaces, not here.
+ */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
@@ -44,7 +51,7 @@ export function EditDraftDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const revise = useMutation(api.drafts.revise)
+  const revise = useMutation(api.outreach.drafts.revise)
   const intentId = useRequestIntents()
 
   const [recipient, setRecipient] = useState(draft.recipient)

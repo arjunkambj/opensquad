@@ -9,7 +9,7 @@ import type { api } from "../../convex/_generated/api"
  * definition for the whole app.
  */
 export type WorkspaceRole = NonNullable<
-  FunctionReturnType<typeof api.workspaces.getCurrent>
+  FunctionReturnType<typeof api.workspaces.queries.getCurrent>
 >["role"]
 
 /**

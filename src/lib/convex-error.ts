@@ -2,7 +2,7 @@ import { ConvexError } from "convex/values"
 
 /**
  * Domain error codes thrown by the OpenSquad backend via
- * `domainError`/`invalid` in `convex/lib/validators.ts`.
+ * `domainError`/`invalid` in `convex/lib/validators/shared.ts`.
  */
 export type DomainErrorCode =
   | "UNAUTHENTICATED"

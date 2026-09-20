@@ -176,7 +176,7 @@ function PendingDraftLink({
   workspaceId: Id<"workspaces">
   draftId: Id<"drafts">
 }) {
-  const draft = useQuery(api.drafts.get, { workspaceId, draftId })
+  const draft = useQuery(api.outreach.drafts.get, { workspaceId, draftId })
 
   if (draft === undefined) {
     return (

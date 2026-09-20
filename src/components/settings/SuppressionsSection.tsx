@@ -45,9 +45,9 @@ export function SuppressionsSection({
   role: "owner" | "operator" | "viewer"
 }) {
   const canEdit = role === "owner" || role === "operator"
-  const rows = useQuery(api.suppressions.list, { workspaceId: workspace._id })
-  const add = useMutation(api.suppressions.add)
-  const remove = useMutation(api.suppressions.remove)
+  const rows = useQuery(api.outreach.suppressions.list, { workspaceId: workspace._id })
+  const add = useMutation(api.outreach.suppressions.add)
+  const remove = useMutation(api.outreach.suppressions.remove)
 
   const [kind, setKind] = useState<"email" | "domain">("email")
   const [value, setValue] = useState("")

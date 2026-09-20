@@ -531,7 +531,7 @@ export const beginFirecrawlOperation = internalMutation({
     // The reservation is taken inside THIS transaction. A CONFLICT here
     // aborts everything above it — the operation row is never written, the
     // cap accounting never moves, and the provider is never contacted.
-    const reservation = await ctx.runMutation(internal.usage.reserve, {
+    const reservation = await ctx.runMutation(internal.billing.reservations.reserve, {
       workspaceId,
       scopeKey: USAGE_SCOPE_WORKSPACE,
       metric: "scrapes" as const,
@@ -600,7 +600,7 @@ export const settleFirecrawlOperation = internalMutation({
     const pageDigest =
       args.page === undefined ? undefined : await computeResultDigest(args.page);
     if (args.settlement === "commit") {
-      await ctx.runMutation(internal.usage.commit, {
+      await ctx.runMutation(internal.billing.reservations.commit, {
         workspaceId: row.workspaceId,
         operationKey: row.operationKey,
         ...(args.componentRequestRef !== undefined
@@ -608,12 +608,12 @@ export const settleFirecrawlOperation = internalMutation({
           : {}),
       });
     } else if (args.settlement === "release") {
-      await ctx.runMutation(internal.usage.release, {
+      await ctx.runMutation(internal.billing.reservations.release, {
         workspaceId: row.workspaceId,
         operationKey: row.operationKey,
       });
     } else {
-      await ctx.runMutation(internal.usage.markUncertain, {
+      await ctx.runMutation(internal.billing.reservations.markUncertain, {
         workspaceId: row.workspaceId,
         operationKey: row.operationKey,
       });
@@ -991,11 +991,11 @@ export const sweepStaleFirecrawlOperations = internalMutation({
         // whole sweep, so a reservation someone else already settled must
         // not be handed to `markUncertain`.
         const reservation = await ctx.runMutation(
-          internal.usage.getByOperationKey,
+          internal.billing.reservations.getByOperationKey,
           { workspaceId: row.workspaceId, operationKey: row.operationKey },
         );
         if (reservation !== null && reservation.state === "reserved") {
-          await ctx.runMutation(internal.usage.markUncertain, {
+          await ctx.runMutation(internal.billing.reservations.markUncertain, {
             workspaceId: row.workspaceId,
             operationKey: row.operationKey,
           });

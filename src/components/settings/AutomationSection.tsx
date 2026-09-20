@@ -30,7 +30,7 @@ export function AutomationSection({
   workspace: Doc<"workspaces">
   isOwner: boolean
 }) {
-  const setAutomationState = useMutation(api.workspaces.setAutomationState)
+  const setAutomationState = useMutation(api.workspaces.mutations.setAutomationState)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

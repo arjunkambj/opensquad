@@ -1,3 +1,10 @@
+/**
+ * Inbox — the conversation queue and, beside it, one thread.
+ *
+ * The list owns the tab/cursor contract the URL carries and the Convex reads
+ * behind it. Sending is not reachable from here: the inbox reads replies and
+ * records human decisions about them.
+ */
 import {
   CatchBoundary,
   Link,
@@ -27,7 +34,7 @@ import { cn } from "@/lib/utils"
 const INBOX_ROUTE = "/_dashboard/_workspace/inbox"
 
 type ConversationSummary = FunctionReturnType<
-  typeof api.conversations.list
+  typeof api.inbox.conversations.list
 >["items"][number]
 
 const TABS: { tab: ConversationTab; label: string }[] = (
@@ -57,7 +64,7 @@ export function InboxList({ detailOpen }: { detailOpen: boolean }) {
   // deliberately does NOT badge the takeover tab — it counts only open frozen
   // threads, a strict subset, and a smaller number over a longer list is a lie.
   const attention = useQuery(
-    api.conversations.attentionCounts,
+    api.inbox.conversations.attentionCounts,
     workspaceId === undefined ? "skip" : { workspaceId },
   )
 
@@ -153,12 +160,12 @@ function InboxListBody({
   tab: ConversationTab
   detailOpen: boolean
   attention:
-    | FunctionReturnType<typeof api.conversations.attentionCounts>
+    | FunctionReturnType<typeof api.inbox.conversations.attentionCounts>
     | undefined
   onSelectTab: (tab: ConversationTab) => void
 }) {
   const navigate = useNavigate()
-  const page = useQuery(api.conversations.list, {
+  const page = useQuery(api.inbox.conversations.list, {
     workspaceId,
     tab,
     limit: search.limit,
@@ -232,7 +239,7 @@ function InboxRows({
   hasMore: boolean
   nextCursor: string | null
   attention:
-    | FunctionReturnType<typeof api.conversations.attentionCounts>
+    | FunctionReturnType<typeof api.inbox.conversations.attentionCounts>
     | undefined
   activeKey: string | null
   setActiveKey: (key: string) => void

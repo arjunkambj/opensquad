@@ -1,3 +1,9 @@
+/**
+ * Overview — the dated receipt feed of what the workspace has done.
+ *
+ * Read-only: every row is an activity event the backend recorded, never a
+ * derived guess, and the date range comes from the route's search contract.
+ */
 import { CatchBoundary, useNavigate, useSearch } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
@@ -158,7 +164,7 @@ function ActivityFeedBody({
   const search = useSearch({ from: OVERVIEW_ROUTE })
   const navigate = useNavigate()
 
-  const page = useQuery(api.activity.list, {
+  const page = useQuery(api.activity.queries.list, {
     workspaceId,
     from: bounds.from,
     to: bounds.to,

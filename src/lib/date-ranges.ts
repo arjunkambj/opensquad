@@ -48,7 +48,7 @@ export type CalendarDateRange = {
  * swear had happened.
  *
  * This is the same conversion `localDayParts` / `localCivilToUtc` perform in
- * `convex/lib/validators.ts`, reimplemented rather than imported: they are
+ * `convex/lib/validators/shared.ts`, reimplemented rather than imported: they are
  * value exports and importing them would pull the convex module graph into
  * the browser bundle. No timezone database is involved on either side —
  * `Intl` already carries one.

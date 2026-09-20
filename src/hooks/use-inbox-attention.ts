@@ -16,7 +16,7 @@ import type { Id } from "../../convex/_generated/dataModel"
  */
 export function useInboxAttention(workspaceId: Id<"workspaces"> | undefined) {
   return useQuery(
-    api.conversations.attentionCounts,
+    api.inbox.conversations.attentionCounts,
     workspaceId === undefined ? "skip" : { workspaceId },
   )
 }

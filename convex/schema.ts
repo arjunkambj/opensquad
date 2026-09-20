@@ -603,7 +603,7 @@ export const conversationNoteFields = {
  * field is frozen per row; `payloadHash` commits to the canonical
  * serialization of {endpointOperation, inboxRef, normalizedRecipient,
  * subject, body, replyToMessageRef}. A revision can never be edited in
- * place — `drafts.revise`/`createRevision` insert a new row and move
+ * place — `drafts.revise`/`draftRevisions.createRevision` insert a new row and move
  * `conversations.currentDraftId`.
  */
 export const draftFields = {
@@ -755,7 +755,7 @@ export const suppressionFields = {
  * (`incoming:<inbox>:<message>` for inbound; `outbound:<messageRef>:<type>`
  * for delivery facts); `providerEventId` dedupes delivery. Delivery events
  * that arrive before the send attempt recorded its providerMessageRef stay
- * `pending` and are folded in by `sending.ts` afterwards. P11 consumes the
+ * `pending` and are folded in by the send-outcome path afterwards. P11 consumes the
  * pending rows fully; `providerFacts` holds only necessary verified fields —
  * never another copy of message bodies.
  */
@@ -877,7 +877,7 @@ export const usageReservationFields = {
  * "ambiguous failures consume the reservation until reconciled"; before this
  * table there was nowhere to record either.
  *
- * The row is written in the SAME transaction as the `usage.reserve` it owns,
+ * The row is written in the SAME transaction as the `billing.reserve` it owns,
  * before the provider is contacted, so there is no window in which a paid
  * call exists with no record of it. `reservationIds` names the reservations
  * the settle path must move, so a caller can never settle a different debit
