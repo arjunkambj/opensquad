@@ -15,6 +15,7 @@ import { recordConversationNote } from "./conversationNotes";
 import { resolveOutboundRecipient } from "./conversationsModel";
 import type { InboundFacts } from "./inboundModel";
 import { mergeConversationSource } from "./model";
+import { scheduleReplyHandling } from "./repliesModel";
 import {
   evaluateReplyAutomation,
   NOTED_REPLY_GATE_BLOCKS,
@@ -134,24 +135,33 @@ export async function applyToConversation(
     });
   }
 
+  // 4c. The rest of PLAN §9.1's "a reply arrived" row, in the SAME
+  //     transaction that stores the reply: this thread's unsent drafts are
+  //     superseded and its parked follow-ups are retired, so a follow-up can
+  //     never be dispatched by something that started a millisecond after the
+  //     reply landed.
+  await ctx.runMutation(
+    internal.outreach.outreachInvalidation.retireOutreachForReply,
+    { conversationId: settled._id },
+  );
+
   // 5. The dispatch point, and the only one. Everything above has committed
   //    to this transaction before any model work could be started.
-  if (!replyWork.start) {
+  if (!replyWork.start && NOTED_REPLY_GATE_BLOCKS.has(replyWork.blockedBy)) {
     // A policy refusal that would otherwise leave no trace is recorded.
-    if (NOTED_REPLY_GATE_BLOCKS.has(replyWork.blockedBy)) {
-      await recordConversationNote(ctx, {
-        conversation: settled,
-        kind: "system",
-        actor: "system",
-        body: `Reply automation did not run for this message (${replyWork.blockedBy}). The reply is retained for human review; no draft and no send were produced.`,
-      });
-    }
-    return { conversation: settled, replyWork };
+    await recordConversationNote(ctx, {
+      conversation: settled,
+      kind: "system",
+      actor: "system",
+      body: `Reply automation did not run for this message (${replyWork.blockedBy}). The reply is retained for human review; no draft and no send were produced.`,
+    });
   }
 
-  // The gate passed, so reply automation MAY run for this message. Nothing
-  // runs it today: the conversation stays un-classified and needs a human.
-  // AI classify/draft: reimplemented via Convex AI Gateway (see plan)
+  // Reply handling, scheduled rather than run: it re-reads every gate in its
+  // own transaction, and a refusal there still lets the FREE rules stop an
+  // unsubscribe or a bounce — which is why it is started whatever the gate
+  // above said (`inbox/repliesSteps.handleInboundReply`).
+  await scheduleReplyHandling(ctx, settled);
   return { conversation: settled, replyWork };
 }
 

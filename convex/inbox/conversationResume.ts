@@ -25,6 +25,7 @@ import {
   assertContextVersion,
   resolveOutboundRecipient,
 } from "./conversationsModel";
+import { scheduleReplyHandling } from "./repliesModel";
 import { v } from "convex/values";
 
 /**
@@ -323,9 +324,11 @@ export const resume = mutation({
       actor: identityKey,
       body: "Automation resumed; association, campaign, sender and policy checks passed.",
     });
-    // Automation is re-armed, but nothing drafts a reply for the latest
-    // inbound message yet — the thread stays in its needs-a-human state.
-    // AI classify/draft: reimplemented via Convex AI Gateway (see plan)
-    return { conversation: updated, dispatched: false };
+    // Automation is re-armed, so the thread's latest inbound message goes
+    // back to reply handling. It re-reads every gate in its own transaction
+    // and refuses a message that already carries a disposition, so resuming
+    // an already-classified thread costs nothing and answers nothing twice.
+    const dispatched = await scheduleReplyHandling(ctx, updated);
+    return { conversation: updated, dispatched };
   },
 });
