@@ -103,11 +103,11 @@ export function outboundStateLabel(
 /** Why a `resume` call refused to re-arm automation (RESUME_BLOCK_CODES). */
 export const RESUME_BLOCK_LABEL: Record<string, string> = {
   association_missing:
-    "No lead and campaign are linked to this thread yet — link one first.",
-  campaign_mismatch:
-    "The linked lead now belongs to a different campaign than this thread.",
-  campaign_inactive:
-    "The linked campaign is not active, so outreach for it cannot resume.",
+    "No lead and agent are linked to this thread yet — link one first.",
+  agent_mismatch:
+    "The linked lead now belongs to a different agent than this thread.",
+  agent_not_sending:
+    "The agent is not in a mode that sends, so replies cannot resume.",
   workspace_paused:
     "Workspace automation is paused — resume it in Settings → Automation first.",
   inbox_unassigned:

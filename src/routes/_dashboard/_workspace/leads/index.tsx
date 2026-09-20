@@ -1,5 +1,4 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { AttentionBlock } from "@/components/leads/AttentionBlock"
 import { LeadList } from "@/components/leads/LeadList"
 import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
@@ -11,8 +10,8 @@ export const Route = createFileRoute("/_dashboard/_workspace/leads/")({
 })
 
 /**
- * `/leads` — the signed-in home and the CRM list. Overview is a named
- * action, not a vanished page: the operator arrives at the pipeline and can
+ * `/leads` — the signed-in home and the lead list. Overview is a named
+ * action, not a vanished page: the operator arrives at their leads and can
  * still reach the workspace's receipts from the top bar.
  */
 function LeadsPage() {
@@ -22,7 +21,7 @@ function LeadsPage() {
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
         title="Leads"
-        description="Every company the agent has found, and what each one is waiting on. Overview — what has happened in this workspace — stays linked at the top."
+        description="Every person the agent has found, and where each one stands. Overview — what has happened in this workspace — stays linked at the top."
         actions={
           <Button variant="outline" size="sm" render={<Link to="/overview" />}>
             Overview
@@ -35,13 +34,7 @@ function LeadsPage() {
           description="Reading this workspace's pipeline."
         />
       ) : (
-        <>
-          <AttentionBlock workspaceId={current.workspace._id} />
-          <LeadList
-            workspaceId={current.workspace._id}
-            timezone={current.workspace.timezone}
-          />
-        </>
+        <LeadList workspaceId={current.workspace._id} />
       )}
     </div>
   )

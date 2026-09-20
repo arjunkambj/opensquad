@@ -114,7 +114,7 @@ function LoadedConversation({
   thread: FunctionReturnType<typeof api.conversations.thread> | undefined
   headingRef: RefObject<HTMLHeadingElement | null>
 }) {
-  const { conversation, prospect, campaign } = detail
+  const { conversation, prospect, agent } = detail
 
   // The version pinned at mount. `setSeenVersion` is the "load current" act.
   const [seenVersion, setSeenVersion] = useState(conversation.contextVersion)
@@ -177,13 +177,13 @@ function LoadedConversation({
           {prospect !== null ? (
             <DetailRow
               label="Lead"
-              value={`${prospect.companyName} — ${prospect.salesStage}`}
+              value={`${prospect.companyName ?? "Unnamed company"} — ${prospect.stage}`}
             />
           ) : null}
-          {campaign !== null ? (
+          {agent !== null ? (
             <DetailRow
-              label="Campaign"
-              value={`${campaign.title} (${campaign.status})`}
+              label="Agent"
+              value={`${agent.name === "" ? "Your agent" : agent.name} (${agent.mode})`}
             />
           ) : null}
           {conversation.lastInboundFrom !== undefined ? (

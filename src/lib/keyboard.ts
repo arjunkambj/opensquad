@@ -4,7 +4,7 @@
  * Every window-level shortcut in this app has to ask this first. ⌘K and ⌘B
  * both `preventDefault()` on any keydown today, so pressing ⌘B while writing a
  * four-thousand-character conversation note toggles the sidebar and pressing ⌘K
- * opens the palette over a half-typed campaign brief. A global shortcut that
+ * opens the palette over a half-typed instruction. A global shortcut that
  * fires inside a text field is a shortcut that eats the user's work.
  *
  * `select` is included deliberately: a native `<select>` uses letter keys to

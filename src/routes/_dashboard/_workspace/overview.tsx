@@ -4,7 +4,6 @@ import {
   optionalCursor,
   optionalEpochMs,
   optionalOneOf,
-  optionalText,
 } from "@/lib/search-params"
 
 /** Receipt windows for the activity feed, not for unfinished work. */
@@ -28,7 +27,6 @@ export type ActivityRange = (typeof ACTIVITY_RANGES)[number]
  * feed only.
  */
 export type OverviewSearch = {
-  campaign?: string
   range?: ActivityRange
   from?: number
   to?: number
@@ -59,7 +57,6 @@ export function overviewDefaults(search: OverviewSearch) {
  */
 export const Route = createFileRoute("/_dashboard/_workspace/overview")({
   validateSearch: (search): OverviewSearch => ({
-    campaign: optionalText(search.campaign),
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
     from: optionalEpochMs(search.from),
     to: optionalEpochMs(search.to),

@@ -29,9 +29,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 
 /**
- * Step 1 — business profile. Persists immediately via
- * `businessProfiles.update` with `expectedVersion` optimistic concurrency
- * (0 = create). CONFLICT reloads the authoritative record.
+ * Step 1 — the company profile everything downstream is written from
+ * (PLAN §7). Persists immediately via `businessProfiles.update` with
+ * `expectedVersion` optimistic concurrency (0 = create); CONFLICT reloads the
+ * authoritative record.
+ *
+ * Typed by hand here. Filling it from a real website analysis, with the
+ * loading and failure states of PLAN §5, is T20's.
  */
 export function BusinessStep({
   workspaceId,
@@ -77,11 +81,15 @@ export function BusinessStep({
       await updateProfile({
         workspaceId,
         expectedVersion: baseVersion,
-        websiteUrl: form.websiteUrl,
-        offer: form.offer,
-        idealCustomer: form.idealCustomer,
-        tone: form.tone,
-        exclusions: splitListInput(form.exclusionsText),
+        ...(form.websiteUrl.trim() === ""
+          ? {}
+          : { websiteUrl: form.websiteUrl }),
+        companyName: form.companyName,
+        industry: form.industry,
+        description: form.description,
+        keyFeatures: splitListInput(form.keyFeaturesText),
+        socialProof: splitListInput(form.socialProofText),
+        painPoints: form.painPoints,
       })
       setDirty(false)
       toast.add({ title: "Business profile saved", type: "success" })
@@ -103,15 +111,15 @@ export function BusinessStep({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your business</CardTitle>
+        <CardTitle>Your company</CardTitle>
         <CardDescription>
-          Scout, Researcher and Outreach write and research from this profile.
+          The agent researches leads and writes every email from this profile.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="bp-website">Business website</FieldLabel>
+            <FieldLabel htmlFor="bp-website">Company website</FieldLabel>
             <Input
               id="bp-website"
               type="url"
@@ -120,51 +128,68 @@ export function BusinessStep({
               onChange={(event) => update({ websiteUrl: event.target.value })}
             />
             <FieldDescription>
-              A public http(s) URL the agent can research.
+              A public http(s) URL. Leave it empty if you do not have one.
             </FieldDescription>
           </Field>
           <Field>
-            <FieldLabel htmlFor="bp-offer">What do you offer?</FieldLabel>
-            <Textarea
-              id="bp-offer"
-              placeholder="e.g. Done-for-you outbound engine for B2B agencies"
-              value={form.offer}
-              onChange={(event) => update({ offer: event.target.value })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="bp-icp">Ideal customer</FieldLabel>
-            <Textarea
-              id="bp-icp"
-              placeholder="e.g. US-based marketing agencies with 5–50 employees"
-              value={form.idealCustomer}
-              onChange={(event) =>
-                update({ idealCustomer: event.target.value })
-              }
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="bp-tone">Tone</FieldLabel>
+            <FieldLabel htmlFor="bp-company">Company name</FieldLabel>
             <Input
-              id="bp-tone"
-              placeholder="e.g. Direct, friendly, no buzzwords"
-              value={form.tone}
-              onChange={(event) => update({ tone: event.target.value })}
+              id="bp-company"
+              value={form.companyName}
+              onChange={(event) => update({ companyName: event.target.value })}
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="bp-exclusions">Exclusions</FieldLabel>
+            <FieldLabel htmlFor="bp-industry">Industry</FieldLabel>
+            <Input
+              id="bp-industry"
+              value={form.industry}
+              onChange={(event) => update({ industry: event.target.value })}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="bp-description">
+              What does your company do?
+            </FieldLabel>
             <Textarea
-              id="bp-exclusions"
-              placeholder={"One per line — companies, domains or segments to never contact"}
-              value={form.exclusionsText}
+              id="bp-description"
+              value={form.description}
+              onChange={(event) => update({ description: event.target.value })}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="bp-features">Key features</FieldLabel>
+            <Textarea
+              id="bp-features"
+              value={form.keyFeaturesText}
               onChange={(event) =>
-                update({ exclusionsText: event.target.value })
+                update({ keyFeaturesText: event.target.value })
               }
             />
             <FieldDescription>
-              One entry per line. The agent must never target these.
+              One per line. These are what the outreach may claim.
             </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="bp-proof">Social proof</FieldLabel>
+            <Textarea
+              id="bp-proof"
+              value={form.socialProofText}
+              onChange={(event) =>
+                update({ socialProofText: event.target.value })
+              }
+            />
+            <FieldDescription>
+              One per line — customers, results or numbers you can stand behind.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="bp-pain">Pain points you solve</FieldLabel>
+            <Textarea
+              id="bp-pain"
+              value={form.painPoints}
+              onChange={(event) => update({ painPoints: event.target.value })}
+            />
           </Field>
           <FormError message={error} />
           <div className="flex justify-end">

@@ -102,7 +102,7 @@ export function MembersSection({
         <CardTitle>Members and roles</CardTitle>
         <CardDescription>
           Who can use this workspace. Owners manage members, operators edit
-          campaigns and leads, viewers read. The last owner can never be
+          the agent and its leads, viewers read. The last owner can never be
           demoted or removed.
         </CardDescription>
       </CardHeader>

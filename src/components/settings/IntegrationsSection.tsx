@@ -29,9 +29,13 @@ type IntegrationRow = {
 }
 
 /**
- * Provider integrations. Every row below is an honest state — Firecrawl is
- * backend-managed and the AgentMail inbox is assigned by the backend — so
- * nothing here offers a control that could lie.
+ * Integrations. Every row below is an honest state — lead search and company
+ * research are backend-managed and the AgentMail inbox is assigned by the
+ * backend — so nothing here offers a control that could lie.
+ *
+ * Client-visible copy never names the lead-data or web-research provider
+ * (PLAN §4 white-label rule); AgentMail is named because the user pastes that
+ * key themselves.
  */
 export function IntegrationsSection({
   workspace,
@@ -52,9 +56,9 @@ export function IntegrationsSection({
     },
     {
       icon: Globe02Icon,
-      name: "Firecrawl",
+      name: "Company research",
       description:
-        "Backend-owned website research. Runs server-side via the crawl component.",
+        "Website analysis and per-lead company research. Runs server-side.",
       status: "Backend-managed — no user connection",
       note: "Configured by deployment env, not per-workspace login.",
     },

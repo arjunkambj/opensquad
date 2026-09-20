@@ -46,7 +46,7 @@ export function SetupBanner() {
           </CardTitle>
           <CardDescription>
             Automation is paused until you confirm your business profile,
-            sending policy and campaign scope.
+            sending policy and agent.
           </CardDescription>
         </CardHeader>
         <CardContent>

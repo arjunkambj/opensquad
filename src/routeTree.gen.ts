@@ -18,7 +18,6 @@ import { Route as DashboardOnboardingRouteImport } from './routes/_dashboard/onb
 import { Route as DashboardProspectsRouteImport } from './routes/_dashboard/prospects'
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
 import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
-import { Route as MarketingTourRouteImport } from './routes/_marketing/tour'
 import { Route as HandlerSplatRouteImport } from './routes/handler.$'
 import { Route as DashboardWorkspaceInboxRouteImport } from './routes/_dashboard/_workspace/inbox'
 import { Route as DashboardWorkspaceLeadsRouteImport } from './routes/_dashboard/_workspace/leads'
@@ -26,7 +25,6 @@ import { Route as DashboardWorkspaceOverviewRouteImport } from './routes/_dashbo
 import { Route as DashboardWorkspaceInboxIndexRouteImport } from './routes/_dashboard/_workspace/inbox/index'
 import { Route as DashboardWorkspaceInboxConversationIdRouteImport } from './routes/_dashboard/_workspace/inbox/$conversationId'
 import { Route as DashboardWorkspaceLeadsIndexRouteImport } from './routes/_dashboard/_workspace/leads/index'
-import { Route as DashboardWorkspaceLeadsProspectIdRouteImport } from './routes/_dashboard/_workspace/leads/$prospectId'
 import { Route as DashboardWorkspaceOverviewIndexRouteImport } from './routes/_dashboard/_workspace/overview/index'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -71,11 +69,6 @@ const MarketingIndexRoute = MarketingIndexRouteImport.update({
   path: '/',
   getParentRoute: () => MarketingRoute,
 } as any)
-const MarketingTourRoute = MarketingTourRouteImport.update({
-  id: '/tour',
-  path: '/tour',
-  getParentRoute: () => MarketingRoute,
-} as any)
 const HandlerSplatRoute = HandlerSplatRouteImport.update({
   id: '/handler/$',
   path: '/handler/$',
@@ -115,12 +108,6 @@ const DashboardWorkspaceLeadsIndexRoute =
     path: '/',
     getParentRoute: () => DashboardWorkspaceLeadsRoute,
   } as any)
-const DashboardWorkspaceLeadsProspectIdRoute =
-  DashboardWorkspaceLeadsProspectIdRouteImport.update({
-    id: '/$prospectId',
-    path: '/$prospectId',
-    getParentRoute: () => DashboardWorkspaceLeadsRoute,
-  } as any)
 const DashboardWorkspaceOverviewIndexRoute =
   DashboardWorkspaceOverviewIndexRouteImport.update({
     id: '/',
@@ -135,13 +122,11 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof DashboardOnboardingRoute
   '/prospects': typeof DashboardProspectsRoute
   '/settings': typeof DashboardSettingsRoute
-  '/tour': typeof MarketingTourRoute
   '/handler/$': typeof HandlerSplatRoute
   '/inbox': typeof DashboardWorkspaceInboxRouteWithChildren
   '/leads': typeof DashboardWorkspaceLeadsRouteWithChildren
   '/overview': typeof DashboardWorkspaceOverviewRouteWithChildren
   '/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
-  '/leads/$prospectId': typeof DashboardWorkspaceLeadsProspectIdRoute
   '/inbox/': typeof DashboardWorkspaceInboxIndexRoute
   '/leads/': typeof DashboardWorkspaceLeadsIndexRoute
   '/overview/': typeof DashboardWorkspaceOverviewIndexRoute
@@ -153,10 +138,8 @@ export interface FileRoutesByTo {
   '/onboarding': typeof DashboardOnboardingRoute
   '/prospects': typeof DashboardProspectsRoute
   '/settings': typeof DashboardSettingsRoute
-  '/tour': typeof MarketingTourRoute
   '/handler/$': typeof HandlerSplatRoute
   '/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
-  '/leads/$prospectId': typeof DashboardWorkspaceLeadsProspectIdRoute
   '/inbox': typeof DashboardWorkspaceInboxIndexRoute
   '/leads': typeof DashboardWorkspaceLeadsIndexRoute
   '/overview': typeof DashboardWorkspaceOverviewIndexRoute
@@ -171,14 +154,12 @@ export interface FileRoutesById {
   '/_dashboard/onboarding': typeof DashboardOnboardingRoute
   '/_dashboard/prospects': typeof DashboardProspectsRoute
   '/_dashboard/settings': typeof DashboardSettingsRoute
-  '/_marketing/tour': typeof MarketingTourRoute
   '/handler/$': typeof HandlerSplatRoute
   '/_marketing/': typeof MarketingIndexRoute
   '/_dashboard/_workspace/inbox': typeof DashboardWorkspaceInboxRouteWithChildren
   '/_dashboard/_workspace/leads': typeof DashboardWorkspaceLeadsRouteWithChildren
   '/_dashboard/_workspace/overview': typeof DashboardWorkspaceOverviewRouteWithChildren
   '/_dashboard/_workspace/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
-  '/_dashboard/_workspace/leads/$prospectId': typeof DashboardWorkspaceLeadsProspectIdRoute
   '/_dashboard/_workspace/inbox/': typeof DashboardWorkspaceInboxIndexRoute
   '/_dashboard/_workspace/leads/': typeof DashboardWorkspaceLeadsIndexRoute
   '/_dashboard/_workspace/overview/': typeof DashboardWorkspaceOverviewIndexRoute
@@ -192,13 +173,11 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/prospects'
     | '/settings'
-    | '/tour'
     | '/handler/$'
     | '/inbox'
     | '/leads'
     | '/overview'
     | '/inbox/$conversationId'
-    | '/leads/$prospectId'
     | '/inbox/'
     | '/leads/'
     | '/overview/'
@@ -210,10 +189,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/prospects'
     | '/settings'
-    | '/tour'
     | '/handler/$'
     | '/inbox/$conversationId'
-    | '/leads/$prospectId'
     | '/inbox'
     | '/leads'
     | '/overview'
@@ -227,14 +204,12 @@ export interface FileRouteTypes {
     | '/_dashboard/onboarding'
     | '/_dashboard/prospects'
     | '/_dashboard/settings'
-    | '/_marketing/tour'
     | '/handler/$'
     | '/_marketing/'
     | '/_dashboard/_workspace/inbox'
     | '/_dashboard/_workspace/leads'
     | '/_dashboard/_workspace/overview'
     | '/_dashboard/_workspace/inbox/$conversationId'
-    | '/_dashboard/_workspace/leads/$prospectId'
     | '/_dashboard/_workspace/inbox/'
     | '/_dashboard/_workspace/leads/'
     | '/_dashboard/_workspace/overview/'
@@ -312,13 +287,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingIndexRouteImport
       parentRoute: typeof MarketingRoute
     }
-    '/_marketing/tour': {
-      id: '/_marketing/tour'
-      path: '/tour'
-      fullPath: '/tour'
-      preLoaderRoute: typeof MarketingTourRouteImport
-      parentRoute: typeof MarketingRoute
-    }
     '/handler/$': {
       id: '/handler/$'
       path: '/handler/$'
@@ -368,13 +336,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardWorkspaceLeadsIndexRouteImport
       parentRoute: typeof DashboardWorkspaceLeadsRoute
     }
-    '/_dashboard/_workspace/leads/$prospectId': {
-      id: '/_dashboard/_workspace/leads/$prospectId'
-      path: '/$prospectId'
-      fullPath: '/leads/$prospectId'
-      preLoaderRoute: typeof DashboardWorkspaceLeadsProspectIdRouteImport
-      parentRoute: typeof DashboardWorkspaceLeadsRoute
-    }
     '/_dashboard/_workspace/overview/': {
       id: '/_dashboard/_workspace/overview/'
       path: '/'
@@ -403,14 +364,11 @@ const DashboardWorkspaceInboxRouteWithChildren =
   )
 
 interface DashboardWorkspaceLeadsRouteChildren {
-  DashboardWorkspaceLeadsProspectIdRoute: typeof DashboardWorkspaceLeadsProspectIdRoute
   DashboardWorkspaceLeadsIndexRoute: typeof DashboardWorkspaceLeadsIndexRoute
 }
 
 const DashboardWorkspaceLeadsRouteChildren: DashboardWorkspaceLeadsRouteChildren =
   {
-    DashboardWorkspaceLeadsProspectIdRoute:
-      DashboardWorkspaceLeadsProspectIdRoute,
     DashboardWorkspaceLeadsIndexRoute: DashboardWorkspaceLeadsIndexRoute,
   }
 
@@ -469,12 +427,10 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 )
 
 interface MarketingRouteChildren {
-  MarketingTourRoute: typeof MarketingTourRoute
   MarketingIndexRoute: typeof MarketingIndexRoute
 }
 
 const MarketingRouteChildren: MarketingRouteChildren = {
-  MarketingTourRoute: MarketingTourRoute,
   MarketingIndexRoute: MarketingIndexRoute,
 }
 

@@ -54,24 +54,6 @@ export function optionalText(value: unknown, max = 200): string | undefined {
   return trimmed.length === 0 || trimmed.length > max ? undefined : trimmed
 }
 
-/**
- * A Convex document id carried in the URL (e.g. `?campaign=`).
- *
- * A free-text param is wrong for these: `v.id(…)` argument validation on the
- * backend THROWS on a value that is not an id — a hard error inside the list
- * boundary, not the NOT_FOUND this layer is meant to fall back from (rule 2).
- * Anything that cannot even be shaped like an id (generated ids are lowercase
- * base32-ish, 16–64 chars) is dropped here, so a hand-edited link degrades to
- * the unfiltered list instead of an error card. A well-shaped id that names a
- * foreign table still reaches the backend and fails honestly there.
- */
-export function optionalId(value: unknown): string | undefined {
-  return typeof value === "string" && /^[a-z0-9]{16,64}$/.test(value)
-    ? value
-    : undefined
-}
-
-/** An opaque pagination cursor. Never inspected, only carried. */
 export function optionalCursor(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 && value.length <= 2048
     ? value
