@@ -35,6 +35,13 @@ export const PAID_ACTIONS = [
   "get_email",
   "write_email",
   "handle_reply",
+  // The AI half of a two-provider action. Zero credits by design: the user
+  // pays once, on the step that fetched the page (`analyze_website`,
+  // `research_lead`), and a failed AI half is retried from the stored markdown
+  // without buying the page again (PLAN §6 "billed … even if a later step
+  // failed"). Still a paid call, so it is metered and capped in `ai_calls`.
+  "profile_company",
+  "score_lead",
 ] as const;
 
 export type PaidAction = (typeof PAID_ACTIONS)[number];
@@ -64,6 +71,8 @@ export const ACTION_PRICES: Record<PaidAction, ActionPrice> = {
   get_email: { credits: 15, firstRunFree: false, provider: "enrich" },
   write_email: { credits: 1, firstRunFree: false, provider: "ai_gateway" },
   handle_reply: { credits: 1, firstRunFree: false, provider: "ai_gateway" },
+  profile_company: { credits: 0, firstRunFree: false, provider: "ai_gateway" },
+  score_lead: { credits: 0, firstRunFree: false, provider: "ai_gateway" },
 };
 
 /** The lifetime grant, made with the workspace and never refilled (PLAN §6). */

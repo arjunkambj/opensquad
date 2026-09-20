@@ -23,6 +23,8 @@ export const vPaidAction = v.union(
   v.literal("get_email"),
   v.literal("write_email"),
   v.literal("handle_reply"),
+  v.literal("profile_company"),
+  v.literal("score_lead"),
 );
 
 /**
