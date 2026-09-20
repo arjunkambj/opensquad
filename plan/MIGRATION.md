@@ -13,6 +13,21 @@ on any deployment that has data. Tables that were removed from the schema
 (`missions`, `runs`, `employees`, …) do not block a deploy; their rows simply
 become unreachable and are cleaned up at the end.
 
+## Tenancy note (2026-09-21)
+
+The tenant is now the auth provider's organization (PLAN §4, EXECUTION T44):
+`workspaces` became `orgs` keyed by `hexclaveOrgId`, every `workspaceId` became
+`orgId`, and `memberships` no longer exists. Wherever this runbook says
+"keep `workspaces`, `memberships` and `suppressions`", read "keep `orgs` and
+`suppressions`"; the clear step's confirmation literal is
+`yes-clear-every-app-table-except-orgs-suppressions`. One thing this runbook
+cannot decide: production's pre-pivot `workspaces` rows carry no organization
+id, so at cutover each kept row is either mapped to its owner's personal
+organization through the auth provider's server API, or cleared together with
+its suppressions' ownership re-pointed. That is the owner's call
+(`plan/migration-log.md`, open item 8); the shape migration fails loudly on
+such rows rather than inventing an id.
+
 ## Decision (2026-09-20): clean-slate path
 
 The owner confirmed there are no real users and no data worth keeping, on dev
