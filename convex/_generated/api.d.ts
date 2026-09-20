@@ -25,6 +25,7 @@ import type * as leadEvents from "../leadEvents.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as migrations_clear from "../migrations/clear.js";
+import type * as migrations_shape from "../migrations/shape.js";
 import type * as migrations_tables from "../migrations/tables.js";
 import type * as prospects from "../prospects.js";
 import type * as quarantine from "../quarantine.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/validators": typeof lib_validators;
   "migrations/clear": typeof migrations_clear;
+  "migrations/shape": typeof migrations_shape;
   "migrations/tables": typeof migrations_tables;
   prospects: typeof prospects;
   quarantine: typeof quarantine;
