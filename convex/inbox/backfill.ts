@@ -652,6 +652,59 @@ export const recordStepFailure = internalMutation({
   },
 });
 
+/** A run whose next step has not moved for this long has lost its schedule. */
+export const BACKFILL_STALL_MS = 10 * 60 * 1000;
+
+/**
+ * Rows one sweep examines. The index is global and every provider's
+ * `accepted` operations share it, so the page is deliberately wide: a wedged
+ * operation belonging to another provider would otherwise sit at the head of
+ * the oldest-first range and starve this sweep.
+ */
+export const BACKFILL_SWEEP_SCAN = 100;
+
+/**
+ * The belt for the chain (PLAN §9.1 "Recovery"). Every step schedules the next
+ * inside its own transaction, so the only way a run stalls is a lost
+ * scheduled function — which this re-drives. Re-driving is safe because every
+ * step is idempotent: the cursor says exactly what is still to do, and
+ * `upsertMessage` refuses a second row for a message already imported.
+ */
+export const sweepStalledBackfills = internalMutation({
+  args: {},
+  returns: v.object({ resumed: v.number() }),
+  handler: async (ctx) => {
+    const cutoff = Date.now() - BACKFILL_STALL_MS;
+    const rows = await ctx.db
+      .query("providerOperations")
+      .withIndex("by_state_and_updatedAt", (q) =>
+        q.eq("state", "accepted").lt("updatedAt", cutoff),
+      )
+      .take(BACKFILL_SWEEP_SCAN);
+    let resumed = 0;
+    for (const row of rows) {
+      if (
+        row.provider !== "agentmail" ||
+        !row.operationKey.startsWith("inbox_backfill:")
+      ) {
+        continue;
+      }
+      // Stamped before the schedule so the next sweep does not re-drive the
+      // same run while this one is still working.
+      await ctx.db.patch("providerOperations", row._id, {
+        updatedAt: Date.now(),
+      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.inbox.backfill.runBackfillStep,
+        { workspaceId: row.workspaceId },
+      );
+      resumed += 1;
+    }
+    return { resumed };
+  },
+});
+
 export const failBackfill = internalMutation({
   args: {
     operationId: v.id("providerOperations"),
