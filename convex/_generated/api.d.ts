@@ -85,6 +85,7 @@ import type * as inbox_inbound from "../inbox/inbound.js";
 import type * as inbox_inboundApply from "../inbox/inboundApply.js";
 import type * as inbox_inboundModel from "../inbox/inboundModel.js";
 import type * as inbox_inboundRoute from "../inbox/inboundRoute.js";
+import type * as inbox_inboxList from "../inbox/inboxList.js";
 import type * as inbox_model from "../inbox/model.js";
 import type * as inbox_quarantine from "../inbox/quarantine.js";
 import type * as inbox_receiptDrain from "../inbox/receiptDrain.js";
@@ -250,6 +251,7 @@ declare const fullApi: ApiFromModules<{
   "inbox/inboundApply": typeof inbox_inboundApply;
   "inbox/inboundModel": typeof inbox_inboundModel;
   "inbox/inboundRoute": typeof inbox_inboundRoute;
+  "inbox/inboxList": typeof inbox_inboxList;
   "inbox/model": typeof inbox_model;
   "inbox/quarantine": typeof inbox_quarantine;
   "inbox/receiptDrain": typeof inbox_receiptDrain;

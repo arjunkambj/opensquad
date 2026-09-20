@@ -1,39 +1,49 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { InboxLayout } from "@/components/inbox/InboxLayout"
-import { oneOf, optionalCursor, pageSize } from "@/lib/search-params"
+import {
+  INBOX_PILLS,
+  type InboxPill,
+} from "@/components/inbox/inbox-presentation"
+import { InboxPage } from "@/components/inbox/InboxPage"
+import {
+  oneOf,
+  optionalCursor,
+  optionalText,
+  pageSize,
+  type PageSize,
+} from "@/lib/search-params"
 
 /**
- * The inbox's URL contract, declared on the layout so the list and the thread
- * share one definition — Back from a thread returns to the same tab and page
- * rather than to page one of `open`.
+ * The inbox's URL contract, declared on the layout so the list and the open
+ * thread share one definition — Back from a thread returns to the same pill
+ * and page rather than to page one of Received.
  *
- * `tab` is one of CONVERSATION_TABS — the only four slices the indexes back
- * (`by_workspaceId_and_state_and_lastMessageAt` and
- * `by_workspaceId_and_humanTakeover_and_lastMessageAt`). There is deliberately
- * no `q`: no inbox search query exists, and a control the backend cannot
- * honour is a lie. `cursor` and `limit` carry paging in the URL because a
- * queue position is shared context (V09/V23).
+ * - `pill` — one of the four slices of reference 24, each an index range in
+ *   `inbox.inboxList.list`. `received` is the default and stays out of the URL.
+ * - `q` — company-name search. It is the only text the backend can honour:
+ *   a thread is reached through `prospects.search_company_name`, so message
+ *   bodies and people's names are not searchable and the field says so.
+ * - `cursor`, `limit` — paging, in the URL because a queue position is shared
+ *   context. A search returns one bounded set and carries no cursor.
  */
 export type InboxSearch = {
-  tab?: "open" | "unassigned" | "takeover" | "closed"
+  pill?: Exclude<InboxPill, "received">
+  q?: string
   cursor?: string
-  limit?: 25 | 50
+  limit?: PageSize
 }
 
 export const Route = createFileRoute("/_dashboard/_workspace/inbox")({
   validateSearch: (search): InboxSearch => {
-    // Defaults are absent from the URL — a clean `/inbox` means the open tab,
-    // first page, 25 rows.
-    const tab = oneOf(
-      ["open", "unassigned", "takeover", "closed"] as const,
-      search.tab,
-      "open",
-    )
+    const pill = oneOf(INBOX_PILLS, search.pill, "received")
+    const q = optionalText(search.q, 200)
+    const cursor = optionalCursor(search.cursor)
+    const limit = pageSize(search.limit)
     return {
-      tab: tab === "open" ? undefined : tab,
-      cursor: optionalCursor(search.cursor),
-      limit: pageSize(search.limit),
+      ...(pill === "received" ? {} : { pill }),
+      ...(q === undefined ? {} : { q }),
+      ...(cursor === undefined ? {} : { cursor }),
+      ...(limit === undefined ? {} : { limit }),
     }
   },
-  component: InboxLayout,
+  component: InboxPage,
 })

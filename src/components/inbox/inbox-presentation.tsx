@@ -1,32 +1,30 @@
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import type {
-  ConversationState,
+  LeadStage,
+  MessageSource,
   ReplyDisposition,
-  TakeoverReason,
 } from "../../../convex/lib/validators"
 import { Chip } from "@/components/shared/presentation"
 
 /**
- * Shared vocabulary for the inbox: every state is a word, never a colour
- * alone (V10). The strings are written for an operator who has not read the
- * schema — `unassigned` means "no lead is linked", not a lifecycle term.
+ * The inbox's shared vocabulary: every state is a word, never a colour alone.
+ * The strings are written for someone who has not read the schema.
  */
 
-export const CONVERSATION_STATE_LABEL: Record<ConversationState, string> = {
-  open: "Open",
-  closed: "Closed",
-  unassigned: "No lead linked",
+/** The four slices of the conversation list (reference 24). */
+export const INBOX_PILLS = ["received", "interested", "unread", "all"] as const
+
+export type InboxPill = (typeof INBOX_PILLS)[number]
+
+export const PILL_LABEL: Record<InboxPill, string> = {
+  received: "Received",
+  interested: "Interested",
+  unread: "Unread",
+  all: "All",
 }
 
-export const CONVERSATION_TAB_LABEL: Record<ConversationState | "takeover", string> = {
-  open: "Open",
-  unassigned: "Unassigned",
-  takeover: "Taken over",
-  closed: "Closed",
-}
-
-/** What the reply pipeline last made of an inbound message. */
+/** What the reply pipeline made of the latest inbound message. */
 export const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
   interested: "Interested",
   question: "Question",
@@ -37,29 +35,19 @@ export const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
   needs_review: "Needs review",
 }
 
-/** Why automation is frozen on a thread — the distinction V16/V17 need. */
-export const TAKEOVER_REASON_LABEL: Record<TakeoverReason, string> = {
-  unassigned_inbound: "Held — this reply matched no thread",
-  operator: "Held — an operator took over",
-  ambiguous_opt_out: "Held — this reply may be an opt-out",
-  awaiting_resume: "Held — waiting for an explicit resume",
-  needs_review: "Held — classification could not be trusted",
-}
-
-export function ConversationStateChip({ state }: { state: ConversationState }) {
-  return (
-    <Chip
-      className={
-        state === "open"
-          ? "bg-chart-2/15 text-chart-2"
-          : state === "unassigned"
-            ? "bg-chart-1/15 text-chart-1"
-            : undefined
-      }
-    >
-      {CONVERSATION_STATE_LABEL[state]}
-    </Chip>
-  )
+/** Where the lead stands, in the same words the Contacts table uses. */
+export const STAGE_LABEL: Record<LeadStage, string> = {
+  found: "Found",
+  researched: "Researched",
+  queued: "Queued",
+  contacted: "Contacted",
+  replied: "Replied",
+  interested: "Interested",
+  meeting_proposed: "Meeting proposed",
+  meeting_booked: "Meeting booked",
+  closed_lost: "Closed lost",
+  rejected: "Rejected",
+  needs_attention: "Needs attention",
 }
 
 export function DispositionChip({
@@ -67,19 +55,67 @@ export function DispositionChip({
 }: {
   disposition: ReplyDisposition
 }) {
-  return <Chip>{DISPOSITION_LABEL[disposition]}</Chip>
+  return (
+    <Chip
+      className={
+        disposition === "interested"
+          ? "bg-chart-2/15 text-chart-2"
+          : disposition === "unsubscribe" || disposition === "not_interested"
+            ? "bg-destructive/10 text-destructive"
+            : undefined
+      }
+    >
+      {DISPOSITION_LABEL[disposition]}
+    </Chip>
+  )
 }
 
-/** One merged thread entry, as `conversations.thread` returns it. */
+export function StageChip({ stage }: { stage: LeadStage }) {
+  return (
+    <Chip
+      className={
+        stage === "meeting_booked" || stage === "interested"
+          ? "bg-chart-2/15 text-chart-2"
+          : undefined
+      }
+    >
+      {STAGE_LABEL[stage]}
+    </Chip>
+  )
+}
+
+/** The marker a Review-mode user looks for: an email waiting on their yes. */
+export function NeedsApprovalChip() {
+  return <Chip className="bg-primary/10 text-primary">Needs your approval</Chip>
+}
+
+/**
+ * Why a thread may be missing its message text. Connecting an inbox imports
+ * the last 30 days of threads — who wrote, on which thread and when — but the
+ * provider's bodies are not copied into our store, so a backfilled message
+ * has a header and no text. Saying that is the only honest option; inventing
+ * the body is not.
+ */
+export function sourceNote(source: MessageSource): string | undefined {
+  return source === "backfill"
+    ? "Imported when this inbox was connected. Imported messages carry their sender and time, not their text."
+    : undefined
+}
+
+/** One merged thread entry, as `inbox.conversationThread.thread` returns it. */
 export type ThreadEntry = FunctionReturnType<
   typeof api.inbox.conversationThread.thread
 >["items"][number]
 
+/** One inbox row, as `inbox.inboxList.list` returns it. */
+export type InboxRowData = FunctionReturnType<
+  typeof api.inbox.inboxList.list
+>["items"][number]
+
 /**
- * One outbound thread entry's state in words. The codes come from
- * `sendResultCode` in `convex/outreach/sendGates.ts` — `sent` means the provider
- * accepted the message, which is never rendered "Delivered" (§6, J3 ④).
- * A `draft` is a distinct variant, not an outbound message wearing a state.
+ * An outbound entry's state in words. The codes come from `sendResultCode`
+ * in `convex/outreach/sendGates.ts`: `sent` means the provider accepted the
+ * message, which is never rendered as "Delivered".
  */
 export function outboundStateLabel(
   state: Extract<ThreadEntry, { kind: "outbound" }>["state"],
@@ -100,35 +136,17 @@ export function outboundStateLabel(
   }
 }
 
-/** Why a `resume` call refused to re-arm automation (RESUME_BLOCK_CODES). */
-export const RESUME_BLOCK_LABEL: Record<string, string> = {
-  association_missing:
-    "No lead and agent are linked to this thread yet — link one first.",
-  agent_mismatch:
-    "The linked lead now belongs to a different agent than this thread.",
-  agent_not_sending:
-    "The agent is not in a mode that sends, so replies cannot resume.",
-  workspace_paused:
-    "Workspace automation is paused — resume it in Settings → Automation first.",
-  inbox_unassigned:
-    "This workspace has no sending inbox assigned yet, so nothing can be mailed.",
-  inbox_mismatch:
-    "This thread arrived on a different inbox than the workspace's current one.",
-  recipient_unknown:
-    "There is no address to mail — the lead has no contact and no draft resolved one.",
-  sender_unverified:
-    "The reply's sender could not be verified as a single address.",
-  sender_contact_mismatch:
-    "The reply's sender is not the address this workspace would mail.",
-  suppressed_email:
-    "This address is on the suppression list — automation stays frozen.",
-  suppressed_domain:
-    "This address's domain is on the suppression list — automation stays frozen.",
-}
-
-export function resumeBlockLabel(code: string): string {
-  return (
-    RESUME_BLOCK_LABEL[code] ??
-    `Resume was refused (${code}). The thread stays under takeover.`
-  )
+/** The person behind a row, as much of them as we are allowed to show. */
+export function leadDisplayName(lead: {
+  firstName?: string
+  lastName?: string
+  companyName?: string
+}): string {
+  const name = [lead.firstName, lead.lastName]
+    .filter((part): part is string => part !== undefined && part.length > 0)
+    .join(" ")
+  if (name.length > 0) {
+    return name
+  }
+  return lead.companyName ?? "Unnamed lead"
 }
