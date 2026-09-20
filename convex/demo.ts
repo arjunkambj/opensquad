@@ -19,11 +19,10 @@
  * AND-ed with the workspace limit). Demo workspaces additionally get small
  * owner-visible quotas at creation (`dailySendLimit`, `modelRunDailyLimit`).
  *
- * Execution needs a runtime the demo cannot have: `runtimeConnections.connect`
- * and `reconnect` refuse `demoMode` workspaces, because those paths provision
- * an ASCII Box on the DEPLOYMENT's account — an anonymous opt-in would be
- * unbounded spend. A funded/shared demo runtime is a separate product and
- * funding decision and is intentionally NOT built here.
+ * Model work runs on the DEPLOYMENT's account, so a demo workspace keeps the
+ * smallest quotas in the product and starts paused. A funded/shared demo
+ * allowance is a separate product decision and is intentionally NOT built
+ * here.
  */
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -35,7 +34,6 @@ import {
 } from "./lib/auth";
 import type { AuthCtx } from "./lib/auth";
 import { assertIanaTimezone, domainError } from "./lib/validators";
-import { EMPLOYEE_SEEDS } from "./workspaces";
 
 function flagEnabled(name: "OPENSQUAD_DEMO_TOUR" | "OPENSQUAD_DEMO_EXECUTION") {
   const value = process.env[name];
@@ -90,7 +88,7 @@ const TOUR_STEPS = [
   },
   {
     stage: "approval",
-    route: "/decisions",
+    route: "/inbox",
     title: "A human approves every word",
     body:
       "Outreach proposes an exact draft — recipient, subject, body and the " +
@@ -267,11 +265,9 @@ export const executionStatus = query({
  *    demo must never blur into a real workspace's quotas or data;
  *  - `demoMode` can only be set by this bootstrap (and is never unset).
  *
- * The workspace starts paused with the smallest quotas in the product. It
- * CANNOT connect a runtime — `runtimeConnections.connect`/`reconnect` refuse
- * `demoMode` workspaces because provisioning spends the deployment's ASCII
- * account. The opt-in demos the pipeline shell and approval UX; a funded
- * demo runtime is a separate decision (see the module header).
+ * The workspace starts paused with the smallest quotas in the product. The
+ * opt-in demos the pipeline shell and approval UX; a funded demo allowance is
+ * a separate decision (see the module header).
  */
 export const optIn = mutation({
   args: {
@@ -332,19 +328,6 @@ export const optIn = mutation({
       createdAt: now,
       updatedAt: now,
     });
-
-    for (const seed of EMPLOYEE_SEEDS) {
-      await ctx.db.insert("employees", {
-        workspaceId,
-        template: seed.template,
-        name: seed.name,
-        instructions: seed.instructions,
-        instructionVersion: 1,
-        enabled: true,
-        allowedCapabilities: [...seed.capabilities],
-        updatedAt: now,
-      });
-    }
 
     return { workspaceId, created: true };
   },

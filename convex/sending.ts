@@ -23,14 +23,11 @@
  *                        through the SAME provider idempotency key, only
  *                        inside the provider's key-retention window and only
  *                        while policy still permits dispatch. Otherwise the
- *                        recorded `delivery_uncertain` decision is the
- *                        human-attention surface; a replacement send exists
- *                        only through that decision's §8.7 binding.
+ *                        attempt stays `uncertain` and blocks the thread
+ *                        until a human resolves it.
  *
- * The Workflow send boundary for P09 lives in `convex/workflows/send.ts`;
- * `approvals.approve` also schedules `sendApprovedDraft` directly so an
- * approved draft dispatches even where no owning workflow stage exists yet.
- * Both paths converge on the same idempotent gates below.
+ * `approvals.approve` schedules `sendApprovedDraft`, which converges on the
+ * same idempotent gates below.
  */
 import {
   internalAction,
@@ -55,9 +52,6 @@ import {
   localCivilToUtc,
   localDayKey,
   localDayParts,
-  readReplacementAnswer,
-  REPLACEMENT_ACKNOWLEDGEMENT,
-  REPLACEMENT_ANSWER_FIELDS,
   sendWindowStatus,
   UNRESOLVED_ATTEMPT_STATES,
   vSendAttemptState,
@@ -94,7 +88,6 @@ const RECONCILE_WINDOW_MS = 23 * 60 * 60 * 1000;
  */
 export const SEND_BLOCK_CODES = [
   "workspace_paused",
-  "mission_inactive",
   "campaign_inactive",
   "conversation_not_open",
   "human_takeover",
@@ -113,10 +106,8 @@ export const SEND_BLOCK_CODES = [
   "attempt_uncertain",
   "attempt_failed",
   "unresolved_attempt",
-  "missing_replacement_authorization",
   "outside_window",
   "send_limit_reached",
-  "workflow_superseded",
   /** §4.3 (P19): the draft offers a booking proposal whose linked booking is
    *  no longer `proposed` at the recorded version — the offer changed. */
   "booking_not_current",
@@ -215,96 +206,10 @@ async function currentApproval(
 }
 
 /**
- * The §8.7 covering check for one `uncertain` attempt: a resolved
- * `delivery_uncertain` decision must name THIS attempt and the replacement
- * draft by ID + payload hash + live context version, and must not already
- * have been consumed by another attempt (one recorded replacement per
- * resolution, enforced transactionally via `by_replacementDecisionId`).
- */
-async function coveringDecisionValid(
-  ctx: AuthCtx,
-  args: {
-    decisionId: Id<"decisions">;
-    /** The specific uncertain attempt the binding must name — `undefined`
-     *  when validating that the decision authorizes THIS draft at all (the
-     *  covered-attempt name is then not re-checked). */
-    uncertainAttemptId?: Id<"sendAttempts">;
-    draft: Doc<"drafts">;
-    conversation: Doc<"conversations">;
-    selfAttemptId?: Id<"sendAttempts">;
-  },
-): Promise<boolean> {
-  const decision = await ctx.db.get("decisions", args.decisionId);
-  if (
-    decision === null ||
-    decision.kind !== "delivery_uncertain" ||
-    decision.state !== "resolved" ||
-    decision.answer?.approved !== true
-  ) {
-    return false;
-  }
-  let binding;
-  try {
-    binding = readReplacementAnswer(decision.answer);
-  } catch {
-    return false;
-  }
-  if (
-    (args.uncertainAttemptId !== undefined &&
-      binding.unresolvedAttemptId !== String(args.uncertainAttemptId)) ||
-    binding.replacementDraftId !== String(args.draft._id) ||
-    binding.replacementPayloadHash !== args.draft.payloadHash ||
-    binding.contextVersion !== args.conversation.contextVersion
-  ) {
-    return false;
-  }
-  // Consume-once: another attempt must not already carry this authorization.
-  const consumed = await ctx.db
-    .query("sendAttempts")
-    .withIndex("by_replacementDecisionId", (q) =>
-      q.eq("replacementDecisionId", args.decisionId),
-    )
-    .collect();
-  return consumed.every(
-    (attempt) =>
-      attempt._id === args.selfAttemptId ||
-      attempt.state === "cancelled" ||
-      attempt.state === "definitively_failed",
-  );
-}
-
-/**
- * Unwind §8.7 coverage when a covering attempt dies without sending: an
- * uncertain attempt whose `coveredByAttemptId` points at `attempt` was never
- * actually resolved by a send, so the across-revisions guard must treat it
- * as uncovered again (a fresh delivery_uncertain decision becomes required).
- * Coverage links only ever point within one conversation.
- */
-async function releaseCoverageLinks(
-  ctx: MutationCtx,
-  attempt: Doc<"sendAttempts">,
-): Promise<void> {
-  const uncovered = await ctx.db
-    .query("sendAttempts")
-    .withIndex("by_conversationId_and_state", (q) =>
-      q.eq("conversationId", attempt.conversationId).eq("state", "uncertain"),
-    )
-    .collect();
-  for (const other of uncovered) {
-    if (other.coveredByAttemptId === attempt._id) {
-      await ctx.db.patch("sendAttempts", other._id, {
-        coveredByAttemptId: undefined,
-        updatedAt: Date.now(),
-      });
-    }
-  }
-}
-
-/**
  * Every send gate that does not depend on wall-clock window/capacity:
- * workspace/campaign/mission liveness, exact approval + context binding,
+ * workspace/campaign liveness, exact approval + context binding,
  * takeover/closed state, suppression, inbox match, demo allowlist, and the
- * across-revisions unresolved-attempt guard with the §8.7 exception.
+ * across-revisions unresolved-attempt guard.
  *
  * `excludeAttemptId` — the attempt currently dispatching (it is itself
  * unresolved while `reserved`/`requesting`).
@@ -315,13 +220,11 @@ async function evaluateSendGates(
     workspace: Doc<"workspaces">;
     conversation: Doc<"conversations">;
     draft: Doc<"drafts">;
-    mission: Doc<"missions">;
-    campaign: Doc<"campaigns">;
+    campaign: Doc<"campaigns"> | null;
     excludeAttemptId?: Id<"sendAttempts">;
-    replacementDecisionId?: Id<"decisions">;
   },
 ): Promise<GateResult> {
-  const { workspace, conversation, draft, mission, campaign } = args;
+  const { workspace, conversation, draft, campaign } = args;
 
   // --- liveness ------------------------------------------------------
   if (workspace.automationState !== "active") {
@@ -330,15 +233,7 @@ async function evaluateSendGates(
       `workspace automation is ${workspace.automationState}`,
     );
   }
-  if (
-    mission.state === "paused" ||
-    mission.state === "cancelled" ||
-    mission.state === "failed" ||
-    mission.state === "completed"
-  ) {
-    return block("mission_inactive", `mission is ${mission.state}`);
-  }
-  if (campaign.status !== "active") {
+  if (campaign !== null && campaign.status !== "active") {
     return block("campaign_inactive", `campaign is ${campaign.status}`);
   }
 
@@ -371,7 +266,7 @@ async function evaluateSendGates(
       `workspace policy is v${workspace.policyVersion}; draft was written against v${draft.policyVersion}`,
     );
   }
-  if (campaign.briefVersion !== draft.campaignBriefVersion) {
+  if (campaign !== null && campaign.briefVersion !== draft.campaignBriefVersion) {
     return block(
       "brief_changed",
       `campaign brief is v${campaign.briefVersion}; draft was written against v${draft.campaignBriefVersion}`,
@@ -469,25 +364,6 @@ async function evaluateSendGates(
   }
 
   // --- across-revisions unresolved-attempt guard -------------------------
-  // A carried replacement authorization must bind THIS draft even when no
-  // uncovered attempt remains (the chain may already be fully covered) —
-  // otherwise an unrelated decision id could decorate a send it never
-  // authorized.
-  if (args.replacementDecisionId !== undefined) {
-    const authorized = await coveringDecisionValid(ctx, {
-      decisionId: args.replacementDecisionId,
-      uncertainAttemptId: undefined,
-      draft,
-      conversation,
-      selfAttemptId: args.excludeAttemptId,
-    });
-    if (!authorized) {
-      return block(
-        "missing_replacement_authorization",
-        "the replacement decision does not authorize this draft revision",
-      );
-    }
-  }
   const unresolved: Doc<"sendAttempts">[] = [];
   for (const state of UNRESOLVED_ATTEMPT_STATES) {
     const rows = await ctx.db
@@ -503,30 +379,10 @@ async function evaluateSendGates(
       continue;
     }
     if (other.state === "uncertain") {
-      // An attempt already covered by a recorded replacement carries
-      // `coveredByAttemptId` — its uncertainty was resolved when the human
-      // authorized the replacement, so coverage is transitive down the
-      // chain: only the LATEST still-uncovered uncertain attempt needs a
-      // fresh delivery_uncertain decision on this dispatch.
-      if (other.coveredByAttemptId !== undefined) {
-        continue;
-      }
-      const covered =
-        args.replacementDecisionId !== undefined &&
-        (await coveringDecisionValid(ctx, {
-          decisionId: args.replacementDecisionId,
-          uncertainAttemptId: other._id,
-          draft,
-          conversation,
-          selfAttemptId: args.excludeAttemptId,
-        }));
-      if (!covered) {
-        return block(
-          "missing_replacement_authorization",
-          "an uncertain send attempt on this conversation requires a recorded delivery_uncertain replacement decision before anything else dispatches",
-        );
-      }
-      continue;
+      return block(
+        "attempt_uncertain",
+        `send attempt ${other._id} is uncertain — reconcile it before anything else dispatches on this conversation`,
+      );
     }
     return block(
       "unresolved_attempt",
@@ -545,8 +401,7 @@ type AttemptContext = {
   workspace: Doc<"workspaces">;
   conversation: Doc<"conversations">;
   draft: Doc<"drafts">;
-  mission: Doc<"missions">;
-  campaign: Doc<"campaigns">;
+  campaign: Doc<"campaigns"> | null;
 };
 
 async function loadAttemptContext(
@@ -559,20 +414,14 @@ async function loadAttemptContext(
   }
   const conversation = await ctx.db.get("conversations", draft.conversationId);
   const workspace = await ctx.db.get("workspaces", draft.workspaceId);
-  const mission = await ctx.db.get("missions", draft.missionId);
-  const campaign =
-    mission === null
-      ? null
-      : await ctx.db.get("campaigns", mission.campaignId);
-  if (
-    conversation === null ||
-    workspace === null ||
-    mission === null ||
-    campaign === null
-  ) {
+  if (conversation === null || workspace === null) {
     throw domainError("NOT_FOUND", "send context is incomplete");
   }
-  return { workspace, conversation, draft, mission, campaign };
+  const campaign =
+    conversation.campaignId === undefined
+      ? null
+      : await ctx.db.get("campaigns", conversation.campaignId);
+  return { workspace, conversation, draft, campaign };
 }
 
 /** Effective daily send cap — demo workspaces are additionally bounded by
@@ -675,7 +524,6 @@ async function insertReservedAttempt(
     context: AttemptContext;
     approval: Doc<"approvals">;
     operationKey: string;
-    replacementDecisionId?: Id<"decisions">;
     /** Recorded wake time for a parked attempt — set by the wait branches
      *  so the sweep can re-drive a lost schedule. */
     nextPermittedAt?: number;
@@ -701,53 +549,12 @@ async function insertReservedAttempt(
     payloadHash: draft.payloadHash,
     createdAt: now,
     updatedAt: now,
-    ...(args.replacementDecisionId !== undefined
-      ? { replacementDecisionId: args.replacementDecisionId }
-      : {}),
     ...(args.nextPermittedAt !== undefined
       ? { nextPermittedAt: args.nextPermittedAt }
       : {}),
   });
-  if (args.replacementDecisionId !== undefined) {
-    // Chain link for §8.7 transitive coverage: the decision binds which
-    // uncertain attempt this replacement covers. The covered attempt keeps
-    // its honest `uncertain` state — the link only tells the
-    // across-revisions guard the uncertainty was resolved by replacement.
-    const covering = await ctx.db.get(
-      "decisions",
-      args.replacementDecisionId,
-    );
-    if (covering?.sendAttemptId !== undefined) {
-      const covered = await ctx.db.get(
-        "sendAttempts",
-        covering.sendAttemptId as Id<"sendAttempts">,
-      );
-      // An existing link is honored only while the covering attempt can
-      // still send — a link at a dead (cancelled/failed) attempt is stale
-      // and a later authorized replacement may take it over.
-      const linked =
-        covered?.coveredByAttemptId !== undefined
-          ? await ctx.db.get("sendAttempts", covered.coveredByAttemptId)
-          : null;
-      const linkLive =
-        linked !== null &&
-        linked?.state !== "cancelled" &&
-        linked?.state !== "definitively_failed";
-      if (
-        covered !== null &&
-        covered.state === "uncertain" &&
-        (covered.coveredByAttemptId === undefined || !linkLive)
-      ) {
-        await ctx.db.patch("sendAttempts", covered._id, {
-          coveredByAttemptId: attemptId,
-          updatedAt: now,
-        });
-      }
-    }
-  }
   await recordActivityEvent(ctx, {
     workspaceId: workspace._id,
-    missionId: args.context.mission._id,
     kind: "send_attempt_reserved",
     summary: `Send intent reserved for draft revision ${draft.revision} → ${draft.normalizedRecipient}`,
     actor: "workflow",
@@ -803,25 +610,11 @@ const vReserveResult = v.union(
 export const reserveSendIntent = internalMutation({
   args: {
     draftId: v.id("drafts"),
-    replacementDecisionId: v.optional(v.id("decisions")),
-    expectedWorkflowGeneration: v.optional(v.number()),
   },
   returns: vReserveResult,
   handler: async (ctx, args): Promise<Infer<typeof vReserveResult>> => {
     const context = await loadAttemptContext(ctx, args.draftId);
-    const { draft, workspace, conversation, mission } = context;
-
-    // A superseded mission workflow abandons at preflight — its dispatch
-    // trigger must never produce a new intent.
-    if (
-      args.expectedWorkflowGeneration !== undefined &&
-      mission.workflowGeneration !== args.expectedWorkflowGeneration
-    ) {
-      return blockResult(
-        "workflow_superseded",
-        `mission workflow generation is ${mission.workflowGeneration}, not ${args.expectedWorkflowGeneration}`,
-      );
-    }
+    const { draft, workspace, conversation } = context;
 
     // --- logical-send dedupe ------------------------------------------------
     const priorAttempts = await ctx.db
@@ -845,7 +638,7 @@ export const reserveSendIntent = internalMutation({
     if (priorAttempts.some((attempt) => attempt.state === "uncertain")) {
       return blockResult(
         "attempt_uncertain",
-        "an earlier attempt for this revision is still uncertain — reconcile it or record a replacement decision; never blind-retry",
+        "an earlier attempt for this revision is still uncertain — reconcile it before sending again; never blind-retry",
       );
     }
     if (
@@ -868,14 +661,11 @@ export const reserveSendIntent = internalMutation({
       workspace: context.workspace,
       conversation,
       draft,
-      mission,
       campaign: context.campaign,
-      replacementDecisionId: args.replacementDecisionId,
     });
     if (!gate.ok) {
       await recordActivityEvent(ctx, {
         workspaceId: workspace._id,
-        missionId: mission._id,
         kind: "send_attempt_cancelled",
         summary: `Send blocked (${gate.code}): ${gate.reason}`,
         actor: "workflow",
@@ -894,7 +684,6 @@ export const reserveSendIntent = internalMutation({
         context,
         approval: gate.approval,
         operationKey,
-        replacementDecisionId: args.replacementDecisionId,
         nextPermittedAt: window.nextPermittedAt,
       });
       // Scheduled INSIDE the committing mutation — the durable wake can
@@ -921,7 +710,6 @@ export const reserveSendIntent = internalMutation({
         context,
         approval: gate.approval,
         operationKey,
-        replacementDecisionId: args.replacementDecisionId,
         nextPermittedAt,
       });
       await ctx.scheduler.runAfter(
@@ -946,7 +734,6 @@ export const reserveSendIntent = internalMutation({
       context,
       approval: gate.approval,
       operationKey,
-      replacementDecisionId: args.replacementDecisionId,
       nextPermittedAt: now,
     });
     const attempt = await ctx.db.get("sendAttempts", sendAttemptId);
@@ -1030,15 +817,13 @@ export const beginDispatch = internalMutation({
     }
 
     const context = await loadAttemptContext(ctx, attempt.draftId);
-    const { workspace, conversation, draft, mission } = context;
+    const { workspace, conversation, draft } = context;
     const gate = await evaluateSendGates(ctx, {
       workspace,
       conversation,
       draft,
-      mission,
       campaign: context.campaign,
       excludeAttemptId: attempt._id,
-      replacementDecisionId: attempt.replacementDecisionId,
     });
     const cancel = async (code: SendBlockCode, reason: string) => {
       await ctx.db.patch("sendAttempts", attempt._id, {
@@ -1046,7 +831,6 @@ export const beginDispatch = internalMutation({
         error: { message: reason, at: Date.now(), reason: code },
         updatedAt: Date.now(),
       });
-      await releaseCoverageLinks(ctx, attempt);
       // Release any deferred reservation the parked attempt holds.
       const reservation = await ctx.runMutation(
         internal.usage.getByOperationKey,
@@ -1063,7 +847,6 @@ export const beginDispatch = internalMutation({
       }
       await recordActivityEvent(ctx, {
         workspaceId: workspace._id,
-        missionId: mission._id,
         kind: "send_attempt_cancelled",
         summary: `Send cancelled at dispatch gate (${code}): ${reason}`,
         actor: "workflow",
@@ -1162,7 +945,6 @@ export const beginDispatch = internalMutation({
     );
     await recordActivityEvent(ctx, {
       workspaceId: workspace._id,
-      missionId: mission._id,
       kind: "send_attempt_dispatched",
       summary: `Dispatching draft revision ${draft.revision} to provider`,
       actor: "workflow",
@@ -1231,14 +1013,12 @@ async function reportThreadLinkMissed(
   ctx: MutationCtx,
   args: {
     attempt: Doc<"sendAttempts">;
-    missionId: Id<"missions">;
     threadId: string;
     detail: string;
   },
 ): Promise<void> {
   await recordActivityEvent(ctx, {
     workspaceId: args.attempt.workspaceId,
-    missionId: args.missionId,
     kind: "conversation_thread_link_missed",
     summary: `Send acknowledged on thread ${args.threadId.slice(0, 120)} but the conversation thread mapping was not written — ${args.detail}; replies on that thread need manual assignment`,
     actor: "workflow",
@@ -1267,7 +1047,6 @@ async function linkConversationThread(
   ctx: MutationCtx,
   args: {
     attempt: Doc<"sendAttempts">;
-    missionId: Id<"missions">;
     threadId: string;
     at: number;
   },
@@ -1286,7 +1065,6 @@ async function linkConversationThread(
   ) {
     await reportThreadLinkMissed(ctx, {
       attempt,
-      missionId: args.missionId,
       threadId,
       detail:
         conversation === null
@@ -1351,7 +1129,6 @@ async function linkConversationThread(
   if (mapping.kind === "conflict") {
     await reportThreadLinkMissed(ctx, {
       attempt,
-      missionId: args.missionId,
       threadId,
       detail: mapping.detail,
     });
@@ -1429,7 +1206,6 @@ export const recordSendOutcome = internalMutation({
     if (draft === null) {
       throw domainError("NOT_FOUND", "draft not found");
     }
-    const mission = await ctx.db.get("missions", draft.missionId);
     const settle = async (
       target: "committed" | "released" | "uncertain",
       providerReference?: string,
@@ -1457,31 +1233,6 @@ export const recordSendOutcome = internalMutation({
       });
     };
 
-    // Retire the delivery_uncertain ask for this attempt once a confirmed
-    // verdict exists — superseded, never resolved by the system.
-    const retireUncertaintyAsk = async (note: string) => {
-      if (mission === null) {
-        return;
-      }
-      const open = await ctx.db
-        .query("decisions")
-        .withIndex("by_missionId_and_state", (q) =>
-          q.eq("missionId", mission._id).eq("state", "open"),
-        )
-        .collect();
-      for (const decision of open) {
-        if (
-          decision.kind === "delivery_uncertain" &&
-          decision.sendAttemptId === String(attempt._id)
-        ) {
-          await ctx.runMutation(internal.decisions.supersedeDecision, {
-            decisionId: decision._id,
-            reason: note,
-          });
-        }
-      }
-    };
-
     if (args.result.outcome === "accepted") {
       const messageId = boundedString(args.result.messageId, "messageId", {
         min: 1,
@@ -1504,7 +1255,6 @@ export const recordSendOutcome = internalMutation({
       // conversation carries no thread ref loses every reply to it.
       await linkConversationThread(ctx, {
         attempt,
-        missionId: draft.missionId,
         threadId,
         at: now,
       });
@@ -1530,12 +1280,8 @@ export const recordSendOutcome = internalMutation({
           await applyReceiptToAttempt(ctx, receipt, attempt._id);
         }
       }
-      await retireUncertaintyAsk(
-        "reconciled: provider acknowledged the original request",
-      );
       await recordActivityEvent(ctx, {
         workspaceId: attempt.workspaceId,
-        missionId: draft.missionId,
         kind:
           attempt.state === "uncertain"
             ? "send_attempt_reconciled"
@@ -1565,16 +1311,8 @@ export const recordSendOutcome = internalMutation({
         updatedAt: now,
       });
       await settle("released");
-      // A definitively failed replacement never sent — release the coverage
-      // link so the covered uncertain attempt blocks dispatch again until a
-      // fresh delivery_uncertain decision authorizes another replacement.
-      await releaseCoverageLinks(ctx, attempt);
-      await retireUncertaintyAsk(
-        "reconciled: provider definitively refused the request",
-      );
       await recordActivityEvent(ctx, {
         workspaceId: attempt.workspaceId,
-        missionId: draft.missionId,
         kind:
           attempt.state === "uncertain"
             ? "send_attempt_reconciled"
@@ -1601,18 +1339,11 @@ export const recordSendOutcome = internalMutation({
       await settle("uncertain");
       await recordActivityEvent(ctx, {
         workspaceId: attempt.workspaceId,
-        missionId: draft.missionId,
         kind: "send_attempt_uncertain",
         summary: `Send outcome is uncertain — ${providerError.slice(0, 200)}`,
         actor: "workflow",
         dedupeKey: `sendattempt:${attempt._id}:uncertain`,
         conversationId: attempt.conversationId,
-      });
-      // Open the Needs-you ask inside this transaction: if the calling action
-      // dies after this commit, the attempt can never be left uncertain with
-      // no ask. Idempotent per attempt via askKey (replay/reconcile safe).
-      await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
-        sendAttemptId: attempt._id,
       });
     }
 
@@ -1628,52 +1359,6 @@ export const recordSendOutcome = internalMutation({
 /* ------------------------------------------------------------------ */
 /* The delivery-uncertain ask + stale-request sweep                      */
 /* ------------------------------------------------------------------ */
-
-/**
- * Open the required `delivery_uncertain` decision for an uncertain attempt
- * (§8.7 — the Needs-you surface). Idempotent per attempt via askKey; skips
- * cleanly when the attempt is no longer uncertain. The ask is opened even
- * when the mission is already terminal — a mission cancelled mid-send does
- * not retire an in-flight provider call, and without the ask the uncovered
- * uncertain attempt would wedge the conversation invisibly
- * (`missing_replacement_authorization` forever).
- */
-export const openDeliveryUncertainAsk = internalMutation({
-  args: { sendAttemptId: v.id("sendAttempts") },
-  returns: v.object({ opened: v.boolean() }),
-  handler: async (ctx, args) => {
-    const attempt = await ctx.db.get("sendAttempts", args.sendAttemptId);
-    if (attempt === null) {
-      throw domainError("NOT_FOUND", "send attempt not found");
-    }
-    if (attempt.state !== "uncertain") {
-      return { opened: false };
-    }
-    const draft = await ctx.db.get("drafts", attempt.draftId);
-    if (draft === null) {
-      return { opened: false };
-    }
-    const mission = await ctx.db.get("missions", draft.missionId);
-    if (mission === null || mission.workflowId === undefined) {
-      return { opened: false };
-    }
-    await ctx.runMutation(internal.decisions.openRequiredDecision, {
-      missionId: mission._id,
-      kind: "delivery_uncertain",
-      reason:
-        `Delivery of the send to ${draft.normalizedRecipient} is uncertain ` +
-        `(attempt ${attempt._id}). The provider may or may not have accepted ` +
-        `it — reconcile with the same idempotency key, or record a reviewed ` +
-        `replacement decision before anything else sends on this thread.`,
-      askKey: `delivery_uncertain:${attempt._id}`,
-      required: true,
-      draftId: String(draft._id),
-      sendAttemptId: String(attempt._id),
-      targetWorkflowId: mission.workflowId,
-    });
-    return { opened: true };
-  },
-});
 
 /** Shared uncertain transition for a stale `requesting` attempt. */
 async function markLostAcknowledgement(
@@ -1713,7 +1398,6 @@ async function markLostAcknowledgement(
   if (draft !== null) {
     await recordActivityEvent(ctx, {
       workspaceId: attempt.workspaceId,
-      missionId: draft.missionId,
       kind: "send_attempt_uncertain",
       summary: "Send attempt lost its acknowledgement — marked uncertain",
       actor: "system",
@@ -1721,9 +1405,6 @@ async function markLostAcknowledgement(
       conversationId: attempt.conversationId,
     });
   }
-  await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
-    sendAttemptId: attempt._id,
-  });
   return true;
 }
 
@@ -2221,15 +1902,13 @@ export const prepareReconcile = internalMutation({
       };
     }
     const context = await loadAttemptContext(ctx, attempt.draftId);
-    const { workspace, conversation, draft, mission, campaign } = context;
+    const { workspace, conversation, draft, campaign } = context;
     const gate = await evaluateSendGates(ctx, {
       workspace,
       conversation,
       draft,
-      mission,
       campaign,
       excludeAttemptId: attempt._id,
-      replacementDecisionId: attempt.replacementDecisionId,
     });
     if (!gate.ok) {
       return {
@@ -2296,10 +1975,6 @@ export const reconcileUncertainAttempt = internalAction({
       };
     }
     if (prepared.action === "needs_review") {
-      // Make sure the human-attention ask exists even if the sweep raced.
-      await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
-        sendAttemptId: args.sendAttemptId,
-      });
       return {
         outcome: "uncertain",
         sendAttemptId: args.sendAttemptId,
@@ -2343,10 +2018,7 @@ export const reconcileUncertainAttempt = internalAction({
       }
     } catch (error) {
       // A pre-request failure proves nothing about the original request —
-      // stay uncertain and leave the ask open.
-      await ctx.runMutation(internal.sending.openDeliveryUncertainAsk, {
-        sendAttemptId: args.sendAttemptId,
-      });
+      // the attempt stays uncertain.
       return {
         outcome: "uncertain",
         sendAttemptId: args.sendAttemptId,
@@ -2505,9 +2177,6 @@ export const requestDispatch = mutation({
       internal.sending.sendApprovedDraft,
       {
         draftId: args.draftId,
-        ...(args.replacementDecisionId !== undefined
-          ? { replacementDecisionId: args.replacementDecisionId }
-          : {}),
       },
     );
     return { scheduled: true };
@@ -2554,223 +2223,8 @@ export const requestReconciliation = mutation({
 });
 
 /**
- * Resolve a `delivery_uncertain` ask (owner/operator) — §8.7's recorded
- * human decision.
- *
- * With `replacementDraftId` + `acknowledgeDuplicate: true` the resolution
- * binds the uncertain attempt, the exact replacement draft (ID + payload
- * hash) and the live context version, then dispatches the replacement — the
- * ONLY way a new send may cover an uncertain attempt, and it is consumed
- * once transactionally.
- *
- * Without a replacement draft the ask is resolved with no replacement: the
- * attempt stays `uncertain` forever (its reservation keeps capacity blocked)
- * as the honest record of "unknown, reviewed".
- */
-export const resolveDeliveryUncertainty = mutation({
-  args: {
-    workspaceId: v.id("workspaces"),
-    decisionId: v.id("decisions"),
-    expectedVersion: v.number(),
-    requestId: v.string(),
-    reason: v.string(),
-    replacementDraftId: v.optional(v.id("drafts")),
-    acknowledgeDuplicate: v.optional(v.boolean()),
-  },
-  returns: v.object({
-    resolved: v.boolean(),
-    replayed: v.boolean(),
-    dispatched: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
-      ctx,
-      args.workspaceId,
-    );
-    const requestId = boundedString(args.requestId, "requestId", {
-      min: 1,
-      max: 100,
-    });
-    const reason = boundedString(args.reason, "reason", {
-      min: 1,
-      max: 2000,
-    });
-    const decision = await ctx.db.get("decisions", args.decisionId);
-    if (decision === null || decision.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "decision not found");
-    }
-    if (decision.kind !== "delivery_uncertain") {
-      throw invalid("decision is not a delivery_uncertain ask");
-    }
-    if (
-      decision.state === "resolved" &&
-      decision.resolutionRequestId === requestId
-    ) {
-      // Report what the original call actually did — `dispatched` is true
-      // iff a replacement attempt carries this decision's authorization.
-      const replacement = await ctx.db
-        .query("sendAttempts")
-        .withIndex("by_replacementDecisionId", (q) =>
-          q.eq("replacementDecisionId", decision._id),
-        )
-        .first();
-      return {
-        resolved: true,
-        replayed: true,
-        dispatched: replacement !== null,
-      };
-    }
-    if (decision.state !== "open") {
-      throw domainError(
-        "CONFLICT",
-        `decision is ${decision.state}; it is no longer open`,
-      );
-    }
-    if (decision.version !== args.expectedVersion) {
-      throw domainError(
-        "CONFLICT",
-        `decision version is ${decision.version}, not ${args.expectedVersion}`,
-      );
-    }
-    if (decision.sendAttemptId === undefined) {
-      throw invalid("delivery_uncertain decision is not bound to an attempt");
-    }
-    const attempt = await ctx.db.get(
-      "sendAttempts",
-      decision.sendAttemptId as Id<"sendAttempts">,
-    );
-    if (attempt === null || attempt.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "send attempt not found");
-    }
-    if (attempt.state !== "uncertain") {
-      throw domainError(
-        "CONFLICT",
-        `attempt is already ${attempt.state} — the uncertainty resolved elsewhere`,
-      );
-    }
-    const conversation = await ctx.db.get(
-      "conversations",
-      attempt.conversationId,
-    );
-    if (conversation === null) {
-      throw domainError("NOT_FOUND", "conversation not found");
-    }
-
-    let dispatched = false;
-    if (args.replacementDraftId !== undefined) {
-      if (args.acknowledgeDuplicate !== true) {
-        throw invalid(
-          "acknowledgeDuplicate must be true — a replacement may cause duplicate delivery and the reviewer must accept that",
-        );
-      }
-      const replacement = await getDraftInWorkspace(
-        ctx,
-        args.workspaceId,
-        args.replacementDraftId,
-      );
-      if (replacement.conversationId !== conversation._id) {
-        throw invalid(
-          "replacement draft belongs to a different conversation",
-        );
-      }
-      if (
-        conversation.currentDraftId !== replacement._id ||
-        replacement.supersededAt !== undefined
-      ) {
-        throw domainError(
-          "CONFLICT",
-          "replacement draft is not the conversation's current revision",
-        );
-      }
-      // The replacement must already carry a live exact approval — the
-      // dispatch gate re-verifies it anyway, and failing here surfaces the
-      // gap while the reviewer still holds the ask.
-      const approval = await currentApproval(ctx, replacement, conversation);
-      if (approval === null) {
-        throw domainError(
-          "CONFLICT",
-          "replacement draft has no current exact approval",
-        );
-      }
-      const consumed = await ctx.db
-        .query("sendAttempts")
-        .withIndex("by_replacementDecisionId", (q) =>
-          q.eq("replacementDecisionId", decision._id),
-        )
-        .first();
-      if (consumed !== null) {
-        throw domainError(
-          "CONFLICT",
-          "this decision already authorized a replacement attempt",
-        );
-      }
-
-      const F = REPLACEMENT_ANSWER_FIELDS;
-      const answer = {
-        approved: true,
-        body: reason,
-        fields: {
-          [F.unresolvedAttemptId]: String(attempt._id),
-          [F.replacementDraftId]: String(replacement._id),
-          [F.replacementPayloadHash]: replacement.payloadHash,
-          [F.contextVersion]: String(conversation.contextVersion),
-          [F.acknowledgement]: REPLACEMENT_ACKNOWLEDGEMENT,
-          [F.reason]: reason.slice(0, 500),
-        },
-      };
-      await ctx.runMutation(internal.decisions.resolveBound, {
-        workspaceId: args.workspaceId,
-        decisionId: decision._id,
-        expectedVersion: args.expectedVersion,
-        requestId,
-        answer,
-        resolvedBy: identityKey,
-      });
-      // The resolution is recorded either way; whether a dispatch can follow
-      // depends on the replacement's own mission — `sendApprovedDraft`'s
-      // gates refuse a terminal mission outright, so don't claim one here.
-      const replacementMission = await ctx.db.get(
-        "missions",
-        replacement.missionId,
-      );
-      const missionLive =
-        replacementMission !== null &&
-        replacementMission.state !== "completed" &&
-        replacementMission.state !== "cancelled" &&
-        replacementMission.state !== "failed";
-      if (missionLive) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.sending.sendApprovedDraft,
-          {
-            draftId: replacement._id,
-            replacementDecisionId: decision._id,
-          },
-        );
-        dispatched = true;
-      }
-    } else {
-      await ctx.runMutation(internal.decisions.resolveBound, {
-        workspaceId: args.workspaceId,
-        decisionId: decision._id,
-        expectedVersion: args.expectedVersion,
-        requestId,
-        answer: {
-          approved: false,
-          body: reason,
-          fields: { uncertaintyResolution: "left_unresolved" },
-        },
-        resolvedBy: identityKey,
-      });
-    }
-    return { resolved: true, replayed: false, dispatched };
-  },
-});
-
-/**
- * Cancel a still-`reserved` intent (owner/operator). Only the pre-dispatch
- * state is cancellable — `requesting` may already be at the provider and can
- * never be recalled; terminal states are already history.
+ * Cancel a `reserved` (pre-dispatch) send intent — the only attempt state a
+ * human can retract, because nothing has reached the provider yet.
  */
 export const cancelAttempt = mutation({
   args: {
@@ -2796,7 +2250,6 @@ export const cancelAttempt = mutation({
       error: { message: "cancelled by operator", at: now, reason: "manual" },
       updatedAt: now,
     });
-    await releaseCoverageLinks(ctx, attempt);
     const reservation = await ctx.runMutation(
       internal.usage.getByOperationKey,
       {
@@ -2814,7 +2267,6 @@ export const cancelAttempt = mutation({
     if (draft !== null) {
       await recordActivityEvent(ctx, {
         workspaceId: args.workspaceId,
-        missionId: draft.missionId,
         kind: "send_attempt_cancelled",
         summary: "Reserved send intent cancelled by operator",
         actor: "operator",
@@ -2865,7 +2317,6 @@ export const cancelParkedConversationAttempts = internalMutation({
         },
         updatedAt: now,
       });
-      await releaseCoverageLinks(ctx, attempt);
       const reservation = await ctx.runMutation(
         internal.usage.getByOperationKey,
         {
@@ -2883,7 +2334,6 @@ export const cancelParkedConversationAttempts = internalMutation({
       if (draft !== null) {
         await recordActivityEvent(ctx, {
           workspaceId: args.workspaceId,
-          missionId: draft.missionId,
           kind: "send_attempt_cancelled",
           summary: `Parked send intent retired — ${args.reason.slice(0, 160)}`,
           actor: "workflow",
@@ -2933,7 +2383,6 @@ export const cancelDraftParkedAttempts = internalMutation({
         },
         updatedAt: now,
       });
-      await releaseCoverageLinks(ctx, attempt);
       const reservation = await ctx.runMutation(
         internal.usage.getByOperationKey,
         {
@@ -2949,7 +2398,6 @@ export const cancelDraftParkedAttempts = internalMutation({
       }
       await recordActivityEvent(ctx, {
         workspaceId: args.workspaceId,
-        missionId: draft.missionId,
         kind: "send_attempt_cancelled",
         summary: `Parked send intent retired — ${args.reason.slice(0, 160)}`,
         actor: "workflow",
@@ -3015,29 +2463,22 @@ export const preflight = query({
       draft.conversationId,
     );
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    const mission = await ctx.db.get("missions", draft.missionId);
-    const campaign =
-      mission === null
-        ? null
-        : await ctx.db.get("campaigns", mission.campaignId);
-    if (
-      conversation === null ||
-      workspace === null ||
-      mission === null ||
-      campaign === null
-    ) {
+    if (conversation === null || workspace === null) {
       return {
         permitted: false,
-        code: "mission_inactive",
+        code: "workspace_paused",
         reason: "send context is incomplete",
         attempts: attemptsView,
       };
     }
+    const campaign =
+      conversation.campaignId === undefined
+        ? null
+        : await ctx.db.get("campaigns", conversation.campaignId);
     const gate = await evaluateSendGates(ctx, {
       workspace,
       conversation,
       draft,
-      mission,
       campaign,
     });
     if (!gate.ok) {

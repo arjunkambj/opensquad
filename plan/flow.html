@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenSquad Call Flow</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F5F6F8; --surface:#FFFFFF; --ink:#17202B; --muted:#5C6673; --line:#DDE1E7;
+  --accent:#E4523A;
+  --user:#17202B; --convex:#566173; --firecrawl:#B86A0B; --gpt:#0B7F73; --enrich:#4450C4; --mail:#9C3587;
+  --user-bg:#E9ECF0; --convex-bg:#ECEFF3; --firecrawl-bg:#FBF0DF; --gpt-bg:#DFF3F0; --enrich-bg:#E6E8FA; --mail-bg:#F7E4F2;
+  --free:#0B7F73; --paid:#B3401F;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#12161C; --surface:#1A2029; --ink:#E9EDF2; --muted:#9AA5B3; --line:#2C3541;
+    --accent:#FF7A62;
+    --user:#E9EDF2; --convex:#AEB8C6; --firecrawl:#F0B057; --gpt:#5FD3C5; --enrich:#9AA3FF; --mail:#E58BD2;
+    --user-bg:#262E39; --convex-bg:#232B36; --firecrawl-bg:#33280F; --gpt-bg:#10302C; --enrich-bg:#1F2450; --mail-bg:#3A1B33;
+    --free:#5FD3C5; --paid:#FF9A7D;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#12161C; --surface:#1A2029; --ink:#E9EDF2; --muted:#9AA5B3; --line:#2C3541;
+  --accent:#FF7A62;
+  --user:#E9EDF2; --convex:#AEB8C6; --firecrawl:#F0B057; --gpt:#5FD3C5; --enrich:#9AA3FF; --mail:#E58BD2;
+  --user-bg:#262E39; --convex-bg:#232B36; --firecrawl-bg:#33280F; --gpt-bg:#10302C; --enrich-bg:#1F2450; --mail-bg:#3A1B33;
+  --free:#5FD3C5; --paid:#FF9A7D;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:Figtree,system-ui,sans-serif;font-size:15px;line-height:1.55;padding-inline:20px;padding-block:40px 72px}
+.wrap{max-width:1040px;margin-inline:auto;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:"Bricolage Grotesque",Figtree,system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(28px,4.4vw,40px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:24px;font-weight:700}
+h3{font-size:17px;font-weight:500}
+p{margin:0;max-width:66ch}
+.lede{color:var(--muted);font-size:17px}
+.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600}
+header{display:flex;flex-direction:column;gap:12px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:12.5px}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 10px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:6px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.chip.user{background:var(--user-bg);color:var(--user)}
+.chip.convex{background:var(--convex-bg);color:var(--convex)}
+.chip.firecrawl{background:var(--firecrawl-bg);color:var(--firecrawl)}
+.chip.gpt{background:var(--gpt-bg);color:var(--gpt)}
+.chip.enrich{background:var(--enrich-bg);color:var(--enrich)}
+.chip.mail{background:var(--mail-bg);color:var(--mail)}
+.legend span.note{color:var(--muted);font-size:13px;align-self:center}
+
+.loop{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.loop div{padding:14px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.loop div:last-child{border-right:0}
+.loop b{font-family:"Bricolage Grotesque",sans-serif;font-size:16px}
+.loop small{color:var(--muted);font-size:13px;line-height:1.4}
+@media (max-width:760px){.loop{grid-template-columns:1fr}.loop div{border-right:0;border-bottom:1px solid var(--line)}.loop div:last-child{border-bottom:0}}
+
+section{display:flex;flex-direction:column;gap:18px}
+.sechead{display:flex;flex-direction:column;gap:6px}
+.steps{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.step{display:grid;grid-template-columns:44px minmax(0,5fr) minmax(0,7fr);gap:6px 22px;padding-block:22px;border-bottom:1px solid var(--line)}
+.num{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:22px;color:var(--accent);font-variant-numeric:tabular-nums}
+.does{display:flex;flex-direction:column;gap:6px}
+.does p{color:var(--muted);font-size:14.5px}
+.ref{font-size:12.5px;color:var(--muted)}
+.ref code{font-family:"JetBrains Mono",monospace;font-size:12px}
+.calls{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.calls li{display:grid;grid-template-columns:92px minmax(0,1fr);gap:10px;align-items:start}
+.calls .what{font-size:14px;overflow-wrap:anywhere}
+.calls .what .mono{color:var(--ink)}
+.cost{font-size:12px;font-weight:600;margin-left:6px;white-space:nowrap}
+.cost.free{color:var(--free)} .cost.paid{color:var(--paid)}
+.stored{grid-column:3;font-size:13px;color:var(--muted);padding-top:4px}
+.stored b{color:var(--ink);font-weight:600}
+@media (max-width:760px){
+  .step{grid-template-columns:32px minmax(0,1fr)}
+  .calls-wrap,.stored{grid-column:2}
+  .calls li{grid-template-columns:84px minmax(0,1fr)}
+}
+
+.branches{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.branch{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.branch b{font-size:14px}
+.branch span{font-size:13.5px;color:var(--muted)}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+.rules{display:flex;flex-direction:column;gap:8px;padding-left:18px;margin:0;max-width:72ch}
+.rules li{color:var(--muted)} .rules li b{color:var(--ink);font-weight:600}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">OpenSquad MVP · how it works</span>
+    <h1>What the user does, and what we call when they do it</h1>
+    <p class="lede">An AI sales agent that finds and researches leads, emails them, and works the replies until a meeting is booked. Every step below lists the real calls behind it, in order, and what ends up stored.</p>
+    <div class="legend" aria-label="Who handles each call">
+      <span class="chip user">User</span>
+      <span class="chip convex">Convex</span>
+      <span class="chip firecrawl">Firecrawl</span>
+      <span class="chip gpt">GPT · AI Gateway</span>
+      <span class="chip enrich">Enrich.so</span>
+      <span class="chip mail">AgentMail</span>
+      <span class="note">External services are only ever called from Convex actions, never from the browser.</span>
+    </div>
+  </header>
+
+  <div class="loop">
+    <div><b>Set up</b><small>Website → profile → ICP → recommended signals</small></div>
+    <div><b>Find</b><small>Enrich search per signal, deduped</small></div>
+    <div><b>Research</b><small>Scrape the lead's company, score 1–3</small></div>
+    <div><b>Contact</b><small>Personal email + two follow-ups</small></div>
+    <div><b>Close</b><small>Read the reply, answer, propose a meeting</small></div>
+  </div>
+
+  <section id="onboarding">
+    <div class="sechead">
+      <span class="eyebrow">Part 1 · once per workspace</span>
+      <h2>Onboarding</h2>
+      <p>Four dots, as in the Gojiberry reference. Everything marked AI-generated is editable before it is saved.</p>
+    </div>
+    <div class="steps" id="onboarding-steps"></div>
+  </section>
+
+  <section id="loop">
+    <div class="sechead">
+      <span class="eyebrow">Part 2 · runs on a cron, no clicks needed</span>
+      <h2>The agent loop</h2>
+      <p>Each lead carries a <span class="mono">stage</span> and a <span class="mono">nextActionAt</span>. A Convex cron wakes up, picks whatever is due, and moves it one stage forward. <b>Autopilot</b> sends on its own; <b>Review</b> stops before every send and waits for one click.</p>
+    </div>
+    <div class="steps" id="loop-steps"></div>
+    <h3>How a reply is handled</h3>
+    <div class="branches">
+      <div class="branch"><b>Question or objection</b><span>Draft an answer from the company profile, send it (or queue for review), stay in the thread.</span></div>
+      <div class="branch"><b>Interested</b><span>Stage → interested. Reply with the booking link and two concrete time suggestions.</span></div>
+      <div class="branch"><b>Meeting accepted</b><span>Write a bookings row, stage → meeting booked, stop the sequence.</span></div>
+      <div class="branch"><b>Not now / out of office</b><span>Pause follow-ups and set a later nextActionAt.</span></div>
+      <div class="branch"><b>Not interested</b><span>Stage → closed lost. No more email.</span></div>
+      <div class="branch"><b>Unsubscribe</b><span>Add to suppressions. Checked before every future send.</span></div>
+    </div>
+  </section>
+
+  <section id="app">
+    <div class="sechead">
+      <span class="eyebrow">Part 3 · the dashboard</span>
+      <h2>What the user can do in the app</h2>
+      <p>Pages read live Convex queries, so rows appear as the agent works. Only working pages are in the sidebar.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Page</th><th>User can</th><th>Behind it</th></tr></thead>
+        <tbody>
+          <tr><td>Dashboard</td><td>See found, contacted, replied, interested and meetings for a date range; activity chart; latest hot leads and replies</td><td>Queries only, over prospects, sendAttempts and conversations</td></tr>
+          <tr><td>Agent</td><td>Switch Review / Autopilot / Paused, turn signals on or off, see leads per signal, edit instructions and booking link, Run now</td><td>Mutations on agents and strategies; Run now schedules the loop action immediately</td></tr>
+          <tr><td>Contacts</td><td>Search and filter, open a lead to read its research and thread, Approve or Reject, get the email for one lead</td><td>Mutation for approval; email button runs the Enrich reveal (10 credits)</td></tr>
+          <tr><td>Inbox</td><td>Read threads under Received / Interested / Unread / All, edit the suggested reply, send, mark interested</td><td>Send goes through the same ledger: suppression, window and limit checks, then AgentMail</td></tr>
+          <tr><td>Settings</td><td>Manage inbox: connect an AgentMail key, pick or create the sending inbox, see sync and webhook health, set sending days, hours and daily limit, disconnect. Also credits remaining and the company profile</td><td>Connecting registers a webhook on the user's own AgentMail account and backfills recent threads. Keys are encrypted and never returned to the browser</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="rules">
+    <div class="sechead"><span class="eyebrow">Guard rails</span><h2>Rules the calls follow</h2></div>
+    <ul class="rules">
+      <li><b>No mock data.</b> Every row, count and chip comes from a real call or a real record. Empty screens say what to do next.</li>
+      <li><b>200 credits, one plan, no upgrade.</b> Credits are our own unit: finding a page of leads 5, researching a lead 2, getting an email 20, writing or answering an email 1. First-run onboarding is free. No balance, no call.</li>
+      <li><b>A hidden hard cap behind the credits.</b> Whatever the balance says, one trial workspace can never cost more than 100 real Enrich credits, 400 GPT calls or 80 scraped pages. Each call reserves its worst case first and settles to what the provider actually charged.</li>
+      <li><b>Our keys cannot be drained.</b> A platform-wide daily budget sits behind every workspace limit, plus per-user rate limits, one trial workspace per verified email, a cap on total trials and a kill switch. Paid work runs only in internal actions that rebuild the request server-side.</li>
+      <li><b>White-label.</b> This page names providers because it is an engineering map. The product never does: users see lead search, email finder, website analysis and credits. Provider names, ids and raw error text never reach the browser.</li>
+      <li><b>Free first.</b> Enrich filter options, counts and the first 75 rows of a search cost nothing. Credits are spent only on revealing an email, and only for leads scored 2 or 3.</li>
+      <li><b>Never phone.</b> Reveal always passes <span class="mono">fields: ["email"]</span>; a phone reveal costs about fifty times more.</li>
+      <li><b>Exact values only.</b> Enrich filters are case-sensitive and a typo silently returns nothing, so GPT picks from the cached allowed values and every value is re-checked before the call.</li>
+      <li><b>One send, once.</b> Every email goes out with an idempotency key through the send ledger, after the suppression, sending-window and daily-limit checks.</li>
+      <li><b>No model key to manage.</b> GPT calls go through Convex AI Gateway from inside actions. The only key a user ever brings is AgentMail.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+const ONBOARDING = [
+  { title: "Enter your website, press Analyze", body: "The form below the URL fills itself in: company name, industry, description, key features, social proof.", ref: "02-company-profile",
+    calls: [
+      ["user","Clicks Analyze"],
+      ["convex","mutation <m>businessProfiles.startAnalysis</m> · status → analyzing, schedules the action"],
+      ["firecrawl","scrape home page plus a few same-site pages (pricing, customers, about)"],
+      ["gpt","<m>ai/analyzeWebsite</m> · markdown → structured company profile"],
+      ["convex","mutation saves the profile · the form updates live"]
+    ], stored: "<b>businessProfiles</b> · websiteUrl, companyName, industry, description, keyFeatures, socialProof" },
+  { title: "Confirm your ideal customer", body: "Three short screens of AI-generated chips: job titles, company filters (industry, location, type, size), and who to exclude.", ref: "06 · 07 · 08",
+    calls: [
+      ["gpt","<m>ai/generateIcp</m> · profile → job titles, industries, locations, sizes, competitors to exclude, customer pain points"],
+      ["user","Adds, removes or toggles chips"],
+      ["convex","mutation <m>agents.updateIcp</m> on a draft agent"]
+    ], stored: "<b>agents</b> (draft) · icp" },
+  { title: "Connect your inbox, set your goal", body: "Paste an AgentMail key (or Connect later). Lead data needs no key: every trial workspace starts with 200 credits that cover lead search, research, emails found and AI writing. Then pain points, campaign goal and message tone.", ref: "04-connect-accounts · 05-goals-tone",
+    calls: [
+      ["user","Pastes a key, clicks Verify"],
+      ["mail","<m>GET /v0/inboxes</m> proves the key · user picks an inbox or creates one with <m>POST /v0/inboxes</m>", "free"],
+      ["mail","<m>POST /v0/webhooks</m> on the user's own account → our per-workspace URL · returns that webhook's signing secret"],
+      ["mail","backfill: page <m>GET /v0/inboxes/{id}/threads</m> for the last 30 days so the Inbox is not empty"],
+      ["convex","key is AES-GCM encrypted · browser only ever sees the last 4 characters and a status"],
+      ["convex","mutation saves goal, tone and pain points"]
+    ], stored: "<b>workspaceSecrets</b> (AgentMail key + webhook secret, encrypted) · <b>workspaces</b>.inboxRef, webhookId · <b>conversations</b> (backfill) · <b>agents</b> · goal, tone, painPoints" },
+  { title: "Pick the signals we recommend", body: "Three to five search strategies built for this business, each with a reason and a live count of matching people. Then keywords, with AI suggestions to click.", ref: "09-signals · 10-keywords",
+    calls: [
+      ["enrich","<m>GET /lead-finder/filter-options</m> · allowed filter values, cached weekly", "free"],
+      ["gpt","<m>ai/recommendStrategies</m> · profile + ICP + signal catalogue + allowed values → strategies (funded, hiring, growing, ad spend, uses a tool, team shape, keyword) and suggested keywords"],
+      ["enrich","<m>POST /lead-finder/count</m> once per strategy", "free"],
+      ["gpt","only if a count is zero or huge: one relax / tighten pass with the counts as feedback"],
+      ["user","Ticks strategies, clicks keyword chips, Generate more"]
+    ], stored: "<b>strategies</b> · title, signalKind, rationale, filters, matchCount, enabled" },
+  { title: "Review, then Confirm & preview leads", body: "An accordion summary of the ICP. One click later the user is on Contacts, watching real scored leads arrive.", ref: "11-icp-review → 23-contacts",
+    calls: [
+      ["convex","mutation <m>agents.confirm</m> · agent goes live, schedules the first run"],
+      ["enrich","<m>POST /lead-finder/search</m> page 1 for each selected strategy only", "free · 75 rows"],
+      ["convex","upsert prospects, dedupe on the Enrich lead id · a lead found by two signals keeps both"],
+      ["firecrawl","scrape each lead's company home page"],
+      ["gpt","<m>ai/researchLead</m> · score 1–3, reason, research summary, personalisation hooks"]
+    ], stored: "<b>prospects</b> · stage found → researched, aiScore, researchSummary, strategyIds" }
+];
+const LOOP = [
+  { title: "Find", body: "Pulls the next page for every enabled signal, up to the agent's daily lead cap.", ref: "",
+    calls: [["convex","cron <m>agent-run</m> picks agents that are not paused"],["enrich","<m>POST /lead-finder/search</m> next page per strategy","free within 3 pages"],["convex","dedupe and insert · stage found"]], stored: "<b>prospects</b> · <b>strategies</b>.nextPage, leadsFound" },
+  { title: "Research", body: "Reads the lead's company site and decides how good the fit is, and why.", ref: "",
+    calls: [["firecrawl","scrape company home page"],["gpt","<m>ai/researchLead</m>"],["convex","stage researched · scores of 1 stop here"]], stored: "<b>prospects</b> · aiScore, aiScoreReason, researchSummary · <b>evidence</b>" },
+  { title: "Get the email", body: "Only for leads scored 2 or 3, and in Review mode only after the user approves the lead.", ref: "",
+    calls: [["convex","reserve 20 credits and 10 real Enrich credits per lead · refuse if the balance, the workspace cap or today's platform budget cannot cover it"],["enrich","<m>POST /lead-finder/reveal</m> with <m>fields: [\"email\"]</m>","10 credits per lead"],["enrich","poll <m>GET /lead-finder/reveal-jobs/{id}</m> every 2 s","free"],["convex","emailStatus found or not_found · commit what Enrich actually charged, release the rest"]], stored: "<b>prospects</b>.email · <b>providerOperations</b>" },
+  { title: "Write", body: "One email per lead, written from the research, the company profile, the chosen tone and goal, and the user's instructions.", ref: "",
+    calls: [["gpt","<m>ai/writeOutreach</m> · step 0 → subject and body with an opt-out line"],["convex","insert draft · Review mode waits here for Approve"]], stored: "<b>drafts</b> · <b>approvals</b>" },
+  { title: "Send", body: "Inside the workspace's sending days and hours, under its daily limit.", ref: "",
+    calls: [["convex","checks: suppression list, sending window, daily limit, draft approved"],["mail","<m>POST /v0/inboxes/{inbox}/messages/send</m> with an Idempotency-Key"],["convex","stage contacted · nextActionAt = +3 days"]], stored: "<b>sendAttempts</b> · <b>conversations</b>" },
+  { title: "Follow up", body: "Two short nudges, on day 3 and day 7, only while there is no reply.", ref: "",
+    calls: [["convex","cron finds contacted leads whose nextActionAt has passed"],["gpt","<m>ai/writeOutreach</m> · step 1 or 2, in the same thread"],["mail","send, same checks as above"]], stored: "<b>prospects</b>.followUpsSent" },
+  { title: "Handle the reply", body: "The part that closes. The agent reads the reply, decides what it means, and makes the next move.", ref: "",
+    calls: [["mail","webhook → <m>POST /agentmail/webhook/{workspace token}</m> · verified with that workspace's own secret, deduped by event id"],["convex","attach to the conversation · stage replied · follow-ups stop"],["gpt","<m>ai/handleReply</m> · class + next move + reply draft"],["mail","sends the reply in Autopilot, or queues it in Inbox in Review"]], stored: "<b>conversations</b> · <b>drafts</b> · <b>bookings</b> · <b>suppressions</b>" }
+];
+const LABEL = { user:"User", convex:"Convex", firecrawl:"Firecrawl", gpt:"GPT", enrich:"Enrich", mail:"AgentMail" };
+function render(id, steps){
+  document.getElementById(id).innerHTML = steps.map((s,i)=>`
+    <article class="step">
+      <div class="num">${i+1}</div>
+      <div class="does"><h3>${s.title}</h3><p>${s.body}</p>${s.ref?`<span class="ref">Reference: <code>temp-images/ref/${s.ref}</code></span>`:""}</div>
+      <div class="calls-wrap"><ol class="calls">${s.calls.map(c=>`
+        <li><span class="chip ${c[0]}">${LABEL[c[0]]}</span><span class="what">${c[1].replace(/<m>/g,'<span class="mono">').replace(/<\/m>/g,'</span>')}${c[2]?`<span class="cost ${/free/.test(c[2])?'free':'paid'}">${c[2]}</span>`:""}</span></li>`).join("")}
+      </ol></div>
+      <div class="stored">Stored: ${s.stored}</div>
+    </article>`).join("");
+}
+render("onboarding-steps", ONBOARDING);
+render("loop-steps", LOOP);
+</script>
+
+</body>
+</html>

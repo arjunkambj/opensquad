@@ -48,11 +48,9 @@ import {
   domainError,
   invalid,
   normalizeHttpUrl,
-  receiptNamesRun,
   researchPageLimit,
   sha256Hex,
   unwrapConvexErrorText,
-  PROVIDER_OPERATION_RUN_HISTORY_MAX,
   vProviderOperationState,
   vRetrievedPage,
   RESEARCH_PAGES_PER_PROSPECT,
@@ -446,9 +444,8 @@ function admitResearchUrl(raw: string): string {
  */
 export const beginFirecrawlOperation = internalMutation({
   args: {
-    missionId: v.id("missions"),
+    campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
-    runId: v.optional(v.id("runs")),
     url: v.string(),
   },
   returns: v.union(
@@ -466,38 +463,24 @@ export const beginFirecrawlOperation = internalMutation({
     }),
   ),
   handler: async (ctx, args): Promise<BeginFirecrawlOperationResult> => {
-    const mission = await ctx.db.get("missions", args.missionId);
-    if (mission === null) {
-      throw domainError("NOT_FOUND", "mission not found");
-    }
-    if (
-      mission.state === "completed" ||
-      mission.state === "cancelled" ||
-      mission.state === "failed"
-    ) {
-      throw domainError(
-        "CONFLICT",
-        `mission is ${mission.state}; cannot spend a research page`,
-      );
-    }
-    const campaign = await ctx.db.get("campaigns", mission.campaignId);
+    const campaign = await ctx.db.get("campaigns", args.campaignId);
     if (campaign === null) {
-      throw domainError("NOT_FOUND", "campaign not found for mission");
+      throw domainError("NOT_FOUND", "campaign not found");
     }
     const prospect = await ctx.db.get("prospects", args.prospectId);
     if (
       prospect === null ||
-      prospect.workspaceId !== mission.workspaceId ||
-      prospect.campaignId !== mission.campaignId
+      prospect.workspaceId !== campaign.workspaceId ||
+      prospect.campaignId !== campaign._id
     ) {
       // Cross-workspace and cross-campaign rows are the same NOT_FOUND —
       // existence never leaks across a scope boundary.
-      throw domainError("NOT_FOUND", "prospect not found for this mission");
+      throw domainError("NOT_FOUND", "prospect not found for this campaign");
     }
     // Admission runs FIRST: an inadmissible URL must never reserve.
     const url = admitResearchUrl(args.url);
 
-    const operationKey = `research:${mission.campaignId}:${args.prospectId}:${await sha256Hex(url)}`;
+    const operationKey = `research:${campaign._id}:${args.prospectId}:${await sha256Hex(url)}`;
     const requestDigest = await computeResultDigest({
       provider: "firecrawl",
       tool: "scrape",
@@ -508,7 +491,7 @@ export const beginFirecrawlOperation = internalMutation({
       .query("providerOperations")
       .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", mission.workspaceId)
+          .eq("workspaceId", campaign.workspaceId)
           .eq("provider", "firecrawl")
           .eq("operationKey", operationKey),
       )
@@ -519,23 +502,6 @@ export const beginFirecrawlOperation = internalMutation({
           "CONFLICT",
           "operationKey was already used with different arguments",
         );
-      }
-      // Record that THIS run read the receipt back. `operationKey` is
-      // campaign-scoped, so a second mission on the same campaign replays
-      // every page it plans and pays for none of them; without this the
-      // replayed page would name only the first run, be invisible to the
-      // one that actually read it, and the campaign could never be
-      // researched a second time. The retrieving `runId` is never rewritten
-      // — it is what `supported` confidence is still measured against.
-      if (args.runId !== undefined && !receiptNamesRun(existing, args.runId)) {
-        const history = [
-          ...(existing.replayedForRunIds ?? []),
-          args.runId,
-        ].slice(-PROVIDER_OPERATION_RUN_HISTORY_MAX);
-        await ctx.db.patch("providerOperations", existing._id, {
-          replayedForRunIds: history,
-          updatedAt: Date.now(),
-        });
       }
       const recorded =
         existing.state === "completed" && existing.resultRef?.kind === "inline"
@@ -560,7 +526,7 @@ export const beginFirecrawlOperation = internalMutation({
       .query("providerOperations")
       .withIndex("by_workspaceId_and_prospectId_and_state", (q) =>
         q
-          .eq("workspaceId", mission.workspaceId)
+          .eq("workspaceId", campaign.workspaceId)
           .eq("prospectId", args.prospectId),
       )
       .take(PROSPECT_OPERATION_SCAN_MAX);
@@ -576,8 +542,8 @@ export const beginFirecrawlOperation = internalMutation({
     // aborts everything above it — the operation row is never written, the
     // cap accounting never moves, and the provider is never contacted.
     const reservation = await ctx.runMutation(internal.usage.reserve, {
-      workspaceId: mission.workspaceId,
-      scopeKey: `campaign:${mission.campaignId}`,
+      workspaceId: campaign.workspaceId,
+      scopeKey: `campaign:${campaign._id}`,
       metric: "research_pages" as const,
       periodKey: "lifetime",
       limit: researchPageLimit(campaign.leadLimit),
@@ -587,17 +553,15 @@ export const beginFirecrawlOperation = internalMutation({
 
     const now = Date.now();
     const providerOperationId = await ctx.db.insert("providerOperations", {
-      workspaceId: mission.workspaceId,
+      workspaceId: campaign.workspaceId,
       provider: "firecrawl" as const,
       operationKey,
-      missionId: mission._id,
       requestDigest,
       reservationIds: [reservation.reservationId],
       state: "requested" as const,
       createdAt: now,
       updatedAt: now,
       prospectId: args.prospectId,
-      ...(args.runId !== undefined ? { runId: args.runId } : {}),
     });
     return { decision: "execute" as const, providerOperationId, url };
   },
@@ -715,9 +679,8 @@ export const settleFirecrawlOperation = internalMutation({
  */
 export const retrieveProspectPage = internalAction({
   args: {
-    missionId: v.id("missions"),
+    campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
-    runId: v.optional(v.id("runs")),
     url: v.string(),
   },
   returns: v.object({
@@ -731,9 +694,8 @@ export const retrieveProspectPage = internalAction({
     const begin = await ctx.runMutation(
       internal.integrations.firecrawl.beginFirecrawlOperation,
       {
-        missionId: args.missionId,
+        campaignId: args.campaignId,
         prospectId: args.prospectId,
-        ...(args.runId !== undefined ? { runId: args.runId } : {}),
         url: args.url,
       },
     );
@@ -827,9 +789,8 @@ export const retrieveProspectPage = internalAction({
  */
 export const retrieveProspectPages = internalAction({
   args: {
-    missionId: v.id("missions"),
+    campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
-    runId: v.id("runs"),
     urls: v.array(v.string()),
   },
   returns: v.object({
@@ -862,9 +823,8 @@ export const retrieveProspectPages = internalAction({
         outcome = await ctx.runAction(
           internal.integrations.firecrawl.retrieveProspectPage,
           {
-            missionId: args.missionId,
+            campaignId: args.campaignId,
             prospectId: args.prospectId,
-            runId: args.runId,
             url,
           },
         );

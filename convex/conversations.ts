@@ -1201,19 +1201,16 @@ export type ResumeBlockCode = (typeof RESUME_BLOCK_CODES)[number];
 
 /**
  * Declared as a const rather than inline so the handler can be annotated with
- * its own return type. `resume` reaches `internal.inbox` and `inbox.ts` imports
- * from this module, so an inferred return type would be circular
- * (TS7022/TS7023) — the same reason `drafts.retireConversationWork` returns
- * `v.null()` and every handler in `inbox.ts` states its type.
+ * its own return type — the same reason `drafts.retireConversationWork`
+ * returns `v.null()` and every handler in `inbox.ts` states its type.
  */
 const vResumeResult = v.object({
   conversation: vConversationDoc,
-  /** Whether a reply workflow was started for the latest inbound message. */
+  /** Whether reply automation was started for the latest inbound message. */
   dispatched: v.boolean(),
-  missionId: v.optional(v.id("missions")),
   /** A `RESUME_BLOCK_CODES` member when a policy check refused. */
   blockedBy: v.optional(v.string()),
-  /** Why no reply workflow started, when the resume itself succeeded. */
+  /** Why no reply automation started, when the resume itself succeeded. */
   replyNote: v.optional(v.string()),
 });
 
@@ -1478,25 +1475,9 @@ export const resume = mutation({
       actor: identityKey,
       body: "Automation resumed; association, campaign, sender and policy checks passed.",
     });
-    // Hand off to the inbound module, which keys the mission on
-    // `incoming:<inbox>:<message>` so resume and ingest can never start two
-    // reply missions for one message. A refusal there is reported, not thrown:
-    // the takeover is already cleared and the association already recorded, so
-    // failing the whole mutation would undo work the operator asked for
-    // because model dispatch happened to be unavailable.
-    const started = await ctx.runMutation(
-      internal.inbox.startReplyForLatestInbound,
-      { conversationId: updated._id, actor: identityKey },
-    );
-    return {
-      conversation: updated,
-      dispatched: started.started,
-      ...(started.missionId !== undefined
-        ? { missionId: started.missionId }
-        : {}),
-      ...(started.started || started.reason === undefined
-        ? {}
-        : { replyNote: started.reason }),
-    };
+    // Automation is re-armed, but nothing drafts a reply for the latest
+    // inbound message yet — the thread stays in its needs-a-human state.
+    // AI classify/draft: reimplemented via Convex AI Gateway (see plan)
+    return { conversation: updated, dispatched: false };
   },
 });
