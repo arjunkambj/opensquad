@@ -422,22 +422,31 @@ Kept as-is: `workspaces`, `memberships`, `conversations`, `conversationNotes`,
   `dailyLeadCap`, `dailyResearchCap`, `autoRevealDailyCap`, `autoApproveMinScore`,
   `followUpDays: [3, 7]`, `revision`, `run { leaseId, leaseUntil, startedAt }`,
   `autopilot? { authorizedBy, authorizedAt, revision }`, `nextRunAt`, `lastRunAt`,
-  `legacyCampaignId?`.
+  `legacyCampaignId?`. One agent per workspace is enforced in the create
+  mutation (read existing → refuse), not by an index.
+- **`legacyCampaigns`**: read-only copies of pre-pivot campaigns folded into an
+  agent (MIGRATION.md §1). Empty on the clean-slate path.
 - **`strategies`**: `agentId`, `title`, `signalKind: "core_icp" | "funded" | "hiring" | "growth" | "ad_spend" | "tech" | "team_shape" | "keyword"`,
   `rationale`, `filters`, `excludeFilters`, `matchCount`, `enabled`,
   `source: "recommended" | "user"`, `nextPage`, `lastRunAt`, `leadsFound`.
 - **`leadFilterOptions`**: cached allowed values, `fetchedAt`.
-- **`prospects`** (extend): `agentId`, `strategyIds[]`, `sourceLeadId`, `linkedinUrl`,
-  `aiScore: 1 | 2 | 3`, `aiScoreReason`, `researchSummary`,
+- **`prospects`** (extend): `agentId`, `linkedinUrl`,
+  `origin`: `{ kind: "sourced", sourceLeadId, strategyIds[] }` | `{ kind: "legacy", legacyCampaignId }` | `{ kind: "manual" }`,
+  `research`: `{ status: "not_researched" }` | `{ status: "researching", startedAt }` | `{ status: "researched", aiScore: 1 | 2 | 3, aiScoreReason, summary, researchedAt }` | `{ status: "failed", lastError }`
+  — a score exists only on a researched lead and a source id only on a sourced
+  one, so found-but-unresearched and migrated leads are valid documents, not
+  exceptions. UI and queries switch on the variant; nothing reads a bare
+  `aiScore`.
   `emailStatus: "locked" | "revealing" | "found" | "not_found"`,
   `stage: "found" | "researched" | "queued" | "contacted" | "replied" | "interested" | "meeting_proposed" | "meeting_booked" | "closed_lost" | "rejected" | "needs_attention"`,
   `approval: "pending" | "approved" | "rejected"`, `approvedBy: "user" | "autopilot"`,
   `preRank`, `lastError?`, `followUpsSent`, `nextActionAt`, `legacy?`.
 - **`workspaceSecrets`**: above.
 - **`workspaces`** (extend): `plan: "trial"`, `webhookToken`, `agentmailWebhookId`,
-  `connectedAt`, `opensObserved`; unique index on `inboxRef`.
-- **`conversations` / messages** (extend): `source: "backfill" | "live"`, unique
-  index on provider `message_id`. **`drafts`** (extend): `agentRevision`, state
+  `connectedAt`, `opensObserved`, `inboxConnection: "none" | "legacy_platform_inbox" | "connected" | "invalid"`;
+  index `by_inboxRef` (uniqueness enforced in the claim mutation, §9.4).
+- **`conversations` / messages** (extend): `source: "backfill" | "live"`, index
+  `by_workspace_inbox_providerMessageId` (single-writer upsert, §9.4). **`drafts`** (extend): `agentRevision`, state
   `superseded`. **`approvals`** (extend): `actor: "user" | "autopilot"`.
 - **`platformBudgets`**: §6. `usageBuckets` metrics change as in §6.
 
@@ -493,11 +502,24 @@ steps**, never by long-running actions or chains of in-memory timers.
   | Event | Pending work |
   |---|---|
   | User pauses the agent / kill switch | nothing new starts; in-flight step finishes its current provider call, writes its result, then stops; unsent drafts stay as drafts |
-  | User rejects a lead | queued reveal, draft, send and follow-ups for that lead cancelled; open drafts → `superseded`; held credits released |
+  | User rejects a lead | queued (not yet started) reveal, draft, send and follow-ups for that lead cancelled; open drafts → `superseded`. Accounting follows the rule below — a rejection never refunds by itself |
   | User changes instructions / tone / goal | `revision`++; unsent drafts under the old revision → `superseded` and rewritten on the next pass (1 credit each, only for leads still due); sent mail untouched |
   | A reply arrives | follow-ups for that conversation cancelled in the same mutation that stores the reply; any unsent draft in the thread → `superseded`; stage → `replied` |
   | Lead unsubscribes / is blocklisted | as reject, plus suppression; checked again at send time regardless |
   | Inbox key becomes invalid | agent → `paused` with reason; nothing is dropped, everything resumes on reconnect |
+
+**Cancellation never decides money.** Pausing, rejecting, editing instructions
+or a reply arriving only stops work that has **not started**. For each held
+reservation the outcome is decided by evidence, exactly as in §6:
+- step never began (no provider request was issued: no `providerOperations`
+  row, send attempt still `reserved`) → **refunded**;
+- provider call started or finished → it runs to its recorded result and is
+  **billed** at the provider's actual, even though the result is now unwanted
+  (a revealed email for a rejected lead is stored, not re-bought, and still
+  costs what it cost);
+- unknown → stays **uncertain** and goes to the recovery sweep.
+The same rule applies to a failed AI or scrape call, to a lost run lease and
+to data migration: *refund only what is proven not to have been charged.*
 
 ### 9.2 Initial batch
 Confirm does **not** research everything it finds.
@@ -548,7 +570,13 @@ Autopilot authorisation:
 - **Matching.** A webhook event is accepted only if the path token resolves to
   a workspace **and** the event's `inbox_id` equals that workspace's
   `inboxRef`; otherwise it is quarantined, never attached.
-- **One inbox, one workspace.** Unique index on `inboxRef`. Connecting an inbox
+- **One inbox, one workspace.** Convex has no unique indexes, so uniqueness is
+  enforced **transactionally**: the connect mutation reads
+  `workspaces.by_inboxRef` for the inbox id and writes the claim in the *same*
+  mutation. Convex mutations are serializable, so two concurrent connects
+  cannot both pass the read. The provider calls (verify key, register webhook)
+  happen in an action *before*; the claim is the final mutation, and an action
+  that loses the race deletes the webhook it just registered. Connecting an inbox
   already connected elsewhere is refused ("This inbox is connected to another
   workspace"). The same key may serve two workspaces only with two different
   inboxes. Reconnecting the same inbox to the same workspace is idempotent:
@@ -559,9 +587,23 @@ Autopilot authorisation:
   webhook → store new key + secret → delete old webhook with the old key
   (best effort). Both secrets are accepted for 10 minutes so nothing is lost
   in between.
-- **Backfill vs live.** Unique index on the provider `message_id`; backfill and
-  webhook both upsert through it, so a message that arrives both ways exists
-  once, and the live copy wins. Rows carry `source: "backfill" | "live"`.
+- **Backfill vs live.** Message identity is `(workspaceId, inboxId, providerMessageId)`
+  — provider ids are only unique within an account, never globally. One
+  internal mutation, `inbox.model.upsertMessage`, is the **only** writer: it
+  looks the triple up on index `by_workspace_inbox_providerMessageId` and
+  inserts or merges in the same transaction, so backfill and webhook racing on
+  the same message produce one row (`source: "live"` wins over `"backfill"`;
+  a later backfill never downgrades it). No code path inserts a message
+  directly.
+- **Legacy inboxes.** A workspace created before the pivot may still use an
+  inbox on the platform account (`inboxConnection: "legacy_platform_inbox"`).
+  The old `/agentmail/webhook` route and its env secret stay mounted for them:
+  events there are matched by `inbox_id` → workspace as before, go through the
+  same `upsertMessage`, and are **receive-only** — shown in the Inbox, never
+  auto-answered, and the workspace cannot send until it connects its own key.
+  The route and env secret are removed only when no workspace is in that state
+  (always true after a clean-slate migration once owners reconnect; checked,
+  not assumed).
 - **Never answer history.** `handleReply` runs only when **all** hold: source
   is `live`; message time > `connectedAt`; the thread was started by one of our
   `sendAttempts` to a known prospect; sender is not us; not already handled.

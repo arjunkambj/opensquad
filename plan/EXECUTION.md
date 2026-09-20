@@ -151,7 +151,9 @@ indexes for every query in PLAN §5 (`prospects` by workspace+stage,
 workspace+nextActionAt, workspace+aiScore, agent+sourceLeadId; `strategies` by
 agent; `conversations` by workspace+state). Migrate/rename `campaigns` call
 sites minimally so the tree typechecks. Land the **final** schema (clean-slate path, see T06) — no widened
-transitional shape, no legacy fields. Includes the unique indexes from PLAN §9.4.
+transitional shape, no legacy fields. Includes the lookup indexes behind the transactional
+uniqueness checks of PLAN §9.4 (`by_inboxRef`,
+`by_workspace_inbox_providerMessageId`) and the `origin` / `research` unions.
 **Done when:** codegen + all four verify commands pass; no table or field from
 PLAN §7 is missing.
 
@@ -160,13 +162,18 @@ PLAN §7 is missing.
 `convex/migrations/**`, `plan/migration-log.md`, the migrations component in
 `convex/convex.config.ts`.
 **Build:** the owner chose the **clean-slate path** (MIGRATION.md Decision +
-§6): on dev, export, carry `suppressions` across, clear app tables, push the
-final schema from PLAN §7 directly — so T01 lands the final schema, not a
-widened one, and no migration code is written. Production gets the same
+§6): freeze using the existing `automationState` lever and **verify it**
+(§4.0 — `PLATFORM_PAUSED` does not exist yet), drain `reserved` + `requesting`
++ `uncertain` send attempts and pending scheduled calls, export, **keep
+`workspaces`, `memberships` and `suppressions` in place**, clear the other app
+tables, run the two small shape migrations, push the final schema from PLAN §7. Production gets the same
 clean-slate steps just before T50, when the owner says go.
-**Done when:** dev runs the final schema with empty app tables and its
-suppressions intact; the export file exists outside git; the steps taken are
-noted in `plan/migration-log.md`.
+**Done when:** dev runs the final schema; every kept suppression still points
+at a live workspace **and a send preflight to a suppressed address is refused**
+(row counts are not accepted as proof); an owner can sign in and lands in
+onboarding; the export exists outside git; the full-restore rollback
+(MIGRATION.md §5 last row) has been rehearsed once on dev; steps and results
+are in `plan/migration-log.md`.
 
 ### T05 · Restructure into domain folders — integrator
 **Depends:** T06. **Owns:** the whole tree, for this task only.
@@ -180,7 +187,13 @@ noted in `plan/migration-log.md`.
   `api.*` / `internal.*` reference, `crons.ts` and `http.ts`.
 - Frontend: `Layout` → `layout`, `Marketing` → `marketing` (two-step
   `git mv` so the case change is recorded), `leads/` → `contacts/`, route files
-  reduced to param/guard + one page component, create the empty-of-logic
+  reduced to param/guard + one page component,
+- **Scheduled calls:** scheduled functions reference functions by path, so a
+  pending call to a moved file fails when it fires. Before moving anything:
+  list pending scheduled functions, let them finish or cancel them (workspaces
+  paused per MIGRATION.md §4.0), and confirm the list is empty. Crons are
+  re-registered by the deploy. After T05 no pending call may reference an old
+  path — assert it with a query over `_scheduled_functions`. create the empty-of-logic
   folder skeleton only where a file lands in it.
 - Update `convex/README.md` and root `README.md` to describe the layout.
 One commit per domain moved, so each diff is reviewable as a pure move.
@@ -216,7 +229,13 @@ later commits or releases; a provider answer of "charged 0" refunds in full.
 inside `withCredits` (`ai_calls`), validates the result, maps failures to our
 own error codes. No task-specific prompts here.
 **Done when:** a smoke internal action returns a validated object from the
-gateway and debits exactly one `ai_calls` unit; failure releases it.
+gateway and debits exactly one `ai_calls` unit. Failure accounting follows
+PLAN §6/§9.1, never a blanket release: refused **before** the request left
+(validation, kill switch, budget, rate limit) → refunded; the gateway answered
+with an error it reports as unbilled → refunded; the request left and the
+outcome is unknown (timeout, dropped connection) → `uncertain`; a completed
+generation whose output fails our validation → **billed** (the tokens were
+spent) and retried at most once.
 
 ### T04 · App shell, routes, theme, rename — integrator
 **Depends:** T01. **Refs:** `20-dashboard`, `24-inbox` (collapsed rail).
@@ -241,8 +260,12 @@ nothing in the shell is hard-coded data.
 **Depends:** T02. **Owns:** `convex/lib/secrets.ts`,
 `convex/workspaces/secrets.ts`, `convex/integrations/agentmail.ts`,
 `convex/inbox/connection.ts`, `convex/inbox/backfill.ts`.
-**Hand-off to integrator:** new `POST /agentmail/webhook/<token>` route and
-removal of the env-secret route in `convex/http.ts`.
+**Hand-off to integrator:** add the `POST /agentmail/webhook/<token>` route in
+`convex/http.ts`. **Do not remove** the existing env-secret
+`/agentmail/webhook` route: it keeps serving legacy platform inboxes
+(PLAN §9.4 "Legacy inboxes", MIGRATION.md §4.1.6), receive-only. Its removal
+is a T50 checklist item gated on a query proving no workspace has
+`inboxConnection = "legacy_platform_inbox"`.
 **Build:** PLAN §4 "Manage inbox" steps 1–7: AES-GCM helper
 (`SECRETS_ENCRYPTION_KEY`), connect/verify, list + create inbox, register
 webhook on the user's account and store its secret encrypted, per-request
@@ -250,7 +273,11 @@ webhook on the user's account and store its secret encrypted, per-request
 the integrator to mount, 30-day thread backfill with progress, send path takes
 the decrypted key as an argument, disconnect/rotate, 401 → key `invalid` +
 agent paused. All of PLAN §9.4: event accepted only when token → workspace
-**and** `inbox_id` = `inboxRef` (else quarantine); unique `inboxRef`; webhook
+**and** `inbox_id` = `inboxRef` (else quarantine); inbox ownership claimed in
+one read-then-write mutation (Convex has no unique indexes), with the losing
+action cleaning up its webhook; `inbox.model.upsertMessage` as the single
+writer keyed on `(workspaceId, inboxId, providerMessageId)`; legacy route
+behaviour (receive-only, never auto-answered, cannot send); webhook
 `client_id` = workspace id so re-connect is idempotent; rotation order with a
 10-minute two-secret overlap; backfill and live both upsert on provider
 `message_id`; rows tagged `source`; `connectedAt` stamped. Client queries expose `{ status, last4, inboxAddress, lastEventAt, sync }` only.
@@ -259,7 +286,11 @@ verifies, webhook appears in that account, an email sent to the inbox arrives
 in `conversations` through the per-workspace route, a bad signature gets 401,
 backfill imports existing threads, disconnect deletes the webhook; connecting
 the same inbox from a second workspace is refused; connecting twice creates
-one webhook; a message delivered by both backfill and webhook exists once; an
+one webhook; two connects for the same inbox fired concurrently → exactly one
+wins and one webhook remains; a message delivered by both backfill and webhook
+at the same moment exists once; the same provider message id under a different
+inbox is a different message; a legacy platform inbox still receives mail and
+cannot send or auto-reply; an
 event for a different `inbox_id` on a valid token is quarantined.
 
 ### T11 · Lead-data client
@@ -516,10 +547,13 @@ handled on production with real data, and the three audits are clean.
 5. Run the white-label and no-mock greps.
 6. Run the wave's **live** acceptance checks handed over by task agents, plus
    the standing manual checks that apply so far:
-   - *Migration:* clean-slate steps recorded; a suppressed address carried
-     across is still refused by the send ledger.
+   - *Migration:* freeze verified by a refused send; a kept suppression is
+     refused by a real preflight; restore rehearsed on dev.
    - *Concurrency:* double-click Run now / Get email / Approve → one effect,
-     one charge.
+     one charge; two simultaneous inbox connects → one owner.
+   - *Cancellation accounting:* reject a lead while its email reveal is in
+     flight → the reveal is billed at the provider's actual and stored, nothing
+     is refunded on the strength of the rejection alone.
    - *Timeouts:* force a provider timeout (bad base URL env on dev) → hold
      shows as pending, sweep resolves it, no double charge, lead ends in
      `needs_attention` with Retry.
