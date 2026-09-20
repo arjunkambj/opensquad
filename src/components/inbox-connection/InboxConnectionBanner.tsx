@@ -4,15 +4,14 @@
  *
  * Mounted by the Agent and Contacts screens (EXECUTION T31, T32). A connected
  * workspace renders nothing at all — a banner that says "you are fine" is
- * chrome, and the reference screens do not carry one.
+ * chrome, and the reference screens do not carry one. Neither does a reader
+ * who cannot act on it: the connect screen is owner-only.
  */
 import { Link } from "@tanstack/react-router"
-import { useQuery } from "convex/react"
-import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { Button } from "@/components/ui/button"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 import { ConnectInboxBanner } from "./ConnectInboxBanner"
+import { useInboxConnection } from "./use-inbox-connection"
 
 export function InboxConnectionBanner({
   workspaceId,
@@ -21,24 +20,14 @@ export function InboxConnectionBanner({
   workspaceId: Id<"workspaces">
   className?: string
 }) {
-  // The read is owner-guarded, so anyone else is not asked — and is not shown
-  // a banner pointing at a screen they cannot act on either.
-  const current = useCurrentWorkspace()
-  const isOwner =
-    current !== undefined &&
-    current !== null &&
-    current.workspace._id === workspaceId &&
-    current.role === "owner"
-  const view = useQuery(
-    api.inbox.connection.getInboxConnection,
-    isOwner ? { workspaceId } : "skip",
-  )
+  const access = useInboxConnection(workspaceId)
 
   // While the read is in flight there is nothing to warn about yet, and a
   // skeleton above the page content would move it twice.
-  if (view === undefined || view.canSend) {
+  if (access.state !== "ready" || access.view.canSend) {
     return null
   }
+  const view = access.view
 
   const settingsLink = (label: string) => (
     <Button
