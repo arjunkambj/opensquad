@@ -29,6 +29,9 @@ const vHealthObject = v.object({
 const HEALTH_SYSTEM =
   "You are a service health probe. Answer only with the required object.";
 
+/** Room for the probe's four small fields and nothing more. */
+const HEALTH_MAX_OUTPUT_TOKENS = 256;
+
 const HEALTH_INPUT =
   "Set ok to true, color to green, and words to exactly two short words " +
   "describing a clear sky. Leave note out.";
@@ -40,6 +43,12 @@ export const check = internalAction({
     operationKey: v.optional(v.string()),
     /** Pass a nonsense id to provoke the gateway's 400 refusal branch. */
     modelId: v.optional(v.string()),
+    /**
+     * Pass a tiny number to provoke the other branch worth seeing: the
+     * generation completes, gets cut off before it can close the object, and
+     * is therefore BILLED and retried once — `attempts: 2`, `aiCalls: 2`.
+     */
+    maxOutputTokens: v.optional(v.number()),
   },
   returns: v.object({
     kind: vPaidOutcome,
@@ -64,7 +73,7 @@ export const check = internalAction({
       input: HEALTH_INPUT,
       result: vHealthObject,
       operationKey: args.operationKey ?? `health:${Date.now()}`,
-      maxOutputTokens: 256,
+      maxOutputTokens: args.maxOutputTokens ?? HEALTH_MAX_OUTPUT_TOKENS,
       ...(args.modelId !== undefined ? { modelId: args.modelId } : {}),
     });
 
