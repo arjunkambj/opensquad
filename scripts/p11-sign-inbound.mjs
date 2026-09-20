@@ -1,13 +1,12 @@
-// scripts/p11-sign-inbound.mjs — probe, not a test file (cf. scripts/p10-probe.sh)
+// scripts/p11-sign-inbound.mjs — probe, not a test file
 /**
- * P11 signed-inbound probe signer.
+ * Signed-inbound probe signer.
  *
  * Fabricates ONE AgentMail webhook event, signs it the way the provider does
  * (svix, over the exact raw body) and POSTs it to the deployment's
  * `/agentmail/webhook`. AgentMail's webhooks API has no resend/replay
- * endpoint (recorded in plan/evidence/P05.md), so a signed fabricated event
- * is the only way to drive duplicate and out-of-order delivery through the
- * real verification path.
+ * endpoint, so a signed fabricated event is the only way to drive duplicate
+ * and out-of-order delivery through the real verification path.
  *
  * Usage:
  *   node scripts/p11-sign-inbound.mjs --inbox <inboxRef> --thread <threadId> \
@@ -22,16 +21,15 @@
  * writes real rows.
  *
  * Exercises, by re-running with the same/other arguments:
- *   V16.1 duplicate      — same --event-id twice          → one logical effect
- *   V16.1 same message   — same --message, new --event-id → duplicate_application_key
- *   V16.1 bad signature  — --corrupt                      → HTTP 401, no state
- *   V16.1 unsigned       — --no-headers                   → HTTP 401, no state
- *   V16.1 forged header  — --bad-headers                  → HTTP 401, no state
- *   V16.2 unmatched mail — a --thread no conversation owns → unassigned queue
- *   V16.1 delivery event — --event-type message.delivered → outbound receipt
- *   no-thread regression — --no-thread omits the payload's thread object;
- *                          onMessageReceived must still record it (the fix for
- *                          the BUG recorded in plan/evidence/P11.md)
+ *   duplicate      — same --event-id twice          → one logical effect
+ *   same message   — same --message, new --event-id → duplicate_application_key
+ *   bad signature  — --corrupt                      → HTTP 401, no state
+ *   unsigned       — --no-headers                   → HTTP 401, no state
+ *   forged header  — --bad-headers                  → HTTP 401, no state
+ *   unmatched mail — a --thread no conversation owns → unassigned queue
+ *   delivery event — --event-type message.delivered → outbound receipt
+ *   no-thread      — --no-thread omits the payload's thread object;
+ *                    onMessageReceived must still record it
  */
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
