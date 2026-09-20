@@ -27,6 +27,7 @@ import type * as lib_validators from "../lib/validators.js";
 import type * as migrations_clear from "../migrations/clear.js";
 import type * as migrations_shape from "../migrations/shape.js";
 import type * as migrations_tables from "../migrations/tables.js";
+import type * as migrations_verify from "../migrations/verify.js";
 import type * as prospects from "../prospects.js";
 import type * as quarantine from "../quarantine.js";
 import type * as sendAttempts from "../sendAttempts.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/clear": typeof migrations_clear;
   "migrations/shape": typeof migrations_shape;
   "migrations/tables": typeof migrations_tables;
+  "migrations/verify": typeof migrations_verify;
   prospects: typeof prospects;
   quarantine: typeof quarantine;
   sendAttempts: typeof sendAttempts;
