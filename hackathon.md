@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** openai/gpt-5.6-sol (Convex AI Gateway)
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-20T22:00:00Z
+- **Last updated:** 2026-09-20T23:40:00Z
 
 ## Log
 
@@ -736,4 +736,47 @@ timezone-aware aggregates and designed empty states (`convex/dashboard/`,
 Not yet verified: none of this has run against a signed-in workspace yet, so
 the real website analysis, ICP, strategy counts on a real profile, a real
 agent run and every page's click-through are still owed; the list is in
+`plan/followups.md`.
+
+### 2026-09-20 - 18d1a90
+
+**Contacts, the outreach loop and the Inbox screen.** Contacts is a dense,
+index-backed table over real leads with a lead drawer: one index range per
+filter, a bounded total, the signal that found each person with "+n signals",
+flame scores read only from researched leads, and projections that keep every
+provider id server-side. Approving a lead authorises finding the email and
+drafting, never sending; rejecting retires that lead's queued work in the same
+transaction and never refunds by itself. "Get email" is keyed on the lead, so
+a double click buys once, bulk is bounded by both the visible balance and the
+hidden cap, and a lead stuck mid-reveal is recovered by the sweep
+(`convex/leads/queries.ts`, `emailReveal*.ts`, `manualResearch*.ts`,
+`approval.ts`, `src/components/contacts/`).
+
+Outreach runs as short idempotent steps off a one-minute cron
+(`convex/outreach/outreachTick.ts` and the `outreach*.ts` files): the mode
+matrix decides who approves what — Review waits for a person at both the lead
+and the email, Autopilot approves leads at the agent's score threshold,
+reveals emails up to a daily cap and records its own `approvals` row bound to
+the exact draft revision, then goes through the same send ledger as a human
+approval (suppression, sending window, daily limit, idempotency key). The
+send mutation re-validates at the moment of effect — agent in a sending mode,
+revision current, lead not rejected, no reply since the draft was written —
+so pausing, rejecting or editing instructions can only stop work that has not
+started. The opt-out line is appended in code, never left to the model
+(`convex/ai/writeOutreach.ts`). Follow-ups are scheduled from the accepted
+send and stop on a reply.
+
+The Inbox is rebuilt on four index-backed pills with a reading pane: merged
+thread with an honest state for imported messages whose text is not stored, a
+suggested-reply card that edits into a new revision and sends through
+preflight, approval and dispatch with the exact block reason mapped through a
+total record (two gate codes added by the outreach work failed the build until
+they had copy, as intended), send status from the attempt ledger, and Mark as
+booked as the only meeting writer (`convex/inbox/inboxList.ts`,
+`src/components/inbox/`).
+
+Decision recorded: the tenant is the auth provider's organization and the
+active org is the source of truth; the rename from workspaces to orgs is in
+progress as its own task. Not yet verified: no real email has been sent and
+no page has been clicked through with a signed-in account; see
 `plan/followups.md`.
