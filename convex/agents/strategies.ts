@@ -9,7 +9,7 @@
  *                          live state of the recommendation, the suggested
  *                          and chosen keywords.
  *   `startRecommendation`  the only authenticated part of a paid run. It
- *                          checks the role, spends a rate-limit token,
+ *                          checks the organization, spends a rate-limit token,
  *                          records `generating` so the screen shows live
  *                          status from its own reactive query, and schedules
  *                          the internal action that may spend money.

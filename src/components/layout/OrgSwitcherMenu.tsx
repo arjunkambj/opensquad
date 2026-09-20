@@ -52,31 +52,27 @@ export function OrgSwitcherMenu({ user }: { user: CurrentUser }) {
   }
 
   return (
-    <>
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>Organization</DropdownMenuLabel>
-        {teams.map((team) => (
-          <DropdownMenuItem
-            key={team.id}
-            closeOnClick={false}
-            disabled={switchingTo !== null}
-            onClick={() => void pick(team)}
-          >
-            <span className="min-w-0 flex-1 truncate">
-              {team.displayName}
-            </span>
-            {switchingTo === team.id ? (
-              <Spinner />
-            ) : team.id === selectedId ? (
-              <HugeiconsIcon
-                aria-label="Active organization"
-                icon={Tick02Icon}
-                strokeWidth={2}
-              />
-            ) : null}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuGroup>
-    </>
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Organization</DropdownMenuLabel>
+      {teams.map((team) => (
+        <DropdownMenuItem
+          key={team.id}
+          closeOnClick={false}
+          disabled={switchingTo !== null}
+          onClick={() => void pick(team)}
+        >
+          <span className="min-w-0 flex-1 truncate">{team.displayName}</span>
+          {switchingTo === team.id ? (
+            <Spinner />
+          ) : team.id === selectedId ? (
+            <HugeiconsIcon
+              aria-label="Active organization"
+              icon={Tick02Icon}
+              strokeWidth={2}
+            />
+          ) : null}
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuGroup>
   )
 }
