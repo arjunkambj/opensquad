@@ -84,6 +84,23 @@ export function StageChip({ stage }: { stage: LeadStage }) {
   )
 }
 
+/**
+ * The "Mark interested" control's words, kept beside the rest of the inbox
+ * vocabulary rather than inline in the button.
+ *
+ * It says what the click does and, just as importantly, what it does not:
+ * marking a reply interested tags the thread and moves the lead in Contacts.
+ * A meeting is still only a meeting when a person records one (PLAN §9.5).
+ */
+export const MARK_INTERESTED_COPY = {
+  label: "Mark interested",
+  pending: "Marking…",
+  success: "Marked interested — the lead moved to Interested",
+  /** Shown instead of the button once the thread already carries the tag. */
+  already: "Marked interested. Use Mark as booked when a time is agreed.",
+  failure: "Could not mark this conversation interested.",
+} as const
+
 /** The marker a Review-mode user looks for: an email waiting on their yes. */
 export function NeedsApprovalChip() {
   return <Chip className="bg-primary/10 text-primary">Needs your approval</Chip>
