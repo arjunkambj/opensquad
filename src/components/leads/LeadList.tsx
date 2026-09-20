@@ -110,10 +110,21 @@ export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
     text === "" ? listArgs : { ...listArgs, text },
   )
 
+  /** A filter change. `withFilters` drops the cursor, because page two of one
+   *  query is not page two of another. */
   const apply = (patch: Partial<LeadsSearch>) => {
     void navigate({
       to: "/leads",
       search: (current: LeadsSearch) => withFilters(current, patch),
+    })
+  }
+
+  /** Paging keeps the filters and moves the cursor — the one change that must
+   *  NOT go through `withFilters`, which would clear the cursor it just set. */
+  const goToCursor = (cursor: string) => {
+    void navigate({
+      to: "/leads",
+      search: (current: LeadsSearch) => ({ ...current, cursor }),
     })
   }
 
@@ -286,10 +297,12 @@ export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={!page.hasMore}
-              onClick={() =>
-                apply({ cursor: page.cursor ?? undefined })
-              }
+              disabled={!page.hasMore || page.cursor === null}
+              onClick={() => {
+                if (page.cursor !== null) {
+                  goToCursor(page.cursor)
+                }
+              }}
             >
               Next page
             </Button>
