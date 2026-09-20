@@ -22,11 +22,18 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T00.5: one real identity dump showing `emailVerified` reaches Convex.
 - [ ] T02: the scripted ledger run (hand-off has the exact `npx convex run` sequence) — needs two real workspaces.
 - [ ] T03: `npx convex run ai/health:check '{"workspaceId":"…"}'` happy path, unknown-model refund, billed-and-retried, kill switch, budget, replay — needs a real workspace.
+- [ ] T12: 1-page and 4-page real scrapes (sizes/titles only), replay with the same key, and the four refused URLs leaving no operation row — exact commands in the T12 hand-off; needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
 - [ ] T04: shell click-through against refs 20 and 24 (needs an agent with `onboardingStep: "done"` — first writer is T23); sidebar collapse persistence; bell and credits block against real rows; dark mode.
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] After T11 merges (it is the only task editing `convex/crons.ts` right now): remove the `provider-operation-sweep` cron and the no-op `integrations/firecrawl.ts#sweepStaleFirecrawlOperations` it targets — T02's `paid-call-park-stale` + `commitExpiredHolds` cover a lost scrape.
+- [ ] Scrape budgets live beside the code in `convex/integrations/firecrawlPages.ts` (`SCRAPE_*`) and `URL_MAX_LENGTH` in `lib/urlSafety.ts`; decide whether they move to `lib/limits.ts`. `TRIAL_SCRAPES_LIFETIME_LIMIT` in `limits.ts` is now unreferenced with a stale comment.
+- [ ] Validators with no caller after T12: `consumesPageAllowance`, `vRetrievedPage`, `RESEARCH_PAGES_PER_PROSPECT`, `sha256Hex`, `unwrapConvexErrorText` (T30 may still want `vRetrievedPage` for lead evidence).
+- [ ] Billed scrapes store a small JSON blob in Convex file storage for replay and nothing deletes it (≤ a few MB per trial). Add a retention sweep once the replay window is decided.
+- [ ] `integrations/firecrawl.ts` imports the plain `withCredits` function from `billing/` — deliberate (the money rule wins), but `convex/README.md` says integrations never import a domain; reword the README.
+- [ ] Remove `internal.integrations.firecrawl.diagnosticScrapeSite` and `agentmail.ts#diagnosticInboundState` before the public release (both marked TODO(T50)).
 - [ ] Rename `convex/ai/schema.ts` (Convex drops any `schema.ts` from the generated API listing; it holds no functions, so nothing breaks, but the name collides with the data schema) → e.g. `ai/strictSchema.ts`.
 - [ ] Move T03's constants from `convex/ai/run.ts` into `convex/lib/limits.ts`: `AI_INPUT_CHAR_BUDGET`, `AI_INPUT_TRUNCATION_MARK`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_ATTEMPTS` (= the worst-case `ai_calls` reservation), `AI_TRANSPORT_RETRIES`, `AI_REQUEST_TIMEOUT_MS`.
 - [ ] Add a `PROVIDER_UNAVAILABLE` error code and point `GATEWAY_UNAVAILABLE` in `convex/ai/failures.ts` at it (currently reuses `PLATFORM_CAPACITY`, which reads as "budget spent").
