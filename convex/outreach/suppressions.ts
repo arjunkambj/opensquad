@@ -11,15 +11,15 @@
  * Unique (workspaceId, kind, normalizedValue) is enforced transactionally;
  * re-adding is an idempotent no-op returning the existing row.
  */
-import { internalMutation, mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, mutation, query } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { v } from "convex/values";
 import {
   requireWorkspaceEditor,
   requireWorkspaceMember,
-} from "./lib/auth";
-import type { AuthCtx } from "./lib/auth";
+} from "../lib/auth";
+import type { AuthCtx } from "../lib/auth";
 import {
   boundedLimit,
   domainError,
@@ -28,9 +28,9 @@ import {
   normalizeEmailAddress,
   vSuppressionKind,
   vSuppressionReason,
-} from "./lib/validators";
-import type { SuppressionKind, SuppressionReason } from "./lib/validators";
-import { suppressionFields } from "./schema";
+} from "../lib/validators";
+import type { SuppressionKind, SuppressionReason } from "../lib/validators";
+import { suppressionFields } from "../schema";
 
 export const vSuppressionDoc = v.object({
   _id: v.id("suppressions"),

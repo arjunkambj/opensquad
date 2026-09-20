@@ -44,7 +44,7 @@ export function EditDraftDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const revise = useMutation(api.drafts.revise)
+  const revise = useMutation(api.outreach.drafts.revise)
   const intentId = useRequestIntents()
 
   const [recipient, setRecipient] = useState(draft.recipient)

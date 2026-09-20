@@ -31,7 +31,7 @@
  *   decisions.
  *
  *   Proposals go out through the mail path — a booking-linked draft is made
- *   by `draftProposal` → `internal.drafts.createRevision`, approved via
+ *   by `draftProposal` → `internal.outreach.draftRevisions.createRevision`, approved via
  *   `approvals.approve`, and dispatched by `sending.sendApprovedDraft`. There
  *   is no booking-specific send. The draft's `bookingId`/`bookingVersion`
  *   link is re-validated at approval AND at dispatch, and only the send's
@@ -72,7 +72,7 @@ import {
   findLeadEventByOperationKey,
 } from "./leads/events";
 import { resolveOutboundRecipient } from "./conversations";
-import { vDraftDoc } from "./drafts";
+import { vDraftDoc } from "./outreach/draftsModel";
 import { bookingFields } from "./schema";
 
 export const vBookingDoc = v.object({
@@ -314,7 +314,7 @@ async function retireLinkedDrafts(
     if (draft.supersededAt === undefined) {
       await ctx.db.patch("drafts", draft._id, { supersededAt: Date.now() });
     }
-    await ctx.runMutation(internal.sending.cancelDraftParkedAttempts, {
+    await ctx.runMutation(internal.outreach.sendControls.cancelDraftParkedAttempts, {
       workspaceId: booking.workspaceId,
       draftId: draft._id,
       reason,
@@ -485,7 +485,7 @@ export const propose = mutation({
 
 /**
  * Create the EXACT draft that carries this proposal out — the ordinary draft
- * path, not a booking-specific send. `internal.drafts.createRevision` does
+ * path, not a booking-specific send. `internal.outreach.draftRevisions.createRevision` does
  * the revision numbering, payload hash, context-version bump and
  * parked-attempt retirement; this mutation only proves the booking belongs
  * on the draft (`proposed`, this version, this lead's thread) and links the
@@ -509,7 +509,7 @@ export const draftProposal = mutation({
     draft: vDraftDoc,
   }),
   // Explicit return annotation: the inferred cycle draftProposal →
-  // internal.drafts.createRevision → back here would otherwise make the
+  // internal.outreach.draftRevisions.createRevision → back here would otherwise make the
   // handler `any`.
   handler: async (
     ctx,
@@ -588,7 +588,7 @@ export const draftProposal = mutation({
       );
     }
     const draft: Doc<"drafts"> = await ctx.runMutation(
-      internal.drafts.createRevision,
+      internal.outreach.draftRevisions.createRevision,
       {
         conversationId: conversation._id,
         recipient,

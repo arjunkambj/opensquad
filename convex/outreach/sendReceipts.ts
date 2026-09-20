@@ -1,215 +1,32 @@
 /**
- * Send attempts + provider event receipts (architecture §4.3, §8).
+ * Provider event receipts — the `emailEventReceipts` write path (§4.3).
  *
- * This module owns the member-facing reads and the `emailEventReceipts`
- * write path. The send lifecycle itself (preflight, reserve, dispatch,
- * reconcile) lives in `sending.ts` — attempts here are only ever read.
- *
- * Receipts (§4.3): every verified provider event lands once per
- * `providerEventId` and once per `applicationKey`. Outbound delivery events
- * use `outbound:<providerMessageRef>:<eventType>`; inbound messages use
+ * Every verified provider event lands once per `providerEventId` and once
+ * per `applicationKey`. Outbound delivery events use
+ * `outbound:<providerMessageRef>:<eventType>`; inbound messages use
  * `incoming:<inboxRef>:<providerMessageRef>` so a provider re-delivery under
  * a new event id can never advance the conversation twice. A delivery event
  * that arrives BEFORE the send attempt recorded its providerMessageRef stays
- * `pending`; `sending.ts` folds it onto the attempt afterwards. P11 consumes
- * pending inbound receipts fully.
+ * `pending`; the send outcome path folds it onto the attempt afterwards.
  */
+import { internal } from "../_generated/api";
+import type { Doc, Id } from "../_generated/dataModel";
+import { internalMutation } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
 import {
-  internalMutation,
-  internalQuery,
-  query,
-} from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { v } from "convex/values";
-import { requireWorkspaceMember } from "./lib/auth";
-import {
-  boundedLimit,
   boundedString,
   directionForApplicationKey,
   domainError,
   invalid,
   PROVIDER_REF_MAX_LENGTH,
   vMessageSource,
-  vSendAttemptState,
-} from "./lib/validators";
-import type { MessageSource } from "./lib/validators";
-import { emailEventReceiptFields, sendAttemptFields } from "./schema";
-
-export const vSendAttemptDoc = v.object({
-  _id: v.id("sendAttempts"),
-  _creationTime: v.number(),
-  ...sendAttemptFields,
-});
-
-export const vEmailEventReceiptDoc = v.object({
-  _id: v.id("emailEventReceipts"),
-  _creationTime: v.number(),
-  ...emailEventReceiptFields,
-});
-
-/* ------------------------------------------------------------------ */
-/* Public reads                                                        */
-/* ------------------------------------------------------------------ */
-
-/** One send attempt; foreign or cross-workspace IDs return `NOT_FOUND`. */
-export const get = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    sendAttemptId: v.id("sendAttempts"),
-  },
-  returns: vSendAttemptDoc,
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const attempt = await ctx.db.get("sendAttempts", args.sendAttemptId);
-    if (attempt === null || attempt.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "send attempt not found");
-    }
-    return attempt;
-  },
-});
-
-/** Attempts recorded for one draft revision (one logical send, bounded). */
-export const listForDraft = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    draftId: v.id("drafts"),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(vSendAttemptDoc),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const draft = await ctx.db.get("drafts", args.draftId);
-    if (draft === null || draft.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "draft not found");
-    }
-    return await ctx.db
-      .query("sendAttempts")
-      .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
-      .order("desc")
-      .take(boundedLimit(args.limit));
-  },
-});
-
-/** Attempts across all revisions of a conversation (audit surface). */
-export const listForConversation = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    conversationId: v.id("conversations"),
-    state: v.optional(vSendAttemptState),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(vSendAttemptDoc),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const conversation = await ctx.db.get("conversations", args.conversationId);
-    if (
-      conversation === null ||
-      conversation.workspaceId !== args.workspaceId
-    ) {
-      throw domainError("NOT_FOUND", "conversation not found");
-    }
-    const limit = boundedLimit(args.limit);
-    const state = args.state;
-    if (state !== undefined) {
-      return await ctx.db
-        .query("sendAttempts")
-        .withIndex("by_conversationId_and_state", (q) =>
-          q
-            .eq("conversationId", args.conversationId)
-            .eq("state", state),
-        )
-        .order("desc")
-        .take(limit);
-    }
-    // No state filter → newest-first audit order (the state index would
-    // return state-bucketed groups, not chronology).
-    return await ctx.db
-      .query("sendAttempts")
-      .withIndex("by_conversationId_and_createdAt", (q) =>
-        q.eq("conversationId", args.conversationId),
-      )
-      .order("desc")
-      .take(limit);
-  },
-});
-
-/** Recent provider event receipts for the workspace (member read). */
-export const listReceipts = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    providerMessageRef: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(vEmailEventReceiptDoc),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const limit = boundedLimit(args.limit);
-    const providerMessageRef = args.providerMessageRef;
-    if (providerMessageRef !== undefined) {
-      // by_providerMessageRef is a global index — the workspace filter is
-      // applied in the query so a known ref can never read across tenants.
-      return await ctx.db
-        .query("emailEventReceipts")
-        .withIndex("by_providerMessageRef", (q) =>
-          q.eq("providerMessageRef", providerMessageRef),
-        )
-        .filter((q) => q.eq(q.field("workspaceId"), args.workspaceId))
-        .order("desc")
-        .take(limit);
-    }
-    // Workspace scan via the application-key index prefix.
-    return await ctx.db
-      .query("emailEventReceipts")
-      .withIndex("by_workspaceId_and_applicationKey", (q) =>
-        q.eq("workspaceId", args.workspaceId),
-      )
-      .order("desc")
-      .take(limit);
-  },
-});
-
-/* ------------------------------------------------------------------ */
-/* Internal reads (sending.ts's evidence/reconcile paths)                */
-/* ------------------------------------------------------------------ */
-
-/** Attempt doc for internal actions — no auth (internal boundary only). */
-export const getInternal = internalQuery({
-  args: { sendAttemptId: v.id("sendAttempts") },
-  returns: v.union(vSendAttemptDoc, v.null()),
-  handler: async (ctx, args) =>
-    await ctx.db.get("sendAttempts", args.sendAttemptId),
-});
-
-/**
- * Every receipt bearing on one attempt — keyed by its provider message ref
- * (receipts fold onto attempts through that ref, so handled and pending
- * rows alike live on this index).
- */
-export const receiptsForAttempt = internalQuery({
-  args: { sendAttemptId: v.id("sendAttempts") },
-  returns: v.array(vEmailEventReceiptDoc),
-  handler: async (ctx, args) => {
-    const attempt = await ctx.db.get("sendAttempts", args.sendAttemptId);
-    const providerMessageRef = attempt?.providerMessageRef;
-    if (providerMessageRef === undefined) {
-      return [];
-    }
-    return await ctx.db
-      .query("emailEventReceipts")
-      .withIndex("by_providerMessageRef", (q) =>
-        q.eq("providerMessageRef", providerMessageRef),
-      )
-      .collect();
-  },
-});
-
-/* ------------------------------------------------------------------ */
-/* Receipt write path — internal; P11's webhook handler calls this       */
-/* ------------------------------------------------------------------ */
+} from "../lib/validators";
+import type { MessageSource } from "../lib/validators";
+import { vEmailEventReceiptDoc } from "./sendAttempts";
+import { v } from "convex/values";
 
 export const PROVIDER_FACTS_MAX_BYTES = 4096;
+
 export const RECEIPT_EVENT_IDS_MAX = 10;
 
 const vRecordReceiptResult = v.object({
@@ -464,7 +281,7 @@ export async function applyReceiptToAttempt(
   ) {
     const draft = await ctx.db.get("drafts", attempt.draftId);
     if (draft !== null) {
-      await ctx.runMutation(internal.suppressions.recordSuppression, {
+      await ctx.runMutation(internal.outreach.suppressions.recordSuppression, {
         workspaceId: attempt.workspaceId,
         kind: "email",
         value: draft.normalizedRecipient,

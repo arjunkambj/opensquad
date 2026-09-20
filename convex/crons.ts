@@ -14,7 +14,7 @@ const crons = cronJobs();
 crons.interval(
   "send-attempt-sweep",
   { minutes: 5 },
-  internal.sending.sweepStaleAttemptsGlobal,
+  internal.outreach.sendSweeps.sweepStaleAttemptsGlobal,
   {},
 );
 

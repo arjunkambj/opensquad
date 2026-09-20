@@ -71,7 +71,7 @@ import {
   recordConversationNote,
   resolveOutboundRecipient,
 } from "./conversations";
-import { matchSuppression } from "./suppressions";
+import { matchSuppression } from "./outreach/suppressions";
 
 /* ------------------------------------------------------------------ */
 /* Receipt facts                                                       */
@@ -315,12 +315,12 @@ async function matchConversation(
  * Apply one verified inbound message to its conversation, in the order
  * architecture §8 requires and V17 tests.
  *
- * STEP 1 — `internal.drafts.applyInboundContext`, first and unconditionally.
+ * STEP 1 — `internal.outreach.conversationStaging.applyInboundContext`, first and unconditionally.
  * One call, two invalidations, and this module reimplements neither: it
  * advances `contextVersion` (which is what makes every live approval refuse
  * at preflight with `context_changed`, and every recorded approval stop
  * applying), and calls
- * `internal.sending.cancelParkedConversationAttempts` (which releases each
+ * `internal.outreach.sendControls.cancelParkedConversationAttempts` (which releases each
  * `reserved` attempt's usage reservation) — that last one being "cancel
  * pending follow-ups".
  *
@@ -353,7 +353,7 @@ async function applyToConversation(
   replyWork: ReplyGateVerdict;
 }> {
   // 1. Version bump, approval invalidation, parked follow-up cancellation.
-  await ctx.runMutation(internal.drafts.applyInboundContext, {
+  await ctx.runMutation(internal.outreach.conversationStaging.applyInboundContext, {
     conversationId: conversation._id,
     lastInboundMessageRef: receipt.providerMessageRef,
     // Ingest time, never the provider's `timestamp`: the component's
@@ -528,7 +528,7 @@ async function enforceOptOut(
         targets.add(recipient);
       }
       for (const value of targets) {
-        await ctx.runMutation(internal.suppressions.recordSuppression, {
+        await ctx.runMutation(internal.outreach.suppressions.recordSuppression, {
           workspaceId: conversation.workspaceId,
           kind: "email",
           value,

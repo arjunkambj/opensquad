@@ -52,7 +52,7 @@ import {
   vQuarantineReason,
 } from "./lib/validators";
 import type { QuarantineReason } from "./lib/validators";
-import { recordReceipt } from "./sendAttempts";
+import { recordReceipt } from "./outreach/sendReceipts";
 
 /** Longest application key `recordReceipt` accepts. */
 const APPLICATION_KEY_MAX_LENGTH = 500;

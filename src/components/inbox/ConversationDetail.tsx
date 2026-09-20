@@ -124,7 +124,7 @@ function LoadedConversation({
   // fact `resume` would refuse on. Checked against `lastInboundFrom`, which is
   // the only address this page can verify honestly.
   const suppression = useQuery(
-    api.suppressions.check,
+    api.outreach.suppressions.check,
     conversation.lastInboundFrom === undefined
       ? "skip"
       : { workspaceId, email: conversation.lastInboundFrom },

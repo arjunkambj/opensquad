@@ -36,7 +36,7 @@ import { internalAction, internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { recordQuarantinedEvent } from "../quarantine";
-import { recordReceipt } from "../sendAttempts";
+import { recordReceipt } from "../outreach/sendReceipts";
 import {
   evaluateOptOutText,
   inboundApplicationKey,

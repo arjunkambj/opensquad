@@ -53,9 +53,9 @@ import {
   vTakeoverReason,
 } from "./lib/validators";
 import type { ConversationNoteKind } from "./lib/validators";
-import { getConversationInWorkspace, vConversationDoc } from "./drafts";
-import { sendResultCode, vSendResultCode } from "./sending";
-import { matchSuppression } from "./suppressions";
+import { getConversationInWorkspace, vConversationDoc } from "./outreach/draftsModel";
+import { sendResultCode, vSendResultCode } from "./outreach/sendGates";
+import { matchSuppression } from "./outreach/suppressions";
 import { conversationNoteFields } from "./schema";
 
 /* ------------------------------------------------------------------ */
@@ -771,7 +771,7 @@ async function advanceContext(
     contextVersion: conversation.contextVersion + 1,
     updatedAt: Date.now(),
   });
-  await ctx.runMutation(internal.drafts.retireConversationWork, {
+  await ctx.runMutation(internal.outreach.conversationStaging.retireConversationWork, {
     conversationId: conversation._id,
     reason,
   });
