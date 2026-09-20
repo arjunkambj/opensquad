@@ -2,14 +2,14 @@
  * `/contacts` — everyone the agent found, what it learned about them, and
  * what happens next (ref 23).
  *
- * The container owns every Convex call on this screen and the URL state
- * behind it; the table, the filters, the bulk bar and the drawer are
- * presentational and take plain props. The list is a live subscription, which
- * is what makes rows appear while a run is in progress.
+ * The container owns every Convex call on this screen; the table, the
+ * filters, the bulk bar and the drawer are presentational and take plain
+ * props, and the URL state behind them is `use-contacts-search.ts`. The list
+ * is a live subscription, which is what makes rows appear while a run is in
+ * progress.
  */
-import { useNavigate, useSearch } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { ACTION_PRICES } from "../../../convex/lib/limits"
@@ -18,9 +18,6 @@ import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 import { canEdit } from "@/lib/workspace-role"
-import type { PageSize } from "@/lib/search-params"
-import type { ContactsSearch } from "@/routes/_dashboard/_workspace/contacts"
-import { exclusiveFilters, withContactFilters } from "./contacts-model"
 import { LeadDrawer } from "./drawer/LeadDrawer"
 import { BulkActionsBar } from "./filters/BulkActionsBar"
 import { ContactsFilters } from "./filters/ContactsFilters"
@@ -28,14 +25,8 @@ import { NoLeadsState } from "./NoLeadsState"
 import { RunStateStrip } from "./RunStateStrip"
 import { ContactsTable } from "./table/ContactsTable"
 import { TableFooterBar } from "./table/TableFooterBar"
+import { useContactsSearch } from "./use-contacts-search"
 import { useLeadActions } from "./use-lead-actions"
-
-const CONTACTS_ROUTE = "/_dashboard/_workspace/contacts"
-
-const DEFAULT_PAGE_SIZE: PageSize = 25
-
-/** How long the search box waits before it becomes a query (and a URL). */
-const SEARCH_DEBOUNCE_MS = 350
 
 const PRICES = {
   email: ACTION_PRICES.get_email.credits,
@@ -76,22 +67,11 @@ function ContactsBody({
   workspaceId: Id<"workspaces">
   canAct: boolean
 }) {
-  const search = useSearch({ from: CONTACTS_ROUTE })
-  const navigate = useNavigate()
+  const url = useContactsSearch()
   const actions = useLeadActions(workspaceId)
-
   const [selected, setSelected] = useState<Set<Id<"prospects">>>(new Set())
-  const [text, setText] = useState(search.q ?? "")
-  /**
-   * The cursor of each page already visited, so Previous can return to one.
-   * `null` is page one, which has no cursor. It lives in component state
-   * because only this session has it: a link opened straight onto a later
-   * page has no trail, and the footer says so rather than offering a
-   * Previous that would land somewhere else.
-   */
-  const [trail, setTrail] = useState<(string | null)[]>([])
 
-  const limit = search.limit ?? DEFAULT_PAGE_SIZE
+  const { search, limit } = url
   const page = useQuery(api.leads.queries.list, {
     workspaceId,
     ...(search.q !== undefined ? { text: search.q } : {}),
@@ -106,98 +86,25 @@ function ContactsBody({
   const signals = useQuery(api.leads.counts.byStrategy, { workspaceId })
   const credits = useQuery(api.billing.credits.balance, { workspaceId })
 
-  // The search box types faster than a query should run, and every keystroke
-  // would otherwise be a history entry as well as a page of results.
-  useEffect(() => {
-    const trimmed = text.trim()
-    if (trimmed === (search.q ?? "")) {
-      return
-    }
-    const timer = setTimeout(() => {
-      setTrail([])
-      void navigate({
-        to: "/contacts",
-        search: (currentSearch: ContactsSearch) =>
-          withContactFilters(currentSearch, {
-            q: trimmed === "" ? undefined : trimmed,
-          }),
-      })
-    }, SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(timer)
-  }, [navigate, search.q, text])
-
-  const applyFilter = (patch: Partial<ContactsSearch>) => {
-    setTrail([])
-    setSelected(new Set())
-    // The company-search index filters on stage and approval only, so asking
-    // for a score means leaving the search rather than pretending both hold.
-    const applied =
-      patch.score === undefined ? patch : { ...patch, q: undefined }
-    if ("q" in applied) {
-      setText(applied.q ?? "")
-    }
-    void navigate({
-      to: "/contacts",
-      search: (currentSearch: ContactsSearch) =>
-        withContactFilters(currentSearch, exclusiveFilters(applied)),
-    })
-  }
-
-  const goToPage = (cursor: string | undefined, pageNumber: number) => {
-    void navigate({
-      to: "/contacts",
-      search: (currentSearch: ContactsSearch) => ({
-        ...currentSearch,
-        cursor,
-        page: pageNumber <= 1 ? undefined : pageNumber,
-      }),
-    })
-  }
-
-  const openLead = (prospectId: Id<"prospects">) => {
-    void navigate({
-      to: "/contacts",
-      search: (currentSearch: ContactsSearch) => ({
-        ...currentSearch,
-        lead: prospectId,
-      }),
-    })
-  }
-
-  const closeLead = () => {
-    void navigate({
-      to: "/contacts",
-      search: (currentSearch: ContactsSearch) => ({
-        ...currentSearch,
-        lead: undefined,
-      }),
-    })
-  }
-
   const selectedIds = [...selected]
+  const clearSelection = () => setSelected(new Set())
   const spend = {
     canAct,
     remaining: credits === undefined ? null : (credits?.remaining ?? 0),
   }
   const busy = actions.pending !== null
-  const filtered =
-    search.q !== undefined ||
-    search.stage !== undefined ||
-    search.approval !== undefined ||
-    search.score !== undefined
-  const pageNumber = search.page ?? 1
-  const unfiltered =
-    search.q === undefined &&
-    search.stage === undefined &&
-    search.approval === undefined &&
-    search.score === undefined
 
-  const runWith = async (
+  const filterTo = (patch: Parameters<typeof url.applyFilter>[0]) => {
+    clearSelection()
+    url.applyFilter(patch)
+  }
+
+  const inBulk = async (
     call: (ids: Id<"prospects">[]) => Promise<void>,
     ids: Id<"prospects">[],
   ) => {
     await call(ids)
-    setSelected(new Set())
+    clearSelection()
   }
 
   return (
@@ -206,15 +113,15 @@ function ContactsBody({
       {run === undefined || run === null ? null : (
         <RunStateStrip
           run={run}
-          onShowNeedsAttention={() => applyFilter({ stage: "needs_attention" })}
+          onShowNeedsAttention={() => filterTo({ stage: "needs_attention" })}
         />
       )}
 
       <ContactsFilters
         search={search}
-        text={text}
-        onText={setText}
-        onFilter={applyFilter}
+        text={url.text}
+        onText={url.setText}
+        onFilter={filterTo}
       />
 
       <BulkActionsBar
@@ -222,15 +129,15 @@ function ContactsBody({
         busy={busy}
         spend={spend}
         prices={PRICES}
-        onGetEmails={() => void runWith(actions.getEmails, selectedIds)}
-        onResearch={() => void runWith(actions.research, selectedIds)}
+        onGetEmails={() => void inBulk(actions.getEmails, selectedIds)}
+        onResearch={() => void inBulk(actions.research, selectedIds)}
         onApprove={() =>
-          void runWith((ids) => actions.decide(ids, "approved"), selectedIds)
+          void inBulk((ids) => actions.decide(ids, "approved"), selectedIds)
         }
         onReject={() =>
-          void runWith((ids) => actions.decide(ids, "rejected"), selectedIds)
+          void inBulk((ids) => actions.decide(ids, "rejected"), selectedIds)
         }
-        onClear={() => setSelected(new Set())}
+        onClear={clearSelection}
       />
 
       {actions.notice === null ? null : (
@@ -255,8 +162,8 @@ function ContactsBody({
         <NoLeadsState
           run={run ?? null}
           signals={signals ?? []}
-          filtered={filtered}
-          onClearFilters={() => applyFilter({ q: undefined })}
+          filtered={url.filtered}
+          onClearFilters={() => filterTo({ q: undefined })}
         />
       ) : (
         <>
@@ -266,10 +173,10 @@ function ContactsBody({
             busy={busy}
             spend={spend}
             prices={PRICES}
-            sortable={unfiltered}
+            sortable={!url.filtered}
             lowestScoreFirst={search.sort === "lowest"}
             onToggleSort={() =>
-              applyFilter({
+              filterTo({
                 sort: search.sort === "lowest" ? undefined : "lowest",
               })
             }
@@ -289,7 +196,7 @@ function ContactsBody({
                   }
                   return next
                 }),
-              open: openLead,
+              open: url.openLead,
               getEmail: (prospectId) => void actions.getEmails([prospectId]),
               research: (prospectId) => void actions.research([prospectId]),
               approve: (prospectId) =>
@@ -300,32 +207,22 @@ function ContactsBody({
           />
           <TableFooterBar
             shown={page.items.length}
-            firstIndex={(pageNumber - 1) * limit + 1}
+            firstIndex={(url.pageNumber - 1) * limit + 1}
             total={page.total}
             pageSize={limit}
-            canGoBack={trail.length > 0}
+            canGoBack={url.canGoBack}
             canGoForward={page.hasMore && page.cursor !== null}
-            onPageSize={(size) => {
-              setTrail([])
-              void navigate({
-                to: "/contacts",
-                search: (currentSearch: ContactsSearch) =>
-                  withContactFilters(currentSearch, { limit: size }),
-              })
-            }}
+            onPageSize={url.setPageSize}
             onBack={() => {
-              const previous = trail[trail.length - 1] ?? null
-              setTrail(trail.slice(0, -1))
-              setSelected(new Set())
-              goToPage(previous ?? undefined, pageNumber - 1)
+              clearSelection()
+              url.goBack()
             }}
             onForward={() => {
               if (page.cursor === null) {
                 return
               }
-              setTrail([...trail, search.cursor ?? null])
-              setSelected(new Set())
-              goToPage(page.cursor, pageNumber + 1)
+              clearSelection()
+              url.goForward(page.cursor)
             }}
           />
         </>
@@ -338,9 +235,13 @@ function ContactsBody({
           busy={busy}
           spend={spend}
           prices={PRICES}
-          onClose={closeLead}
-          onApprove={(prospectId) => void actions.decide([prospectId], "approved")}
-          onReject={(prospectId) => void actions.decide([prospectId], "rejected")}
+          onClose={url.closeLead}
+          onApprove={(prospectId) =>
+            void actions.decide([prospectId], "approved")
+          }
+          onReject={(prospectId) =>
+            void actions.decide([prospectId], "rejected")
+          }
           onGetEmail={(prospectId) => void actions.getEmails([prospectId])}
           onResearch={(prospectId) => void actions.research([prospectId])}
         />

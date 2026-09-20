@@ -20,8 +20,7 @@
  * Every business update and its `leadEvents` row are written in ONE
  * transaction, so the history can never disagree with the lead.
  */
-import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { Doc } from "../_generated/dataModel";
 import { internalMutation, mutation } from "../_generated/server";
 import { requireWorkspaceEditor } from "../lib/auth";
 import {
@@ -35,14 +34,13 @@ import {
   vLeadApproval,
   vLeadStage,
 } from "../lib/validators";
-import type { LeadApproval } from "../lib/validators";
+import { decideOne } from "./approval";
 import {
   appendLeadEvent,
   findLeadEventByOperationKey,
   vLeadEventDoc,
 } from "./events";
 import { loadProspectForWrite } from "./model";
-import { cancelWorkForRejectedLead } from "./rejection";
 import { v } from "convex/values";
 
 /**
@@ -53,7 +51,7 @@ import { v } from "convex/values";
  *
  * Rejecting also moves the lead to the `rejected` stage, clears
  * `nextActionAt` so the state machine stops offering it work, and retires the
- * outreach it had queued (`leads/rejection.ts`). Per PLAN §9.1 it never
+ * outreach it had queued (`leads/approval.ts`). Per PLAN §9.1 it never
  * refunds by itself: a reveal already in flight still bills, and its address
  * is still stored.
  *
@@ -120,90 +118,6 @@ export const setApproval = mutation({
     return { decided, unchanged };
   },
 });
-
-/** One lead's decision, written with its event in the same transaction. */
-async function decideOne(
-  ctx: MutationCtx,
-  args: {
-    workspaceId: Id<"workspaces">;
-    prospectId: Id<"prospects">;
-    approval: LeadApproval;
-    identityKey: string;
-    requestId: string;
-    reason?: string;
-  },
-): Promise<boolean> {
-  const prospect = await loadProspectForWrite(
-    ctx,
-    args.workspaceId,
-    args.prospectId,
-  );
-  const operationKey = `lead:${args.prospectId}:approval:${args.requestId}`;
-  const prior = await findLeadEventByOperationKey(
-    ctx,
-    args.workspaceId,
-    operationKey,
-  );
-  if (prior !== null) {
-    if (prior.details?.toApproval !== args.approval) {
-      throw domainError(
-        "CONFLICT",
-        `requestId ${args.requestId} already recorded a different decision`,
-      );
-    }
-    return false;
-  }
-  if (prospect.approval === args.approval) {
-    // Already decided the same way — a deliberate no-op, not a new event.
-    return false;
-  }
-
-  const now = Date.now();
-  const rejected = args.approval === "rejected";
-  await ctx.db.patch("prospects", prospect._id, {
-    approval: args.approval,
-    approvedBy: "user",
-    updatedAt: now,
-    ...(args.reason !== undefined ? { stageReason: args.reason } : {}),
-    // A rejected lead leaves the pipeline and stops being due for work — but
-    // a reveal already in flight keeps its watchdog, because the sweep finds
-    // a lost job by the lead being DUE. Rejecting stops what has not started
-    // (PLAN §9.1); it does not strand a request that already left us.
-    ...(rejected
-      ? {
-          stage: "rejected" as const,
-          ...(prospect.emailStatus === "revealing"
-            ? {}
-            : { nextActionAt: undefined }),
-        }
-      : {}),
-  });
-  if (rejected) {
-    await cancelWorkForRejectedLead(
-      ctx,
-      prospect,
-      args.reason ?? "lead rejected",
-    );
-  }
-  await appendLeadEvent(ctx, {
-    workspaceId: prospect.workspaceId,
-    prospectId: prospect._id,
-    kind: "approval_changed",
-    summary: rejected ? "Lead rejected" : "Lead approved for outreach",
-    operationKey,
-    actor: { source: "human", identityKey: args.identityKey },
-    ...(rejected && prospect.stage !== "rejected"
-      ? { fromStage: prospect.stage, toStage: "rejected" as const }
-      : {}),
-    details: {
-      fromApproval: prospect.approval,
-      toApproval: args.approval,
-      approvalActor: "user",
-      ...(args.reason !== undefined ? { reason: args.reason } : {}),
-    },
-  });
-  return true;
-}
 
 /**
  * Append a note to the lead's history. A note IS the event — the lead row is

@@ -47,7 +47,7 @@ export const submitReveals = internalAction({
     ctx,
     args,
   ): Promise<{ submitted: number; released: number }> => {
-    const targets = await ctx.runQuery(internal.leads.emailReveal.revealTargets, {
+    const targets = await ctx.runQuery(internal.leads.emailRevealState.revealTargets, {
       workspaceId: args.workspaceId,
       prospectIds: args.prospectIds,
     });
@@ -159,7 +159,7 @@ export const driveLeadReveal = internalAction({
 
 /**
  * The recovery sweep's lead half (scheduled by
- * `leads/emailReveal.ts#recoverStalledReveals`): a lead still `revealing`
+ * `leads/emailRevealState.ts#recoverStalledReveals`): a lead still `revealing`
  * past its watchdog lost whoever was polling for it. Ask the job once more,
  * and if no job reference was ever recorded, put the lead back to `locked`.
  */
@@ -218,7 +218,7 @@ async function applyPoll(
   polled: RevealPollResult,
 ): Promise<void> {
   if (polled.status === "revealed") {
-    await ctx.runMutation(internal.leads.emailReveal.applyRevealedEmail, {
+    await ctx.runMutation(internal.leads.emailRevealState.applyRevealedEmail, {
       workspaceId: target.workspaceId,
       prospectId: target.prospectId,
       contact: polled.contact,
@@ -226,7 +226,7 @@ async function applyPoll(
     return;
   }
   if (polled.status === "no_email") {
-    await ctx.runMutation(internal.leads.emailReveal.applyNoEmail, {
+    await ctx.runMutation(internal.leads.emailRevealState.applyNoEmail, {
       workspaceId: target.workspaceId,
       prospectId: target.prospectId,
     });
@@ -263,7 +263,7 @@ async function release(
     return 0;
   }
   const result = await ctx.runMutation(
-    internal.leads.emailReveal.releaseReveal,
+    internal.leads.emailRevealState.releaseReveal,
     { workspaceId, prospectIds },
   );
   return result.released;
