@@ -25,6 +25,10 @@ import type * as company_mutations from "../company/mutations.js";
 import type * as company_queries from "../company/queries.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as inbox_backfill from "../inbox/backfill.js";
+import type * as inbox_connectActions from "../inbox/connectActions.js";
+import type * as inbox_connection from "../inbox/connection.js";
+import type * as inbox_connectionState from "../inbox/connectionState.js";
 import type * as inbox_conversationLifecycle from "../inbox/conversationLifecycle.js";
 import type * as inbox_conversationNotes from "../inbox/conversationNotes.js";
 import type * as inbox_conversationResume from "../inbox/conversationResume.js";
@@ -34,11 +38,14 @@ import type * as inbox_conversationsModel from "../inbox/conversationsModel.js";
 import type * as inbox_inbound from "../inbox/inbound.js";
 import type * as inbox_inboundApply from "../inbox/inboundApply.js";
 import type * as inbox_inboundModel from "../inbox/inboundModel.js";
+import type * as inbox_inboundRoute from "../inbox/inboundRoute.js";
+import type * as inbox_model from "../inbox/model.js";
 import type * as inbox_quarantine from "../inbox/quarantine.js";
 import type * as inbox_receiptDrain from "../inbox/receiptDrain.js";
 import type * as inbox_replyGate from "../inbox/replyGate.js";
 import type * as inbox_unassignedQueue from "../inbox/unassignedQueue.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
+import type * as integrations_agentmailApi from "../integrations/agentmailApi.js";
 import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as leads_events from "../leads/events.js";
 import type * as leads_evidence from "../leads/evidence.js";
@@ -46,6 +53,7 @@ import type * as leads_model from "../leads/model.js";
 import type * as leads_mutations from "../leads/mutations.js";
 import type * as leads_queries from "../leads/queries.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_secrets from "../lib/secrets.js";
 import type * as lib_validators_activity from "../lib/validators/activity.js";
 import type * as lib_validators_agents from "../lib/validators/agents.js";
 import type * as lib_validators_billing from "../lib/validators/billing.js";
@@ -83,6 +91,7 @@ import type * as outreach_suppressions from "../outreach/suppressions.js";
 import type * as workspaces_model from "../workspaces/model.js";
 import type * as workspaces_mutations from "../workspaces/mutations.js";
 import type * as workspaces_queries from "../workspaces/queries.js";
+import type * as workspaces_secrets from "../workspaces/secrets.js";
 
 import type {
   ApiFromModules,
@@ -108,6 +117,10 @@ declare const fullApi: ApiFromModules<{
   "company/queries": typeof company_queries;
   crons: typeof crons;
   http: typeof http;
+  "inbox/backfill": typeof inbox_backfill;
+  "inbox/connectActions": typeof inbox_connectActions;
+  "inbox/connection": typeof inbox_connection;
+  "inbox/connectionState": typeof inbox_connectionState;
   "inbox/conversationLifecycle": typeof inbox_conversationLifecycle;
   "inbox/conversationNotes": typeof inbox_conversationNotes;
   "inbox/conversationResume": typeof inbox_conversationResume;
@@ -117,11 +130,14 @@ declare const fullApi: ApiFromModules<{
   "inbox/inbound": typeof inbox_inbound;
   "inbox/inboundApply": typeof inbox_inboundApply;
   "inbox/inboundModel": typeof inbox_inboundModel;
+  "inbox/inboundRoute": typeof inbox_inboundRoute;
+  "inbox/model": typeof inbox_model;
   "inbox/quarantine": typeof inbox_quarantine;
   "inbox/receiptDrain": typeof inbox_receiptDrain;
   "inbox/replyGate": typeof inbox_replyGate;
   "inbox/unassignedQueue": typeof inbox_unassignedQueue;
   "integrations/agentmail": typeof integrations_agentmail;
+  "integrations/agentmailApi": typeof integrations_agentmailApi;
   "integrations/firecrawl": typeof integrations_firecrawl;
   "leads/events": typeof leads_events;
   "leads/evidence": typeof leads_evidence;
@@ -129,6 +145,7 @@ declare const fullApi: ApiFromModules<{
   "leads/mutations": typeof leads_mutations;
   "leads/queries": typeof leads_queries;
   "lib/auth": typeof lib_auth;
+  "lib/secrets": typeof lib_secrets;
   "lib/validators/activity": typeof lib_validators_activity;
   "lib/validators/agents": typeof lib_validators_agents;
   "lib/validators/billing": typeof lib_validators_billing;
@@ -166,6 +183,7 @@ declare const fullApi: ApiFromModules<{
   "workspaces/model": typeof workspaces_model;
   "workspaces/mutations": typeof workspaces_mutations;
   "workspaces/queries": typeof workspaces_queries;
+  "workspaces/secrets": typeof workspaces_secrets;
 }>;
 
 /**
