@@ -127,7 +127,7 @@ function ProvisionWorkspace() {
 }
 
 function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
-  const profile = useQuery(api.businessProfiles.get, {
+  const profile = useQuery(api.company.queries.get, {
     workspaceId: workspace._id,
   })
   const search = useSearch({ from: "/_dashboard/onboarding" })

@@ -1,53 +1,30 @@
 /**
- * Business profile — one current record per workspace (PLAN §7), the company
- * we are selling FOR. Website analysis (T20) fills it from the user's own
- * site; every field stays editable afterwards.
+ * Business profile edits (PLAN §7).
  *
- * Reads require any active member; writes require owner or operator and use
- * `expectedVersion` optimistic concurrency. Meaningful edits increment
- * `version`; `updatedBy` always records the authenticated actor.
+ * Writes require owner or operator and use `expectedVersion` optimistic
+ * concurrency. Meaningful edits increment `version`; `updatedBy` always
+ * records the authenticated actor.
  *
  * `analysisStatus` is owned by the analysis flow, not by this editor: a user
  * correcting their industry must not overwrite "analyzing" with "idle". T20
  * moves it through analyzing → ready|failed and sets `firstRunUsed` on
  * success only, so a blocked site costs the user nothing (PLAN §5).
  */
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "./lib/auth";
+import { mutation } from "../_generated/server";
+import { requireWorkspaceEditor } from "../lib/auth";
 import {
   boundedString,
   boundedStringList,
-  domainError,
-  normalizeHttpUrl,
   COMPANY_DESCRIPTION_MAX_LENGTH,
   COMPANY_LIST_ITEM_MAX_LENGTH,
   COMPANY_LIST_MAX_ITEMS,
   COMPANY_NAME_MAX_LENGTH,
   COMPANY_PAIN_POINTS_MAX_LENGTH,
-} from "./lib/validators";
-import { businessProfileFields } from "./schema";
-
-export const vBusinessProfileDoc = v.object({
-  _id: v.id("businessProfiles"),
-  _creationTime: v.number(),
-  ...businessProfileFields,
-});
-
-/** The workspace's current profile, or `null` before onboarding saves one. */
-export const get = query({
-  args: { workspaceId: v.id("workspaces") },
-  returns: v.union(vBusinessProfileDoc, v.null()),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    return await ctx.db
-      .query("businessProfiles")
-      .withIndex("by_workspaceId", (q) =>
-        q.eq("workspaceId", args.workspaceId),
-      )
-      .unique();
-  },
-});
+  domainError,
+  normalizeHttpUrl,
+} from "../lib/validators";
+import { vBusinessProfileDoc } from "./queries";
+import { v } from "convex/values";
 
 /**
  * Create-or-update the profile. Pass `expectedVersion: 0` when no profile may
