@@ -13,6 +13,9 @@ import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { ONBOARDING_STEPS } from "../../../convex/lib/validators"
 import type { OnboardingStep } from "../../../convex/lib/validators"
 import { CompanyStep } from "@/components/onboarding/steps/company/CompanyStep"
+import { CompanyFiltersStep } from "@/components/onboarding/steps/icp/CompanyFiltersStep"
+import { ExclusionsStep } from "@/components/onboarding/steps/icp/ExclusionsStep"
+import { JobTitlesStep } from "@/components/onboarding/steps/icp/JobTitlesStep"
 
 /* ------------------------------------------------------------------ */
 /* Where a step sits in the four dots                                   */
@@ -66,6 +69,24 @@ export const ONBOARDING_STEP_REGISTRY: Partial<
   Record<OnboardingStep, OnboardingStepEntry>
 > = {
   company: { dot: 1, stepInDot: 1, stepsInDot: 1, Component: CompanyStep },
+  icp_job_titles: {
+    dot: 2,
+    stepInDot: 1,
+    stepsInDot: 3,
+    Component: JobTitlesStep,
+  },
+  icp_company_filters: {
+    dot: 2,
+    stepInDot: 2,
+    stepsInDot: 3,
+    Component: CompanyFiltersStep,
+  },
+  icp_exclusions: {
+    dot: 2,
+    stepInDot: 3,
+    stepsInDot: 3,
+    Component: ExclusionsStep,
+  },
 }
 
 /* ------------------------------------------------------------------ */
