@@ -10,7 +10,6 @@ import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { actorLabel, formatInstant } from "@/components/shared/presentation"
-import { ActivityRangePicker } from "@/components/dashboard/ActivityRangePicker"
 import {
   EmptyState,
   ErrorState,
@@ -24,106 +23,43 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  activityRangeToBounds,
-  activityRangeToCalendar,
-  calendarRangeToSearch,
-} from "@/lib/date-ranges"
-import { withFilters } from "@/lib/search-params"
-import { DASHBOARD_DEFAULTS } from "@/routes/_dashboard/_workspace/dashboard"
 
 const DASHBOARD_ROUTE = "/_dashboard/_workspace/dashboard"
 
 /**
- * No `timeZone` option, deliberately. `picker.value` holds **civil days** —
- * browser-local midnights standing for wall-calendar dates that
- * `date-ranges.ts` already derived in the workspace's zone. Converting them
- * again here would shift the label off the day whose bounds were sent.
- */
-const dateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-})
-
-/**
- * Dated receipts, with the date picker attached **to this section** and not to
- * the page.
+ * Dated receipts — the feed the sidebar bell's "See all activity" leads to,
+ * at the foot of the dashboard.
  *
- * That placement is the whole point. `activity.list` is the only query in this
- * screen that takes `from`/`to`. A picker sitting in the page header would
- * read as though it filters everything below it, which would mean unfinished
- * work could be hidden by a date range.
- *
- * The cursor for this feed is the one that belongs in the URL: a dated
- * receipts position is shared context, so `?range=30d&cursor=…` is a link
- * worth pasting.
+ * It reads the SAME window the range pills chose for everything above it,
+ * handed down as `bounds` rather than re-derived, so the page can never head
+ * one window and list another's receipts. Only the page cursor is its own,
+ * and that is the one part of this screen worth pasting: `?range=30d&cursor=…`
+ * reopens the same page of the same window.
  */
 export function ActivityFeed({
   workspaceId,
   timezone,
+  bounds,
+  hint,
 }: {
   workspaceId: Id<"workspaces">
+  /** The workspace's zone — every row below is stamped on its clock. */
   timezone: string
+  /** The window the range pills chose, in the workspace's own days. */
+  bounds: { from: number; to: number }
+  /** That window in words, e.g. "Last 30 days". */
+  hint: string
 }) {
   const search = useSearch({ from: DASHBOARD_ROUTE })
-  const navigate = useNavigate()
-
-  const range = search.range ?? DASHBOARD_DEFAULTS.range
-  // The window is the WORKSPACE's day, not the browser's. Every row below is
-  // stamped with `formatInstant(…, timezone)` and every send allowance in this
-  // product is bucketed by the workspace zone, so a window derived from the
-  // browser would head one day and list another's receipts.
-  const bounds = activityRangeToBounds(range, search.from, search.to, timezone)
-  const picker = activityRangeToCalendar(
-    range,
-    search.from,
-    search.to,
-    timezone,
-  )
-
-  const label =
-    picker.value.start.getTime() === picker.value.end.getTime()
-      ? dateFormatter.format(picker.value.start)
-      : `${dateFormatter.format(picker.value.start)} – ${dateFormatter.format(picker.value.end)}`
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Recent activity</CardTitle>
         <CardDescription>
-          Receipts for what already happened, in the window you pick. This date
-          range never hides unfinished work — the board above is not filtered
-          by it.
+          Receipts for what already happened, over the same window as the rest
+          of this page.
         </CardDescription>
-        <div className="pt-1">
-          <ActivityRangePicker
-            value={picker.value}
-            preset={picker.preset}
-            timezone={timezone}
-            onChange={(nextRange, nextPreset) => {
-              const chosen = calendarRangeToSearch(
-                nextRange,
-                nextPreset,
-                timezone,
-              )
-              void navigate({
-                to: "/dashboard",
-                // A range change is a filter change, so the cursor goes with
-                // it — page two of one window must never render as page two
-                // of another.
-                search: withFilters(search, {
-                  range:
-                    chosen.range === DASHBOARD_DEFAULTS.range
-                      ? undefined
-                      : chosen.range,
-                  from: chosen.from,
-                  to: chosen.to,
-                }),
-              })
-            }}
-          />
-        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The `activity.list` query lives inside this boundary so a stale or
@@ -131,7 +67,7 @@ export function ActivityFeed({
             same arrangement the leads and inbox lists use. */}
         <CatchBoundary
           getResetKey={() =>
-            `${range}:${search.from ?? ""}:${search.to ?? ""}:${search.cursor ?? ""}`
+            `${bounds.from}:${bounds.to}:${search.cursor ?? ""}`
           }
           errorComponent={ActivityFeedError}
         >
@@ -139,7 +75,7 @@ export function ActivityFeed({
             workspaceId={workspaceId}
             timezone={timezone}
             bounds={bounds}
-            label={label}
+            label={hint}
             cursor={search.cursor}
           />
         </CatchBoundary>
@@ -200,7 +136,7 @@ function ActivityFeedBody({
             />
           ) : (
             <EmptyState
-              title={`No activity in ${label}`}
+              title={`No activity · ${label}`}
               description="Nothing was recorded in this window."
             />
           )
@@ -253,7 +189,7 @@ function ActivityFeedBody({
               </Button>
             ) : null}
             <p className="text-xs text-muted-foreground">
-              Showing {label}.{" "}
+              Showing: {label}.{" "}
               {page.hasMore
                 ? "More receipts than fit on one page."
                 : "End of this window."}
