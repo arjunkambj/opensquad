@@ -1,1016 +1,555 @@
 /**
- * OpenSquad ↔ Firecrawl boundary (P04 — bounded research spike).
+ * The web-research boundary (PLAN §4 "Firecrawl change needed").
  *
- * The registered `@firecrawl/firecrawl-convex@0.1.1` component owns the
- * provider transport: `lib.scrape`/`lib.map`/`lib.search` are direct v2 REST
- * calls, and `crawl.start` runs a durable crawl whose progress arrives either
- * through the signed component webhook mounted at `<site>/firecrawl/webhook`
- * (self-mounted via `httpPrefix: "/firecrawl/"` in convex.config.ts) or
- * through `mode: "poll"` for deployments Firecrawl cannot reach (local dev).
+ * ONE operation lives here: `scrapeSite` reads a company's website — the home
+ * page, plus up to three supporting pages chosen from that home page's own
+ * links — and returns bounded markdown. Website analysis asks for four pages,
+ * lead research for one. The page count is fixed in code; nothing a caller
+ * or a site says can raise it.
  *
- * This file is the ONLY app-side surface (integrations.md §G2 "Firecrawl
- * route"): a narrow, allow-listed internal wrapper. Everything exported is
- * internal — unreachable from clients and public HTTP. The app-facing
- * OpenSquad research tool (P09) reads scoped results; it never receives a
- * Firecrawl credential or an arbitrary crawl primitive.
+ * Three rules hold the boundary:
  *
- * Allow-list vs the full component client (deliberately NOT exported):
- *   - `firecrawl.map` / `firecrawl.search` — discovery-shaped; the primary
- *     route is targeted page research. Not needed here.
- *   - `firecrawl.cancelCrawl` / `resumeCrawl` / `deleteCrawl` — lifecycle
- *     management belongs to the owning workflow task (P09), not this spike.
+ *   1. The provider is reached only through the registered
+ *      `@firecrawl/firecrawl-convex` component (its signed `/firecrawl/webhook`
+ *      stays mounted by the component itself, via `httpPrefix` in
+ *      convex.config.ts). The provider's name and its raw error text never
+ *      leave this folder — callers get our own typed outcomes.
+ *   2. Every URL passes `lib/urlSafety.ts` BEFORE anything is reserved and
+ *      before anything is fetched, and the provider-reported final URL passes
+ *      it again on the way back.
+ *   3. The whole scrape is ONE `withCredits` call: worst case `scrapes: pages`,
+ *      settled at the pages really fetched. A provable pre-flight refusal
+ *      RETURNS `refunded`; an unknown outcome THROWS, which parks the hold as
+ *      `uncertain` (PLAN §6 "Three outcomes, never two").
  *
- * Component inspection notes (@firecrawl/firecrawl-convex@0.1.1 dist/):
- *   - `scrape` → POST {FIRECRAWL_API_URL}/v2/scrape; errors are ConvexError
- *     `{code:"firecrawl_request_failed", status, path, message}`; transient
- *     408/425/429/5xx retried ≤3 with backoff honoring Retry-After.
- *   - Webhook deliveries are double-guarded: `X-Firecrawl-Signature` HMAC
- *     over the raw body when FIRECRAWL_WEBHOOK_SECRET is set, PLUS a
- *     per-crawl `x-firecrawl-convex-token` header the component registers.
- *   - Crawl rows cap page bodies at Convex's 1MB document limit
- *     (`truncated: true`, `unstored` count) — never silently.
+ * The markdown of a billed scrape is stored in Convex file storage and the
+ * operation's `resultRef` points at it, so a replay of the same
+ * `operationKey` — the retry of a failed AI half — hands the caller the pages
+ * it already paid for instead of buying them again.
  */
-
 import { FirecrawlClient } from "@firecrawl/firecrawl-convex";
-import { v, type Infer } from "convex/values";
-import { components, internal } from "../_generated/api";
-import {
-  internalAction,
-  internalMutation,
-  internalQuery,
-} from "../_generated/server";
+import { v } from "convex/values";
+import { components } from "../_generated/api";
+import { internalAction, internalMutation } from "../_generated/server";
+import type { ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import type { FunctionReference } from "convex/server";
+import type { PaidWork, RefundReason } from "../billing/paidCall";
+import { withCredits } from "../billing/withCredits";
+import { checkPublicHttpUrl } from "../lib/urlSafety";
+import type { SafeUrl } from "../lib/urlSafety";
 import {
-  assertEpochMs,
-  computeResultDigest,
-  consumesPageAllowance,
-  domainError,
-  invalid,
-  normalizeHttpUrl,
-  sha256Hex,
-  unwrapConvexErrorText,
-  vProviderOperationState,
-  vRetrievedPage,
-  RESEARCH_PAGES_PER_PROSPECT,
-  USAGE_PERIOD_LIFETIME,
-  USAGE_SCOPE_WORKSPACE,
-} from "../lib/validators";
-import type { ProviderOperationState } from "../lib/validators";
-import { TRIAL_SCRAPES_LIFETIME_LIMIT } from "../lib/limits";
+  boundMarkdown,
+  combineSiteMarkdown,
+  linksFromMarkdown,
+  selectExtraPages,
+  SCRAPE_EXTRA_PAGES_MAX,
+  SCRAPE_EXTRA_PAGE_MARKDOWN_MAX,
+  SCRAPE_HOME_MARKDOWN_MAX,
+  SCRAPE_TITLE_MAX,
+} from "./firecrawlPages";
+import type { ScrapedPage } from "./firecrawlPages";
+
+export type { ScrapedPage } from "./firecrawlPages";
 
 /** Shared component client handle. `FIRECRAWL_API_KEY` /
  * `FIRECRAWL_WEBHOOK_SECRET` are bound to the component's typed env in
  * convex.config.ts and read inside component functions — never through args. */
 export const firecrawl = new FirecrawlClient(components.firecrawl);
 
-// The component's QueryCtx/MutationCtx/ActionCtx types (resolved under
-// convex 1.45.0) expect the `(fn, args, options?: {transactionLimits})`
-// ArgsAndOptions signature, while the real ctx exposes the single-argument
-// OptionalRestArgs form — the same skew P05 documented for AgentMail. The
+// The component's ActionCtx type (resolved under convex 1.45.0) expects the
+// `(fn, args, options?: {transactionLimits})` ArgsAndOptions signature, while
+// the real ctx exposes the single-argument OptionalRestArgs form. The
 // component only ever calls runQuery/runMutation/runAction(fn, argsObject)
-// (verified in dist/client/index.js), so these adapters drop the unused
+// (verified in dist/client/index.js), so this adapter drops the unused
 // options element; runtime behavior is unchanged.
-type ComponentQueryCtx = Parameters<typeof firecrawl.getCrawl>[0];
 type ComponentActionCtx = Parameters<typeof firecrawl.scrape>[0];
 
-/** Plain `(fn, args)` runner shape — what the component actually invokes at
- * runtime (verified: dist/client/index.js always calls runX(fn, argsObject)). */
-type PlainQuery = (
-  q: FunctionReference<"query">,
-  args?: unknown,
-) => Promise<unknown>;
-type PlainMutation = (
-  m: FunctionReference<"mutation">,
-  args?: unknown,
-) => Promise<unknown>;
-type PlainAction = (
-  a: FunctionReference<"action">,
-  args?: unknown,
-) => Promise<unknown>;
-
-type CtxWithRunners = {
-  runQuery: unknown;
-  runMutation: unknown;
-  runAction: unknown;
-};
+type PlainQuery = (q: FunctionReference<"query">, args?: unknown) => Promise<unknown>;
+type PlainMutation = (m: FunctionReference<"mutation">, args?: unknown) => Promise<unknown>;
+type PlainAction = (a: FunctionReference<"action">, args?: unknown) => Promise<unknown>;
 
 /** Rebind the real ctx's runners positionally for the component client's
- * skewed signature (drops the unsupported options element). The member-level
- * casts are the honest statement of verified runtime behavior — the declared
- * types disagree on rest-tuple shapes, not on capability. */
-function asQueryCtx(ctx: { runQuery: unknown }): ComponentQueryCtx {
+ *  skewed signature. The casts are the honest statement of verified runtime
+ *  behavior — the declared types disagree on rest-tuple shapes, not on
+ *  capability. */
+function asComponentCtx(ctx: ActionCtx): ComponentActionCtx {
   const adapted = {
     runQuery: ((q, args) =>
-      (ctx.runQuery as PlainQuery)(q, args)) satisfies PlainQuery,
-  };
-  return adapted as unknown as ComponentQueryCtx;
-}
-
-function asActionCtx(ctx: CtxWithRunners): ComponentActionCtx {
-  const adapted = {
-    runQuery: ((q, args) =>
-      (ctx.runQuery as PlainQuery)(q, args)) satisfies PlainQuery,
+      (ctx.runQuery as unknown as PlainQuery)(q, args)) satisfies PlainQuery,
     runMutation: ((m, args) =>
-      (ctx.runMutation as PlainMutation)(m, args)) satisfies PlainMutation,
+      (ctx.runMutation as unknown as PlainMutation)(m, args)) satisfies PlainMutation,
     runAction: ((a, args) =>
-      (ctx.runAction as PlainAction)(a, args)) satisfies PlainAction,
+      (ctx.runAction as unknown as PlainAction)(a, args)) satisfies PlainAction,
   };
   return adapted as unknown as ComponentActionCtx;
 }
 
-// ---------------------------------------------------------------------------
-// URL admission — OpenSquad-controlled fetch policy (architecture §9)
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------ */
+/* What a caller asks for, and what it gets back                        */
+/* ------------------------------------------------------------------ */
 
-/**
- * Admit only public `http(s)` URLs with no userinfo and a publicly routable
- * literal hostname. The actual fetch is performed provider-side by Firecrawl,
- * so this guard is policy enforcement, not SSRF defense-in-depth — Convex
- * actions cannot resolve DNS, so hostname-to-private-IP rebinding is a known
- * residual limitation recorded in plan/evidence/P04.md. Provider-reported
- * source URLs are validated before returning evidence; this cannot prevent
- * Firecrawl from following a redirect before reporting the result.
- */
-function assertPublicHttpUrl(raw: string): URL {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error(`invalid URL: ${raw}`);
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error(`URL scheme must be http(s), got ${url.protocol}`);
-  }
-  if (url.username !== "" || url.password !== "") {
-    throw new Error("credential-bearing URLs are not allowed");
-  }
-  // A trailing DNS root dot does not make a local hostname public.
-  const host = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (
-    host === "localhost" ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal") ||
-    host.endsWith(".localhost")
-  ) {
-    throw new Error(`local hostname not allowed: ${host}`);
-  }
-  // Literal-IP checks (dotted-quad v4 + bracketed v6).
-  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (v4 !== null) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    const privateV4 =
-      a === 10 ||
-      a === 127 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 169 && b === 254) ||
-      (a === 100 && b >= 64 && b <= 127) || // CGNAT
-      a === 0 ||
-      a >= 224; // multicast/reserved
-    if (privateV4) {
-      throw new Error(`private/reserved IPv4 not allowed: ${host}`);
-    }
-  }
-  if (host.startsWith("[")) {
-    const v6 = host.slice(1, -1);
-    if (
-      // Unspecified, loopback and IPv4-compatible/mapped addresses.
-      v6.startsWith("::") ||
-      v6.startsWith("fc") ||
-      v6.startsWith("fd") ||
-      v6.startsWith("ff") || // multicast
-      // fe80::/10 link-local + fec0::/10 site-local + the rest of the
-      // reserved fe00::/8 space — all non-public for a fetch policy.
-      v6.startsWith("fe") ||
-      // NAT64 well-known prefix can embed a private IPv4 target.
-      v6.startsWith("64:ff9b")
-    ) {
-      throw new Error(`private/reserved IPv6 not allowed: ${host}`);
-    }
-  }
-  return url;
-}
+/** The two paid actions that read a website (`lib/limits.ts` prices them). */
+export type ScrapeAction = "analyze_website" | "research_lead";
 
-// ---------------------------------------------------------------------------
-// Bounded scrape — the P04 probe primitive and the P09 contract seed
-// ---------------------------------------------------------------------------
-
-const EXCERPT_LIMIT = 4_000;
-
-const vScrapeResult = v.object({
-  url: v.string(),
-  retrievedAt: v.string(),
-  statusCode: v.optional(v.number()),
-  title: v.optional(v.string()),
-  description: v.optional(v.string()),
-  /** First EXCERPT_LIMIT chars of the page's main-content markdown. */
-  markdownExcerpt: v.string(),
-  markdownTruncated: v.boolean(),
-  creditsUsed: v.optional(v.number()),
-  cacheState: v.optional(v.string()),
-  warning: v.optional(v.string()),
-});
-
-type ScrapeResult = Infer<typeof vScrapeResult>;
-
-/**
- * Scrape exactly ONE validated public page (markdown, main content only).
- * This is the bounded operation the research slice uses for "homepage plus
- * up to two relevant pages per prospect": callers pass each approved URL
- * explicitly. There is deliberately no search/map/fan-out parameter.
- */
-export const scrapePage = internalAction({
-  args: { url: v.string() },
-  returns: vScrapeResult,
-  handler: async (ctx, args): Promise<ScrapeResult> => {
-    const url = assertPublicHttpUrl(args.url);
-    const doc = await firecrawl.scrape(asActionCtx(ctx), url.toString(), {
-      formats: ["markdown"],
-      onlyMainContent: true,
-    });
-    const markdown = typeof doc.markdown === "string" ? doc.markdown : "";
-    const metadata = doc.metadata ?? {};
-    for (const reportedUrl of [metadata.url, metadata.sourceURL]) {
-      if (typeof reportedUrl === "string") assertPublicHttpUrl(reportedUrl);
-    }
-    const statusCode = metadata["statusCode"];
-    return {
-      url: url.toString(),
-      retrievedAt: new Date().toISOString(),
-      statusCode: typeof statusCode === "number" ? statusCode : undefined,
-      title:
-        typeof metadata["title"] === "string" ? metadata["title"] : undefined,
-      description:
-        typeof metadata["description"] === "string"
-          ? metadata["description"]
-          : undefined,
-      markdownExcerpt: markdown.slice(0, EXCERPT_LIMIT),
-      markdownTruncated: markdown.length > EXCERPT_LIMIT,
-      creditsUsed:
-        typeof metadata["creditsUsed"] === "number"
-          ? metadata["creditsUsed"]
-          : undefined,
-      cacheState:
-        typeof metadata["cacheState"] === "string"
-          ? metadata["cacheState"]
-          : undefined,
-      warning: typeof doc.warning === "string" ? doc.warning : undefined,
-    };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Read-only crawl inspection (for the P09 Workflow-resume contract)
-// ---------------------------------------------------------------------------
-
-/** Status/progress of one component-owned crawl. Read-only. */
-export const getResearchCrawl = internalQuery({
-  args: { crawlId: v.string() },
-  returns: v.any(),
-  handler: async (ctx, args) => {
-    const crawl = await firecrawl.getCrawl(asQueryCtx(ctx), args.crawlId);
-    if (crawl === null) return null;
-    return {
-      crawlId: crawl._id,
-      jobId: crawl.jobId,
-      url: crawl.url,
-      status: crawl.status,
-      mode: crawl.mode,
-      pageCount: crawl.pageCount,
-      completed: crawl.completed,
-      total: crawl.total,
-      creditsUsed: crawl.creditsUsed,
-      unstored: crawl.unstored,
-      error: crawl.error,
-      finalized: crawl.finalized,
-      startedAt: crawl.startedAt,
-      completedAt: crawl.completedAt,
-    };
-  },
-});
-
-/** Stored pages of one crawl (URLs + metadata, bounded page size). */
-export const listResearchPages = internalQuery({
-  args: {
-    crawlId: v.string(),
-    paginationOpts: v.object({
-      numItems: v.number(),
-      cursor: v.union(v.string(), v.null()),
-    }),
-  },
-  returns: v.any(),
-  handler: async (ctx, args) => {
-    const page = await firecrawl.listPages(asQueryCtx(ctx), {
-      crawlId: args.crawlId,
-      paginationOpts: {
-        numItems: Math.min(args.paginationOpts.numItems, 10),
-        cursor: args.paginationOpts.cursor,
-      },
-    });
-    return {
-      ...page,
-      page: page.page.map((p) => ({
-        pageId: p._id,
-        url: p.url,
-        title: p.metadata?.["title"],
-        statusCode: p.metadata?.["statusCode"],
-        truncated: p.truncated,
-        scrapedAt: p.scrapedAt,
-        hasMarkdown: typeof p.markdown === "string" && p.markdown.length > 0,
-      })),
-    };
-  },
-});
-
-/**
- * DEV-ONLY diagnostic reader for the P04 live probe: projects the component's
- * crawl table down to operational fields so the probe can verify crawl state
- * without exposing page bodies to logs. Internal-only — unreachable from
- * clients or HTTP routes. **TODO(P16): remove before public release** (same
- * convention as agentmail.ts `diagnosticInboundState`).
- */
-export const diagnosticFirecrawlState = internalAction({
-  args: {},
-  returns: v.object({
-    crawls: v.array(
-      v.object({
-        crawlId: v.string(),
-        url: v.string(),
-        status: v.string(),
-        mode: v.string(),
-        pageCount: v.number(),
-        creditsUsed: v.optional(v.number()),
-        finalized: v.boolean(),
-      }),
-    ),
-  }),
-  handler: async (ctx) => {
-    const crawls = await firecrawl.listCrawls(asQueryCtx(ctx), { limit: 20 });
-    return {
-      crawls: crawls.map((c) => ({
-        crawlId: c._id,
-        url: c.url,
-        status: c.status,
-        mode: c.mode,
-        pageCount: c.pageCount,
-        creditsUsed: c.creditsUsed,
-        finalized: c.finalized,
-      })),
-    };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// The budgeted research route (P21 — integrations §G2 gateway contract item 3,
-// Firecrawl route items 2/3/5)
-//
-// `scrapePage` above is the raw primitive: it forwards a paid request and
-// reserves nothing. Everything in the pipeline goes through
-// `retrieveProspectPage` instead, which is the only path that may spend a
-// campaign's page allowance. The sequence is fixed and its order is the whole
-// guarantee:
-//
-//   1. beginFirecrawlOperation — ONE transaction that admits the URL, checks
-//      the per-prospect page cap, dedupes the invocation id and reserves the
-//      allowance. A refusal at any step rolls the whole transaction back, so
-//      a refused call never reaches the provider and never leaves a partial
-//      record behind.
-//   2. scrapePage — the paid call, only on `decision: "execute"`.
-//   3. settleFirecrawlOperation — commit what was billed, release what never
-//      left the deployment, and mark uncertain what we cannot tell apart.
-//
-// `reserved → released` is terminal and `uncertain` deliberately keeps
-// capacity blocked; neither is worked around here.
-// ---------------------------------------------------------------------------
-
-/** How long a `requested`/`accepted` operation may sit before the sweep
- *  calls its outcome unknown and blocks its allowance until reconciled. */
-const PROVIDER_OPERATION_STALE_MS = 10 * 60 * 1000;
-
-/**
- * How many of a prospect's operation receipts the cap scan reads.
- *
- * `operationKey` is `research:<campaignId>:<prospectId>:sha256(url)` and is
- * unique per workspace, so a prospect accumulates at most one row per
- * distinct URL ever attempted for it — across the whole campaign.
- * The scan window has to stay comfortably above that, because the index is
- * (workspaceId, prospectId, state) and a short `.take` would sort released
- * rows ahead of the live ones and undercount.
- */
-const PROSPECT_OPERATION_SCAN_MAX = 64;
-
-/** The page body recorded on a completed operation (no self-reference). */
-const vScrapedPageRecord = v.object({
-  url: v.string(),
-  retrievedAt: v.number(),
-  excerpt: v.string(),
-  statusCode: v.optional(v.number()),
-  truncated: v.boolean(),
-});
-
-const vProviderOperationError = v.object({
-  code: v.string(),
-  message: v.string(),
-});
-
-/**
- * Admit a research URL inside a MUTATION: normalize it, then run the same
- * public-host policy `scrapePage` applies, translated into a domain error.
- * Reusing the one policy function matters more than the error shape — a
- * second copy would drift from the first.
- */
-function admitResearchUrl(raw: string): string {
-  const normalized = normalizeHttpUrl(raw, "url");
-  try {
-    assertPublicHttpUrl(normalized);
-  } catch (error) {
-    throw invalid(
-      `url is not an admissible research target: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-  return normalized;
-}
-
-/**
- * Reserve a page of the campaign's lifetime research allowance and record
- * the invocation BEFORE the provider is contacted.
- *
- * A repeated `operationKey` returns the recorded result or status and never
- * forwards a second paid request: `completed` replays the stored page,
- * `failed` replays the stored error, and `requested`/`accepted`/`uncertain`
- * surface an explicit in-flight or unknown status. A repeat carrying
- * different arguments is a conflict, not a replay.
- */
-export const beginFirecrawlOperation = internalMutation({
-  args: {
-    prospectId: v.id("prospects"),
-    url: v.string(),
-  },
-  returns: v.union(
-    v.object({
-      decision: v.literal("execute"),
-      providerOperationId: v.id("providerOperations"),
-      url: v.string(),
-    }),
-    v.object({
-      decision: v.literal("replay"),
-      providerOperationId: v.id("providerOperations"),
-      state: vProviderOperationState,
-      page: v.optional(vScrapedPageRecord),
-      error: v.optional(vProviderOperationError),
-    }),
-  ),
-  handler: async (ctx, args): Promise<BeginFirecrawlOperationResult> => {
-    const prospect = await ctx.db.get("prospects", args.prospectId);
-    if (prospect === null) {
-      throw domainError("NOT_FOUND", "prospect not found");
-    }
-    const workspaceId = prospect.workspaceId;
-    // Admission runs FIRST: an inadmissible URL must never reserve.
-    const url = admitResearchUrl(args.url);
-
-    const operationKey = `research:${args.prospectId}:${await sha256Hex(url)}`;
-    const requestDigest = await computeResultDigest({
-      provider: "firecrawl",
-      tool: "scrape",
-      arguments: { url },
-    });
-
-    const existing = await ctx.db
-      .query("providerOperations")
-      .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
-        q
-          .eq("workspaceId", workspaceId)
-          .eq("provider", "firecrawl")
-          .eq("operationKey", operationKey),
-      )
-      .unique();
-    if (existing !== null) {
-      if (existing.requestDigest !== requestDigest) {
-        throw domainError(
-          "CONFLICT",
-          "operationKey was already used with different arguments",
-        );
-      }
-      const recorded =
-        existing.state === "completed" && existing.resultRef?.kind === "inline"
-          ? (existing.resultRef.value as Infer<typeof vScrapedPageRecord>)
-          : undefined;
-      return {
-        decision: "replay" as const,
-        providerOperationId: existing._id,
-        state: existing.state,
-        ...(recorded !== undefined ? { page: recorded } : {}),
-        ...(existing.error !== undefined ? { error: existing.error } : {}),
-      };
-    }
-
-    // §G2 Firecrawl route item 2 — homepage plus at most two other pages.
-    // The cap counts BILLED retrievals, not non-`failed` rows. A released
-    // reservation is the only proof the provider was never reached (a
-    // missing API key, a transport failure that never left Convex); every
-    // other outcome either paid or may have paid, and a `failed` row can be
-    // both — a post-fetch redirect refusal is billed and refused.
-    const priorForProspect = await ctx.db
-      .query("providerOperations")
-      .withIndex("by_workspaceId_and_prospectId_and_state", (q) =>
-        q.eq("workspaceId", workspaceId).eq("prospectId", args.prospectId),
-      )
-      .take(PROSPECT_OPERATION_SCAN_MAX);
-    const counted = priorForProspect.filter(consumesPageAllowance).length;
-    if (counted >= RESEARCH_PAGES_PER_PROSPECT) {
-      throw domainError(
-        "CONFLICT",
-        `prospect page cap reached (${counted}/${RESEARCH_PAGES_PER_PROSPECT})`,
-      );
-    }
-
-    // The reservation is taken inside THIS transaction. A CONFLICT here
-    // aborts everything above it — the operation row is never written, the
-    // cap accounting never moves, and the provider is never contacted.
-    const reservation = await ctx.runMutation(internal.billing.reservations.reserve, {
-      workspaceId,
-      scopeKey: USAGE_SCOPE_WORKSPACE,
-      metric: "scrapes" as const,
-      periodKey: USAGE_PERIOD_LIFETIME,
-      limit: TRIAL_SCRAPES_LIFETIME_LIMIT,
-      operationKey,
-      quantity: 1,
-    });
-
-    const now = Date.now();
-    const providerOperationId = await ctx.db.insert("providerOperations", {
-      workspaceId,
-      provider: "firecrawl" as const,
-      operationKey,
-      requestDigest,
-      reservationIds: [reservation.reservationId],
-      state: "requested" as const,
-      createdAt: now,
-      updatedAt: now,
-      prospectId: args.prospectId,
-    });
-    return { decision: "execute" as const, providerOperationId, url };
-  },
-});
-
-/**
- * Settle one provider operation and its reservation together. The caller
- * chooses the settlement because only the caller knows whether the provider
- * was reached; this applies it faithfully and idempotently.
- */
-export const settleFirecrawlOperation = internalMutation({
-  args: {
-    providerOperationId: v.id("providerOperations"),
-    settlement: v.union(
-      v.literal("commit"),
-      v.literal("release"),
-      v.literal("markUncertain"),
-    ),
-    state: vProviderOperationState,
-    page: v.optional(vScrapedPageRecord),
-    componentRequestRef: v.optional(v.string()),
-    error: v.optional(vProviderOperationError),
-  },
-  returns: v.object({ state: vProviderOperationState, settled: v.boolean() }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ state: ProviderOperationState; settled: boolean }> => {
-    const row = await ctx.db.get(
-      "providerOperations",
-      args.providerOperationId,
-    );
-    if (row === null) {
-      throw domainError("NOT_FOUND", "provider operation not found");
-    }
-    if (row.state === args.state) {
-      // Idempotent replay — the reservation already moved with it.
-      return { state: row.state, settled: false };
-    }
-    if (row.state === "completed" || row.state === "failed") {
-      throw domainError(
-        "CONFLICT",
-        `provider operation is ${row.state}; it can no longer be settled`,
-      );
-    }
-    const pageDigest =
-      args.page === undefined ? undefined : await computeResultDigest(args.page);
-    if (args.settlement === "commit") {
-      await ctx.runMutation(internal.billing.reservations.commit, {
-        workspaceId: row.workspaceId,
-        operationKey: row.operationKey,
-        ...(args.componentRequestRef !== undefined
-          ? { providerReference: args.componentRequestRef }
-          : {}),
-      });
-    } else if (args.settlement === "release") {
-      await ctx.runMutation(internal.billing.reservations.release, {
-        workspaceId: row.workspaceId,
-        operationKey: row.operationKey,
-      });
-    } else {
-      await ctx.runMutation(internal.billing.reservations.markUncertain, {
-        workspaceId: row.workspaceId,
-        operationKey: row.operationKey,
-      });
-    }
-    await ctx.db.patch("providerOperations", row._id, {
-      state: args.state,
-      // Recorded because `state` does not imply it: a post-fetch redirect
-      // refusal is `failed` AND `commit`-settled. The per-prospect page cap
-      // reads this, so a billed retrieval can never be free.
-      settlement: args.settlement,
-      updatedAt: Date.now(),
-      ...(args.page !== undefined
-        ? {
-            resultRef: { kind: "inline" as const, value: args.page },
-            resultDigest: pageDigest,
-          }
-        : {}),
-      ...(args.componentRequestRef !== undefined
-        ? { componentRequestRef: args.componentRequestRef }
-        : {}),
-      ...(args.error !== undefined ? { error: args.error } : {}),
-    });
-    return { state: args.state, settled: true };
-  },
-});
-
-/**
- * Retrieve ONE page for a prospect, paying for it exactly once.
- *
- * The outcome table, and why each settlement is the honest one:
- *
- *   page returned                 commit   — we were billed. A provider cache
- *                                            hit still commits: this counts
- *                                            OUR operations, which is a
- *                                            separate number from the
- *                                            provider's observed credits.
- *   redirect to a private host    commit   — the fetch happened and was
- *                                            billed; refusing to bill
- *                                            ourselves would understate spend.
- *                                            The page is still refused.
- *   missing API key               release  — the request never left Convex.
- *   transport failure (status 0)  release  — it never reached Firecrawl.
- *   any other provider failure    uncertain— it reached Firecrawl and may
- *                                            have been metered.
- *   unknown throw                 uncertain— same reason: we cannot prove it
- *                                            was not billed.
- *   process death mid-call        (none)   — left `requested`; the sweep
- *                                            below moves it to `uncertain`.
- *
- * The settlement, not the resulting state, is what the per-prospect page cap
- * counts — `release` is the only row in this table that proves the provider
- * was never reached, and it is the only one a prospect gets for free.
- */
-export const retrieveProspectPage = internalAction({
-  args: {
-    prospectId: v.id("prospects"),
-    url: v.string(),
-  },
-  returns: v.object({
-    replayed: v.boolean(),
-    state: vProviderOperationState,
-    providerOperationId: v.id("providerOperations"),
-    page: v.optional(vRetrievedPage),
-    error: v.optional(vProviderOperationError),
-  }),
-  handler: async (ctx, args): Promise<RetrieveProspectPageResult> => {
-    const begin = await ctx.runMutation(
-      internal.integrations.firecrawl.beginFirecrawlOperation,
-      { prospectId: args.prospectId, url: args.url },
-    );
-    if (begin.decision === "replay") {
-      return {
-        replayed: true,
-        state: begin.state,
-        providerOperationId: begin.providerOperationId,
-        ...(begin.page !== undefined
-          ? {
-              page: {
-                ...begin.page,
-                providerOperationId: begin.providerOperationId,
-              },
-            }
-          : {}),
-        ...(begin.error !== undefined ? { error: begin.error } : {}),
-      };
-    }
-
-    let scraped: ScrapeResult;
-    try {
-      scraped = await ctx.runAction(
-        internal.integrations.firecrawl.scrapePage,
-        { url: begin.url },
-      );
-    } catch (error) {
-      const failure = classifyFirecrawlFailure(error);
-      await ctx.runMutation(
-        internal.integrations.firecrawl.settleFirecrawlOperation,
-        {
-          providerOperationId: begin.providerOperationId,
-          settlement: failure.settlement,
-          state: failure.state,
-          error: { code: failure.code, message: failure.message },
-        },
-      );
-      return {
-        replayed: false,
-        state: failure.state,
-        providerOperationId: begin.providerOperationId,
-        error: { code: failure.code, message: failure.message },
-      };
-    }
-
-    const retrievedAt = Date.parse(scraped.retrievedAt);
-    const page = {
-      url: scraped.url,
-      // `scrapePage` stamps this itself, so a value outside the calendar
-      // window is a defect in this deployment, not untrusted provider data.
-      retrievedAt: assertEpochMs(retrievedAt, "retrievedAt"),
-      excerpt: scraped.markdownExcerpt,
-      ...(scraped.statusCode !== undefined
-        ? { statusCode: scraped.statusCode }
-        : {}),
-      truncated: scraped.markdownTruncated,
-    };
-    await ctx.runMutation(
-      internal.integrations.firecrawl.settleFirecrawlOperation,
-      {
-        providerOperationId: begin.providerOperationId,
-        settlement: "commit" as const,
-        state: "completed" as const,
-        page,
-        componentRequestRef: providerReceipt(scraped),
-      },
-    );
-    return {
-      replayed: false,
-      state: "completed" as const,
-      providerOperationId: begin.providerOperationId,
-      page: { ...page, providerOperationId: begin.providerOperationId },
-    };
-  },
-});
-
-/**
- * Retrieve one prospect's research pages — the homepage plus at most two more
- * (§G2 Firecrawl route item 2), in ONE journaled workflow step.
- *
- * It never throws for a single URL. An inadmissible URL, an exhausted
- * workspace allowance, a per-prospect cap and a provider failure all land in
- * `failures` with a stated reason, because a research branch that loses one
- * page should still cite the pages it did retrieve — and because a step that
- * throws would take a `retry` policy with it and re-drive a refusal that is
- * deterministic by construction.
- *
- * Every page is reserved and settled individually inside
- * `retrieveProspectPage`, so re-executing this step after a crash REPLAYS the
- * pages already paid for rather than paying twice.
- */
-export const retrieveProspectPages = internalAction({
-  args: {
-    prospectId: v.id("prospects"),
-    urls: v.array(v.string()),
-  },
-  returns: v.object({
-    pages: v.array(vRetrievedPage),
-    failures: v.array(
-      v.object({
-        url: v.string(),
-        code: v.string(),
-        message: v.string(),
-      }),
-    ),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    pages: Infer<typeof vRetrievedPage>[];
-    failures: { url: string; code: string; message: string }[];
-  }> => {
-    if (args.urls.length > RESEARCH_PAGES_PER_PROSPECT) {
-      throw invalid(
-        `urls allows at most ${RESEARCH_PAGES_PER_PROSPECT} pages per prospect`,
-      );
-    }
-    const pages: Infer<typeof vRetrievedPage>[] = [];
-    const failures: { url: string; code: string; message: string }[] = [];
-    for (const url of args.urls) {
-      let outcome: RetrieveProspectPageResult;
-      try {
-        outcome = await ctx.runAction(
-          internal.integrations.firecrawl.retrieveProspectPage,
-          { prospectId: args.prospectId, url },
-        );
-      } catch (error) {
-        // A refusal raised BEFORE the provider was contacted: an
-        // inadmissible URL, the prospect's own page cap, or the workspace's
-        // exhausted scrape allowance. Nothing was reserved and nothing was
-        // forwarded, so it is recorded and the next URL is tried.
-        failures.push({
-          url: url.slice(0, 300),
-          code: "refused",
-          message: refusalMessage(error),
-        });
-        continue;
-      }
-      if (outcome.page !== undefined) {
-        pages.push(outcome.page);
-        continue;
-      }
-      failures.push({
-        url: url.slice(0, 300),
-        code: outcome.error?.code ?? outcome.state,
-        message: (outcome.error?.message ?? `page is ${outcome.state}`).slice(
-          0,
-          500,
-        ),
-      });
-    }
-    return { pages, failures };
-  },
-});
-
-/**
- * The human-readable half of a refusal.
- *
- * `ConvexError.data` is read FIRST: a `ConvexError` is also an `Error` whose
- * `.message` is the serialized `{code, message}` envelope, so reading
- * `.message` first would put JSON where a reason belongs. Rethrown envelopes
- * are unwrapped by the shared `unwrapConvexErrorText` in lib/validators —
- * see that file for the boundary notes.
- */
-function refusalMessage(error: unknown): string {
-  const data =
-    typeof error === "object" && error !== null
-      ? (error as { data?: { message?: unknown } }).data
-      : undefined;
-  if (data !== undefined && typeof data.message === "string") {
-    return data.message.slice(0, 500);
-  }
-  const raw = error instanceof Error ? error.message : String(error);
-  return unwrapConvexErrorText(raw).slice(0, 500);
-}
-
-type BeginFirecrawlOperationResult =
-  | {
-      decision: "execute";
-      providerOperationId: Id<"providerOperations">;
-      url: string;
-    }
-  | {
-      decision: "replay";
-      providerOperationId: Id<"providerOperations">;
-      state: ProviderOperationState;
-      page?: Infer<typeof vScrapedPageRecord>;
-      error?: Infer<typeof vProviderOperationError>;
-    };
-
-type RetrieveProspectPageResult = {
-  replayed: boolean;
-  state: ProviderOperationState;
-  providerOperationId: Id<"providerOperations">;
-  page?: Infer<typeof vRetrievedPage>;
-  error?: Infer<typeof vProviderOperationError>;
+export type ScrapeSiteArgs = {
+  workspaceId: Id<"workspaces">;
+  /** The site to read. A bare domain is read as `https://`. */
+  url: string;
+  /** 1 = the home page only; 4 = the home page plus up to three supporting
+   *  pages. Fixed by the caller's step, never by user input. */
+  pages: 1 | 4;
+  action: ScrapeAction;
+  /** Stable per-step key. The same key never buys the same pages twice. */
+  operationKey: string;
 };
 
-/** The backend receipt for one paid call: the provider's own credit and
- *  cache report, recorded so our operation count and the provider's credit
- *  count stay separately auditable (§G2 item 4). */
-function providerReceipt(scraped: ScrapeResult): string {
-  return `firecrawl:credits=${scraped.creditsUsed ?? "unknown"};cache=${scraped.cacheState ?? "unknown"}`;
+/** The pages one scrape produced, bounded and ready to be read or prompted. */
+export type ScrapedSite = {
+  /** At least one page. Ordered: home page first, then supporting pages. */
+  pages: ScrapedPage[];
+  /** Every page in one document, under the site character budget. */
+  combinedMarkdown: string;
+};
+
+/**
+ * What the caller must handle. Each member says what to DO, not what the
+ * provider said:
+ *
+ *   scraped     — pages in hand (`replayed` means they were already paid for).
+ *   empty       — we reached the site and there was nothing readable on it.
+ *   refused     — we never read it. `reason` picks the copy; none of the
+ *                 reasons names a provider.
+ *   uncertain   — the request left us and the hold stays until it reconciles.
+ *   unavailable — this operation was billed earlier and its pages are not
+ *                 readable now: the stored markdown is gone, or that earlier
+ *                 run found nothing on the site. Retry under a FRESH
+ *                 operation key, or fall back to the manual path.
+ */
+export type ScrapeSiteOutcome =
+  | { kind: "scraped"; replayed: boolean; site: ScrapedSite }
+  | { kind: "empty" }
+  | { kind: "refused"; reason: RefundReason }
+  | { kind: "uncertain" }
+  | { kind: "unavailable" };
+
+/* ------------------------------------------------------------------ */
+/* One page from the provider                                           */
+/* ------------------------------------------------------------------ */
+
+/** One provider answer, already re-admitted by the URL policy. */
+type ProviderDocument = {
+  /** `null` when the provider reported a final URL we will not accept. */
+  finalUrl: SafeUrl | null;
+  markdown: string;
+  title?: string;
+  statusCode?: number;
+  /** The provider's own credit report. `undefined` means "it did not say". */
+  creditsUsed?: number;
+  cacheState?: string;
+  links: string[];
+};
+
+function textField(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/** Post-fetch URL policy messages from `assertPublicHttpUrl`. Reaching one
- *  of these means Firecrawl already fetched and reported a redirect we will
- *  not accept — the call was billed even though the page is refused. */
-const POST_FETCH_URL_POLICY = [
-  "private/reserved",
-  "local hostname not allowed",
-  "credential-bearing URLs",
-  "URL scheme must be http(s)",
-];
+function numberField(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
 
-function classifyFirecrawlFailure(error: unknown): {
-  settlement: "commit" | "release" | "markUncertain";
-  state: ProviderOperationState;
-  code: string;
-  message: string;
-} {
-  // A ConvexError rethrown across an action boundary arrives as
-  // `Uncaught ConvexError: {"code":…,"message":…}` followed by a stack trace,
-  // sometimes wrapped twice — and this text is STORED on
-  // `providerOperations.error.message` and read back into a lead's
-  // `fitReason`. The structured `data.message` is preferred, and the wrapper
-  // text is unwrapped when it is not. The classification below still matches
-  // on the provider's own wording, which survives either.
-  const message = refusalMessage(error);
-  const data =
-    typeof error === "object" && error !== null && "data" in error
-      ? (error as { data?: unknown }).data
-      : undefined;
-  const code =
-    typeof data === "object" && data !== null && "code" in data
-      ? String((data as { code?: unknown }).code)
-      : undefined;
-  const status =
-    typeof data === "object" && data !== null && "status" in data
-      ? (data as { status?: unknown }).status
-      : undefined;
-
-  if (POST_FETCH_URL_POLICY.some((needle) => message.includes(needle))) {
-    return {
-      settlement: "commit",
-      state: "failed",
-      code: "redirect_to_private_host",
-      message: message.slice(0, 500),
-    };
-  }
-  if (code === "firecrawl_missing_api_key") {
-    return {
-      settlement: "release",
-      state: "failed",
-      code,
-      message: "the deployment has no Firecrawl API key configured",
-    };
-  }
-  if (code === "firecrawl_request_failed" && status === 0) {
-    return {
-      settlement: "release",
-      state: "failed",
-      code,
-      message: message.slice(0, 500),
-    };
-  }
-  if (code === "firecrawl_request_failed") {
-    return {
-      settlement: "markUncertain",
-      state: "uncertain",
-      code,
-      message: message.slice(0, 500),
-    };
-  }
+/** Fetch one page as markdown plus its outbound links. Throws whatever the
+ *  component throws; the classifier below is the only thing that reads it. */
+async function fetchPage(ctx: ActionCtx, target: SafeUrl): Promise<ProviderDocument> {
+  const doc = await firecrawl.scrape(asComponentCtx(ctx), target.url, {
+    formats: ["markdown", "links"],
+    onlyMainContent: true,
+  });
+  const metadata = doc.metadata ?? {};
+  // The provider may have followed a redirect. Whatever it reports as the
+  // final URL faces the same policy the request did.
+  const reported = textField(metadata.url) ?? textField(metadata.sourceURL);
+  const admitted =
+    reported === undefined ? { ok: true as const, url: target } : checkPublicHttpUrl(reported);
+  const title = textField(metadata.title);
+  const statusCode = numberField(metadata.statusCode);
+  const creditsUsed = numberField(metadata.creditsUsed);
+  const cacheState = textField(metadata.cacheState);
   return {
-    settlement: "markUncertain",
-    state: "uncertain",
-    code: "provider_outcome_unknown",
-    message: message.slice(0, 500),
+    finalUrl: admitted.ok ? admitted.url : null,
+    markdown: typeof doc.markdown === "string" ? doc.markdown : "",
+    ...(title !== undefined
+      ? { title: boundMarkdown(title, SCRAPE_TITLE_MAX).text }
+      : {}),
+    ...(statusCode !== undefined ? { statusCode } : {}),
+    ...(creditsUsed !== undefined ? { creditsUsed } : {}),
+    ...(cacheState !== undefined ? { cacheState } : {}),
+    links: Array.isArray(doc.links)
+      ? doc.links.filter((link): link is string => typeof link === "string")
+      : [],
   };
 }
 
+/** The page a caller may read, or `null` when there is nothing usable on it:
+ *  a refused final URL, an error status, or no main content at all. */
+function toScrapedPage(doc: ProviderDocument, limit: number): ScrapedPage | null {
+  if (doc.finalUrl === null) {
+    return null;
+  }
+  if (doc.statusCode !== undefined && doc.statusCode >= 400) {
+    return null;
+  }
+  const bounded = boundMarkdown(doc.markdown, limit);
+  if (bounded.text.length === 0) {
+    return null;
+  }
+  return {
+    url: doc.finalUrl.url,
+    ...(doc.title !== undefined ? { title: doc.title } : {}),
+    markdown: bounded.text,
+    truncated: bounded.truncated,
+  };
+}
+
+/** Provider units this page consumed. A reported zero is a cache hit and is
+ *  released; silence means it charged us the usual one page. */
+function chargeOf(doc: ProviderDocument): number {
+  return doc.creditsUsed === 0 ? 0 : 1;
+}
+
+/** The provider's own report, kept server-side for reconciliation (the
+ *  settle path wraps it with our action and credits). */
+function providerReceipt(docs: readonly ProviderDocument[]): string {
+  const cache = docs.map((doc) => doc.cacheState ?? "unknown").join(",");
+  return `pages=${docs.length};cache=${cache}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Failure classification — the difference between a refund and a hold  */
+/* ------------------------------------------------------------------ */
+
+type ProviderFailure =
+  /** Provably not charged, or charged nothing. The money goes back. */
+  | { kind: "refund"; reason: RefundReason }
+  /** It may have been metered. The hold stays until something proves otherwise. */
+  | { kind: "uncertain" };
+
+const UNCERTAIN: ProviderFailure = { kind: "uncertain" };
+
+function errorData(error: unknown): { code?: unknown; status?: unknown } {
+  return typeof error === "object" && error !== null && "data" in error
+    ? ((error as { data?: { code?: unknown; status?: unknown } }).data ?? {})
+    : {};
+}
+
 /**
- * Reconcile operations whose outcome was never recorded — a process death
- * or an aborted caller between the reservation and the settle. They become
- * `uncertain`, which KEEPS the allowance blocked: that is the accounting
- * G2 asks for, not a leak to be tidied away by releasing capacity we cannot
- * prove we still have.
+ * Read one provider failure as money.
+ *
+ * The component's own vocabulary (`dist/component/api.ts`): a missing key
+ * throws before any request, a transport failure reports status 0, and every
+ * HTTP failure arrives as `{ code: "firecrawl_request_failed", status }` with
+ * 408/425/429/5xx already retried three times behind it.
+ */
+function classifyProviderFailure(error: unknown): ProviderFailure {
+  const { code, status } = errorData(error);
+  if (code === "firecrawl_missing_api_key") {
+    // The request never left the deployment.
+    return { kind: "refund", reason: "unauthorized" };
+  }
+  if (code !== "firecrawl_request_failed" || typeof status !== "number") {
+    return UNCERTAIN;
+  }
+  if (status === 0) {
+    // Never reached the provider: DNS, TLS, or a dead socket.
+    return { kind: "refund", reason: "unknown" };
+  }
+  if (status === 200) {
+    // The provider answered and declined the page — a blocked site, a target
+    // it would not render. It reports those as unbilled.
+    return { kind: "refund", reason: "provider_charged_nothing" };
+  }
+  if (status === 401 || status === 403) {
+    return { kind: "refund", reason: "unauthorized" };
+  }
+  if (status === 402) {
+    // Our platform account is out of provider credit — capacity, for everyone.
+    return { kind: "refund", reason: "platform_capacity" };
+  }
+  if (status === 429) {
+    return { kind: "refund", reason: "rate_limited" };
+  }
+  if (status === 400 || status === 404 || status === 422) {
+    return { kind: "refund", reason: "validation" };
+  }
+  // 408/5xx and anything unrecognised: it reached the provider and may have
+  // been metered.
+  return UNCERTAIN;
+}
+
+/* ------------------------------------------------------------------ */
+/* Stored markdown — what a replayed operation hands back               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Keep the bounded markdown where the operation row can point at it.
+ *
+ * Convex file storage, not a new table and not the operation document: the
+ * `evidence` table belongs to leads, the workspace's own website has no home
+ * of its own until T20 writes the profile it produces, and `resultRef` is
+ * documented as a short pointer — which is exactly what a storage id is. The
+ * blob holds only what this function already returns to the caller.
+ */
+async function storeSite(ctx: ActionCtx, site: ScrapedSite): Promise<string> {
+  const blob = new Blob([JSON.stringify(site)], { type: "application/json" });
+  return await ctx.storage.store(blob);
+}
+
+function isScrapedSite(value: unknown): value is ScrapedSite {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as { pages?: unknown; combinedMarkdown?: unknown };
+  return (
+    Array.isArray(candidate.pages) &&
+    candidate.pages.length > 0 &&
+    typeof candidate.combinedMarkdown === "string"
+  );
+}
+
+/** Read back what a billed operation stored, or `null` when it is gone. */
+async function readStoredSite(
+  ctx: ActionCtx,
+  resultRef: string | null,
+): Promise<ScrapedSite | null> {
+  if (resultRef === null) {
+    return null;
+  }
+  try {
+    const blob = await ctx.storage.get(resultRef as Id<"_storage">);
+    if (blob === null) {
+      return null;
+    }
+    const parsed: unknown = JSON.parse(await blob.text());
+    return isScrapedSite(parsed) ? parsed : null;
+  } catch {
+    // A malformed id or an unreadable blob is the same answer as a missing
+    // one: we cannot hand back pages we no longer have.
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* The one operation                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Read a website and return bounded markdown, paying for it exactly once.
+ *
+ * Call it from an internal action that an authenticated mutation scheduled —
+ * never from a public function, and never with a URL a user typed straight
+ * into a request (`analyze_website` passes the stored website, `research_lead`
+ * the stored company domain).
+ */
+export async function scrapeSite(
+  ctx: ActionCtx,
+  args: ScrapeSiteArgs,
+): Promise<ScrapeSiteOutcome> {
+  // Admission first, and outside the money entirely: a URL we will not fetch
+  // must never reserve, never reach the provider and never leave a record.
+  const admitted = checkPublicHttpUrl(args.url);
+  if (!admitted.ok) {
+    return { kind: "refused", reason: "validation" };
+  }
+  const home = admitted.url;
+
+  const outcome = await withCredits<ScrapedSite | null>(
+    ctx,
+    {
+      workspaceId: args.workspaceId,
+      action: args.action,
+      operationKey: args.operationKey,
+      worstCaseProviderUnits: { scrapes: args.pages },
+    },
+    async (): Promise<PaidWork<ScrapedSite | null>> => {
+      let first: ProviderDocument;
+      try {
+        first = await fetchPage(ctx, home);
+      } catch (error) {
+        const failure = classifyProviderFailure(error);
+        if (failure.kind === "refund") {
+          return { outcome: "refunded", reason: failure.reason };
+        }
+        // Unknown outcome: let it out, so the hold is parked `uncertain`.
+        throw error;
+      }
+
+      const fetched: ProviderDocument[] = [first];
+      const pages: ScrapedPage[] = [];
+      let charged = chargeOf(first);
+      const homePage = toScrapedPage(first, SCRAPE_HOME_MARKDOWN_MAX);
+      if (homePage !== null) {
+        pages.push(homePage);
+      }
+
+      // Supporting pages come from the home page's OWN links — never from a
+      // discovery endpoint, and never more than the fixed count.
+      if (homePage !== null && args.pages > 1) {
+        const links =
+          first.links.length > 0 ? first.links : linksFromMarkdown(first.markdown);
+        const extras = selectExtraPages(
+          home,
+          links,
+          Math.min(SCRAPE_EXTRA_PAGES_MAX, args.pages - 1),
+        );
+        for (const extra of extras) {
+          try {
+            const doc = await fetchPage(ctx, extra);
+            fetched.push(doc);
+            charged += chargeOf(doc);
+            const page = toScrapedPage(doc, SCRAPE_EXTRA_PAGE_MARKDOWN_MAX);
+            if (page !== null) {
+              pages.push(page);
+            }
+          } catch (error) {
+            // One supporting page is never fatal — the home page is already
+            // paid for and readable. An unknown failure still counts against
+            // the reservation: we cannot prove it was not metered.
+            if (classifyProviderFailure(error).kind !== "refund") {
+              charged += 1;
+            }
+          }
+        }
+      }
+
+      const receipt = providerReceipt(fetched);
+      if (pages.length === 0) {
+        // We reached the site and got nothing readable. If it cost nothing,
+        // it is a refund; if it cost something, we say so.
+        return charged === 0
+          ? { outcome: "refunded", reason: "provider_charged_nothing" }
+          : {
+              outcome: "billed",
+              result: null,
+              actualUnits: { scrapes: charged },
+              providerReference: receipt,
+            };
+      }
+      const site: ScrapedSite = {
+        pages,
+        combinedMarkdown: combineSiteMarkdown(pages),
+      };
+      return {
+        outcome: "billed",
+        result: site,
+        actualUnits: { scrapes: charged },
+        resultRef: await storeSite(ctx, site),
+        providerReference: receipt,
+      };
+    },
+  );
+
+  if (outcome.kind === "uncertain") {
+    return { kind: "uncertain" };
+  }
+  if (outcome.kind === "refunded") {
+    // A provider that answered and charged nothing did READ the site; every
+    // other refusal means we never got to.
+    return outcome.reason === "provider_charged_nothing"
+      ? { kind: "empty" }
+      : { kind: "refused", reason: outcome.reason };
+  }
+  if (outcome.replayed) {
+    const stored = await readStoredSite(ctx, outcome.resultRef);
+    return stored === null
+      ? { kind: "unavailable" }
+      : { kind: "scraped", replayed: true, site: stored };
+  }
+  return outcome.result === null
+    ? { kind: "empty" }
+    : { kind: "scraped", replayed: false, site: outcome.result };
+}
+
+/* ------------------------------------------------------------------ */
+/* Operational surfaces                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * DEV-ONLY live probe: run one real scrape and report SIZES, not content, so
+ * the integrator can verify the provider route and the refusal cases without
+ * putting page bodies in a log. Internal-only — unreachable from clients and
+ * from HTTP. **TODO(T50): remove before public release** (same convention as
+ * agentmail.ts `diagnosticInboundState`).
+ */
+export const diagnosticScrapeSite = internalAction({
+  args: {
+    workspaceId: v.id("workspaces"),
+    url: v.string(),
+    pages: v.union(v.literal(1), v.literal(4)),
+    action: v.union(v.literal("analyze_website"), v.literal("research_lead")),
+    operationKey: v.string(),
+  },
+  returns: v.object({
+    kind: v.string(),
+    reason: v.optional(v.string()),
+    replayed: v.optional(v.boolean()),
+    combinedCharacters: v.optional(v.number()),
+    pages: v.array(
+      v.object({
+        url: v.string(),
+        title: v.optional(v.string()),
+        characters: v.number(),
+        truncated: v.boolean(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const outcome = await scrapeSite(ctx, {
+      workspaceId: args.workspaceId,
+      url: args.url,
+      pages: args.pages,
+      action: args.action,
+      operationKey: args.operationKey,
+    });
+    if (outcome.kind !== "scraped") {
+      return {
+        kind: outcome.kind,
+        ...(outcome.kind === "refused" ? { reason: outcome.reason } : {}),
+        pages: [],
+      };
+    }
+    return {
+      kind: outcome.kind,
+      replayed: outcome.replayed,
+      combinedCharacters: outcome.site.combinedMarkdown.length,
+      pages: outcome.site.pages.map((page) => ({
+        url: page.url,
+        ...(page.title !== undefined ? { title: page.title } : {}),
+        characters: page.markdown.length,
+        truncated: page.truncated,
+      })),
+    };
+  },
+});
+
+/**
+ * Registered by `crons.ts` as `provider-operation-sweep`.
+ *
+ * It has nothing left to reconcile. A scrape is a synchronous request with no
+ * job id to look up, so there is no provider-side fact this task could fetch
+ * that `billing/settlement.ts#reconcilePaidCall` would accept as proof — and
+ * the generic belts now cover the rest: `billing/sweeps.ts#parkStalePaidCalls`
+ * parks a scrape whose action died, and `commitExpiredHolds` commits a hold
+ * nothing resolved in 24 hours. This stays only because the cron registration
+ * lives in an integrator-owned file; it reports zero work and does none.
+ *
+ * **Integrator: remove the `provider-operation-sweep` entry from `crons.ts`
+ * and delete this function.** (See the hand-off note.)
  */
 export const sweepStaleFirecrawlOperations = internalMutation({
   args: {},
   returns: v.object({ checked: v.number(), reconciled: v.number() }),
-  handler: async (ctx): Promise<{ checked: number; reconciled: number }> => {
-    const cutoff = Date.now() - PROVIDER_OPERATION_STALE_MS;
-    let checked = 0;
-    let reconciled = 0;
-    for (const state of ["requested", "accepted"] as const) {
-      const stale = await ctx.db
-        .query("providerOperations")
-        .withIndex("by_state_and_updatedAt", (q) =>
-          q.eq("state", state).lt("updatedAt", cutoff),
-        )
-        .take(16);
-      for (const row of stale) {
-        checked += 1;
-        // Ask before settling: a nested mutation's throw would abort this
-        // whole sweep, so a reservation someone else already settled must
-        // not be handed to `markUncertain`.
-        const reservation = await ctx.runMutation(
-          internal.billing.reservations.getByOperationKey,
-          { workspaceId: row.workspaceId, operationKey: row.operationKey },
-        );
-        if (reservation !== null && reservation.state === "reserved") {
-          await ctx.runMutation(internal.billing.reservations.markUncertain, {
-            workspaceId: row.workspaceId,
-            operationKey: row.operationKey,
-          });
-        }
-        await ctx.db.patch("providerOperations", row._id, {
-          state: "uncertain",
-          updatedAt: Date.now(),
-          error: {
-            code: "provider_outcome_unknown",
-            message: "no outcome was recorded before the reconciliation window",
-          },
-        });
-        reconciled += 1;
-      }
-    }
-    return { checked, reconciled };
-  },
+  handler: async (): Promise<{ checked: number; reconciled: number }> => ({
+    checked: 0,
+    reconciled: 0,
+  }),
 });
