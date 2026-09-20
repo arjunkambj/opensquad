@@ -23,8 +23,7 @@
  *   which records it counts, because the acceptance for this screen is that
  *   its numbers reconcile with Contacts and Inbox over the same window.
  */
-import type { QueryCtx } from "../_generated/server";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import { assertEpochMs, invalid, localDayKey } from "../lib/validators";
 import { v } from "convex/values";
 
@@ -57,8 +56,12 @@ export type Bounded = { count: number; hasMore: boolean };
 
 export type Range = { from: number; to: number };
 
-/** No rows, and we know it — distinct from a figure we could not read. */
-export const NONE: Bounded = { count: 0, hasMore: false };
+/** The arguments every windowed dashboard query takes, declared once. */
+export const vRange = {
+  workspaceId: v.id("workspaces"),
+  from: v.number(),
+  to: v.number(),
+};
 
 /**
  * Validate the window before a single row is read. Both bounds are real
@@ -104,282 +107,12 @@ export function countWithin(
 }
 
 /** A page of at most `bound + 1` rows whose length says whether it filled. */
-function filled<T>(rows: readonly T[], bound: number): Bounded {
+export function filled<T>(rows: readonly T[], bound: number): Bounded {
   return {
     count: Math.min(rows.length, bound),
     hasMore: rows.length > bound,
   };
 }
-
-/* ------------------------------------------------------------------ */
-/* Leads                                                               */
-/* ------------------------------------------------------------------ */
-
-/**
- * Researched leads that scored 3, newest first.
- *
- * Exact range on `by_workspaceId_and_scoreKey`: `scoreKey` is the
- * denormalised mirror of `research.aiScore`, so "score 3" implies
- * "researched" and no post-filter is needed. The index does not carry
- * `createdAt`, so the window is applied to the newest-first page — which is
- * exact for a window ending now, and bounded and honest otherwise.
- *
- * Counts: `prospects` where `scoreKey = 3` and `createdAt` is in the window.
- * The same rows Contacts lists under a 3-flame score.
- */
-export async function loadHotLeads(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-  range: Range,
-): Promise<{ rows: Doc<"prospects">[]; bounded: Bounded }> {
-  const page = await ctx.db
-    .query("prospects")
-    .withIndex("by_workspaceId_and_scoreKey", (q) =>
-      q.eq("workspaceId", workspaceId).eq("scoreKey", HOT_LEAD_SCORE),
-    )
-    .order("desc")
-    .take(DASHBOARD_SCAN_BOUND + 1);
-  const bounded = countWithin(
-    page.map((row) => ({ at: row.createdAt })),
-    range,
-  );
-  const rows = page
-    .filter((row) => row.createdAt >= range.from && row.createdAt <= range.to)
-    .sort((a, b) => b.createdAt - a.createdAt);
-  return { rows, bounded };
-}
-
-/**
- * Leads created in the window, for the activity chart's daily series.
- *
- * `prospects` has no `(workspaceId, createdAt)` index, so this reads the
- * three `by_workspaceId_and_approval` ranges newest-first instead — three
- * exact index ranges rather than one table scan. Each is bounded separately,
- * so a workspace past the bound reports `hasMore` and the chart says which
- * rows it counted.
- *
- * The integrator should add `prospects.by_workspaceId_and_createdAt`; this
- * becomes one exact range and the bound stops mattering.
- */
-const LEAD_APPROVALS = ["pending", "approved", "rejected"] as const;
-
-export async function loadLeadsCreated(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-  range: Range,
-): Promise<{ createdAt: number[]; bounded: Bounded }> {
-  const createdAt: number[] = [];
-  let hasMore = false;
-  for (const approval of LEAD_APPROVALS) {
-    const page = await ctx.db
-      .query("prospects")
-      .withIndex("by_workspaceId_and_approval", (q) =>
-        q.eq("workspaceId", workspaceId).eq("approval", approval),
-      )
-      .order("desc")
-      .take(DASHBOARD_SCAN_BOUND + 1);
-    const bucket = countWithin(
-      page.map((row) => ({ at: row.createdAt })),
-      range,
-    );
-    hasMore = hasMore || bucket.hasMore;
-    for (const row of page) {
-      if (row.createdAt >= range.from && row.createdAt <= range.to) {
-        createdAt.push(row.createdAt);
-      }
-    }
-  }
-  return { createdAt, bounded: { count: createdAt.length, hasMore } };
-}
-
-/**
- * Leads sitting at stage `interested` whose stage last moved inside the
- * window. Exact range on `by_workspaceId_and_stage_and_updatedAt` — the same
- * index and the same rows as the Contacts "Interested" filter.
- */
-export async function countInterested(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-  range: Range,
-): Promise<Bounded> {
-  const page = await ctx.db
-    .query("prospects")
-    .withIndex("by_workspaceId_and_stage_and_updatedAt", (q) =>
-      q
-        .eq("workspaceId", workspaceId)
-        .eq("stage", "interested")
-        .gte("updatedAt", range.from)
-        .lte("updatedAt", range.to),
-    )
-    .take(DASHBOARD_SCAN_BOUND + 1);
-  return filled(page, DASHBOARD_SCAN_BOUND);
-}
-
-/**
- * Leads waiting for a yes or a no, right now. Not window-scoped: an approval
- * queue is a state, and hiding the ones that arrived last month would hide
- * work. Exact range on `by_workspaceId_and_approval`.
- */
-export async function countPendingApprovals(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-): Promise<Bounded> {
-  const page = await ctx.db
-    .query("prospects")
-    .withIndex("by_workspaceId_and_approval", (q) =>
-      q.eq("workspaceId", workspaceId).eq("approval", "pending"),
-    )
-    .take(DASHBOARD_SCAN_BOUND + 1);
-  return filled(page, DASHBOARD_SCAN_BOUND);
-}
-
-/* ------------------------------------------------------------------ */
-/* Outreach and replies                                                */
-/* ------------------------------------------------------------------ */
-
-/**
- * Sends the provider ACCEPTED inside the window — `sendAttempts` in state
- * `acknowledged` with `updatedAt` in range, an exact range on
- * `by_workspaceId_and_state_and_updatedAt`.
- *
- * `acknowledged` means accepted, never delivered (PLAN §4.3), and `updatedAt`
- * on such a row is when it was accepted. A follow-up is its own attempt, so
- * the attempt count is emails and the distinct conversation count is people:
- * both are returned, and the stat card shows the second with the first
- * underneath it.
- */
-export async function loadAcknowledgedSends(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-  range: Range,
-): Promise<{
-  rows: Doc<"sendAttempts">[];
-  emails: Bounded;
-  contacted: Bounded;
-}> {
-  const page = await ctx.db
-    .query("sendAttempts")
-    .withIndex("by_workspaceId_and_state_and_updatedAt", (q) =>
-      q
-        .eq("workspaceId", workspaceId)
-        .eq("state", "acknowledged")
-        .gte("updatedAt", range.from)
-        .lte("updatedAt", range.to),
-    )
-    .take(DASHBOARD_SCAN_BOUND + 1);
-  const rows = page.slice(0, DASHBOARD_SCAN_BOUND);
-  const conversations = new Set(rows.map((row) => row.conversationId));
-  const hasMore = page.length > DASHBOARD_SCAN_BOUND;
-  return {
-    rows,
-    emails: filled(page, DASHBOARD_SCAN_BOUND),
-    contacted: { count: conversations.size, hasMore },
-  };
-}
-
-const CONVERSATION_STATES = ["open", "closed", "unassigned"] as const;
-
-/**
- * Threads a real reply landed in during the window — `conversations` whose
- * `lastInboundAt` is in range, newest reply first. These are exactly the rows
- * the Inbox lists as having been replied to.
- *
- * `conversations` has no `lastInboundAt` index, so this walks the three
- * `by_workspaceId_and_state_and_lastMessageAt` ranges from `from` forward.
- * That is sound rather than convenient: `lastMessageAt` is bumped by every
- * message, inbound included, so `lastMessageAt >= lastInboundAt` always and
- * no thread whose reply is in the window can sort below `from`. There is no
- * upper bound on the scan for the same reason — a thread we answered after
- * the window still had its reply inside it.
- *
- * The integrator should add `conversations.by_workspaceId_and_lastInboundAt`;
- * this becomes one exact range.
- */
-export async function loadRepliedConversations(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-  range: Range,
-): Promise<{ rows: Doc<"conversations">[]; bounded: Bounded }> {
-  const rows: Doc<"conversations">[] = [];
-  let hasMore = false;
-  for (const state of CONVERSATION_STATES) {
-    const page = await ctx.db
-      .query("conversations")
-      .withIndex("by_workspaceId_and_state_and_lastMessageAt", (q) =>
-        q
-          .eq("workspaceId", workspaceId)
-          .eq("state", state)
-          .gte("lastMessageAt", range.from),
-      )
-      .order("desc")
-      .take(DASHBOARD_SCAN_BOUND + 1);
-    hasMore = hasMore || page.length > DASHBOARD_SCAN_BOUND;
-    for (const row of page) {
-      const at = row.lastInboundAt;
-      if (at !== undefined && at >= range.from && at <= range.to) {
-        rows.push(row);
-      }
-    }
-  }
-  rows.sort((a, b) => (b.lastInboundAt ?? 0) - (a.lastInboundAt ?? 0));
-  return {
-    rows,
-    bounded: { count: Math.min(rows.length, DASHBOARD_SCAN_BOUND), hasMore },
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Meetings                                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Meetings, counted the way PLAN §9.5 defines them: CONFIRMED bookings only,
- * whose meeting time falls inside the window. A confirmed booking always
- * carries `startsAt`, so this is an exact range on
- * `by_workspaceId_and_state_and_startsAt`.
- *
- * A booking link in an email and a model reading agreement out of a reply are
- * both proposals — they are counted separately, below, and never here.
- */
-export async function countConfirmedMeetings(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-  range: Range,
-): Promise<Bounded> {
-  const page = await ctx.db
-    .query("bookings")
-    .withIndex("by_workspaceId_and_state_and_startsAt", (q) =>
-      q
-        .eq("workspaceId", workspaceId)
-        .eq("state", "confirmed")
-        .gte("startsAt", range.from)
-        .lte("startsAt", range.to),
-    )
-    .take(DASHBOARD_SCAN_BOUND + 1);
-  return filled(page, DASHBOARD_SCAN_BOUND);
-}
-
-/**
- * Proposals still open, right now. Not window-scoped: a proposal has no
- * agreed time to place it in a window — that is the whole difference between
- * it and a meeting — so this is the live count of `proposed` bookings.
- */
-export async function countProposedMeetings(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-): Promise<Bounded> {
-  const page = await ctx.db
-    .query("bookings")
-    .withIndex("by_workspaceId_and_state_and_startsAt", (q) =>
-      q.eq("workspaceId", workspaceId).eq("state", "proposed"),
-    )
-    .take(DASHBOARD_SCAN_BOUND + 1);
-  return filled(page, DASHBOARD_SCAN_BOUND);
-}
-
-/* ------------------------------------------------------------------ */
-/* Daily buckets                                                       */
-/* ------------------------------------------------------------------ */
 
 /** One day of the activity chart, keyed by its local `YYYY-MM-DD`. */
 export type DayBucket = {

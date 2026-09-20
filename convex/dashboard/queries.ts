@@ -11,40 +11,29 @@
  * `model.ts` explains the bounds and names the rows behind every number.
  */
 import { query } from "../_generated/server";
-import type { Id } from "../_generated/dataModel";
 import { requireWorkspaceMember } from "../lib/auth";
 import { getWorkspaceAgent } from "../agents/model";
+import { vAgentMode, vInboxConnection } from "../lib/validators";
 import {
-  boundedLimit,
-  vAgentMode,
-  vInboxConnection,
-  vReplyDisposition,
-} from "../lib/validators";
-import type { ReplyDisposition } from "../lib/validators";
-import {
-  DASHBOARD_SCAN_BOUND,
-  HOT_LEAD_SCORE,
-  NONE,
-  assertRange,
-  bucketByDay,
-  countConfirmedMeetings,
   countInterested,
   countPendingApprovals,
-  countProposedMeetings,
-  leadDisplayName,
-  loadAcknowledgedSends,
   loadHotLeads,
   loadLeadsCreated,
-  loadRepliedConversations,
+} from "./leadReads";
+import {
+  DASHBOARD_SCAN_BOUND,
+  assertRange,
+  bucketByDay,
   vBounded,
+  vRange,
 } from "./model";
+import {
+  countConfirmedMeetings,
+  countProposedMeetings,
+  loadAcknowledgedSends,
+  loadRepliedConversations,
+} from "./outcomeReads";
 import { v } from "convex/values";
-
-const vRange = {
-  workspaceId: v.id("workspaces"),
-  from: v.number(),
-  to: v.number(),
-};
 
 /**
  * The five figures of the stat row, over one window.
@@ -161,127 +150,6 @@ export const activitySeries = query({
 });
 
 /**
- * "Latest hot leads" — researched leads that scored 3 inside the window,
- * newest first. Person fields are optional on a sourced lead and are omitted
- * rather than filled in: the panel prints what the row says and nothing else.
- */
-export const latestHotLeads = query({
-  args: { ...vRange, limit: v.optional(v.number()) },
-  returns: v.object({
-    items: v.array(
-      v.object({
-        prospectId: v.id("prospects"),
-        score: v.number(),
-        createdAt: v.number(),
-        name: v.optional(v.string()),
-        jobTitle: v.optional(v.string()),
-        companyName: v.optional(v.string()),
-      }),
-    ),
-    /** More scored-3 leads in this window than the panel lists. */
-    hasMore: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const range = assertRange(args.from, args.to);
-    const limit = boundedLimit(args.limit);
-    const { rows } = await loadHotLeads(ctx, args.workspaceId, range);
-    return {
-      items: rows.slice(0, limit).map((lead) => {
-        const name = leadDisplayName(lead);
-        return {
-          prospectId: lead._id,
-          score: HOT_LEAD_SCORE,
-          createdAt: lead.createdAt,
-          ...(name !== null ? { name } : {}),
-          ...(lead.jobTitle !== undefined ? { jobTitle: lead.jobTitle } : {}),
-          ...(lead.companyName !== undefined
-            ? { companyName: lead.companyName }
-            : {}),
-        };
-      }),
-      hasMore: rows.length > limit,
-    };
-  },
-});
-
-/**
- * "Latest replies" — threads whose most recent inbound message landed inside
- * the window, newest first.
- *
- * There is no message body on a `conversations` row, so there is no preview
- * here: the panel shows who replied, when, and the classification the reply
- * handler recorded, if any. A one-line summary would have to be invented, and
- * an invented summary of someone's email is the one thing this screen must
- * never print.
- *
- * `inboxConnection` travels with the list so the panel can tell "no inbox
- * connected" from "connected and quiet" without a second, owner-only read.
- */
-type ReplyItem = {
-  conversationId: Id<"conversations">;
-  repliedAt: number;
-  name?: string;
-  companyName?: string;
-  fromAddress?: string;
-  disposition?: ReplyDisposition;
-};
-
-export const latestReplies = query({
-  args: { ...vRange, limit: v.optional(v.number()) },
-  returns: v.object({
-    inboxConnection: vInboxConnection,
-    items: v.array(
-      v.object({
-        conversationId: v.id("conversations"),
-        repliedAt: v.number(),
-        /** The associated lead, when the thread has one. */
-        name: v.optional(v.string()),
-        companyName: v.optional(v.string()),
-        /** The stored sender of that inbound message, when it parsed as one. */
-        fromAddress: v.optional(v.string()),
-        disposition: v.optional(vReplyDisposition),
-      }),
-    ),
-    hasMore: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
-    const range = assertRange(args.from, args.to);
-    const limit = boundedLimit(args.limit);
-    const { rows } = await loadRepliedConversations(ctx, args.workspaceId, range);
-
-    const items: ReplyItem[] = [];
-    for (const conversation of rows.slice(0, limit)) {
-      const lead =
-        conversation.prospectId === undefined
-          ? null
-          : await ctx.db.get("prospects", conversation.prospectId);
-      const name = lead === null ? null : leadDisplayName(lead);
-      items.push({
-        conversationId: conversation._id,
-        repliedAt: conversation.lastInboundAt ?? conversation.updatedAt,
-        ...(name !== null ? { name } : {}),
-        ...(lead?.companyName !== undefined
-          ? { companyName: lead.companyName }
-          : {}),
-        ...(conversation.lastInboundFrom !== undefined
-          ? { fromAddress: conversation.lastInboundFrom }
-          : {}),
-        ...(conversation.lastDisposition !== undefined
-          ? { disposition: conversation.lastDisposition }
-          : {}),
-      });
-    }
-    return {
-      inboxConnection: workspace.inboxConnection,
-      items,
-      hasMore: rows.length > limit,
-    };
-  },
-});
-
-/**
  * The one thing to do next, decided from real state rather than from a step
  * counter: finish setup, connect the inbox, choose how the agent sends,
  * approve the leads waiting, let it send on its own, or nothing at all.
@@ -302,7 +170,7 @@ export const nextStep = query({
     v.object({ kind: v.literal("start_sending"), mode: vAgentMode }),
     v.object({ kind: v.literal("approve_leads"), pending: vBounded }),
     v.object({ kind: v.literal("enable_autopilot") }),
-    v.object({ kind: v.literal("all_set"), pending: vBounded }),
+    v.object({ kind: v.literal("all_set") }),
   ),
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
@@ -326,6 +194,6 @@ export const nextStep = query({
     if (agent.mode === "review") {
       return { kind: "enable_autopilot" as const };
     }
-    return { kind: "all_set" as const, pending: NONE };
+    return { kind: "all_set" as const };
   },
 });
