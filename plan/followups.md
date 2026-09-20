@@ -20,11 +20,19 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T00.3: people search pages 1–3 cost 0 on this account (balance before/after) + live preview-row shape.
 - [ ] T00.4 / T10: AgentMail live shapes and the whole connect flow with a real key.
 - [ ] T00.5: one real identity dump showing `emailVerified` reaches Convex.
+- [ ] T02: the scripted ledger run (hand-off has the exact `npx convex run` sequence) — needs two real workspaces.
+- [ ] T03: `npx convex run ai/health:check '{"workspaceId":"…"}'` happy path, unknown-model refund, billed-and-retried, kill switch, budget, replay — needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
 - [ ] T04: shell click-through against refs 20 and 24 (needs an agent with `onboardingStep: "done"` — first writer is T23); sidebar collapse persistence; bell and credits block against real rows; dark mode.
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] Rename `convex/ai/schema.ts` (Convex drops any `schema.ts` from the generated API listing; it holds no functions, so nothing breaks, but the name collides with the data schema) → e.g. `ai/strictSchema.ts`.
+- [ ] Move T03's constants from `convex/ai/run.ts` into `convex/lib/limits.ts`: `AI_INPUT_CHAR_BUDGET`, `AI_INPUT_TRUNCATION_MARK`, `AI_MAX_OUTPUT_TOKENS`, `AI_MAX_ATTEMPTS` (= the worst-case `ai_calls` reservation), `AI_TRANSPORT_RETRIES`, `AI_REQUEST_TIMEOUT_MS`.
+- [ ] Add a `PROVIDER_UNAVAILABLE` error code and point `GATEWAY_UNAVAILABLE` in `convex/ai/failures.ts` at it (currently reuses `PLATFORM_CAPACITY`, which reads as "budget spent").
+- [ ] `convex/README.md` layout block has no `ai/` row.
+- [ ] Every AI call reserves 2 `ai_calls` and commits 1, so the daily cap of 40 admits 20 in-flight calls; confirm the caps are what we want.
+- [ ] If the gateway rejects the nullable form `"type": ["string","null"]` that `strictJsonSchema` emits for optional fields, switch `nullableNode` to `anyOf` (first live `ai/health:check` run will tell).
 - [ ] Owner rule (colours only from `src/index.css` tokens): pre-pivot offenders are `src/components/marketing/CompanyMark.tsx` (hex backgrounds AND made-up company names — also a no-mock violation), `marketing/Pricing.tsx` and `auth/SignInForm.tsx` (rgba shadow literals). Everything built since the pivot audits clean. Fix with the T50 landing rewrite.
 - [ ] Owner rule (no custom team step): the pre-pivot wizard's "Workspace & policy" step goes with T20; consider storing the auth provider's team id on the workspace and defaulting the workspace name from it.
 - [ ] Landing hero still has pre-pivot copy ("AI Sales Squad", "Give it a campaign, Scout finds…") and a Pricing nav link with no page (T50 landing copy).
