@@ -1,106 +1,29 @@
 /**
- * Usage accounting (architecture §4.4, §9 "Billable/limited resources are
- * debited inside transactions").
+ * Billing — usage accounting (architecture §4.4, §9 "Billable/limited
+ * resources are debited inside transactions").
  *
- * A `usageBuckets` row is one (workspaceId, scopeKey, metric, periodKey)
- * counter; `usageReservations` rows track one logical debit's lifecycle —
- * `reserved` at intent, then exactly one of `committed` (accepted send),
- * `released` (definitively failed/cancelled before any provider effect) or
- * `uncertain` (unknown outcome — capacity stays blocked until reconciled).
+ * This domain owns the ledger: a `usageBuckets` row is one (workspaceId,
+ * scopeKey, metric, periodKey) counter, and a `usageReservations` row tracks
+ * one logical debit — `reserved` at intent, then exactly one of `committed`,
+ * `released` or `uncertain` (unknown outcome: capacity stays blocked). It
+ * decides nothing about WHEN to spend; callers hold that rule.
  *
  * Sends are bucketed by the workspace-local day (`localDayKey(now,
  * workspace.timezone)`), enforced inside the reserving transaction so
  * concurrent sends cannot oversubscribe the daily limit.
  */
-import { internalMutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
-import { v } from "convex/values";
-import { requireWorkspaceEditor } from "./lib/auth";
+import type { Doc, Id } from "../_generated/dataModel";
+import { internalMutation } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
 import {
-  boundedLimit,
   boundedString,
   domainError,
   invalid,
   vUsageMetric,
-} from "./lib/validators";
-import type { UsageReservationState } from "./lib/validators";
-import { usageBucketFields, usageReservationFields } from "./schema";
-
-export const vUsageBucketDoc = v.object({
-  _id: v.id("usageBuckets"),
-  _creationTime: v.number(),
-  ...usageBucketFields,
-});
-
-export const vUsageReservationDoc = v.object({
-  _id: v.id("usageReservations"),
-  _creationTime: v.number(),
-  ...usageReservationFields,
-});
-
-export const vUsageBucketSummary = v.object({
-  bucketId: v.id("usageBuckets"),
-  scopeKey: v.string(),
-  metric: vUsageMetric,
-  periodKey: v.string(),
-  limit: v.number(),
-  reserved: v.number(),
-  committed: v.number(),
-  uncertain: v.number(),
-  /** limit − reserved − committed − uncertain (may be negative if the
-   *  limit was lowered after debits — new reservations then refuse). */
-  remaining: v.number(),
-  updatedAt: v.number(),
-});
-
-/* ------------------------------------------------------------------ */
-/* Owner/operator-safe summary                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Usage summary — owner/operator only (§5 "Owner/operator-safe summary
- * only"). Returns one entry per bucket, bounded.
- */
-export const summary = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    metric: v.optional(vUsageMetric),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(vUsageBucketSummary),
-  handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const limit = boundedLimit(args.limit);
-    const buckets = await ctx.db
-      .query("usageBuckets")
-      .withIndex(
-        "by_workspaceId_and_scopeKey_and_metric_and_periodKey",
-        (q) => q.eq("workspaceId", args.workspaceId),
-      )
-      .collect();
-    return buckets
-      .filter((bucket) => args.metric === undefined || bucket.metric === args.metric)
-      .slice(0, limit)
-      .map((bucket) => ({
-        bucketId: bucket._id,
-        scopeKey: bucket.scopeKey,
-        metric: bucket.metric,
-        periodKey: bucket.periodKey,
-        limit: bucket.limit,
-        reserved: bucket.reserved,
-        committed: bucket.committed,
-        uncertain: bucket.uncertain,
-        remaining:
-          bucket.limit - bucket.reserved - bucket.committed - bucket.uncertain,
-        updatedAt: bucket.updatedAt,
-      }));
-  },
-});
-
-/* ------------------------------------------------------------------ */
-/* Internal reservation lifecycle                                       */
-/* ------------------------------------------------------------------ */
+} from "../lib/validators";
+import type { UsageReservationState } from "../lib/validators";
+import { vUsageReservationDoc } from "./queries";
+import { v } from "convex/values";
 
 export const vReserveResult = v.object({
   bucketId: v.id("usageBuckets"),

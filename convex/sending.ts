@@ -483,7 +483,7 @@ async function ensureUsageReservation(
       `send limit reached for ${capacity.periodKey} (${capacity.limit})`,
     );
   }
-  await ctx.runMutation(internal.usage.reserve, {
+  await ctx.runMutation(internal.billing.reservations.reserve, {
     workspaceId: workspace._id,
     scopeKey: "workspace",
     metric: "sends",
@@ -809,14 +809,14 @@ export const beginDispatch = internalMutation({
       });
       // Release any deferred reservation the parked attempt holds.
       const reservation = await ctx.runMutation(
-        internal.usage.getByOperationKey,
+        internal.billing.reservations.getByOperationKey,
         {
           workspaceId: workspace._id,
           operationKey: attempt.operationKey,
         },
       );
       if (reservation !== null && reservation.state === "reserved") {
-        await ctx.runMutation(internal.usage.release, {
+        await ctx.runMutation(internal.billing.reservations.release, {
           workspaceId: workspace._id,
           operationKey: attempt.operationKey,
         });
@@ -855,7 +855,7 @@ export const beginDispatch = internalMutation({
       };
     }
     let reservation: Doc<"usageReservations"> | null = await ctx.runMutation(
-      internal.usage.getByOperationKey,
+      internal.billing.reservations.getByOperationKey,
       {
         workspaceId: workspace._id,
         operationKey: attempt.operationKey,
@@ -870,7 +870,7 @@ export const beginDispatch = internalMutation({
         heldBucket !== null &&
         heldBucket.periodKey !== localDayKey(now, workspace.timezone)
       ) {
-        await ctx.runMutation(internal.usage.release, {
+        await ctx.runMutation(internal.billing.reservations.release, {
           workspaceId: workspace._id,
           operationKey: attempt.operationKey,
         });
@@ -1187,7 +1187,7 @@ export const recordSendOutcome = internalMutation({
       providerReference?: string,
     ) => {
       const reservation = await ctx.runMutation(
-        internal.usage.getByOperationKey,
+        internal.billing.reservations.getByOperationKey,
         {
           workspaceId: attempt.workspaceId,
           operationKey: attempt.operationKey,
@@ -1198,10 +1198,10 @@ export const recordSendOutcome = internalMutation({
       }
       const fn =
         target === "committed"
-          ? internal.usage.commit
+          ? internal.billing.reservations.commit
           : target === "released"
-            ? internal.usage.release
-            : internal.usage.markUncertain;
+            ? internal.billing.reservations.release
+            : internal.billing.reservations.markUncertain;
       await ctx.runMutation(fn, {
         workspaceId: attempt.workspaceId,
         operationKey: attempt.operationKey,
@@ -1358,14 +1358,14 @@ async function markLostAcknowledgement(
     updatedAt: Date.now(),
   });
   const reservation = await ctx.runMutation(
-    internal.usage.getByOperationKey,
+    internal.billing.reservations.getByOperationKey,
     {
       workspaceId: attempt.workspaceId,
       operationKey: attempt.operationKey,
     },
   );
   if (reservation !== null && reservation.state === "reserved") {
-    await ctx.runMutation(internal.usage.markUncertain, {
+    await ctx.runMutation(internal.billing.reservations.markUncertain, {
       workspaceId: attempt.workspaceId,
       operationKey: attempt.operationKey,
     });
@@ -2221,14 +2221,14 @@ export const cancelAttempt = mutation({
       updatedAt: now,
     });
     const reservation = await ctx.runMutation(
-      internal.usage.getByOperationKey,
+      internal.billing.reservations.getByOperationKey,
       {
         workspaceId: args.workspaceId,
         operationKey: attempt.operationKey,
       },
     );
     if (reservation !== null && reservation.state === "reserved") {
-      await ctx.runMutation(internal.usage.release, {
+      await ctx.runMutation(internal.billing.reservations.release, {
         workspaceId: args.workspaceId,
         operationKey: attempt.operationKey,
       });
@@ -2288,14 +2288,14 @@ export const cancelParkedConversationAttempts = internalMutation({
         updatedAt: now,
       });
       const reservation = await ctx.runMutation(
-        internal.usage.getByOperationKey,
+        internal.billing.reservations.getByOperationKey,
         {
           workspaceId: args.workspaceId,
           operationKey: attempt.operationKey,
         },
       );
       if (reservation !== null && reservation.state === "reserved") {
-        await ctx.runMutation(internal.usage.release, {
+        await ctx.runMutation(internal.billing.reservations.release, {
           workspaceId: args.workspaceId,
           operationKey: attempt.operationKey,
         });
@@ -2354,14 +2354,14 @@ export const cancelDraftParkedAttempts = internalMutation({
         updatedAt: now,
       });
       const reservation = await ctx.runMutation(
-        internal.usage.getByOperationKey,
+        internal.billing.reservations.getByOperationKey,
         {
           workspaceId: args.workspaceId,
           operationKey: attempt.operationKey,
         },
       );
       if (reservation !== null && reservation.state === "reserved") {
-        await ctx.runMutation(internal.usage.release, {
+        await ctx.runMutation(internal.billing.reservations.release, {
           workspaceId: args.workspaceId,
           operationKey: attempt.operationKey,
         });
