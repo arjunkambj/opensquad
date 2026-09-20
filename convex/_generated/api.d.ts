@@ -10,6 +10,7 @@
 
 import type * as activity_model from "../activity/model.js";
 import type * as activity_queries from "../activity/queries.js";
+import type * as agents_filterOptions from "../agents/filterOptions.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_mutations from "../agents/mutations.js";
 import type * as agents_queries from "../agents/queries.js";
@@ -20,6 +21,7 @@ import type * as ai_run from "../ai/run.js";
 import type * as billing_credits from "../billing/credits.js";
 import type * as billing_model from "../billing/model.js";
 import type * as billing_paidCall from "../billing/paidCall.js";
+import type * as billing_platformBalance from "../billing/platformBalance.js";
 import type * as billing_platformBudgets from "../billing/platformBudgets.js";
 import type * as billing_queries from "../billing/queries.js";
 import type * as billing_reservations from "../billing/reservations.js";
@@ -52,6 +54,15 @@ import type * as inbox_receiptDrain from "../inbox/receiptDrain.js";
 import type * as inbox_replyGate from "../inbox/replyGate.js";
 import type * as inbox_unassignedQueue from "../inbox/unassignedQueue.js";
 import type * as integrations_agentmail from "../integrations/agentmail.js";
+import type * as integrations_enrich_catalog from "../integrations/enrich/catalog.js";
+import type * as integrations_enrich_client from "../integrations/enrich/client.js";
+import type * as integrations_enrich_filters from "../integrations/enrich/filters.js";
+import type * as integrations_enrich_reveal from "../integrations/enrich/reveal.js";
+import type * as integrations_enrich_revealContact from "../integrations/enrich/revealContact.js";
+import type * as integrations_enrich_revealPoll from "../integrations/enrich/revealPoll.js";
+import type * as integrations_enrich_rows from "../integrations/enrich/rows.js";
+import type * as integrations_enrich_search from "../integrations/enrich/search.js";
+import type * as integrations_enrich_wallet from "../integrations/enrich/wallet.js";
 import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as integrations_firecrawlPages from "../integrations/firecrawlPages.js";
 import type * as leads_events from "../leads/events.js";
@@ -112,6 +123,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "activity/model": typeof activity_model;
   "activity/queries": typeof activity_queries;
+  "agents/filterOptions": typeof agents_filterOptions;
   "agents/model": typeof agents_model;
   "agents/mutations": typeof agents_mutations;
   "agents/queries": typeof agents_queries;
@@ -122,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   "billing/credits": typeof billing_credits;
   "billing/model": typeof billing_model;
   "billing/paidCall": typeof billing_paidCall;
+  "billing/platformBalance": typeof billing_platformBalance;
   "billing/platformBudgets": typeof billing_platformBudgets;
   "billing/queries": typeof billing_queries;
   "billing/reservations": typeof billing_reservations;
@@ -154,6 +167,15 @@ declare const fullApi: ApiFromModules<{
   "inbox/replyGate": typeof inbox_replyGate;
   "inbox/unassignedQueue": typeof inbox_unassignedQueue;
   "integrations/agentmail": typeof integrations_agentmail;
+  "integrations/enrich/catalog": typeof integrations_enrich_catalog;
+  "integrations/enrich/client": typeof integrations_enrich_client;
+  "integrations/enrich/filters": typeof integrations_enrich_filters;
+  "integrations/enrich/reveal": typeof integrations_enrich_reveal;
+  "integrations/enrich/revealContact": typeof integrations_enrich_revealContact;
+  "integrations/enrich/revealPoll": typeof integrations_enrich_revealPoll;
+  "integrations/enrich/rows": typeof integrations_enrich_rows;
+  "integrations/enrich/search": typeof integrations_enrich_search;
+  "integrations/enrich/wallet": typeof integrations_enrich_wallet;
   "integrations/firecrawl": typeof integrations_firecrawl;
   "integrations/firecrawlPages": typeof integrations_firecrawlPages;
   "leads/events": typeof leads_events;
