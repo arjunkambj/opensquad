@@ -34,17 +34,6 @@ crons.interval(
   {},
 );
 
-// A paid provider call that never recorded its outcome must not silently
-// keep an allowance reserved forever. This moves those to `uncertain` — which
-// KEEPS capacity blocked, deliberately: we cannot prove we were not billed,
-// so the honest accounting is an explicit unknown, not a release.
-crons.interval(
-  "provider-operation-sweep",
-  { minutes: 5 },
-  internal.integrations.firecrawl.sweepStaleFirecrawlOperations,
-  {},
-);
-
 // The same belt for every paid call that goes through `withCredits`: an
 // operation whose action died before it could settle is parked `uncertain`,
 // which KEEPS its credits and provider units blocked. We cannot prove the

@@ -30,7 +30,7 @@
 import { FirecrawlClient } from "@firecrawl/firecrawl-convex";
 import { v } from "convex/values";
 import { components } from "../_generated/api";
-import { internalAction, internalMutation } from "../_generated/server";
+import { internalAction } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import type { FunctionReference } from "convex/server";
@@ -529,27 +529,4 @@ export const diagnosticScrapeSite = internalAction({
       })),
     };
   },
-});
-
-/**
- * Registered by `crons.ts` as `provider-operation-sweep`.
- *
- * It has nothing left to reconcile. A scrape is a synchronous request with no
- * job id to look up, so there is no provider-side fact this task could fetch
- * that `billing/settlement.ts#reconcilePaidCall` would accept as proof — and
- * the generic belts now cover the rest: `billing/sweeps.ts#parkStalePaidCalls`
- * parks a scrape whose action died, and `commitExpiredHolds` commits a hold
- * nothing resolved in 24 hours. This stays only because the cron registration
- * lives in an integrator-owned file; it reports zero work and does none.
- *
- * **Integrator: remove the `provider-operation-sweep` entry from `crons.ts`
- * and delete this function.** (See the hand-off note.)
- */
-export const sweepStaleFirecrawlOperations = internalMutation({
-  args: {},
-  returns: v.object({ checked: v.number(), reconciled: v.number() }),
-  handler: async (): Promise<{ checked: number; reconciled: number }> => ({
-    checked: 0,
-    reconciled: 0,
-  }),
 });
