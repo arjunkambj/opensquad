@@ -22,12 +22,17 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T00.5: one real identity dump showing `emailVerified` reaches Convex.
 - [ ] T02: the scripted ledger run (hand-off has the exact `npx convex run` sequence) — needs two real workspaces.
 - [ ] T03: `npx convex run ai/health:check '{"workspaceId":"…"}'` happy path, unknown-model refund, billed-and-retried, kill switch, budget, replay — needs a real workspace.
+- [ ] T11 (partly done 2026-09-20 on dev, real provider): catalogue refresh → 46 filters / 38 with values ✔; wallet 10,000 ✔; real count 89,731 for the spike's ICP ✔; wrong-case `jobLevel`, the silently-zero `jobFunction: "Marketing"` and an unknown key all refused with no network call ✔; balance watchdog `tripped: false` at floor 300 ✔. **Still owed (need a workspace):** `findLeads … summaryOnly` with the balance unchanged before/after (proves pages 1–3 cost 0), a one-lead reveal debiting 15 credits / 10 provider units, the breaker trip/release via `ENRICH_BALANCE_FLOOR`, and the two crons visible in the dashboard.
 - [ ] T12: 1-page and 4-page real scrapes (sizes/titles only), replay with the same key, and the four refused URLs leaving no operation row — exact commands in the T12 hand-off; needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
 - [ ] T04: shell click-through against refs 20 and 24 (needs an agent with `onboardingStep: "done"` — first writer is T23); sidebar collapse persistence; bell and credits block against real rows; dark mode.
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] T11: the 49 `martechCategoriesOrg` values are recorded nowhere, so that one filter is refused ("no cached allowed values") until the list is pasted into `CATALOGUE_SEEDS` in `integrations/enrich/catalog.ts`. No PLAN §3 signal needs it.
+- [ ] T11: no cron drives `integrations/enrich/revealPoll:reconcileRevealOperation` for `uncertain` `get_email` holds older than the 2-minute poll belt; wire it into the recovery sweep before `commitExpiredHolds` reaches them (T30 owns `agents/recovery.ts`).
+- [ ] T02/T11: `reconcilePaidCall` commits an `uncertain` reservation at its worst case and ignores a smaller `actualUnits` (harmless today: a reveal's worst case equals its actual).
+- [ ] Document `ENRICH_BALANCE_FLOOR` in `.env.example`; add `enrich/` and `billing/platformBalance.ts` to `convex/README.md`.
 - [ ] After T11 merges (it is the only task editing `convex/crons.ts` right now): remove the `provider-operation-sweep` cron and the no-op `integrations/firecrawl.ts#sweepStaleFirecrawlOperations` it targets — T02's `paid-call-park-stale` + `commitExpiredHolds` cover a lost scrape.
 - [ ] Scrape budgets live beside the code in `convex/integrations/firecrawlPages.ts` (`SCRAPE_*`) and `URL_MAX_LENGTH` in `lib/urlSafety.ts`; decide whether they move to `lib/limits.ts`. `TRIAL_SCRAPES_LIFETIME_LIMIT` in `limits.ts` is now unreferenced with a stale comment.
 - [ ] Validators with no caller after T12: `consumesPageAllowance`, `vRetrievedPage`, `RESEARCH_PAGES_PER_PROSPECT`, `sha256Hex`, `unwrapConvexErrorText` (T30 may still want `vRetrievedPage` for lead evidence).
