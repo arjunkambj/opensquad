@@ -52,10 +52,6 @@ export function InboxList({ detailOpen }: { detailOpen: boolean }) {
     current !== undefined && current !== null ? current.workspace._id : undefined
   const tab = search.tab ?? "open"
 
-  const employees = useQuery(
-    api.employees.list,
-    workspaceId === undefined ? "skip" : { workspaceId },
-  )
   // The unassigned tab's count is the one `attentionCounts` bucket that is an
   // exact match for a tab's index range (state = "unassigned"). `openTakeover`
   // deliberately does NOT badge the takeover tab — it counts only open frozen
@@ -133,7 +129,6 @@ export function InboxList({ detailOpen }: { detailOpen: boolean }) {
           tab={tab}
           detailOpen={detailOpen}
           attention={attention}
-          employees={employees}
           onSelectTab={setTab}
         />
       </CatchBoundary>
@@ -151,7 +146,6 @@ function InboxListBody({
   tab,
   detailOpen,
   attention,
-  employees,
   onSelectTab,
 }: {
   workspaceId: Id<"workspaces">
@@ -161,7 +155,6 @@ function InboxListBody({
   attention:
     | FunctionReturnType<typeof api.conversations.attentionCounts>
     | undefined
-  employees: FunctionReturnType<typeof api.employees.list> | undefined
   onSelectTab: (tab: ConversationTab) => void
 }) {
   const navigate = useNavigate()
@@ -188,10 +181,6 @@ function InboxListBody({
     )
   }
 
-  const employeeName = (employeeId: Id<"employees">) =>
-    employees?.find((employee) => employee._id === employeeId)?.name ??
-    "an employee"
-
   return (
     <InboxRows
       items={items}
@@ -202,7 +191,6 @@ function InboxListBody({
       attention={attention}
       activeKey={activeKey}
       setActiveKey={setActiveKey}
-      employeeName={employeeName}
       onFirstPage={() =>
         void navigate({
           to: "/inbox",
@@ -234,7 +222,6 @@ function InboxRows({
   attention,
   activeKey,
   setActiveKey,
-  employeeName,
   onFirstPage,
   onNextPage,
   onSelectTab,
@@ -249,7 +236,6 @@ function InboxRows({
     | undefined
   activeKey: string | null
   setActiveKey: (key: string) => void
-  employeeName: (employeeId: Id<"employees">) => string
   onFirstPage: () => void
   onNextPage: (cursor: string) => void
   onSelectTab: (tab: ConversationTab) => void
@@ -319,7 +305,6 @@ function InboxRows({
               item={item}
               active={item.conversationId === activeKey}
               setActiveKey={setActiveKey}
-              employeeName={employeeName}
             />
           </li>
         ))}
@@ -361,12 +346,10 @@ function ConversationRow({
   item,
   active,
   setActiveKey,
-  employeeName,
 }: {
   item: ConversationSummary
   active: boolean
   setActiveKey: (key: string) => void
-  employeeName: (employeeId: Id<"employees">) => string
 }) {
   return (
     <Link
@@ -403,8 +386,7 @@ function ConversationRow({
       <p className="text-xs text-muted-foreground">
         {item.prospect === null
           ? "No lead linked"
-          : `${item.prospect.salesStage} · `}
-        worked by {employeeName(item.employeeId)}
+          : item.prospect.salesStage}
         {item.assigneeIdentityKey !== undefined
           ? " · has a human owner"
           : ""}

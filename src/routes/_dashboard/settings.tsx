@@ -9,11 +9,9 @@ import { Chip } from "@/components/shared/presentation"
 import { cn } from "@/lib/utils"
 
 /**
- * `?section=` rather than seven route files. The requirement is a deep link: a
- * `connection_required` decision must be able to point at the runtime
- * controls, and a send blocked by the policy window at the sending policy.
- * One `validateSearch` delivers that; seven route files deliver the same thing
- * and a week we do not have.
+ * `?section=` rather than six route files. The requirement is a deep link: a
+ * send blocked by the policy window must be able to point at the sending
+ * policy. One `validateSearch` delivers that.
  */
 export const SETTINGS_SECTIONS = [
   "account",
@@ -21,7 +19,6 @@ export const SETTINGS_SECTIONS = [
   "sending",
   "automation",
   "members",
-  "runtime",
   "integrations",
 ] as const
 
@@ -42,7 +39,6 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   sending: "Sending",
   automation: "Automation",
   members: "Members",
-  runtime: "Runtime",
   integrations: "Integrations",
 }
 
@@ -58,7 +54,6 @@ const OWNER_ONLY: ReadonlySet<SettingsSection> = new Set([
   "sending",
   "automation",
   "members",
-  "runtime",
 ])
 
 function SettingsPage() {

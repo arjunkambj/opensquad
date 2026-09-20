@@ -150,7 +150,6 @@ function ActivityRow({
           : ""}
         by {leadEventActorLabel(item.actor)}
         {item.bookingId !== undefined ? " · linked booking" : ""}
-        {item.missionId !== undefined ? " · on a mission" : ""}
       </p>
       {item.details?.note !== undefined ? (
         <blockquote className="border-l-2 border-border pl-3 text-sm leading-relaxed text-foreground">

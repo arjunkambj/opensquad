@@ -1,4 +1,4 @@
-import { CatchBoundary, Link } from "@tanstack/react-router"
+import { CatchBoundary } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { useState } from "react"
@@ -61,23 +61,26 @@ function BookingDraftLinkBody({
   bookingVersion: number
 }) {
   const draft = useQuery(api.drafts.get, { workspaceId, draftId })
-  const asks = useQuery(api.decisions.listForDraft, { workspaceId, draftId })
+  const approvals = useQuery(api.approvals.listForDraft, {
+    workspaceId,
+    draftId,
+  })
   const preflight = useQuery(api.sending.preflight, { workspaceId, draftId })
   const [editOpen, setEditOpen] = useState(false)
 
-  if (draft === undefined || asks === undefined || preflight === undefined) {
+  if (
+    draft === undefined ||
+    approvals === undefined ||
+    preflight === undefined
+  ) {
     return (
       <LoadingState
         title="Loading the draft"
-        description="Reading the proposal email and its approval ask."
+        description="Reading the proposal email and its recorded approvals."
       />
     )
   }
 
-  const openAsk = asks.items.find(
-    (decision) =>
-      decision.kind === "draft_approval" && decision.state === "open",
-  )
   // `sending.preflight` returns attempts newest-first.
   const latestAttempt = preflight.attempts[0]
   const superseded = draft.supersededAt !== undefined
@@ -112,26 +115,11 @@ function BookingDraftLinkBody({
         {draft.body}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {openAsk !== undefined ? (
-          <Button
-            variant="outline"
-            size="sm"
-            render={
-              <Link
-                to="/decisions/$decisionId"
-                params={{ decisionId: openAsk._id }}
-              />
-            }
-          >
-            Review the approval ask
-          </Button>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {asks.items.length === 0
-              ? "No approval ask is linked to this draft."
-              : "The approval ask was resolved — the queue has the outcome."}
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground">
+          {approvals.length === 0
+            ? "No approval has been recorded for this revision yet."
+            : `Latest verdict: ${approvals[approvals.length - 1].decision}.`}
+        </p>
         {latestAttempt === undefined && !superseded ? (
           <Button
             variant="ghost"

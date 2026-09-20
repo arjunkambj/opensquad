@@ -544,9 +544,7 @@ function AssignmentCard({
   expectedContextVersion: number
 }) {
   const members = useQuery(api.workspaces.listMembers, { workspaceId })
-  const employees = useQuery(api.employees.list, { workspaceId })
   const assignOwner = useMutation(api.conversations.assignOwner)
-  const assignEmployee = useMutation(api.conversations.assignEmployee)
 
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -572,9 +570,7 @@ function AssignmentCard({
     <Card>
       <CardHeader>
         <CardTitle>Ownership</CardTitle>
-        <CardDescription>
-          The person who owns this thread, and the employee that works it.
-        </CardDescription>
+        <CardDescription>The person who owns this thread.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
@@ -600,30 +596,6 @@ function AssignmentCard({
             {activeMembers.map((member) => (
               <option key={member._id} value={member.identityKey}>
                 {member.identityKey.split("|").pop()} — {member.role}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="conversation-employee">Employee</Label>
-          <NativeSelect
-            id="conversation-employee"
-            disabled={pending !== null || employees === undefined}
-            value={conversation.employeeId}
-            onChange={(event) =>
-              run("assignEmployee", () =>
-                assignEmployee({
-                  workspaceId,
-                  conversationId: conversation._id,
-                  expectedContextVersion,
-                  employeeId: event.target.value as Id<"employees">,
-                }),
-              )
-            }
-          >
-            {(employees ?? []).map((employee) => (
-              <option key={employee._id} value={employee._id}>
-                {employee.name}
               </option>
             ))}
           </NativeSelect>

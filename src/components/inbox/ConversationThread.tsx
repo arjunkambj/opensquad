@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
@@ -166,14 +165,9 @@ function OutboundMessage({
 }
 
 /**
- * The pending draft's ask lives on `/decisions/$decisionId`. There is no
- * public `decisions.byDraft` query (recorded as a gap for the integrator),
- * so the link resolves through the draft's own mission queue: `drafts.get`
- * yields `missionId`, and `decisions.listOpen` on that mission carries the
- * draft_approval ask for this revision — a mission's open-ask page is small
- * enough that the match is on its first page. When it is not there — the ask
- * was resolved between renders — the link falls back to the mission-filtered
- * queue, which is always a real place.
+ * A pending draft, identified by its current revision. There is no approval
+ * surface to link to while the outbound agent is being rebuilt, so this states
+ * what exists rather than offering a route that would 404.
  */
 function PendingDraftLink({
   workspaceId,
@@ -183,45 +177,17 @@ function PendingDraftLink({
   draftId: Id<"drafts">
 }) {
   const draft = useQuery(api.drafts.get, { workspaceId, draftId })
-  const open = useQuery(
-    api.decisions.listOpen,
-    draft === undefined
-      ? "skip"
-      : {
-          workspaceId: draft.workspaceId,
-          missionId: draft.missionId,
-          limit: 50,
-        },
-  )
-  const decision = open?.items.find(
-    (item) => item.draftId === draftId && item.state === "open",
-  )
 
-  if (draft === undefined || open === undefined) {
+  if (draft === undefined) {
     return (
       <span className="text-xs text-muted-foreground">
-        Finding this draft's approval ask…
+        Reading this draft…
       </span>
     )
   }
-  if (decision === undefined) {
-    return (
-      <Link
-        to="/decisions"
-        search={{ mission: draft.missionId }}
-        className="text-xs font-medium text-foreground underline underline-offset-2"
-      >
-        Open this mission's decisions
-      </Link>
-    )
-  }
   return (
-    <Link
-      to="/decisions/$decisionId"
-      params={{ decisionId: decision._id }}
-      className="text-xs font-medium text-foreground underline underline-offset-2"
-    >
-      Review and approve this draft
-    </Link>
+    <span className="text-xs text-muted-foreground">
+      Revision {draft.revision} is written and waits for a recorded approval.
+    </span>
   )
 }

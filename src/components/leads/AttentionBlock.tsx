@@ -3,7 +3,6 @@ import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { useInboxAttention } from "@/hooks/use-inbox-attention"
-import { useOpenDecisionCount } from "@/hooks/use-open-decision-count"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -14,17 +13,12 @@ import {
 } from "@/components/ui/card"
 
 /**
- * "What needs a person", in three bounded counts — the first thing the
- * operator sees on `/leads`, the signed-in home (`plan/ux.md` §161). Moved
- * from `/overview`, which is Mission Control for execution rather than the
- * first surface.
+ * "What needs a person", in two bounded counts — the first thing the
+ * operator sees on `/leads`, the signed-in home.
  *
  * Each slot shows what its count is OF, because a bare number cannot be
  * checked:
  *
- * - **Open decisions** — `decisions.listOpen`, the same hook the sidebar's
- *   Decisions badge uses. Any drill-down lives on the queue itself; the tile
- *   links there, not to a filtered sub-view.
  * - **Unassigned mail** — `conversations.attentionCounts.unassigned`, the
  *   exact bucket for threads no lead has claimed (bounded at 50+). The
  *   sidebar Inbox badge shows the *different* `needsAttention` sum — same
@@ -38,40 +32,11 @@ export function AttentionBlock({
 }: {
   workspaceId: Id<"workspaces">
 }) {
-  const decisions = useOpenDecisionCount(workspaceId)
   const inboxAttention = useInboxAttention(workspaceId)
   const overdue = useQuery(api.prospects.countOverdue, { workspaceId })
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <Card>
-        <CardHeader>
-          <CardDescription>Open decisions</CardDescription>
-          <CardTitle
-            className="font-heading text-3xl tabular-nums"
-            aria-live="polite"
-          >
-            {decisions ?? "—"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-start gap-2">
-          <p className="text-sm text-muted-foreground">
-            {decisions === undefined
-              ? "Counting what is waiting on a human."
-              : decisions === "0"
-                ? "Nothing is waiting on you."
-                : "Asks of every kind, required or not, waiting on a human."}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link to="/decisions" />}
-          >
-            Go to Decisions
-          </Button>
-        </CardContent>
-      </Card>
-
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
           <CardDescription>Unassigned mail</CardDescription>

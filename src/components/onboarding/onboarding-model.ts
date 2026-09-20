@@ -1,5 +1,4 @@
 import type { Doc } from "../../../convex/_generated/dataModel"
-import type { SourceConfig } from "../../../convex/lib/validators"
 import { minutesToTimeString } from "@/lib/workspace-time"
 
 /**
@@ -31,14 +30,6 @@ export type WorkspacePolicyForm = {
 export type CampaignScopeForm = {
   title: string
   brief: string
-  /** Free-text source instruction stored verbatim on the plan. */
-  instruction: string
-  /** Apollo typed filters (comma-separated inputs). */
-  locations: string
-  categories: string
-  employeeMin: string
-  employeeMax: string
-  maxResults: string
   /** 1–5 accepted prospects. */
   leadLimit: number
   /** Paid enrichment operations allowed for the campaign lifetime. */
@@ -78,12 +69,6 @@ export function defaultCampaignForm(): CampaignScopeForm {
   return {
     title: "",
     brief: "",
-    instruction: "",
-    locations: "",
-    categories: "",
-    employeeMin: "",
-    employeeMax: "",
-    maxResults: "",
     leadLimit: 5,
     enrichmentLimit: "2",
   }
@@ -106,44 +91,6 @@ function parseOptionalInt(value: string): number | undefined {
   return Number.isInteger(parsed) ? parsed : Number.NaN
 }
 
-/**
- * Build the typed source plan the owner is asked to confirm. Only Apollo is
- * offered: `ENABLED_SOURCES` on the backend is `["apollo"]`, and YC/TrustMRR
- * stay disabled until their extraction gates pass.
- */
-export function buildSourceConfigs(form: CampaignScopeForm): SourceConfig[] {
-  const locations = splitListInput(form.locations)
-  const categories = splitListInput(form.categories)
-  const employeeMin = parseOptionalInt(form.employeeMin)
-  const employeeMax = parseOptionalInt(form.employeeMax)
-  const maxResults = parseOptionalInt(form.maxResults)
-
-  const filters: {
-    locations?: string[]
-    categories?: string[]
-    employeeCount?: { min: number; max: number }
-  } = {}
-  if (locations.length > 0) {
-    filters.locations = locations
-  }
-  if (categories.length > 0) {
-    filters.categories = categories
-  }
-  if (employeeMin !== undefined || employeeMax !== undefined) {
-    filters.employeeCount = {
-      min: employeeMin ?? 1,
-      max: employeeMax ?? 100000,
-    }
-  }
-  return [
-    {
-      source: "apollo",
-      filters,
-      ...(maxResults !== undefined ? { maxResults } : {}),
-    },
-  ]
-}
-
 /** Client-side sanity check mirror of the bounded-int fields. */
 export function campaignFormProblems(form: CampaignScopeForm): string[] {
   const problems: string[] = []
@@ -152,32 +99,6 @@ export function campaignFormProblems(form: CampaignScopeForm): string[] {
   }
   if (form.brief.trim() === "") {
     problems.push("Campaign brief is required.")
-  }
-  if (form.instruction.trim() === "") {
-    problems.push("Source instruction is required.")
-  }
-  const maxResults = parseOptionalInt(form.maxResults)
-  if (maxResults !== undefined && (Number.isNaN(maxResults) || maxResults < 1 || maxResults > 25)) {
-    problems.push("Max results must be an integer between 1 and 25.")
-  }
-  const employeeMin = parseOptionalInt(form.employeeMin)
-  const employeeMax = parseOptionalInt(form.employeeMax)
-  for (const [label, value] of [
-    ["Employee count minimum", employeeMin],
-    ["Employee count maximum", employeeMax],
-  ] as const) {
-    if (value !== undefined && (Number.isNaN(value) || value < 1)) {
-      problems.push(`${label} must be a positive integer.`)
-    }
-  }
-  if (
-    employeeMin !== undefined &&
-    employeeMax !== undefined &&
-    !Number.isNaN(employeeMin) &&
-    !Number.isNaN(employeeMax) &&
-    employeeMin > employeeMax
-  ) {
-    problems.push("Employee count minimum must not exceed the maximum.")
   }
   const enrichment = parseOptionalInt(form.enrichmentLimit)
   if (

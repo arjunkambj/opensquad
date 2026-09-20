@@ -54,10 +54,6 @@ export function ConversationDetail({
     api.conversations.thread,
     workspaceId === undefined ? "skip" : { workspaceId, conversationId },
   )
-  const employees = useQuery(
-    api.employees.list,
-    workspaceId === undefined ? "skip" : { workspaceId },
-  )
   const markRead = useMutation(api.conversations.markRead)
 
   // Focus lands on the heading when a thread opens — once per thread, not on
@@ -100,9 +96,6 @@ export function ConversationDetail({
       role={current.role}
       detail={detail}
       thread={thread}
-      employeeName={(employeeId) =>
-        employees?.find((employee) => employee._id === employeeId)?.name
-      }
       headingRef={headingRef}
     />
   )
@@ -113,14 +106,12 @@ function LoadedConversation({
   role,
   detail,
   thread,
-  employeeName,
   headingRef,
 }: {
   workspaceId: Id<"workspaces">
   role: "owner" | "operator" | "viewer"
   detail: FunctionReturnType<typeof api.conversations.get>
   thread: FunctionReturnType<typeof api.conversations.thread> | undefined
-  employeeName: (employeeId: Id<"employees">) => string | undefined
   headingRef: RefObject<HTMLHeadingElement | null>
 }) {
   const { conversation, prospect, campaign } = detail
@@ -138,8 +129,6 @@ function LoadedConversation({
       ? "skip"
       : { workspaceId, email: conversation.lastInboundFrom },
   )
-
-  const employee = employeeName(conversation.employeeId)
 
   return (
     <div className="flex flex-col gap-5">
@@ -203,10 +192,6 @@ function LoadedConversation({
               value={conversation.lastInboundFrom}
             />
           ) : null}
-          <DetailRow
-            label="Worked by"
-            value={employee ?? "an employee"}
-          />
           {conversation.assigneeIdentityKey !== undefined ? (
             <DetailRow
               label="Human owner"

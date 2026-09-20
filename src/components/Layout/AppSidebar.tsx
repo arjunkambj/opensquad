@@ -2,7 +2,6 @@ import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
-import { useOpenDecisionCount } from "@/hooks/use-open-decision-count"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -75,11 +74,6 @@ export function AppSidebar() {
   // missing workspace skips the query and renders no badge at all, rather
   // than a zero that would claim the queue is empty.
   const current = useCurrentWorkspace()
-  const openDecisions = useOpenDecisionCount(
-    current !== undefined && current !== null
-      ? current.workspace._id
-      : undefined,
-  )
   // Unassigned + open-frozen threads — the same call the Overview attention
   // block makes, so the badge and the block can never disagree.
   const inboxAttention = useInboxAttention(
@@ -94,7 +88,7 @@ export function AppSidebar() {
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === SEARCH_SHORTCUT &&
         // Not while the user is typing. ⌘K inside a campaign brief or a
-        // mission note opened the palette over their half-written words.
+        // conversation note opened the palette over their half-written words.
         !isTypingTarget(event.target)
       ) {
         event.preventDefault()
@@ -105,9 +99,8 @@ export function AppSidebar() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  // Prefix match, so a nested route keeps its parent lit — `/overview` must
-  // stay the active item while a mission detail is open under it. The
-  // boundary check stops `/settings` matching a future `/settings-export`.
+  // Prefix match, so a nested route keeps its parent lit. The boundary check
+  // stops `/settings` matching a future `/settings-export`.
   const isActive = (item: MenuItem) =>
     pathname === item.href || pathname.startsWith(`${item.href}/`)
 
@@ -132,19 +125,12 @@ export function AppSidebar() {
         </SidebarMenuButton>
         {/* The same call the home attention block makes, with byte-identical
             arguments, so Convex serves one subscription and the two numbers
-            cannot disagree. A zero is shown as the digit — "nothing is
-            waiting" is a real state and worth seeing. */}
+            cannot disagree. */}
         {/* The wording is in the DOM, not in an attribute. `SidebarMenuBadge`
             is a bare `<div>` with no role, and ARIA does not name a generic
             element: an `aria-label` there is silently discarded, so the count
             reached a screen reader as a bare "3" — the one number the sidebar
             exists to surface, stripped of what it counts. */}
-        {item.href === "/decisions" && openDecisions !== undefined ? (
-          <SidebarMenuBadge>
-            {openDecisions}
-            <span className="sr-only"> open decisions</span>
-          </SidebarMenuBadge>
-        ) : null}
         {item.href === "/inbox" && inboxAttention !== undefined ? (
           <SidebarMenuBadge>
             {/* `attentionCounts` caps at MAX_LIST_LIMIT — render the same

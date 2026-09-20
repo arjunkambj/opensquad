@@ -109,14 +109,14 @@ function ProvisionWorkspace() {
       <CardHeader>
         <CardTitle>Create your workspace</CardTitle>
         <CardDescription>
-          One workspace with three AI employees — Scout, Researcher and
-          Outreach — plus a conservative send policy you confirm next.
+          One workspace for your outbound, plus a conservative send policy you
+          confirm next.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error !== null ? (
           <ErrorState
-            title="Provisioning failed"
+            title="Could not create the workspace"
             description={error}
             onRetry={() => void provision()}
           />
@@ -187,28 +187,20 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
             Setup complete
           </CardTitle>
           <CardDescription>
-            Your campaign scope is confirmed and automation is active. Runs
-            start once the workspace runtime connects — that is the one thing
-            still blocking them.
+            Your campaign scope is confirmed and automation is active.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {/* The finish line is the runtime connection, not a tour of empty
-              pages — link the action that actually unblocks runs. */}
-          <Button
-            render={
-              <Link to="/settings" search={{ section: "runtime" }} />
-            }
-          >
-            Connect the runtime
+          <Button render={<Link to="/leads" />}>
+            Go to Leads
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               data-icon="inline-end"
               strokeWidth={2}
             />
           </Button>
-          <Button variant="outline" render={<Link to="/employees" />}>
-            Meet your employees
+          <Button variant="outline" render={<Link to="/inbox" />}>
+            Open the inbox
           </Button>
         </CardContent>
       </Card>

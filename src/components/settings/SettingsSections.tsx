@@ -3,7 +3,6 @@ import type { SettingsSection } from "@/routes/_dashboard/settings"
 import { AutomationSection } from "@/components/settings/AutomationSection"
 import { IntegrationsSection } from "@/components/settings/IntegrationsSection"
 import { MembersSection } from "@/components/settings/MembersSection"
-import { RuntimeSection } from "@/components/settings/RuntimeSection"
 import { SendingPolicySection } from "@/components/settings/SendingPolicySection"
 import { SuppressionsSection } from "@/components/settings/SuppressionsSection"
 import { WorkspaceSection } from "@/components/settings/WorkspaceSection"
@@ -12,12 +11,12 @@ import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 
 /**
- * One workspace-backed settings section at a time — the `?section=` deep
- * link is the contract a `connection_required` decision and a policy-blocked
- * send rely on, so each section is individually addressable rather than one
- * long stack. Loading, missing-workspace and role-gated states stay explicit
- * (V11); every mutation-backed control here is functional while provider
- * rows in Integrations stay honestly pending their own gates.
+ * One workspace-backed settings section at a time — the `?section=` deep link
+ * is the contract a policy-blocked send relies on, so each section is
+ * individually addressable rather than one long stack. Loading,
+ * missing-workspace and role-gated states stay explicit (V11); every
+ * mutation-backed control here is functional while provider rows in
+ * Integrations stay honestly pending their own gates.
  */
 export function SettingsSections({ section }: { section: SettingsSection }) {
   const current = useCurrentWorkspace()
@@ -64,8 +63,6 @@ export function SettingsSections({ section }: { section: SettingsSection }) {
           selfMembershipId={membershipId}
         />
       )
-    case "runtime":
-      return <RuntimeSection workspace={workspace} isOwner={isOwner} />
     case "integrations":
       return <IntegrationsSection workspace={workspace} isOwner={isOwner} />
     default:

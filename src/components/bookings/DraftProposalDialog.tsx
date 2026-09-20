@@ -1,4 +1,4 @@
-import { CatchBoundary, Link } from "@tanstack/react-router"
+import { CatchBoundary } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
@@ -109,59 +109,34 @@ function DraftProposalForm({
     workspaceId,
     prospectId: booking.prospectId,
   })
-  const missions = useQuery(api.missions.listForProspect, {
-    workspaceId,
-    prospectId: booking.prospectId,
-  })
-
   const [conversationId, setConversationId] = useState("")
-  const [missionId, setMissionId] = useState("")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{
     draftId: Id<"drafts">
-    decisionId: Id<"decisions">
   } | null>(null)
 
-  if (threads === undefined || missions === undefined) {
+  if (threads === undefined) {
     return (
       <LoadingState
-        title="Loading the thread and mission"
-        description="Reading which conversation this proposal belongs on, and which live mission can carry its approval ask."
+        title="Loading the thread"
+        description="Reading which conversation this proposal belongs on."
       />
     )
   }
 
   const openThreads = threads.items.filter((item) => item.state === "open")
-  const liveMissions = missions.items.filter(
-    (mission) =>
-      mission.workflowId !== undefined &&
-      mission.state !== "completed" &&
-      mission.state !== "cancelled" &&
-      mission.state !== "failed",
-  )
 
   if (created !== null) {
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-foreground">
-          The draft is written and its approval ask is on the queue. Nothing
-          has been sent — a person reviews the exact email there first.
+          The draft is written and waits for a recorded approval. Nothing has
+          been sent — a person reviews the exact email on the thread first.
         </p>
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            render={
-              <Link
-                to="/decisions/$decisionId"
-                params={{ decisionId: created.decisionId }}
-              />
-            }
-          >
-            Open the approval ask
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -180,8 +155,8 @@ function DraftProposalForm({
       ?.lastInboundFrom
 
   const submit = () => {
-    if (conversationId === "" || missionId === "") {
-      setError("Pick the thread and the mission — both are required.")
+    if (conversationId === "") {
+      setError("Pick the thread the proposal goes out on.")
       return
     }
     if (subject.trim() === "" || body.trim() === "") {
@@ -195,15 +170,17 @@ function DraftProposalForm({
       bookingId: booking._id,
       expectedVersion,
       conversationId: conversationId as Id<"conversations">,
-      missionId: missionId as Id<"missions">,
       subject: subject.trim(),
       body: body.trim(),
       requestId,
     })
       .then((result) => {
-        toast.add({ title: "Proposal draft created — approval ask is open", type: "success" })
+        toast.add({
+          title: "Proposal draft created — it awaits approval",
+          type: "success",
+        })
         rotateIntent()
-        setCreated({ draftId: result.draft._id, decisionId: result.decisionId })
+        setCreated({ draftId: result.draft._id })
       })
       .catch((failure: unknown) =>
         setError(
@@ -240,34 +217,6 @@ function DraftProposalForm({
             ))}
           </NativeSelect>
         )}
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <Label htmlFor="dp-mission">Mission that owns the approval ask</Label>
-        {liveMissions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No live mission has worked this lead — a finished or not-yet
-            dispatched mission cannot carry an approval ask, so there is
-            nothing to draft under yet.
-          </p>
-        ) : (
-          <NativeSelect
-            id="dp-mission"
-            value={missionId}
-            onChange={(event) => setMissionId(event.target.value)}
-          >
-            <option value="">Pick a mission…</option>
-            {liveMissions.map((mission) => (
-              <option key={mission._id} value={mission._id}>
-                {mission.title} ({mission.state})
-              </option>
-            ))}
-          </NativeSelect>
-        )}
-        <p className="text-xs text-muted-foreground">
-          The ask is delivered to this mission's workflow — a mission with no
-          dispatched run cannot receive it, so only live ones are listed.
-        </p>
       </div>
 
       <div className="flex flex-col gap-1">
@@ -308,16 +257,14 @@ function DraftProposalForm({
           disabled={
             busy ||
             openThreads.length === 0 ||
-            liveMissions.length === 0 ||
             conversationId === "" ||
-            missionId === "" ||
             subject.trim() === "" ||
             body.trim() === ""
           }
           onClick={submit}
         >
           {busy ? <Spinner className="size-3.5" /> : null}
-          Create the draft and open the ask
+          Create the draft
         </Button>
       </DialogFooter>
     </div>

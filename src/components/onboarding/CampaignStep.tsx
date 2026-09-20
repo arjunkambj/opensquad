@@ -23,10 +23,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 /**
- * Step 3 — campaign scope. Nothing is persisted here: the campaign is created
- * only at the review step's explicit confirmation (`campaigns.create` →
- * `campaigns.confirmSourcePlan`), so editing and re-editing this step can never
- * pile up unconfirmed drafts.
+ * Step 3 — campaign basics. Nothing is persisted here: the campaign is created
+ * only at the review step's explicit confirmation (`campaigns.create`), so
+ * editing and re-editing this step can never pile up unconfirmed drafts.
  */
 export function CampaignStep({
   form,
@@ -57,8 +56,8 @@ export function CampaignStep({
       <CardHeader>
         <CardTitle>Campaign scope</CardTitle>
         <CardDescription>
-          What Scout should find and how much it may spend doing it. Nothing
-          runs yet — you confirm the interpreted plan on the next step.
+          What this campaign is for and how much it may spend. Nothing runs yet
+          — you confirm it on the next step.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -82,120 +81,24 @@ export function CampaignStep({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="camp-instruction">
-              Source instruction
+            <FieldLabel htmlFor="camp-enrichment">
+              Enrichment allowance
             </FieldLabel>
-            <Textarea
-              id="camp-instruction"
-              placeholder="Describe where to look, in your own words — e.g. Apollo companies in the US mid-market agency space."
-              value={form.instruction}
+            <Input
+              id="camp-enrichment"
+              type="number"
+              min={0}
+              max={10}
+              step={1}
+              value={form.enrichmentLimit}
               onChange={(event) =>
-                update({ instruction: event.target.value })
+                update({ enrichmentLimit: event.target.value })
               }
             />
             <FieldDescription>
-              Stored verbatim next to the typed interpretation below.
+              Paid contact-enrichment operations this campaign may use (0–10).
             </FieldDescription>
           </Field>
-
-          <Field>
-            <FieldLabel>Source: Apollo company search</FieldLabel>
-            <FieldDescription>
-              Apollo is the only provider route enabled today — YC and TrustMRR
-              stay unavailable until their extraction gates pass, and the
-              backend rejects plans that include them.
-            </FieldDescription>
-          </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="camp-locations">Locations</FieldLabel>
-              <Input
-                id="camp-locations"
-                placeholder="e.g. United States, Canada"
-                value={form.locations}
-                onChange={(event) =>
-                  update({ locations: event.target.value })
-                }
-              />
-              <FieldDescription>Comma-separated, optional.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="camp-categories">Categories</FieldLabel>
-              <Input
-                id="camp-categories"
-                placeholder="e.g. marketing, advertising"
-                value={form.categories}
-                onChange={(event) =>
-                  update({ categories: event.target.value })
-                }
-              />
-              <FieldDescription>Comma-separated, optional.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="camp-emp-min">Employees (min)</FieldLabel>
-              <Input
-                id="camp-emp-min"
-                type="number"
-                min={1}
-                placeholder="e.g. 5"
-                value={form.employeeMin}
-                onChange={(event) =>
-                  update({ employeeMin: event.target.value })
-                }
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="camp-emp-max">Employees (max)</FieldLabel>
-              <Input
-                id="camp-emp-max"
-                type="number"
-                min={1}
-                placeholder="e.g. 50"
-                value={form.employeeMax}
-                onChange={(event) =>
-                  update({ employeeMax: event.target.value })
-                }
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="camp-max-results">
-                Max results per source
-              </FieldLabel>
-              <Input
-                id="camp-max-results"
-                type="number"
-                min={1}
-                max={25}
-                placeholder="up to 25"
-                value={form.maxResults}
-                onChange={(event) =>
-                  update({ maxResults: event.target.value })
-                }
-              />
-              <FieldDescription>
-                Optional bound on candidates Scout may pull (1–25).
-              </FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="camp-enrichment">
-                Enrichment allowance
-              </FieldLabel>
-              <Input
-                id="camp-enrichment"
-                type="number"
-                min={0}
-                max={10}
-                step={1}
-                value={form.enrichmentLimit}
-                onChange={(event) =>
-                  update({ enrichmentLimit: event.target.value })
-                }
-              />
-              <FieldDescription>
-                Paid contact-enrichment operations this campaign may use (0–10).
-              </FieldDescription>
-            </Field>
-          </div>
 
           <Field>
             <FieldLabel>Prospect cap</FieldLabel>
