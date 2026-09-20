@@ -985,6 +985,8 @@ export default defineSchema({
   /* Leads, bookings and evidence */
 
   prospects: defineTable(prospectFields)
+    // Dashboard: leads created in a date window, as one exact range.
+    .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"])
     // Contacts, filtered by stage, most recently changed first.
     .index("by_workspaceId_and_stage_and_updatedAt", [
       "workspaceId",
@@ -1047,6 +1049,8 @@ export default defineSchema({
   /* Correspondence */
 
   conversations: defineTable(conversationFields)
+    // Dashboard: threads whose latest reply falls in a date window.
+    .index("by_workspaceId_and_lastInboundAt", ["workspaceId", "lastInboundAt"])
     .index("by_workspaceId_and_state_and_lastMessageAt", [
       "workspaceId",
       "state",
