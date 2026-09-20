@@ -1,36 +1,23 @@
 /**
- * Cross-domain validator primitives: the error vocabulary, bounded strings
- * and numbers, URL/timezone/email normalisation, content digests and the
- * local-time helpers every domain shares.
+ * Cross-domain validator primitives: bounded strings and numbers,
+ * URL/timezone/email normalisation, content digests and the local-time
+ * helpers every domain shares.
  *
  * Convex `v.*` validators describe wire/storage shape; they cannot express
  * length or syntax rules, so every `v.string()` that carries a bound is paired
  * with a runtime check here. Call the `assert*`/`normalize*` helpers inside
  * handlers before trusting or storing a value.
  */
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Infer } from "convex/values";
+import { domainError, invalid } from "../errors";
 
-export type DomainErrorCode =
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "INVALID";
-
-export function domainError(code: DomainErrorCode, message: string): ConvexError<{
-  code: DomainErrorCode;
-  message: string;
-}> {
-  return new ConvexError({ code, message });
-}
-
-export function invalid(message: string): ConvexError<{
-  code: DomainErrorCode;
-  message: string;
-}> {
-  return domainError("INVALID", message);
-}
+// The error vocabulary itself lives in `lib/errors.ts` (PLAN §10): one typed
+// code union and one constructor, so the client maps a code to copy in a
+// single place. It is re-exported here because every backend module reaches
+// its validators — and its refusals — through `lib/validators`.
+export { domainError, invalid, DOMAIN_ERROR_CODES } from "../errors";
+export type { DomainErrorCode, DomainErrorData } from "../errors";
 
 /**
  * Validate that `value` is a string of `min..max` characters after trimming.
