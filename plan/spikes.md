@@ -7,8 +7,8 @@ Status legend: **recorded** = a real response or primary source was observed;
 
 | # | Probe | Status |
 |---|---|---|
-| 1 | AI Gateway enabled on dev, model ids, `MODELS.fast` / `MODELS.smart` | **recorded — BLOCKER**: the gateway is not enabled for this team (see §1) |
-| 2 | Schema-constrained object output through the gateway provider | **blocked** by probe 1 (see §2) |
+| 1 | AI Gateway enabled on dev, model ids, `MODELS.fast` / `MODELS.smart` | **recorded**: enabled after the team plan upgrade; 35 OpenAI ids served; model chosen by the owner: `openai/gpt-5.6-sol` |
+| 2 | Schema-constrained object output through the gateway provider | **recorded**: works with provider `0.2.0-alpha.1`; fails with `0.1.0` (see §2) |
 | 3 | Lead-data account: plan, balance, free pages, shapes | **recorded** live: balance, filter options, counts per signal kind, validation behaviour. People-search page cost + row shape **not run** (session policy refused the call) |
 | 4 | AgentMail inbox / webhook / thread shapes | docs half **recorded** (OpenAPI); live half **blocked** — provider call not permitted in this session |
 | 5 | Verified-email status in Convex auth | **recorded** (source + docs); one live identity dump still to do |
@@ -48,43 +48,68 @@ Consequences for T06 on dev (to confirm with the owner, not assumed):
 The throwaway module `convex/spikes.ts` (internal actions only, never
 committed) is what ran the live probes below; it is deleted when T00 closes.
 
-## 1. AI Gateway — BLOCKER
+## 1. AI Gateway
 
-Real response, 2026-09-20, `internalAction` on dev calling
-`getServiceToken("ai-gateway")`:
+**First run (22:40):** `getServiceToken("ai-gateway")` inside an
+`internalAction` on dev was refused — "The Convex AI gateway is not enabled
+for your team. Upgrade to a paid plan to enable it…". The owner upgraded the
+team plan.
 
-```
-Error: The Convex AI gateway is not enabled for your team. Upgrade to a paid
-plan to enable it, or contact support@convex.dev if you believe this is an error.
-```
+**Second run (23:10), real responses:**
+- token minted (757 chars); `GET https://ai-gateway.convex.dev/v1/models` →
+  200 `{ object: "list", data: [{ id, object: "model", created, owned_by }] }`.
+  No pricing or capability fields in the listing. The `?provider=` query is
+  ignored (same list).
+- OpenAI ids served (35): `openai/gpt-6-astra`, `-astra-pro`;
+  `openai/gpt-5.6-{luna,terra,sol}` and their `-pro` variants;
+  `openai/gpt-5.5`, `-pro`; `openai/gpt-5.4`, `-pro`, `-mini`, `-nano`,
+  `-image-2`; `openai/gpt-chat-latest`; a `:batch` twin of most; and moving
+  aliases `~openai/gpt-{astra,sol,terra,luna,mini}-latest`. Pinned ids are
+  used, never the `~…-latest` aliases or `:batch`.
+- plain generation (`POST /v1/chat/completions`, 13 tokens in / 5 out, no
+  reasoning tokens) succeeded on all seven ids tried: `gpt-5.4-mini` 0.7 s,
+  `gpt-5.6-luna` 0.8 s, `gpt-5.5` 0.9 s, `gpt-5.6-terra` 0.9 s,
+  `gpt-5.4-nano` 1.2 s, `gpt-5.6-sol` 1.2 s, `gpt-6-astra` 1.3 s.
+- the response `usage` block carries real cost:
+  `{ prompt_tokens, completion_tokens, total_tokens, cost, cost_details: { upstream_inference_cost, … }, completion_tokens_details: { reasoning_tokens } }`
+  (a 119-in / 43-out structured call on sol cost $0.00067). The alpha
+  provider surfaces it as `providerMetadata.convexGateway.cost`, so
+  `providerOperations` can record the actual spend per AI call.
+- error shape: unknown model → 400 `{ error: { message: "<id> is not a valid model ID", code: 400 } }`
+  in 47 ms, surfaced by the SDK as `AI_APICallError` with `statusCode` and
+  `responseBody`; an upstream rejection → 400 `{ error: { message: "Provider returned error", code: 400 } }`.
+  Both are answered before any generation, i.e. the **refunded** outcome in
+  PLAN §6. The message text is provider wording and is mapped, never shown.
 
-The token is refused before any model call, so no model list could be read
-and `MODELS.fast` / `MODELS.smart` are **not chosen**. Package facts, for
-whichever way this goes: `@convex-dev/ai-sdk-provider@0.1.0` (peer `ai ^7`,
-`convex ^1.44`, Node ≥ 22) is a thin OpenAI-compatible wrapper around
-`https://ai-gateway.convex.dev/v1` with the deployment token as bearer.
+**Decision (owner, 2026-09-20):** the model is `openai/gpt-5.6-sol`.
+`convex/ai/models.ts` keeps the two names from PLAN §4 —
+`MODELS.fast` and `MODELS.smart` — both set to that id, so call sites keep
+saying which tier they need and retuning `fast` later is a one-line change.
 
-PLAN §4 fixes the gateway as the only AI path, so this is the owner's call:
-- **A — enable it:** move the Convex team to a paid plan (or ask Convex
-  support for hackathon access). PLAN stays as written; probes 1–2 re-run in
-  two minutes with the spike module that is already deployed.
-- **B — fallback, same call sites:** AI SDK 7 with the OpenAI provider and a
-  platform `OPENAI_API_KEY` in Convex env. Only `convex/ai/models.ts` and
-  `convex/ai/run.ts` differ (a `languageModel(id)` factory), metering through
-  `withCredits` / `ai_calls` is unchanged, and switching back to the gateway
-  later is a one-file change. Costs: PLAN §4 "no model key stored" and the
-  AGENTS.md gateway line change, and a platform model key joins the keys
-  guarded by §6.
+## 2. Structured output
 
-## 2. Structured output — blocked by probe 1
+Real request/response through the AI SDK
+(`generateText({ output: Output.object({ schema: jsonSchema(...) }) })`):
 
-Probe prepared: AI SDK 7 `generateText({ output: Output.object({ schema: jsonSchema(...) }) })`
-(`generateObject` still exists in v7 but `Output.object` is the current API;
-`jsonSchema()` avoids adding a schema library). Decision rule, to be applied
-once when the probe runs: if the gateway rejects `response_format: json_schema`
-for the chosen models → JSON-mode text + Convex validator parse at the same
-call sites (PLAN §4), otherwise schema-constrained output + Convex validator
-re-check.
+- **`@convex-dev/ai-sdk-provider@0.1.0` — does not work.** It builds the
+  OpenAI-compatible provider without `supportsStructuredOutputs`, so the SDK
+  downgrades to `response_format: { "type": "json_object" }`, sends no schema,
+  and the upstream answers 400 "Provider returned error".
+- **`0.2.0-alpha.1` — works.** It sets `supportsStructuredOutputs: true`; the
+  SDK sends
+  `response_format: { type: "json_schema", json_schema: { name: "response", strict: true, schema } }`
+  with `max_tokens`, and sol returns a schema-conformant object (enum-typed
+  integer, string array with `maxItems`, `additionalProperties: false`) in
+  ~1.8 s. The same body posted raw to `/v1/chat/completions` also returns 200,
+  with either `max_tokens` or `max_completion_tokens`.
+
+**Decision (once, per EXECUTION T00.2):** schema-constrained output through
+the provider, pinned **exactly** at `0.2.0-alpha.1`, schemas written with the
+SDK's `jsonSchema()` (no schema library added), and every result re-validated
+with Convex validators before a write (PLAN §4). Fallback if the alpha ever
+has to be dropped: the same strict `json_schema` body posted directly to the
+gateway with the deployment token from inside `convex/ai/run.ts` — verified
+above, same call sites.
 
 ## 3. Lead-data provider
 
