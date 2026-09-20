@@ -139,17 +139,27 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   // nothing), so the honest resume point after a saved profile is the
   // workspace step itself.
   const step: StepId = search.step ?? (profile ? "workspace" : "business")
+  const agent = useQuery(api.agents.get, { workspaceId: workspace._id })
   const createAgent = useMutation(api.agents.createDraft)
   const [completed, setCompleted] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [finishError, setFinishError] = useState<string | null>(null)
 
   /**
-   * Finish setup by creating the workspace's one agent. `createDraft` is
-   * idempotent — a workspace that already has an agent gets that agent back —
-   * so a repeated finish can never produce a second one.
+   * Finish setup by creating the workspace's one agent.
+   *
+   * A workspace has exactly one agent and `createDraft` refuses a second, so
+   * finishing again on a workspace that already has one is a no-op here
+   * rather than a refusal the user has to read.
    */
   const finish = async () => {
+    if (agent === undefined) {
+      return
+    }
+    if (agent !== null) {
+      setCompleted(true)
+      return
+    }
     setFinishing(true)
     setFinishError(null)
     try {

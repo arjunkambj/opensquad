@@ -86,9 +86,13 @@ export const get = query({
 
 /**
  * Create the workspace's draft agent — the row onboarding fills in step by
- * step. Idempotent by construction: a workspace that already has an agent
- * gets that agent back rather than a second one, which is also what makes a
- * double-clicked "Get started" harmless.
+ * step.
+ *
+ * ONE AGENT PER WORKSPACE, enforced here rather than by an index: the read
+ * and the insert are in one serializable transaction, so a second create —
+ * concurrent or later — sees the first and refuses. Callers that only want
+ * "the agent" read `agents.get` first; a CONFLICT here means there already is
+ * one, never that anything was lost.
  *
  * The agent starts in `sourcing_only`: until an inbox is connected it finds
  * and researches leads and contacts nobody (PLAN §1).
@@ -100,7 +104,10 @@ export const createDraft = mutation({
     await requireWorkspaceEditor(ctx, args.workspaceId);
     const existing = await getWorkspaceAgent(ctx, args.workspaceId);
     if (existing !== null) {
-      return existing;
+      throw domainError(
+        "CONFLICT",
+        "this workspace already has an agent",
+      );
     }
     const now = Date.now();
     const agentId = await ctx.db.insert("agents", {
