@@ -384,9 +384,7 @@ function ConversationRow({
           "Unmatched sender"}
       </p>
       <p className="text-xs text-muted-foreground">
-        {item.prospect === null
-          ? "No lead linked"
-          : item.prospect.salesStage}
+        {item.prospect === null ? "No lead linked" : item.prospect.stage}
         {item.assigneeIdentityKey !== undefined
           ? " · has a human owner"
           : ""}

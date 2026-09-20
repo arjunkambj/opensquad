@@ -52,6 +52,7 @@ import {
   localDayKey,
   localDayParts,
   sendWindowStatus,
+  SENDING_AGENT_MODES,
   UNRESOLVED_ATTEMPT_STATES,
   vSendAttemptState,
 } from "./lib/validators";
@@ -87,19 +88,20 @@ const RECONCILE_WINDOW_MS = 23 * 60 * 60 * 1000;
  */
 export const SEND_BLOCK_CODES = [
   "workspace_paused",
-  "campaign_inactive",
+  /** The agent is in a mode that never sends (sourcing only, paused). */
+  "agent_not_sending",
   "conversation_not_open",
   "human_takeover",
   "draft_not_current",
   "context_changed",
   "no_current_approval",
   "policy_changed",
-  "brief_changed",
+  /** The agent's instructions moved on after the draft was written. */
+  "agent_revision_changed",
   "inbox_unassigned",
   "inbox_mismatch",
   "suppressed_email",
   "suppressed_domain",
-  "demo_recipient_blocked",
   "already_sent",
   "attempt_in_flight",
   "attempt_uncertain",
@@ -206,9 +208,9 @@ async function currentApproval(
 
 /**
  * Every send gate that does not depend on wall-clock window/capacity:
- * workspace/campaign liveness, exact approval + context binding,
- * takeover/closed state, suppression, inbox match, demo allowlist, and the
- * across-revisions unresolved-attempt guard.
+ * workspace/agent liveness, exact approval + context binding,
+ * takeover/closed state, suppression, inbox match, and the across-revisions
+ * unresolved-attempt guard.
  *
  * `excludeAttemptId` — the attempt currently dispatching (it is itself
  * unresolved while `reserved`/`requesting`).
@@ -219,11 +221,11 @@ async function evaluateSendGates(
     workspace: Doc<"workspaces">;
     conversation: Doc<"conversations">;
     draft: Doc<"drafts">;
-    campaign: Doc<"campaigns"> | null;
+    agent: Doc<"agents"> | null;
     excludeAttemptId?: Id<"sendAttempts">;
   },
 ): Promise<GateResult> {
-  const { workspace, conversation, draft, campaign } = args;
+  const { workspace, conversation, draft, agent } = args;
 
   // --- liveness ------------------------------------------------------
   if (workspace.automationState !== "active") {
@@ -232,8 +234,9 @@ async function evaluateSendGates(
       `workspace automation is ${workspace.automationState}`,
     );
   }
-  if (campaign !== null && campaign.status !== "active") {
-    return block("campaign_inactive", `campaign is ${campaign.status}`);
+  // Sourcing-only and paused agents never put mail on the wire (PLAN §9.3).
+  if (agent !== null && !SENDING_AGENT_MODES.includes(agent.mode)) {
+    return block("agent_not_sending", `agent mode is ${agent.mode}`);
   }
 
   // --- exact draft + approval binding ---------------------------------
@@ -265,10 +268,13 @@ async function evaluateSendGates(
       `workspace policy is v${workspace.policyVersion}; draft was written against v${draft.policyVersion}`,
     );
   }
-  if (campaign !== null && campaign.briefVersion !== draft.campaignBriefVersion) {
+  // Revision fencing (PLAN §9.1): instructions, tone, goal, ICP or mode
+  // changed after this text was written, so the text is no longer what the
+  // agent would say.
+  if (agent !== null && agent.revision !== draft.agentRevision) {
     return block(
-      "brief_changed",
-      `campaign brief is v${campaign.briefVersion}; draft was written against v${draft.campaignBriefVersion}`,
+      "agent_revision_changed",
+      `agent is at revision ${agent.revision}; draft was written against ${draft.agentRevision}`,
     );
   }
 
@@ -342,26 +348,6 @@ async function evaluateSendGates(
     );
   }
 
-  // --- demo scope --------------------------------------------------------
-  if (workspace.demoMode) {
-    const allowed = (process.env.OPENSQUAD_DEMO_ALLOWED_RECIPIENTS ?? "")
-      .split(/[,\s]+/)
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0);
-    if (allowed.length === 0) {
-      return block(
-        "demo_recipient_blocked",
-        "demo workspace has no configured recipient allowlist — demo sending is disabled",
-      );
-    }
-    if (!allowed.includes(draft.normalizedRecipient)) {
-      return block(
-        "demo_recipient_blocked",
-        "recipient is not on the demo allowlist",
-      );
-    }
-  }
-
   // --- across-revisions unresolved-attempt guard -------------------------
   const unresolved: Doc<"sendAttempts">[] = [];
   for (const state of UNRESOLVED_ATTEMPT_STATES) {
@@ -400,7 +386,7 @@ type AttemptContext = {
   workspace: Doc<"workspaces">;
   conversation: Doc<"conversations">;
   draft: Doc<"drafts">;
-  campaign: Doc<"campaigns"> | null;
+  agent: Doc<"agents"> | null;
 };
 
 async function loadAttemptContext(
@@ -416,25 +402,16 @@ async function loadAttemptContext(
   if (conversation === null || workspace === null) {
     throw domainError("NOT_FOUND", "send context is incomplete");
   }
-  const campaign =
-    conversation.campaignId === undefined
+  const agent =
+    conversation.agentId === undefined
       ? null
-      : await ctx.db.get("campaigns", conversation.campaignId);
-  return { workspace, conversation, draft, campaign };
+      : await ctx.db.get("agents", conversation.agentId);
+  return { workspace, conversation, draft, agent };
 }
 
-/** Effective daily send cap — demo workspaces are additionally bounded by
- *  the deployment's demo cap (missing env ⇒ zero). */
+/** The workspace's daily send cap — the one ceiling the ledger reserves against. */
 function effectiveSendLimit(workspace: Doc<"workspaces">): number {
-  if (!workspace.demoMode) {
-    return workspace.dailySendLimit;
-  }
-  const raw = process.env.OPENSQUAD_DEMO_MAX_DAILY_SENDS;
-  const cap = raw === undefined ? 0 : Number.parseInt(raw, 10);
-  if (!Number.isFinite(cap) || cap < 0) {
-    return 0;
-  }
-  return Math.min(workspace.dailySendLimit, cap);
+  return workspace.dailySendLimit;
 }
 
 /** UTC instant of the NEXT send-window opening after `fromMs`. */
@@ -660,7 +637,7 @@ export const reserveSendIntent = internalMutation({
       workspace: context.workspace,
       conversation,
       draft,
-      campaign: context.campaign,
+      agent: context.agent,
     });
     if (!gate.ok) {
       await recordActivityEvent(ctx, {
@@ -821,7 +798,7 @@ export const beginDispatch = internalMutation({
       workspace,
       conversation,
       draft,
-      campaign: context.campaign,
+      agent: context.agent,
       excludeAttemptId: attempt._id,
     });
     const cancel = async (code: SendBlockCode, reason: string) => {
@@ -1896,12 +1873,12 @@ export const prepareReconcile = internalMutation({
       };
     }
     const context = await loadAttemptContext(ctx, attempt.draftId);
-    const { workspace, conversation, draft, campaign } = context;
+    const { workspace, conversation, draft, agent } = context;
     const gate = await evaluateSendGates(ctx, {
       workspace,
       conversation,
       draft,
-      campaign,
+      agent,
       excludeAttemptId: attempt._id,
     });
     if (!gate.ok) {
@@ -2464,15 +2441,15 @@ export const preflight = query({
         attempts: attemptsView,
       };
     }
-    const campaign =
-      conversation.campaignId === undefined
+    const agent =
+      conversation.agentId === undefined
         ? null
-        : await ctx.db.get("campaigns", conversation.campaignId);
+        : await ctx.db.get("agents", conversation.agentId);
     const gate = await evaluateSendGates(ctx, {
       workspace,
       conversation,
       draft,
-      campaign,
+      agent,
     });
     if (!gate.ok) {
       return {

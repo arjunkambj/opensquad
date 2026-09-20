@@ -26,6 +26,7 @@ import {
   domainError,
   invalid,
   vRole,
+  WEBHOOK_TOKEN_LENGTH,
 } from "./lib/validators";
 import { membershipFields, workspaceFields } from "./schema";
 
@@ -44,6 +45,20 @@ export const vMembershipDoc = v.object({
 /* ------------------------------------------------------------------ */
 /* Provisioning                                                        */
 /* ------------------------------------------------------------------ */
+
+/**
+ * The opaque token in this workspace's inbound webhook path. Generated from
+ * the runtime CSPRNG and never derived from anything a caller can see: the
+ * path is the ONLY thing that resolves an inbound request to a workspace, so
+ * a guessable token would be a way in (PLAN §9.4).
+ */
+function generateWebhookToken(): string {
+  const bytes = new Uint8Array(WEBHOOK_TOKEN_LENGTH);
+  crypto.getRandomValues(bytes);
+  return [...bytes]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 function defaultWorkspaceName(identity: UserIdentity): string {
   const display = identity.name ?? identity.email;
@@ -91,15 +106,14 @@ async function ensureWorkspaceImpl(
       q.eq("identityKey", identityKey).eq("status", "active"),
     )
     .collect();
-  // A DEMO workspace does not satisfy "already owns one" — opting into the
-  // public demo must not strand the visitor without a real workspace (the
-  // demo row itself is created by `demo.optIn`, not this path).
+  // One workspace per user (PLAN §6): the first owned workspace the caller
+  // already holds IS their workspace, and this call returns it.
   const ownedMemberships = existing.filter(
     (membership) => membership.role === "owner",
   );
   for (const membership of ownedMemberships) {
     const workspace = await ctx.db.get("workspaces", membership.workspaceId);
-    if (workspace !== null && workspace.demoMode !== true) {
+    if (workspace !== null) {
       return { workspaceId: workspace._id, created: false };
     }
   }
@@ -116,6 +130,7 @@ async function ensureWorkspaceImpl(
     name,
     ownerIdentityKey: identityKey,
     timezone,
+    plan: "trial",
     // Conservative default: automation stays paused until the owner
     // completes onboarding and explicitly activates it.
     automationState: "paused",
@@ -127,7 +142,16 @@ async function ensureWorkspaceImpl(
       startMinute: 9 * 60,
       endMinute: 17 * 60,
     },
-    demoMode: false,
+    // No inbox yet: the agent starts in sourcing-only mode and the owner
+    // connects their own key from onboarding or Settings (PLAN §4).
+    inboxConnection: "none",
+    // The opaque path token of this workspace's inbound webhook route. It is
+    // generated once, here, from the runtime CSPRNG — never derived from the
+    // workspace id, which is not secret.
+    webhookToken: generateWebhookToken(),
+    // No verified open event has been seen, so the Agent card shows no
+    // "Opened" column at all (PLAN §9.6).
+    opensObserved: false,
     createdAt: now,
     updatedAt: now,
   });
@@ -203,17 +227,14 @@ export const getCurrent = query({
     if (memberships.length === 0) {
       return null;
     }
-    // Prefer the caller's REAL workspace: a demo-mode row is always created
-    // first (optIn refuses anyone already owning one), so the insertion-ordered
-    // `find` would resolve a demo+real owner to the demo forever — with no
-    // workspace switcher in the app, that strands them on a workspace that
-    // starts paused with the smallest quotas in the product.
+    // Prefer a workspace the caller OWNS; there is at most one (PLAN §6),
+    // and an invited membership must not shadow it.
     for (const entry of memberships) {
       if (entry.role !== "owner") {
         continue;
       }
       const candidate = await ctx.db.get("workspaces", entry.workspaceId);
-      if (candidate !== null && candidate.demoMode !== true) {
+      if (candidate !== null) {
         return {
           workspace: candidate,
           role: entry.role,

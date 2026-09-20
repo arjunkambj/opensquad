@@ -1,14 +1,14 @@
 /**
- * OpenSquad schema — §4.1 workspace/configuration tables, the workspace
- * activity feed, the §4.3 correspondence tables, the §4.3 lead, booking and
- * evidence tables and the §4.4 usage/provider-accounting tables.
+ * OpenIntent schema — PLAN §7. Workspace and configuration tables, the agent
+ * and its search strategies, the person-level lead store, the correspondence
+ * tables and the usage/provider-accounting tables.
  * Component-owned mail/crawl tables never enter this schema. Every table is
  * declared exactly once: a module that writes rows imports the `*Fields` map,
  * it does not re-declare the table.
  *
  * Notation: `ms` timestamps are integer UTC epoch milliseconds. Indexes use
  * application timestamp fields; uniqueness invariants are enforced inside the
- * mutating transaction, not by the index itself.
+ * mutating transaction, not by the index itself (Convex has no unique index).
  *
  * The exported `*Fields` maps are the single source of truth for both
  * `defineTable` and per-module `returns` doc validators.
@@ -16,40 +16,63 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+  vAgentAutopilot,
+  vAgentGoal,
+  vAgentIcp,
+  vAgentMode,
+  vAgentRun,
+  vAgentStatus,
+  vAgentTone,
+  vAnalysisStatus,
+  vApprovalActor,
   vApprovalVerdict,
   vBookingProposal,
   vBookingState,
-  vCampaignStatus,
   vConfirmationSource,
   vConversationNoteKind,
   vConversationState,
+  vDraftState,
   vEmailEventDirection,
   vEmailEventHandlingState,
   vEndpointOperation,
   vEvidenceConfidence,
+  vInboxConnection,
+  vLeadApproval,
+  vLeadCompany,
+  vLeadEmailStatus,
   vLeadEventActor,
   vLeadEventDetails,
   vLeadEventKind,
+  vLeadFilterOption,
+  vLeadFilters,
+  vLeadLegacy,
+  vLeadLocation,
+  vLeadOrigin,
+  vLeadResearch,
+  vLeadStage,
   vMembershipStatus,
-  vNextAction,
-  vProspectContact,
-  vProspectSourceRef,
+  vMessageSource,
+  vOnboardingStep,
+  vOperationError,
   vProviderDataRef,
   vProviderKind,
   vProviderOperationSettlement,
   vProviderOperationState,
-  vQualification,
   vQuarantineReason,
   vQuarantineState,
   vReplyDisposition,
   vRole,
-  vSalesStage,
+  vSecretProvider,
+  vSecretStatus,
   vSendAttemptState,
+  vSignalKind,
+  vStrategySource,
   vSuppressionKind,
   vSuppressionReason,
   vTakeoverReason,
   vUsageMetric,
   vUsageReservationState,
+  vWorkspacePlan,
 } from "./lib/validators";
 
 export const workspaceFields = {
@@ -58,6 +81,8 @@ export const workspaceFields = {
   ownerIdentityKey: v.string(),
   /** IANA timezone, validated on write. */
   timezone: v.string(),
+  /** One plan, granted at creation with its credit buckets (PLAN §6). */
+  plan: vWorkspacePlan,
   automationState: v.union(v.literal("active"), v.literal("paused")),
   policyVersion: v.number(),
   dailySendLimit: v.number(),
@@ -68,16 +93,32 @@ export const workspaceFields = {
     startMinute: v.number(),
     endMinute: v.number(),
   }),
-  /** Assigned only by the server demo bootstrap; never client-set. */
-  demoMode: v.boolean(),
+  /** How the sending inbox is attached (PLAN §9.4). */
+  inboxConnection: vInboxConnection,
+  /**
+   * Opaque path token of this workspace's inbound webhook route
+   * (`/agentmail/webhook/<token>`). Generated at creation, never derived from
+   * the workspace id, and rotated by a reconnect — it is the only thing that
+   * resolves an inbound request to a workspace, so it is a secret.
+   */
+  webhookToken: v.string(),
+  /**
+   * Whether a verified open event has ever been observed for this workspace
+   * (PLAN §9.6). Until it flips the Agent card shows no "Opened" column at
+   * all — no zero, no dash.
+   */
+  opensObserved: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
-  /** Owner-set daily model-run ceiling (§9). Absent falls back to
-   *  `MODEL_RUN_DAILY_LIMIT_DEFAULT`; the debit is taken at dispatch and
-   *  settled by the run's own outcome. */
-  modelRunDailyLimit: v.optional(v.number()),
-  /** AgentMail inbox reference assigned by P05/P10; unique when present. */
+  /** AgentMail inbox reference; unique when present, claimed transactionally. */
   inboxRef: v.optional(v.string()),
+  /** The webhook this workspace registered on the user's own account. */
+  agentmailWebhookId: v.optional(v.string()),
+  /**
+   * When the inbox was connected. The reply gate answers nothing older than
+   * this, so it is a permission boundary rather than a display timestamp.
+   */
+  connectedAt: v.optional(v.number()),
   pauseReason: v.optional(v.string()),
 };
 
@@ -90,47 +131,194 @@ export const membershipFields = {
   updatedAt: v.number(),
 };
 
+/**
+ * The company we are selling FOR — filled by website analysis at onboarding
+ * dot 1 and fully editable afterwards (PLAN §7, §11 M1).
+ *
+ * `analysisStatus` is a variant, not a boolean pair: "never analyzed",
+ * "analyzing now", "ready" and "failed with a mapped code" are four different
+ * screens, and the failure code is OURS — provider wording never reaches it.
+ */
 export const businessProfileFields = {
   workspaceId: v.id("workspaces"),
-  websiteUrl: v.string(),
-  offer: v.string(),
-  idealCustomer: v.string(),
-  tone: v.string(),
-  exclusions: v.array(v.string()),
+  /** Absent for the "I don't have a website" path (PLAN §5). */
+  websiteUrl: v.optional(v.string()),
+  companyName: v.string(),
+  industry: v.string(),
+  description: v.string(),
+  keyFeatures: v.array(v.string()),
+  socialProof: v.array(v.string()),
+  painPoints: v.string(),
+  analysisStatus: vAnalysisStatus,
+  /**
+   * Whether the free first analysis has been consumed. Only a SUCCESSFUL run
+   * sets it, so a blocked site costs the user nothing (PLAN §5).
+   */
+  firstRunUsed: v.boolean(),
   version: v.number(),
   updatedAt: v.number(),
   /** identityKey of the last editor. */
   updatedBy: v.string(),
 };
 
+/**
+ * The agent — one per workspace (PLAN §7), replacing pre-pivot `campaigns`.
+ *
+ * One agent per workspace is enforced in the create mutation (read the
+ * workspace's agents, refuse if one exists), not by an index: Convex has no
+ * unique index, and mutations are serializable, so the read-then-write in one
+ * transaction is the constraint.
+ *
+ * `revision` is the fence every queued step and draft records itself against
+ * (PLAN §9.1 "Revision fencing"): it increments whenever instructions, tone,
+ * goal, ICP or mode change, and work written under an older revision is
+ * superseded rather than sent.
+ */
+export const agentFields = {
+  workspaceId: v.id("workspaces"),
+  /** Generated from the ICP ("Title · Region · Industry"), editable. */
+  name: v.string(),
+  status: vAgentStatus,
+  mode: vAgentMode,
+  onboardingStep: vOnboardingStep,
+  icp: vAgentIcp,
+  goal: vAgentGoal,
+  tone: vAgentTone,
+  keywords: v.array(v.string()),
+  /** Per-run ceilings; the run loop never exceeds them (PLAN §9.2). */
+  dailyLeadCap: v.number(),
+  dailyResearchCap: v.number(),
+  autoRevealDailyCap: v.number(),
+  /** Autopilot approves leads at or above this score (PLAN §9.3). */
+  autoApproveMinScore: v.number(),
+  /** Days after the previous message a follow-up goes out, in order. */
+  followUpDays: v.array(v.number()),
+  revision: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  /** Deal size for the dashboard's pipeline figure; absent until set. */
+  dealSize: v.optional(v.number()),
+  instructions: v.optional(v.string()),
+  bookingUrl: v.optional(v.string()),
+  /** Single-flight lease; absent when no run holds it (PLAN §9.1). */
+  run: v.optional(vAgentRun),
+  /** Present only while Autopilot consent stands (PLAN §9.3). */
+  autopilot: v.optional(vAgentAutopilot),
+  /** When the cron should pick this agent up. Absent means "not scheduled". */
+  nextRunAt: v.optional(v.number()),
+  lastRunAt: v.optional(v.number()),
+  /** Traceability for an agent folded out of a pre-pivot campaign. */
+  legacyCampaignId: v.optional(v.id("legacyCampaigns")),
+};
 
-export const campaignFields = {
+/**
+ * Read-only copies of pre-pivot campaigns folded into an agent
+ * (MIGRATION §1). Nothing writes these outside the migration and nothing
+ * schedules work from them; they exist so a campaign's brief and identity are
+ * not silently discarded. Empty on the clean-slate path.
+ */
+export const legacyCampaignFields = {
   workspaceId: v.id("workspaces"),
   title: v.string(),
   brief: v.string(),
-  briefVersion: v.number(),
-  /** 1–5 accepted prospects for MVP. */
-  leadLimit: v.number(),
-  /** Paid contact-enrichment ceiling for the campaign lifetime. */
-  enrichmentLimit: v.number(),
-  status: vCampaignStatus,
-  /** identityKey of the creator. */
+  /** The pre-pivot status as it stood at migration time. */
+  status: v.string(),
   createdBy: v.string(),
-  /** Client retry key — when present, `create` dedupes on
-   * (workspaceId, requestId) transactionally instead of double-creating. */
-  requestId: v.optional(v.string()),
   createdAt: v.number(),
+  /** The agent this campaign was folded into. */
+  agentId: v.id("agents"),
+  foldedAt: v.number(),
+};
+
+/**
+ * A named, explainable lead search (PLAN §3). Each is the core ICP filters
+ * AND one signal; the cards show `matchCount` from a free count call and the
+ * model's one-line `rationale`.
+ *
+ * `nextPage` is the paging cursor the run advances so a second run does not
+ * re-buy page 1, and `leadsFound` is what the Agent page's per-signal table
+ * reports — both are facts of this strategy, which is why they live here and
+ * not on the agent.
+ */
+export const strategyFields = {
+  workspaceId: v.id("workspaces"),
+  agentId: v.id("agents"),
+  title: v.string(),
+  signalKind: vSignalKind,
+  rationale: v.string(),
+  filters: vLeadFilters,
+  excludeFilters: vLeadFilters,
+  matchCount: v.number(),
+  enabled: v.boolean(),
+  source: vStrategySource,
+  nextPage: v.number(),
+  leadsFound: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  lastRunAt: v.optional(v.number()),
+};
+
+/**
+ * The cached allowed values for lead-search filters (PLAN §3 step 2),
+ * refreshed weekly. Values are case-sensitive and a typo silently returns
+ * zero rows, so the model only ever picks from this list and every value is
+ * re-checked against it before a call.
+ */
+export const leadFilterOptionsFields = {
+  options: v.record(v.string(), vLeadFilterOption),
+  fetchedAt: v.number(),
+};
+
+/**
+ * Per-workspace provider secrets (PLAN §4 "Bring-your-own keys"). AES-GCM
+ * under the deployment's `SECRETS_ENCRYPTION_KEY`; decrypted only inside
+ * actions and http actions. Client queries see `{ provider, last4, status }`
+ * and never the ciphertext.
+ */
+export const workspaceSecretFields = {
+  workspaceId: v.id("workspaces"),
+  provider: vSecretProvider,
+  ciphertext: v.string(),
+  iv: v.string(),
+  /** Last four characters of the key, for the "connected" UI only. */
+  last4: v.string(),
+  status: vSecretStatus,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  checkedAt: v.optional(v.number()),
+  /**
+   * Rotation keeps the previous secret valid for a short overlap so nothing
+   * signed with it is lost in between (PLAN §9.4 "Rotation").
+   */
+  previousCiphertext: v.optional(v.string()),
+  previousIv: v.optional(v.string()),
+  previousValidUntil: v.optional(v.number()),
+};
+
+/**
+ * Platform-wide circuit breakers (PLAN §6). The credit wrapper debits the
+ * workspace bucket AND the platform bucket in the same transaction, so the
+ * worst case per day is a number we chose rather than a function of how many
+ * people sign up. `provider` is server-side vocabulary and never reaches a
+ * client payload.
+ */
+export const platformBudgetFields = {
+  provider: vProviderKind,
+  /** `lifetime`, or a UTC day/month key — whatever the budget is stated in. */
+  periodKey: v.string(),
+  limit: v.number(),
+  used: v.number(),
   updatedAt: v.number(),
 };
 
 /* ------------------------------------------------------------------ */
-/* §4.2 Workspace activity feed                                        */
+/* Workspace activity feed                                             */
 /* ------------------------------------------------------------------ */
 
 /**
- * Activity events — the workspace-wide append-only feed. Rows are deduped per
- * workspace by `dedupeKey`, which is what makes a replayed mutation record one
- * logical event instead of two.
+ * Activity events — the workspace-wide append-only feed behind the header
+ * bell. Rows are deduped per workspace by `dedupeKey`, which is what makes a
+ * replayed mutation record one logical event instead of two.
  */
 export const activityEventFields = {
   workspaceId: v.id("workspaces"),
@@ -146,71 +334,92 @@ export const activityEventFields = {
 };
 
 /* ------------------------------------------------------------------ */
-/* §4.3 leads, bookings and evidence (P20)                             */
+/* Leads, bookings and evidence                                        */
 /*                                                                     */
 /* THE single declaration site for `prospects`, `leadEvents`,          */
-/* `bookings` and `evidence`. P09 (sourcing), P11 (inbox), P19 (CRM    */
-/* and booking behavior) and P21 (pipeline) all write these rows and   */
-/* none of them re-declares a table or opens a second lead store.      */
-/* P20 declares contracts only — no mutation lives in this slice.      */
+/* `bookings` and `evidence`.                                          */
 /* ------------------------------------------------------------------ */
 
 /**
- * Prospects — the lead/CRM entity (`prospects` is the backend name; the UI
- * says Leads). Two facts stay deliberately orthogonal: `qualification` is
- * whether the company fits, `salesStage` is how far the conversation has
- * travelled, and `contact` is whether an address exists. A missing email
- * therefore never erases fit evidence.
+ * Prospects — the person-level lead (`prospects` is the backend name; the UI
+ * says Contacts). PLAN §7.
  *
- * One prospect per (campaignId, canonicalDomain) — the index is a lookup, so
- * the inserting mutation enforces it transactionally. `sourceRefs` merges on
- * re-discovery rather than being replaced, which is why provenance survives a
- * second source finding the same company.
+ * Two unions carry what used to be optional columns, so an incomplete lead is
+ * a valid document rather than a row full of holes:
+ *   `origin`   — a provider id exists only on a sourced lead.
+ *   `research` — a score exists only on a researched one. Nothing reads a
+ *                bare `aiScore`; readers switch on `research.status`.
  *
- * `version` is optimistic concurrency: every CRM mutation takes an
- * `expectedVersion` and fails CONFLICT rather than clobbering a concurrent
- * stage change.
+ * `stage` + `nextActionAt` is the whole state machine (PLAN §7): the cron
+ * picks up whatever is due, and no other field encodes progress.
+ *
+ * `scoreKey` and `sourceLeadKey` are DENORMALISED INDEX KEYS. Convex indexes
+ * top-level fields and cannot reach into a union member, so these two mirror
+ * `research.aiScore` and `origin.sourceLeadId`. The invariant — enforced by
+ * writing them through `leadScoreKey`/`leadSourceKey` in the same patch as
+ * the union they mirror — is that they are never written alone and never read
+ * as the value itself.
  */
 export const prospectFields = {
   workspaceId: v.id("workspaces"),
-  campaignId: v.id("campaigns"),
-  companyName: v.string(),
-  /** Dedupe key — normalized host, meaningful subdomains preserved. */
-  canonicalDomain: v.string(),
-  /** At most 10 distinct refs; merged, never overwritten, on re-discovery. */
-  sourceRefs: v.array(vProspectSourceRef),
-  qualification: vQualification,
-  fitReason: v.string(),
-  salesStage: vSalesStage,
-  /** identityKey of the owner; must resolve to an ACTIVE membership. */
-  ownerIdentityKey: v.string(),
-  /** Optimistic-concurrency version; bumped by every CRM mutation. */
-  version: v.number(),
+  agentId: v.id("agents"),
+  origin: vLeadOrigin,
+  /** Mirrors `origin.sourceLeadId` for the dedupe index. See above. */
+  sourceLeadKey: v.optional(v.string()),
+  research: vLeadResearch,
+  /** Mirrors `research.aiScore` for the sort index. See above. */
+  scoreKey: v.optional(v.number()),
+  stage: vLeadStage,
+  approval: vLeadApproval,
+  emailStatus: vLeadEmailStatus,
+  /** Free pre-rank computed in plain code at sourcing time (PLAN §9.2). */
+  preRank: v.number(),
+  /** Follow-ups already sent in this thread, against `agents.followUpDays`. */
+  followUpsSent: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
-  /** The one selected business person (MVP), absent until enrichment. */
-  contact: v.optional(vProspectContact),
-  nextAction: v.optional(vNextAction),
-  /** UTC ms derived from the selected timezone. ABSENT means unscheduled —
-   *  an explicit state the CRM renders, never a far-future sentinel. */
-  nextActionDueAt: v.optional(v.number()),
+  /** Who approved; absent while the lead is `pending` (PLAN §9.3). */
+  approvedBy: v.optional(vApprovalActor),
+  /** When the state machine should next touch this lead. */
+  nextActionAt: v.optional(v.number()),
+  /** The last failed step; drives the retry ladder (PLAN §9.1). */
+  lastError: v.optional(vOperationError),
+  /* --- person, as the free search preview describes them ------------- */
+  firstName: v.optional(v.string()),
+  /** Masked until the reveal is paid for — stored exactly as returned. */
+  lastName: v.optional(v.string()),
+  jobTitle: v.optional(v.string()),
+  jobFunction: v.optional(v.string()),
+  jobLevel: v.optional(v.string()),
+  headline: v.optional(v.string()),
+  linkedinUrl: v.optional(v.string()),
+  location: v.optional(vLeadLocation),
+  skills: v.optional(v.array(v.string())),
+  /** Present only once `emailStatus` is `found`; never manufactured. */
+  email: v.optional(v.string()),
+  /* --- their company -------------------------------------------------- */
+  companyName: v.optional(v.string()),
+  /** Normalized host — the research target and the company-level dedupe. */
+  canonicalDomain: v.optional(v.string()),
+  company: v.optional(vLeadCompany),
+  /* --- derived facts --------------------------------------------------- */
   /** Set from a send ACCEPTANCE fact, not from drafting. */
   lastContactedAt: v.optional(v.number()),
   /** Set from a verified inbound reply. */
   lastReplyAt: v.optional(v.number()),
   /** Stated basis for the current stage; required for human corrections. */
   stageReason: v.optional(v.string()),
+  /** Migration-only copy of pre-pivot fields (MIGRATION §5). */
+  legacy: v.optional(vLeadLegacy),
 };
 
 /**
- * Lead events — the append-only CRM history (status, owner, note, next action
- * and booking transitions). Rows are never edited or deleted: a stage
- * correction appends a row preserving `fromStage`, it does not rewrite one.
- * Every business update and its event are written in ONE transaction
- * (§8 "CRM and booking transitions"),
- * so the history can never disagree with the lead.
+ * Lead events — the append-only lead history. Rows are never edited or
+ * deleted: a stage correction appends a row preserving `fromStage`, it does
+ * not rewrite one. Every business update and its event are written in ONE
+ * transaction, so the history can never disagree with the lead.
  *
- * `actor` is a discriminated union so "comes from auth or internal workflow"
+ * `actor` is a discriminated union so "comes from auth or from the agent run"
  * is structural — model output and email content can never name an actor.
  * `operationKey` is unique per workspace, enforced in the inserting mutation.
  */
@@ -223,21 +432,19 @@ export const leadEventFields = {
   createdAt: v.number(),
   /** Idempotency key; unique per workspace, enforced transactionally. */
   operationKey: v.string(),
-  fromStage: v.optional(vSalesStage),
-  toStage: v.optional(vSalesStage),
+  fromStage: v.optional(vLeadStage),
+  toStage: v.optional(vLeadStage),
   bookingId: v.optional(v.id("bookings")),
-  /** Closed previous/new payload §8 "CRM and booking transitions" requires
-   *  an event to preserve. */
   details: v.optional(vLeadEventDetails),
 };
 
 /**
- * Bookings — operator-authored meeting records. At most one `proposed` or
- * `confirmed` booking per lead, checked transactionally through
- * `by_prospectId_and_state`. A proposal implies NO confirmation: a sent link,
- * an offered slot or a model's reading of a reply all leave the row
- * `proposed`.
+ * Bookings — meeting records. At most one `proposed` or `confirmed` booking
+ * per lead, checked transactionally through `by_prospectId_and_state`. A
+ * proposal implies NO confirmation: a sent link, an offered slot or a model's
+ * reading of a reply all leave the row `proposed`.
  *
+ * `meeting_booked` is set ONLY by the user (PLAN §9.5), which is why
  * `startsAt`/`endsAt`/`timezone` are REQUIRED once the state is `confirmed`,
  * `completed` or `no_show`, together with `confirmationSource: manual`, an
  * authenticated `confirmedBy`/`confirmedAt` and a short stated
@@ -275,11 +482,10 @@ export const bookingFields = {
 };
 
 /**
- * Evidence — one observation with the source it came from (§4.3/§4.5).
- * Excerpts are bounded to 2,000 characters. `retrievedAt` is the
- * source-retrieval timestamp — evidence metadata, never a permission or
- * accounting timestamp (§4.5). Drafts may link only evidence from the same
- * workspace AND prospect.
+ * Evidence — one observation with the source it came from. Excerpts are
+ * bounded to 2,000 characters. `retrievedAt` is the source-retrieval
+ * timestamp — evidence metadata, never a permission or accounting timestamp.
+ * Drafts may link only evidence from the same workspace AND prospect.
  */
 export const evidenceFields = {
   workspaceId: v.id("workspaces"),
@@ -294,23 +500,26 @@ export const evidenceFields = {
 };
 
 /* ------------------------------------------------------------------ */
-/* §4.3 correspondence (P10) — conversations, immutable drafts,         */
-/* approvals, send attempts, suppressions and provider-event receipts.  */
+/* Correspondence — conversations, immutable drafts, approvals, send    */
+/* attempts, suppressions and provider-event receipts.                  */
 /* `prospects`/`leadEvents`/`bookings`/`evidence` in the block above.   */
 /* ------------------------------------------------------------------ */
 
 /**
- * Conversations — full §4.3 table. P11 builds the public
- * `conversations.ts` module; P10 needs the table now because drafts,
- * approvals and send attempts all bind `contextVersion`/`currentDraftId`
- * here, and provides only the minimal internal helpers in `drafts.ts` plus the
- * send-acknowledgement thread mapping in `sending.ts`.
+ * Conversations — one mail thread. Drafts, approvals and send attempts all
+ * bind `contextVersion`/`currentDraftId` here.
  */
 export const conversationFields = {
   workspaceId: v.id("workspaces"),
   /** AgentMail inbox reference this conversation lives on. */
   inboxRef: v.string(),
   state: vConversationState,
+  /**
+   * How this thread first reached us (PLAN §7). The per-message fact lives on
+   * `emailEventReceipts.source`; this is the thread-level summary the Inbox
+   * reads, merged through `mergeMessageSource` so `live` always wins.
+   */
+  source: vMessageSource,
   /** When true, automation is frozen: no sends, drafts or reply workflows. */
   humanTakeover: v.boolean(),
   /**
@@ -322,22 +531,20 @@ export const conversationFields = {
   unreadCount: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
-  /** Association target for §5 `conversations.associateProspect` (P11).
+  /** Association target for `conversations.associateProspect`.
    *  Internally produced — the association is made by an authorized operator
    *  against a lead already in this workspace, never from a provider payload. */
   prospectId: v.optional(v.id("prospects")),
   /**
-   * The campaign this thread's reply work runs under, FROZEN at association.
-   * Recording what was agreed when the lead was linked means a later
-   * re-campaigning of that lead cannot silently retarget in-flight reply
-   * work. Written only by `conversations.associateProspect`, which refuses a
-   * campaign the prospect does not belong to.
+   * The agent this thread's reply work runs under, FROZEN at association, so
+   * a lead later re-pointed at another agent cannot silently retarget
+   * in-flight reply work. Written only by `conversations.associateProspect`,
+   * which refuses an agent the prospect does not belong to.
    */
-  campaignId: v.optional(v.id("campaigns")),
+  agentId: v.optional(v.id("agents")),
   /**
    * Human owner of this thread (identityKey). Must resolve to an ACTIVE
-   * membership before it is stored — the same rule `prospects.ownerIdentityKey`
-   * carries.
+   * membership before it is stored.
    */
   assigneeIdentityKey: v.optional(v.string()),
   /** Why automation is frozen. Present whenever `humanTakeover` is true. */
@@ -414,8 +621,15 @@ export const draftFields = {
   payloadHash: v.string(),
   /** `conversations.contextVersion` the content was written against. */
   basedOnContextVersion: v.number(),
-  campaignBriefVersion: v.number(),
+  /**
+   * `agents.revision` the content was written under (PLAN §7/§9.1). A draft
+   * whose agent has since changed instructions, tone, goal, ICP or mode is
+   * superseded and rewritten rather than sent.
+   */
+  agentRevision: v.number(),
   policyVersion: v.number(),
+  /** See `vDraftState`: `superseded` exactly when `supersededAt` is set. */
+  state: vDraftState,
   /**
    * §4.3 evidence links. Bounded label strings until a backend step resolves
    * them to `evidence` rows.
@@ -443,9 +657,15 @@ export const draftFields = {
  * Approvals — one immutable verdict per draft approval, bound to the exact
  * payloadHash + normalizedRecipient + contextVersion. A later edit supersedes
  * applicability, not the record.
+ *
+ * This is EMAIL approval — "yes, send this text" — never lead approval, which
+ * lives on `prospects.approval` (PLAN §9.3). Autopilot does not bypass it: it
+ * writes a row here with `actor: "autopilot"` bound to the draft id and
+ * revision, and the send goes through the same ledger.
  */
 export const approvalFields = {
   workspaceId: v.id("workspaces"),
+  actor: vApprovalActor,
   draftId: v.id("drafts"),
   draftRevision: v.number(),
   payloadHash: v.string(),
@@ -548,6 +768,13 @@ export const emailEventReceiptFields = {
   eventType: v.string(),
   receivedAt: v.number(),
   /**
+   * Whether this message came from the live webhook or the 30-day connect
+   * backfill (PLAN §9.4). This is the per-message fact the reply gate reads;
+   * `mergeMessageSource` decides the winner when both paths race, and a later
+   * backfill never downgrades a `live` row.
+   */
+  source: vMessageSource,
+  /**
    * Which half of the mail path this row belongs to, derived from
    * `applicationKey` by `directionForApplicationKey` so the two can never
    * disagree. It exists to keep the inbound drain's filter INSIDE its index
@@ -604,18 +831,23 @@ export const quarantinedEmailEventFields = {
 };
 
 /* ------------------------------------------------------------------ */
-/* §4.4 usage (P10) — send bucket + reservations.                       */
+/* Usage ledger (PLAN §6) — buckets, reservations, provider operations. */
 /* ------------------------------------------------------------------ */
 
 /**
- * Usage buckets — atomic capacity counters (§9). `reserved + committed +
- * uncertain <= limit` is enforced inside the reserving transaction;
- * `periodKey` is the workspace-local day for `sends` and the campaign
- * lifetime for enrichment.
+ * Usage buckets — atomic capacity counters. `reserved + committed +
+ * uncertain <= limit` is enforced inside the reserving transaction, which is
+ * why concurrent calls cannot overspend.
+ *
+ * `periodKey` is `lifetime` for the granted trial allowances and the
+ * workspace-local day for the daily caps (PLAN §6 "Ledger"). No bucket means
+ * every paid call refuses — the grant is part of creating the workspace,
+ * never implied.
  */
 export const usageBucketFields = {
   workspaceId: v.id("workspaces"),
-  /** `workspace` for sends; `campaign:<id>` for campaign-lifetime metrics. */
+  /** `workspace` for workspace-wide metrics; `agent:<id>` when an agent
+   *  carries its own allowance. */
   scopeKey: v.string(),
   metric: vUsageMetric,
   periodKey: v.string(),
@@ -679,10 +911,15 @@ export const providerOperationFields = {
   error: v.optional(v.object({ code: v.string(), message: v.string() })),
 };
 
+
 export default defineSchema({
   workspaces: defineTable(workspaceFields)
     .index("by_ownerIdentityKey", ["ownerIdentityKey"])
-    .index("by_inboxRef", ["inboxRef"]),
+    // One workspace per inbox: a lookup, made a constraint by the claim
+    // mutation reading it in the same transaction as the write (PLAN §9.4).
+    .index("by_inboxRef", ["inboxRef"])
+    // The inbound route's only way from an opaque path token to a workspace.
+    .index("by_webhookToken", ["webhookToken"]),
 
   memberships: defineTable(membershipFields)
     // Unique (workspaceId, identityKey) pair, enforced transactionally.
@@ -693,67 +930,85 @@ export default defineSchema({
     // One current profile per workspace, enforced transactionally.
     .index("by_workspaceId", ["workspaceId"]),
 
-  campaigns: defineTable(campaignFields)
-    .index("by_workspaceId_and_status", ["workspaceId", "status"])
-    // At most one campaign per (workspaceId, requestId), enforced in `create`.
-    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
+  /* The agent and what it searches with */
 
-  /* §4.2 — workspace activity feed */
+  agents: defineTable(agentFields)
+    // One agent per workspace — a lookup the create mutation reads before it
+    // inserts (PLAN §7); Convex has no unique index.
+    .index("by_workspaceId", ["workspaceId"])
+    // The run cron's exact range: live agents whose next run is due. `status`
+    // leads so draft agents, which have no due time at all, are never paged
+    // through (EXECUTION "API hand-offs": T23 writes it, T30 reads it).
+    .index("by_status_and_nextRunAt", ["status", "nextRunAt"]),
+
+  legacyCampaigns: defineTable(legacyCampaignFields)
+    .index("by_workspaceId", ["workspaceId"])
+    .index("by_agentId", ["agentId"]),
+
+  strategies: defineTable(strategyFields)
+    // The agent's strategies, and the enabled subset the run iterates.
+    .index("by_agentId_and_enabled", ["agentId", "enabled"])
+    .index("by_workspaceId", ["workspaceId"]),
+
+  // A singleton cache; the reader takes the newest row and the weekly refresh
+  // replaces it.
+  leadFilterOptions: defineTable(leadFilterOptionsFields).index(
+    "by_fetchedAt",
+    ["fetchedAt"],
+  ),
+
+  workspaceSecrets: defineTable(workspaceSecretFields)
+    // Unique (workspaceId, provider), enforced transactionally.
+    .index("by_workspaceId_and_provider", ["workspaceId", "provider"]),
+
+  platformBudgets: defineTable(platformBudgetFields)
+    // Unique (provider, periodKey), enforced inside the debiting transaction.
+    .index("by_provider_and_periodKey", ["provider", "periodKey"]),
+
+  /* Workspace activity feed */
 
   activityEvents: defineTable(activityEventFields)
     .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"])
     .index("by_workspaceId_and_dedupeKey", ["workspaceId", "dedupeKey"]),
 
-  /* §4.3 — leads, bookings and evidence (P20) */
+  /* Leads, bookings and evidence */
 
   prospects: defineTable(prospectFields)
-    // Pipeline mode: one stage at a time, most recently updated first.
-    .index("by_workspaceId_and_salesStage_and_updatedAt", [
+    // Contacts, filtered by stage, most recently changed first.
+    .index("by_workspaceId_and_stage_and_updatedAt", [
       "workspaceId",
-      "salesStage",
+      "stage",
       "updatedAt",
     ])
-    .index("by_workspaceId_and_campaignId_and_salesStage", [
-      "workspaceId",
-      "campaignId",
-      "salesStage",
-    ])
-    // Due-action mode, scoped to one owner…
-    .index("by_workspaceId_and_ownerIdentityKey_and_nextActionDueAt", [
-      "workspaceId",
-      "ownerIdentityKey",
-      "nextActionDueAt",
-    ])
-    // …and across the workspace. Rows with no due time sort together, which
-    // is how the unscheduled state stays visible instead of being filtered.
-    .index("by_workspaceId_and_nextActionDueAt", [
-      "workspaceId",
-      "nextActionDueAt",
-    ])
-    // One prospect per (campaignId, canonicalDomain) — a lookup, not a
-    // constraint; the inserting mutation enforces uniqueness.
-    .index("by_workspaceId_and_campaignId_and_canonicalDomain", [
-      "workspaceId",
-      "campaignId",
-      "canonicalDomain",
-    ])
-    // Company-name search. Equality filters are applied INSIDE
-    // `withSearchIndex`; search mode never combines with due ranges or date
-    // sorting, and empty text falls back to the ordinary list (§4.3).
+    // The state machine's due range: whatever the cron must touch next
+    // (PLAN §7). Rows with no due time sort below every bound, so an
+    // unscheduled lead can never look overdue.
+    .index("by_workspaceId_and_nextActionAt", ["workspaceId", "nextActionAt"])
+    // Best leads first, for the Contacts sort and the research/reveal order.
+    // Indexes the denormalised `scoreKey`, never `research.aiScore` — Convex
+    // cannot index into a union member, which is what `scoreKey` exists for.
+    .index("by_workspaceId_and_scoreKey", ["workspaceId", "scoreKey"])
+    // The sourcing dedupe: has this agent already stored this provider row?
+    // Same denormalisation as above, for `origin.sourceLeadId`. The upsert
+    // reads this range in the transaction it inserts into, which is what
+    // makes the lookup behave as the uniqueness constraint.
+    .index("by_agentId_and_sourceLeadKey", ["agentId", "sourceLeadKey"])
+    // The per-agent funnel counts the Agent page reports.
+    .index("by_agentId_and_stage", ["agentId", "stage"])
+    // The approval queue: what is waiting for a yes/no in this workspace.
+    .index("by_workspaceId_and_approval", ["workspaceId", "approval"])
+    // Contact search. Equality filters are applied INSIDE `withSearchIndex`;
+    // search mode never combines with due ranges or date sorting, and empty
+    // text falls back to the ordinary list.
     .searchIndex("search_company_name", {
       searchField: "companyName",
-      filterFields: [
-        "workspaceId",
-        "salesStage",
-        "campaignId",
-        "ownerIdentityKey",
-      ],
+      filterFields: ["workspaceId", "stage", "agentId", "approval"],
     }),
 
   leadEvents: defineTable(leadEventFields)
     .index("by_prospectId_and_createdAt", ["prospectId", "createdAt"])
     // Unique (workspaceId, operationKey) — the idempotency lookup a replayed
-    // CRM mutation reads before writing; uniqueness is enforced in that same
+    // mutation reads before writing; uniqueness is enforced in that same
     // transaction.
     .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
 
@@ -778,7 +1033,7 @@ export default defineSchema({
     "createdAt",
   ]),
 
-  /* §4.3 — correspondence (P10) */
+  /* Correspondence */
 
   conversations: defineTable(conversationFields)
     .index("by_workspaceId_and_state_and_lastMessageAt", [
@@ -792,7 +1047,7 @@ export default defineSchema({
       "lastMessageAt",
     ])
     // Unique (inboxRef, providerThreadRef) mapping when the thread ref is
-    // assigned — enforced transactionally (§4.3 invariant).
+    // assigned — enforced transactionally.
     .index("by_inboxRef_and_providerThreadRef", [
       "inboxRef",
       "providerThreadRef",
@@ -801,7 +1056,7 @@ export default defineSchema({
     // threads, and open threads under takeover. Summing the plain takeover
     // index would double-count, because every unassigned thread is also under
     // takeover; scoping the second bucket to `state: "open"` removes the
-    // overlap without post-filtering a truncated page (§5).
+    // overlap without post-filtering a truncated page.
     .index("by_workspaceId_and_state_and_humanTakeover", [
       "workspaceId",
       "state",
@@ -817,11 +1072,13 @@ export default defineSchema({
   drafts: defineTable(draftFields)
     // Unique (conversationId, revision) pair, enforced transactionally.
     .index("by_conversationId_and_revision", ["conversationId", "revision"])
+    // The invalidation sweep: every draft still current in a conversation.
+    .index("by_conversationId_and_state", ["conversationId", "state"])
     // requestId dedupe for revise/createRevision retries.
     .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"])
-    // Booking-linked drafts (P19): the invalidation path needs every draft
-    // still proposing a booking as one exact range, and a lead can hold
-    // several conversations — no conversation-scoped index can find them all.
+    // Booking-linked drafts: the invalidation path needs every draft still
+    // proposing a booking as one exact range, and a lead can hold several
+    // conversations — no conversation-scoped index can find them all.
     .index("by_bookingId", ["bookingId"]),
 
   approvals: defineTable(approvalFields)
@@ -831,8 +1088,8 @@ export default defineSchema({
 
   sendAttempts: defineTable(sendAttemptFields)
     .index("by_draftId", ["draftId"])
-    // The §8.3 across-revisions guard: queries reserved|requesting|uncertain
-    // per conversation inside the reservation mutation.
+    // The across-revisions guard: queries reserved|requesting|uncertain per
+    // conversation inside the reservation mutation.
     .index("by_conversationId_and_state", ["conversationId", "state"])
     // Chronological audit listing — the unfiltered conversation view is
     // newest-first, not state-bucketed.
@@ -866,12 +1123,21 @@ export default defineSchema({
       "workspaceId",
       "applicationKey",
     ])
+    // PLAN §9.4's message identity: (workspaceId, inboxId, providerMessageId).
+    // Provider message ids are unique only within an account, so the triple —
+    // not the id alone — is what the single-writer upsert looks up before it
+    // inserts or merges. `by_providerMessageRef` below stays for the
+    // outbound delivery-fact correlation, which has no inbox in hand.
+    .index("by_workspace_inbox_providerMessageId", [
+      "workspaceId",
+      "inboxRef",
+      "providerMessageRef",
+    ])
     // Delivery-fact lookup when the send attempt records its message ref.
     .index("by_providerMessageRef", ["providerMessageRef"])
     // The drain's exact range: one half of the mail path, still pending,
     // older than the cutoff, oldest first. `direction` leads so the sweep
-    // never pages through the other half's permanently-pending rows (§5 — a
-    // post-filtered page is not a filtered result).
+    // never pages through the other half's permanently-pending rows.
     .index("by_direction_and_handlingState_and_receivedAt", [
       "direction",
       "handlingState",
@@ -886,7 +1152,7 @@ export default defineSchema({
     // Bounded operator listing across inboxes.
     .index("by_state_and_receivedAt", ["state", "receivedAt"]),
 
-  /* §4.4 — usage (P10) */
+  /* Usage ledger */
 
   usageBuckets: defineTable(usageBucketFields)
     // Unique bucket per (workspaceId, scopeKey, metric, periodKey), enforced

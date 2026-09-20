@@ -2,23 +2,17 @@ import { ArrowRight01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-ic
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc } from "../../../convex/_generated/dataModel"
 import {
   EmptyState,
   ErrorState,
+  FormError,
   LoadingState,
 } from "@/components/states/states"
 import { BusinessStep } from "@/components/onboarding/BusinessStep"
-import { CampaignStep } from "@/components/onboarding/CampaignStep"
-import { ReviewStep } from "@/components/onboarding/ReviewStep"
 import { WorkspaceStep } from "@/components/onboarding/WorkspaceStep"
-import {
-  type CampaignScopeForm,
-  campaignFormProblems,
-  defaultCampaignForm,
-} from "@/components/onboarding/onboarding-model"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -34,10 +28,8 @@ import { detectLocalTimezone } from "@/lib/workspace-time"
 import { cn } from "@/lib/utils"
 
 const STEPS = [
-  { id: "business", label: "Business" },
+  { id: "business", label: "Company" },
   { id: "workspace", label: "Workspace & policy" },
-  { id: "campaign", label: "Campaign scope" },
-  { id: "review", label: "Confirm" },
 ] as const
 
 export type StepId = (typeof STEPS)[number]["id"]
@@ -46,9 +38,13 @@ export type StepId = (typeof STEPS)[number]["id"]
 export const STEP_IDS = STEPS.map((entry) => entry.id) as readonly StepId[]
 
 /**
- * First-run setup: provision the workspace (if needed), save the business
- * profile, workspace timezone and send policy, define campaign scope, then
- * explicitly confirm the interpreted source plan before automation activates.
+ * First-run setup: provision the workspace (if needed), save the company
+ * profile and the workspace timezone/send policy, then create the workspace's
+ * one draft agent.
+ *
+ * This is the pre-pivot wizard reduced to what the new model still needs. The
+ * real onboarding — the four-dot stepper of PLAN §11 M1, website analysis,
+ * ICP, inbox connection and signals — is T20 through T23.
  */
 export function OnboardingWizard() {
   const current = useCurrentWorkspace()
@@ -140,29 +136,41 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   // or a fresh arrival resumes instead of restarting at step one. The
   // profile's existence is the only durable per-step marker: the workspace
   // step can complete with no version bump (accepting every default writes
-  // nothing), and a campaign row only exists once review has run, so the
-  // honest resume point after a saved profile is the workspace step itself.
+  // nothing), so the honest resume point after a saved profile is the
+  // workspace step itself.
   const step: StepId = search.step ?? (profile ? "workspace" : "business")
-  const [campaignForm, setCampaignForm] =
-    useState<CampaignScopeForm>(defaultCampaignForm)
+  const agent = useQuery(api.agents.get, { workspaceId: workspace._id })
+  const createAgent = useMutation(api.agents.createDraft)
   const [completed, setCompleted] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [finishError, setFinishError] = useState<string | null>(null)
 
-  // `?step=review` on a fresh mount is a dead end: the campaign scope lives
-  // only in this component's state, so a reload or shared link arrives with
-  // an empty form whose confirm can never pass. Send the visitor back to the
-  // step the review actually needs rather than rendering an unwinnable
-  // confirm.
-  const reviewBlocked =
-    step === "review" && campaignFormProblems(campaignForm).length > 0
-  useEffect(() => {
-    if (reviewBlocked) {
-      void navigate({
-        to: "/onboarding",
-        search: { step: "campaign" },
-        replace: true,
-      })
+  /**
+   * Finish setup by creating the workspace's one agent.
+   *
+   * A workspace has exactly one agent and `createDraft` refuses a second, so
+   * finishing again on a workspace that already has one is a no-op here
+   * rather than a refusal the user has to read.
+   */
+  const finish = async () => {
+    if (agent === undefined) {
+      return
     }
-  }, [reviewBlocked, navigate])
+    if (agent !== null) {
+      setCompleted(true)
+      return
+    }
+    setFinishing(true)
+    setFinishError(null)
+    try {
+      await createAgent({ workspaceId: workspace._id })
+      setCompleted(true)
+    } catch (cause) {
+      setFinishError(errorMessage(cause, "Could not create your agent."))
+    } finally {
+      setFinishing(false)
+    }
+  }
 
   if (profile === undefined) {
     return (
@@ -187,7 +195,8 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
             Setup complete
           </CardTitle>
           <CardDescription>
-            Your campaign scope is confirmed and automation is active.
+            Your agent exists and starts in sourcing-only mode: it finds and
+            researches leads and contacts nobody until you connect an inbox.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -207,17 +216,6 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
     )
   }
 
-  if (reviewBlocked) {
-    // One render while the effect above moves the URL to `campaign` — the
-    // review step must never draw an empty form whose confirm cannot pass.
-    return (
-      <LoadingState
-        title="Back to the campaign step"
-        description="The review needs the campaign scope filled in first."
-      />
-    )
-  }
-
   // `replace` — the wizard is one task, so Back should leave setup rather than
   // walk the user backwards through every step they already completed.
   const go = (id: StepId) => {
@@ -229,8 +227,8 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
       {workspace.automationState === "active" ? (
         <p className="rounded-2xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           Setup was already completed for this workspace. Saving updates your
-          profile and policy; confirming below creates an additional draft
-          campaign.
+          profile and policy; finishing again returns the agent you already
+          have.
         </p>
       ) : null}
       <StepRail current={step} onGo={go} />
@@ -243,23 +241,16 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
         />
       ) : null}
       {step === "workspace" ? (
-        <WorkspaceStep workspace={workspace} onDone={() => go("campaign")} />
-      ) : null}
-      {step === "campaign" ? (
-        <CampaignStep
-          form={campaignForm}
-          onChange={setCampaignForm}
-          onDone={() => go("review")}
-        />
-      ) : null}
-      {step === "review" ? (
-        <ReviewStep
-          workspace={workspace}
-          profile={profile}
-          form={campaignForm}
-          onBack={() => go("campaign")}
-          onComplete={() => setCompleted(true)}
-        />
+        <>
+          <WorkspaceStep workspace={workspace} onDone={() => void finish()} />
+          <FormError message={finishError} />
+          {finishing ? (
+            <LoadingState
+              title="Creating your agent"
+              description="Setting up the one agent this workspace runs."
+            />
+          ) : null}
+        </>
       ) : null}
     </div>
   )

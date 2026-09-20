@@ -45,17 +45,13 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
-  getActiveMembership,
   requireWorkspaceEditor,
   requireWorkspaceMember,
 } from "./lib/auth";
 import {
-  advancedStage,
   assertBookingProposal,
   assertConfirmationSourceEnabled,
-  assertEpochMs,
   assertExpectedVersion,
-  assertNextAction,
   assertRequiredBookingTimes,
   boundedLimit,
   boundedString,
@@ -63,15 +59,14 @@ import {
   invalid,
   vBookingProposal,
   vBookingState,
-  vNextAction,
   BOOKING_CANCELLATION_REASON_MAX_LENGTH,
   BOOKING_CONFIRMATION_NOTE_MAX_LENGTH,
   DEFAULT_LIST_LIMIT,
   LEAD_EVENT_REASON_MAX_LENGTH,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
-  TERMINAL_SALES_STAGES,
+  TERMINAL_LEAD_STAGES,
 } from "./lib/validators";
-import type { NextAction, SalesStage } from "./lib/validators";
+import type { LeadStage } from "./lib/validators";
 import {
   appendLeadEvent,
   findLeadEventByOperationKey,
@@ -237,6 +232,11 @@ async function loadBookingForWrite(
   return booking;
 }
 
+/** A lead's display label — a sourced row may carry no company name. */
+function leadLabel(prospect: Doc<"prospects">): string {
+  return prospect.companyName ?? "this lead";
+}
+
 async function loadProspect(
   ctx: MutationCtx,
   workspaceId: Id<"workspaces">,
@@ -252,15 +252,15 @@ async function loadProspect(
 /**
  * The stage a lead falls back to when its booking leaves the active states —
  * the last stage its facts still support: a verified reply, an accepted send,
- * else the newest recorded non-booking stage, else what its qualification
- * implies. Terminal stages are never re-entered from here either — if a human
- * won/lost the lead while a booking was still active, the fallback leaves the
- * call standing (the check happens before this is consulted).
+ * else the newest recorded non-meeting stage, else whether it has been
+ * researched at all. Terminal stages are never re-entered from here either —
+ * if a human closed the lead while a booking was still active, the fallback
+ * leaves the call standing (the check happens before this is consulted).
  */
-async function fallbackSalesStage(
+async function fallbackLeadStage(
   ctx: MutationCtx,
   prospect: Doc<"prospects">,
-): Promise<SalesStage> {
+): Promise<LeadStage> {
   if (prospect.lastReplyAt !== undefined) {
     return "replied";
   }
@@ -277,16 +277,13 @@ async function fallbackSalesStage(
   for (const event of events) {
     if (
       event.toStage !== undefined &&
-      event.toStage !== "booking_proposed" &&
-      event.toStage !== "booked"
+      event.toStage !== "meeting_proposed" &&
+      event.toStage !== "meeting_booked"
     ) {
       return event.toStage;
     }
   }
-  if (prospect.qualification === "qualified") {
-    return "qualified";
-  }
-  return prospect.qualification === "pending" ? "discovered" : "researched";
+  return prospect.research.status === "researched" ? "researched" : "found";
 }
 
 /**
@@ -345,23 +342,6 @@ function assertAgreedTimes(
   return checked;
 }
 
-/**
- * Set the lead's next action where a booking transition requires an EXPLICIT
- * one (§8). Caller-supplied `action`/`dueAt` win; otherwise the booking
- * mutation passes its derived default.
- */
-function nextActionPatch(
-  action: NextAction | undefined,
-  dueAt: number | undefined,
-  fallback: NextAction,
-): { nextAction: NextAction; nextActionDueAt?: number } {
-  const nextAction = assertNextAction(action ?? fallback);
-  return {
-    nextAction,
-    ...(dueAt !== undefined ? { nextActionDueAt: dueAt } : {}),
-  };
-}
-
 /* ------------------------------------------------------------------ */
 /* propose — create the auditable proposal record                       */
 /* ------------------------------------------------------------------ */
@@ -374,16 +354,15 @@ function nextActionPatch(
  *
  * The proposal is NOT the send: `draftProposal` wraps it in an exact draft,
  * `approvals.approve` is the human gate and the send boundary mails it. This
- * mutation creates the record, sets the lead's next action to getting the
- * proposal sent, and appends the `booking_proposed` history — without moving
- * `salesStage`, which only the provider's send acceptance may advance.
+ * mutation creates the record and appends the `booking_proposed` history —
+ * without moving `stage`, which only the provider's send acceptance may
+ * advance to `meeting_proposed`.
  */
 export const propose = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     prospectId: v.id("prospects"),
     /** OCC on the LEAD the caller saw — the proposal changes its row too. */
-    expectedLeadVersion: v.number(),
     proposal: vBookingProposal,
     /** The thread the proposal will go out on, when already known. */
     conversationId: v.optional(v.id("conversations")),
@@ -425,15 +404,10 @@ export const propose = mutation({
       }
       return recorded;
     }
-    assertExpectedVersion(
-      prospect.version,
-      args.expectedLeadVersion,
-      "prospect",
-    );
-    if (TERMINAL_SALES_STAGES.includes(prospect.salesStage)) {
+    if (TERMINAL_LEAD_STAGES.includes(prospect.stage)) {
       throw domainError(
         "CONFLICT",
-        `lead is ${prospect.salesStage} — a human stage correction must reopen it before a booking is proposed`,
+        `lead is ${prospect.stage} — it must be reopened before a booking is proposed`,
       );
     }
     // At most one ACTIVE booking per lead — read through the state index in
@@ -471,19 +445,10 @@ export const propose = mutation({
         );
       }
     }
-    // The booking's owner is the lead's owner while that membership is still
-    // active; otherwise the acting member takes responsibility — a booking
-    // must never name an owner who cannot act on it.
-    const ownerMembership = await getActiveMembership(
-      ctx,
-      args.workspaceId,
-      prospect.ownerIdentityKey,
-    );
-    const ownerIdentityKey = ownerMembership?.identityKey ?? identityKey;
-    const nextAction = assertNextAction({
-      kind: "review",
-      description: `Send the booking proposal to ${prospect.companyName} through an approved draft`,
-    });
+    // The acting member owns the booking: leads no longer carry an owner
+    // (one agent, one trial workspace), and a booking must always name
+    // someone who can act on it.
+    const ownerIdentityKey = identityKey;
     const bookingId = await ctx.db.insert("bookings", {
       workspaceId: args.workspaceId,
       prospectId: prospect._id,
@@ -497,29 +462,18 @@ export const propose = mutation({
         ? { conversationId: args.conversationId }
         : {}),
     });
-    await ctx.db.patch("prospects", prospect._id, {
-      nextAction,
-      nextActionDueAt: undefined,
-      version: prospect.version + 1,
-      updatedAt: now,
-    });
+    await ctx.db.patch("prospects", prospect._id, { updatedAt: now });
     await appendLeadEvent(ctx, {
       workspaceId: args.workspaceId,
       prospectId: prospect._id,
       kind: "booking_proposed",
       summary:
         proposal.kind === "booking_link"
-          ? `Booking link proposal recorded for ${prospect.companyName}`
-          : `Booking proposal recorded for ${prospect.companyName} (${proposal.slots.length} slot option(s))`,
+          ? `Booking link proposal recorded for ${leadLabel(prospect)}`
+          : `Booking proposal recorded for ${leadLabel(prospect)} (${proposal.slots.length} slot option(s))`,
       operationKey,
       bookingId,
       actor: { source: "human", identityKey },
-      details: {
-        ...(prospect.nextAction !== undefined
-          ? { fromNextAction: prospect.nextAction }
-          : {}),
-        toNextAction: nextAction,
-      },
     });
     const booking = await ctx.db.get("bookings", bookingId);
     if (booking === null) {
@@ -755,21 +709,16 @@ export const confirm = mutation({
       args.workspaceId,
       booking.prospectId,
     );
-    if (TERMINAL_SALES_STAGES.includes(prospect.salesStage)) {
+    if (TERMINAL_LEAD_STAGES.includes(prospect.stage)) {
       throw domainError(
         "CONFLICT",
-        `lead is ${prospect.salesStage} — a human stage correction must reopen it before a booking is confirmed`,
+        `lead is ${prospect.stage} — it must be reopened before a booking is confirmed`,
       );
     }
-    const nextStage = advancedStage(prospect.salesStage, "booked");
-    const { nextAction, nextActionDueAt } = nextActionPatch(
-      undefined,
-      times.startsAt,
-      {
-        kind: "attend_meeting",
-        description: `Attend the confirmed meeting with ${prospect.companyName}`,
-      },
-    );
+    // PLAN §9.5: this mutation IS the user's "Mark as booked". It is the only
+    // writer of `meeting_booked`, and it sets the stage outright rather than
+    // advancing it, because the human assertion outranks the pipeline order.
+    const nextStage = "meeting_booked" as const;
     const stageReason = boundedString(
       `Meeting confirmed — ${confirmationNote}`,
       "stageReason",
@@ -788,11 +737,11 @@ export const confirm = mutation({
       updatedAt: now,
     });
     await ctx.db.patch("prospects", prospect._id, {
-      salesStage: nextStage,
+      stage: nextStage,
       stageReason,
-      nextAction,
-      nextActionDueAt,
-      version: prospect.version + 1,
+      // The meeting is the next thing that happens on this lead, so the state
+      // machine has nothing to do until it does.
+      nextActionAt: undefined,
       updatedAt: now,
     });
     await appendLeadEvent(ctx, {
@@ -802,15 +751,11 @@ export const confirm = mutation({
       summary: `Meeting confirmed for ${new Date(times.startsAt).toISOString()} ${times.timezone} — ${confirmationNote}`,
       operationKey: `booking:${booking._id}:confirmed:${requestId}`,
       bookingId: booking._id,
-      ...(nextStage === prospect.salesStage
+      ...(nextStage === prospect.stage
         ? {}
-        : { fromStage: prospect.salesStage, toStage: nextStage }),
+        : { fromStage: prospect.stage, toStage: nextStage }),
       actor: { source: "human", identityKey },
-      details: {
-        reason: confirmationNote,
-        toNextAction: nextAction,
-        toNextActionDueAt: times.startsAt,
-      },
+      details: { reason: confirmationNote },
     });
     const updated = await ctx.db.get("bookings", booking._id);
     if (updated === null) {
@@ -909,19 +854,7 @@ export const reschedule = mutation({
       version: booking.version + 1,
       updatedAt: now,
     });
-    // The lead's attend-meeting action follows the new time; an operator-set
-    // action on another kind is left alone.
-    const followOn =
-      prospect.nextAction?.kind === "attend_meeting"
-        ? {
-            nextActionDueAt: times.startsAt,
-          }
-        : {};
-    await ctx.db.patch("prospects", prospect._id, {
-      ...followOn,
-      version: prospect.version + 1,
-      updatedAt: now,
-    });
+    await ctx.db.patch("prospects", prospect._id, { updatedAt: now });
     await retireLinkedDrafts(
       ctx,
       booking,
@@ -940,9 +873,6 @@ export const reschedule = mutation({
         previousEndsAt: booking.endsAt,
         previousTimezone: booking.timezone,
         reason,
-        ...(followOn.nextActionDueAt !== undefined
-          ? { toNextActionDueAt: followOn.nextActionDueAt }
-          : {}),
       },
     });
     const updated = await ctx.db.get("bookings", booking._id);
@@ -971,8 +901,6 @@ export const cancel = mutation({
     expectedVersion: v.number(),
     reason: v.string(),
     /** Override the derived follow-up action. */
-    nextAction: v.optional(vNextAction),
-    nextActionDueAt: v.optional(v.number()),
     requestId: v.string(),
   },
   returns: vBookingDoc,
@@ -1021,26 +949,14 @@ export const cancel = mutation({
       args.workspaceId,
       booking.prospectId,
     );
-    const dueAt =
-      args.nextActionDueAt === undefined
-        ? undefined
-        : assertEpochMs(args.nextActionDueAt, "nextActionDueAt");
-    const { nextAction, nextActionDueAt } = nextActionPatch(
-      args.nextAction,
-      dueAt,
-      {
-        kind: "follow_up_email",
-        description: `Follow up with ${prospect.companyName} about the cancelled meeting`,
-      },
-    );
-    // Only a lead still sitting on a booking stage falls back; a stage a
+    // Only a lead still sitting on a meeting stage falls back; a stage a
     // human set since stands.
     const inBookingStage =
-      prospect.salesStage === "booking_proposed" ||
-      prospect.salesStage === "booked";
+      prospect.stage === "meeting_proposed" ||
+      prospect.stage === "meeting_booked";
     const nextStage = inBookingStage
-      ? await fallbackSalesStage(ctx, prospect)
-      : prospect.salesStage;
+      ? await fallbackLeadStage(ctx, prospect)
+      : prospect.stage;
     const stageReason = boundedString(
       `Booking cancelled — ${reason}`,
       "stageReason",
@@ -1053,12 +969,7 @@ export const cancel = mutation({
       updatedAt: now,
     });
     await ctx.db.patch("prospects", prospect._id, {
-      ...(inBookingStage
-        ? { salesStage: nextStage, stageReason }
-        : { stageReason }),
-      nextAction,
-      nextActionDueAt,
-      version: prospect.version + 1,
+      ...(inBookingStage ? { stage: nextStage, stageReason } : { stageReason }),
       updatedAt: now,
     });
     await retireLinkedDrafts(
@@ -1073,8 +984,8 @@ export const cancel = mutation({
       summary: `Booking cancelled — ${reason}`,
       operationKey: `booking:${booking._id}:cancelled:${requestId}`,
       bookingId: booking._id,
-      ...(inBookingStage && nextStage !== prospect.salesStage
-        ? { fromStage: prospect.salesStage, toStage: nextStage }
+      ...(inBookingStage && nextStage !== prospect.stage
+        ? { fromStage: prospect.stage, toStage: nextStage }
         : {}),
       actor: { source: "human", identityKey },
       details: {
@@ -1082,10 +993,6 @@ export const cancel = mutation({
         previousEndsAt: booking.endsAt,
         previousTimezone: booking.timezone,
         reason,
-        toNextAction: nextAction,
-        ...(nextActionDueAt !== undefined
-          ? { toNextActionDueAt: nextActionDueAt }
-          : {}),
       },
     });
     const updated = await ctx.db.get("bookings", booking._id);
@@ -1110,8 +1017,6 @@ export const recordOutcome = mutation({
     bookingId: v.id("bookings"),
     expectedVersion: v.number(),
     outcome: v.union(v.literal("completed"), v.literal("no_show")),
-    nextAction: v.optional(vNextAction),
-    nextActionDueAt: v.optional(v.number()),
     requestId: v.string(),
   },
   returns: vBookingDoc,
@@ -1168,27 +1073,10 @@ export const recordOutcome = mutation({
       args.workspaceId,
       booking.prospectId,
     );
-    const dueAt =
-      args.nextActionDueAt === undefined
-        ? undefined
-        : assertEpochMs(args.nextActionDueAt, "nextActionDueAt");
-    const { nextAction, nextActionDueAt } = nextActionPatch(
-      args.nextAction,
-      dueAt,
-      args.outcome === "completed"
-        ? {
-            kind: "follow_up_email",
-            description: `Follow up with ${prospect.companyName} after the meeting`,
-          }
-        : {
-            kind: "propose_booking",
-            description: `Rebook the missed meeting with ${prospect.companyName}`,
-          },
-    );
-    const inBookingStage = prospect.salesStage === "booked";
+    const inBookingStage = prospect.stage === "meeting_booked";
     const nextStage = inBookingStage
-      ? await fallbackSalesStage(ctx, prospect)
-      : prospect.salesStage;
+      ? await fallbackLeadStage(ctx, prospect)
+      : prospect.stage;
     await ctx.db.patch("bookings", booking._id, {
       state: args.outcome,
       version: booking.version + 1,
@@ -1197,7 +1085,7 @@ export const recordOutcome = mutation({
     await ctx.db.patch("prospects", prospect._id, {
       ...(inBookingStage
         ? {
-            salesStage: nextStage,
+            stage: nextStage,
             stageReason: boundedString(
               `Meeting ${args.outcome === "no_show" ? "no-show" : "completed"}`,
               "stageReason",
@@ -1205,9 +1093,6 @@ export const recordOutcome = mutation({
             ),
           }
         : {}),
-      nextAction,
-      nextActionDueAt,
-      version: prospect.version + 1,
       updatedAt: now,
     });
     await appendLeadEvent(ctx, {
@@ -1217,17 +1102,12 @@ export const recordOutcome = mutation({
       summary: `Meeting outcome recorded: ${args.outcome}`,
       operationKey: `booking:${booking._id}:outcome:${requestId}`,
       bookingId: booking._id,
-      ...(inBookingStage && nextStage !== prospect.salesStage
-        ? { fromStage: prospect.salesStage, toStage: nextStage }
+      ...(inBookingStage && nextStage !== prospect.stage
+        ? { fromStage: prospect.stage, toStage: nextStage }
         : {}),
       actor: { source: "human", identityKey },
       details: {
-        reason:
-          args.outcome === "completed" ? "meeting completed" : "no-show",
-        toNextAction: nextAction,
-        ...(nextActionDueAt !== undefined
-          ? { toNextActionDueAt: nextActionDueAt }
-          : {}),
+        reason: args.outcome === "completed" ? "meeting completed" : "no-show",
       },
     });
     const updated = await ctx.db.get("bookings", booking._id);

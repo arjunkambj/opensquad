@@ -87,7 +87,7 @@ export function AppSidebar() {
       if (
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === SEARCH_SHORTCUT &&
-        // Not while the user is typing. ⌘K inside a campaign brief or a
+        // Not while the user is typing. ⌘K inside an instruction box or a
         // conversation note opened the palette over their half-written words.
         !isTypingTarget(event.target)
       ) {

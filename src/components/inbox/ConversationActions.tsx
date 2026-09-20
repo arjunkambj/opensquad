@@ -50,7 +50,7 @@ import type { WorkspaceRole } from "@/lib/workspace-role"
  * ④ Takeover and resume are SEPARATE explicit acts. Takeover freezes
  *    automation — no new drafts, no sends — and the screen says it cannot
  *    recall mail already submitted. Resume is the only path that clears the
- *    freeze, and it re-runs association, sender, campaign and policy checks
+ *    freeze, and it re-runs association, sender, agent and policy checks
  *    (`conversations.resume` returns a block code rather than throwing).
  * ⑤ Association dispatches nothing. The screen says so before the click —
  *    linking a lead files the thread and nothing else; Resume is separate
@@ -316,7 +316,7 @@ function TakeoverControls({
       ) : (
         <p className="text-sm text-muted-foreground">
           {frozen
-            ? "Resume re-checks the lead link, the reply's sender, the campaign and the sending policy before anything is dispatched — a refusal names the closed gate and keeps the hold on."
+            ? "Resume re-checks the lead link, the reply's sender, the agent's mode and the sending policy before anything is dispatched — a refusal names the closed gate and keeps the hold on."
             : "Takeover is immediate; resuming is a separate, checked act."}
         </p>
       )}
@@ -387,8 +387,8 @@ function TakeoverControls({
  *
  * Human-only by contract: the mutation accepts ids from an authenticated
  * editor, validates the lead is in this workspace and that it belongs to the
- * asserted campaign — the picker derives `campaignId` from the chosen lead so
- * the two can never disagree.
+ * asserted agent — the picker derives `agentId` from the chosen lead so the
+ * two can never disagree.
  */
 function AssociateCard({
   workspaceId,
@@ -405,7 +405,6 @@ function AssociateCard({
     workspaceId,
     limit: 50,
   })
-  const campaigns = useQuery(api.campaigns.list, { workspaceId })
   const associate = useMutation(api.conversations.associateProspect)
   const intentId = useRequestIntents()
 
@@ -414,9 +413,6 @@ function AssociateCard({
   const [error, setError] = useState<string | null>(null)
 
   const canAct = role === "owner" || role === "operator"
-  const campaignTitle = (campaignId: Id<"campaigns">) =>
-    campaigns?.items.find((campaign) => campaign._id === campaignId)?.title ??
-    "its campaign"
 
   return (
     <Card>
@@ -454,8 +450,16 @@ function AssociateCard({
                 <option value="">Choose a lead…</option>
                 {prospects.items.map((prospect) => (
                   <option key={prospect._id} value={prospect._id}>
-                    {prospect.companyName} — {prospect.salesStage} —{" "}
-                    {campaignTitle(prospect.campaignId)}
+                    {[prospect.firstName, prospect.lastName]
+                      .filter(
+                        (part): part is string =>
+                          part !== undefined && part.length > 0,
+                      )
+                      .join(" ") || "Name locked"}
+                    {prospect.companyName === undefined
+                      ? ""
+                      : ` — ${prospect.companyName}`}{" "}
+                    — {prospect.stage}
                   </option>
                 ))}
               </NativeSelect>
@@ -486,7 +490,7 @@ function AssociateCard({
                     conversationId: conversation._id,
                     expectedContextVersion,
                     prospectId: prospect._id,
-                    campaignId: prospect.campaignId,
+                    agentId: prospect.agentId,
                     requestId: intentId(conversation._id, "associate"),
                   })
                     .then(() =>
