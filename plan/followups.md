@@ -6,6 +6,7 @@ running list that pass starts from. Items come from task hand-offs
 ("unverified", deferred decisions) and from integrator checks. Tick when fixed.
 
 ## Decisions waiting on the owner
+- [ ] Org roles (T44): the token carries the active org but not the member's role, so the server cannot tell an org admin from a member without a keyed lookup. Default taken: every member of the active org can use the whole product; owner-only controls (disconnect inbox, replace key) are hidden for non-admins client-side with the auth SDK's permission check, which is cosmetic. Tighten with a server-side permission check if the owner wants real admin gating.
 - [ ] `AGENT_DAILY_LEAD_CAP_DEFAULT = 25` is one search page, so after each signal's first page the agent buys at most one more page a day (the hidden search caps of 6/day and 12/lifetime stay the real guarantee). Raise to ~100 for livelier day-2 paging?
 - [ ] `inbox.connection.getInboxConnection` is owner-only, so operators/viewers see a permission note and no "connect inbox" banner. Relax to any member? (one line in `convex/inbox/connection.ts`)
 - [ ] Set `SECRETS_ENCRYPTION_KEY` on dev (`npx convex env set SECRETS_ENCRYPTION_KEY "$(openssl rand -base64 32)"`). Nothing in the inbox connect flow works without it; it fails closed with `secrets_unconfigured`.

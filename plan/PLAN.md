@@ -159,7 +159,7 @@ strategy from real counts, so weak strategies can be switched off.
 | Leads | Enrich.so REST, `x-api-key`. **Platform key**, hard-capped per workspace by the credit ledger (§6). Never named in the product (see white-label rule). |
 | Email | AgentMail, existing send ledger + inbound webhook. **Bring-your-own key**, per workspace. |
 | Research | Existing Firecrawl component (platform key): user's site at onboarding, lead's company homepage at research time. |
-| Auth | Hexclave + workspaces + memberships, unchanged. |
+| Auth + tenancy | Hexclave. **The tenant is the Hexclave organization, and the org active in Hexclave is the source of truth** (owner decision, 2026-09-21): the signed token's `selected_team_id` claim decides whose data a request sees. No separate workspace concept and no `memberships` table — Hexclave owns who belongs to an org. Convex keeps one `orgs` row per Hexclave org, keyed by that org id and created silently on first use, because credits, the inbox connection, send policy and the agent need a home. |
 | Durable work | Scheduled actions + a status field per lead. No workflow engine, sandbox or worker. |
 
 ### Integrations at a glance
@@ -404,7 +404,9 @@ cannot become an overdraft.
 
 ## 7. Data model
 
-Kept as-is: `workspaces`, `memberships`, `conversations`, `conversationNotes`,
+Tenancy (owner decision, 2026-09-21): `workspaces` becomes **`orgs`** (one row per Hexclave organization, `hexclaveOrgId` indexed and unique-by-mutation, every other table's `workspaceId` becomes `orgId`), and `memberships` is removed — see EXECUTION T44. Wherever this plan still says "workspace", read "org".
+
+Kept as-is: `conversations`, `conversationNotes`,
 `drafts`, `approvals`, `sendAttempts`, `suppressions`, `emailEventReceipts`,
 `quarantinedEmailEvents`, `usageBuckets`, `usageReservations`,
 `providerOperations`, `activityEvents`, `leadEvents`, `bookings`, `evidence`.

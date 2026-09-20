@@ -101,7 +101,7 @@ Wave 0 (serial)     T00 ─▶ T01 ─▶ T06 ─▶ T05 ─▶ T02 ─▶ T03 �
 Wave 1 (parallel)   T10 inbox backend   T11 lead-data client   T12 scraper   T13 UI kit
 Wave 2 (parallel)   T20 company ─▶ T21 ICP ─▶ T23 signals        T22 inbox + goals UI
 Wave 3 (parallel)   T30 sourcing + research ─▶ T31 contacts      T32 agent page
-Wave 4 (parallel)   T40 outreach ─▶ T41 close + inbox UI         T42 dashboard   T43 settings
+Wave 4 (parallel)   T40 outreach ─▶ T44 org tenancy ─▶ T41 close + inbox   T42 dashboard   T43 settings
 Wave 5 (serial)     T50 polish, audit, ship
 ```
 
@@ -515,6 +515,25 @@ provider name.
 
 ---
 
+### T44 · Org tenancy — integrator (added 2026-09-21, owner decision)
+**Depends:** T40 and the Inbox UI half of T41 merged; runs ALONE (it touches
+the whole tree). **Owns:** the whole tree, for this task only.
+**Build:** the tenant is the Hexclave organization and the org active in
+Hexclave is the source of truth (PLAN §4). Rename `workspaces` → `orgs` and
+every `workspaceId` → `orgId` (tables, indexes, validators, function args,
+frontend), keyed by the Hexclave org id; delete `memberships` and everything
+that manages members; the auth guard authorises a request when the token's
+`selected_team_id` equals the org row's Hexclave id; the org row is created
+silently for the active org on first entry (trial grant + draft agent in the
+same mutation, one trial per org); switching org in Hexclave switches the
+data; user-visible copy says "organization", never "workspace". No behaviour
+change beyond tenancy.
+**Done when:** codegen + the four verify commands pass; no `workspace` or
+`membership` identifier, table or user-visible string remains (grep); signing
+in lands in the active org's data, a second org of the same user sees its own
+empty state, and a token whose active org differs from the requested org row
+is refused.
+
 ### T50 · Polish, audit, ship — integrator
 **Build:** loading/error/empty pass on every screen; landing copy for the new
 product; audits: `grep -ri` client bundle and `src/` for provider names
@@ -571,7 +590,7 @@ handled on production with real data, and the three audits are clean.
 - [ ] T10 inbox backend · [ ] T11 lead data · [ ] T12 scraper · [ ] T13 UI kit
 - [ ] T20 company · [ ] T21 ICP · [ ] T22 inbox + goals · [ ] T23 signals
 - [ ] T30 sourcing · [ ] T31 contacts · [ ] T32 agent
-- [ ] T40 outreach · [ ] T41 close + inbox · [ ] T42 dashboard · [ ] T43 settings
+- [ ] T40 outreach · [ ] T44 org tenancy · [ ] T41 close + inbox · [ ] T42 dashboard · [ ] T43 settings
 - [ ] T50 ship
 
 Merged with all four verify commands passing, **live half still owed** (see
