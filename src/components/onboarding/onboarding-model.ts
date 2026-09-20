@@ -16,6 +16,10 @@ import { CompanyStep } from "@/components/onboarding/steps/company/CompanyStep"
 import { CompanyFiltersStep } from "@/components/onboarding/steps/icp/CompanyFiltersStep"
 import { ExclusionsStep } from "@/components/onboarding/steps/icp/ExclusionsStep"
 import { JobTitlesStep } from "@/components/onboarding/steps/icp/JobTitlesStep"
+import {
+  OutreachGoalsStep,
+  OutreachInboxStep,
+} from "@/components/onboarding/steps/outreach/OutreachSteps"
 
 /* ------------------------------------------------------------------ */
 /* Where a step sits in the four dots                                   */
@@ -86,6 +90,18 @@ export const ONBOARDING_STEP_REGISTRY: Partial<
     stepInDot: 3,
     stepsInDot: 3,
     Component: ExclusionsStep,
+  },
+  outreach_inbox: {
+    dot: 3,
+    stepInDot: 1,
+    stepsInDot: 2,
+    Component: OutreachInboxStep,
+  },
+  outreach_goals: {
+    dot: 3,
+    stepInDot: 2,
+    stepsInDot: 2,
+    Component: OutreachGoalsStep,
   },
 }
 
