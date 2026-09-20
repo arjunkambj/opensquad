@@ -67,4 +67,26 @@ crons.interval(
   {},
 );
 
+// The overdraft guard (PLAN §6): our ledger counts what we believe each call
+// cost, the provider counts what it charged, and the two can drift. This
+// reads the real platform balance hourly and trips — or releases — the
+// lead-data breaker, so drift can never become an overdraft.
+crons.interval(
+  "platform-balance-watchdog",
+  { hours: 1 },
+  internal.billing.platformBalance.checkPlatformBalance,
+  {},
+);
+
+// The allowed values a lead search may use are case-sensitive and a typo
+// silently returns zero rows, so the catalogue behind every strategy is
+// refreshed on a schedule rather than trusted to stay right. A failed
+// refresh keeps the previous cache; it never empties it.
+crons.weekly(
+  "lead-filter-options-refresh",
+  { dayOfWeek: "monday", hourUTC: 4, minuteUTC: 0 },
+  internal.agents.filterOptions.refreshFilterOptions,
+  {},
+);
+
 export default crons;
