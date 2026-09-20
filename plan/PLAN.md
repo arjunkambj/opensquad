@@ -18,8 +18,9 @@ website ─▶ profile ─▶ Enrich search ─▶ score + company ─▶ person
 ```
 
 Every stage is visible per lead as a status, and the agent runs on a cron
-without anyone clicking. The user can run it in **Autopilot** (sends on its own)
-or **Review** (every email waits for one-click approval).
+without anyone clicking. Modes: **Sourcing only** (find and research, contact nobody — the default
+until an inbox is connected), **Review** (every email waits for one-click
+approval), **Autopilot** (sends on its own), **Paused**.
 
 ### In scope
 Onboarding (website → profile → ICP → recommended search strategies + keywords → goal/tone → keys → real lead preview), one agent per workspace
@@ -61,6 +62,45 @@ Not built in the MVP, kept only for context:
 [03-channel-choice](../temp-images/ref/03-channel-choice.png) (we are email-only),
 [22-search](../temp-images/ref/22-search.png),
 [25-insights](../temp-images/ref/25-insights.png) (its "leads generated per signal" table is reused inside the Agent page).
+
+### Element-by-element coverage
+Every visible element of the reference, and what we do with it. "Cut" elements
+are left out entirely — never rendered as inactive chrome.
+
+| Reference | Element | Ours |
+|---|---|---|
+| 01 | website field, Analyze, "I don't have a website" | built |
+| 02 | company name, industry select, description, key-feature rows, social proof, required markers | built |
+| 03 | Multichannel / LinkedIn-only choice | cut — email only, step removed |
+| 04 | location select for proxy, LinkedIn card | cut |
+| 04 | email connect card, benefit bullets, Connect later | built as "Connect your sending inbox" |
+| 05 | pain points, campaign goal, message tone | built |
+| 06–08 | job titles, industry / location / company type / size chips with "All …", exclude profiles checkbox, competitors & keywords | built |
+| 09 | signal checkboxes with info tooltips, "you can update this later" | built, with live counts + rationale |
+| 10 | keyword chips, AI-suggested chips, Generate more, custom input, "No keywords needed" | built |
+| 11 | seven-row review accordion, info banner, Confirm & preview leads | built |
+| 20 | sidebar: logo, bell, collapse, nav, credits block, user block | built (bell = real activity feed) |
+| 20 | sidebar: Copilot, Search, Insights, webinar card, Help, Roadmap, Referral | cut |
+| 20 | header chips "n Active Signal(s)" and account connection status | built: active signals count → `/agent`; inbox status → Settings |
+| 20 | range pills 7 days / 30 days / 3 months / This month | built |
+| 20 | "Ready to outreach?" CTA card | built, state-aware (connect inbox → approve leads → switch to autopilot) |
+| 20 | Hot opportunities · Leads engaged · Conversations | built: hot leads (score 3) · contacted · conversations |
+| 20 | Pipeline generated with editable deal size | built: `dealSize` × (interested + meetings booked); "Set deal size" until set |
+| 20 | Activity overview chart, Latest hot leads + View more, Latest replies + connect empty state | built |
+| 21 | "n / m running agents", Create an agent | cut — one agent per trial workspace; page opens straight on the agent |
+| 21 | not-connected banner with Connect link | built (inbox) |
+| 21 | agent name generated from ICP ("Title · Region · Industry") | built, editable |
+| 21 | mode dropdown incl. "Leads sourcing only" | built: Sourcing only / Review / Autopilot / Paused |
+| 21 | Contacted n / total, Accepted, Replied, Interested | built: Contacted n / total, **Opened** (AgentMail open events), Replied, Interested |
+| 21 | channel icons, sender account, created date, row menu | built: sender address, created date, menu (rename, pause) |
+| 22 | Search page | cut |
+| 23 | All contacts / Lists tabs, Add leads, Add to list, Export, phone column + Enrich Phone | cut |
+| 23 | search box, filters, sortable AI score, signal column with "+n signals", profile link icon, Enrich email per row and in bulk, imported time, agent link, Reject / Approve, row menu, page size + "Showing x to y of z" | built |
+| 24 | collapsed rail, Conversations count, search, Received / Interested / Unread / All, connect empty state | built |
+| 24 | "All accounts" switcher | cut — one inbox |
+| 25 | Insights page | cut; its "leads generated per signal" table lives on `/agent`, its daily counts feed the dashboard chart |
+| 26 | tabs: Workspace, Senders Accounts, AI Outreach Templates, Organization Blocklist, Account | built as Company, Inbox, Outreach (default instructions), Blocklist, Sending, Usage, Account |
+| 26 | tabs: Members, Security, Billing, API, MCP; Integrations submenu | cut |
 
 Visual system: warm coral primary on near-white, large radii, soft shadows,
 geometric sans for headings, generous whitespace. Our own name, logo and copy —
@@ -219,14 +259,16 @@ Lead data and web research are presented as OpenSquad's own capabilities.
 | `/agent` | 〃 | the agent: mode, signals on/off with leads per signal, instructions, booking link, Run now |
 | `/contacts` | 〃 | table; `?lead=<id>` opens the lead drawer (research, signals, thread, approve/reject, get email) |
 | `/inbox`, `/inbox/$conversationId` | 〃 | conversation list + thread with suggested reply |
-| `/settings?tab=company\|inbox\|sending\|usage\|account` | 〃 | company profile · Manage inbox · sending days/hours/limit · credit balance + usage history from the real ledger · account |
+| `/settings?tab=company\|inbox\|outreach\|blocklist\|sending\|usage\|account` | 〃 | company profile · Manage inbox · default outreach instructions · blocklist (emails and domains never contacted, backed by `suppressions`) · sending days/hours/limit · credit balance + usage history from the real ledger · account |
 | `$` | in shell | 404 |
 
 Redirects: signed-in user without finished onboarding → `/onboarding`; after
 Confirm → `/contacts`; old `/leads`, `/prospects`, `/overview`, `/employees`,
 `/squads`, `/decisions` → nearest new page. Sidebar order: Dashboard, Agent,
 Contacts, Inbox, Settings; credits block and user menu at the bottom. Inbox
-shows an unread count from the existing attention hook.
+shows an unread count from the existing attention hook. The header bell opens
+a feed from `activityEvents` (new reply, meeting booked, run finished, credits
+low).
 
 ### Onboarding edge cases
 - Progress is saved per step on the draft agent / business profile
@@ -237,8 +279,7 @@ shows an unread count from the existing attention hook.
   read that website", offer Retry and "Fill in manually". The free first run is
   only consumed on success.
 - Every AI-generated step has Regenerate (3 credits) and is fully editable.
-- Inbox step is skippable; the agent then starts in `review` mode with sending
-  disabled and a "Connect inbox to start sending" banner on Agent and Contacts.
+- Inbox step is skippable; the agent then starts in `sourcing_only` mode and a "Connect inbox to start sending" banner on Agent and Contacts.
 - Zero leads after Confirm: Contacts shows which signals returned nothing and
   links back to edit the ICP — never an empty table with no explanation.
 
@@ -353,7 +394,8 @@ Kept as-is: `workspaces`, `memberships`, `conversations`, `conversationNotes`,
 - **`businessProfiles`** (extend): `websiteUrl`, `companyName`, `industry`,
   `description`, `keyFeatures[]`, `socialProof[]`, `painPoints`, `analysisStatus`.
 - **`agents`** (replaces `campaigns`):
-  `name`, `mode: "review" | "autopilot" | "paused"`,
+  `name` (generated from ICP: "Title · Region · Industry", editable),
+  `mode: "sourcing_only" | "review" | "autopilot" | "paused"`, `dealSize?`,
   `icp { jobTitles[], industries[], locations[], companyTypes[], companySizes[], excludeProfiles[], excludeKeywords[] }`,
   `onboardingStep`,
   `goal: "start_conversations" | "book_calls"`,
