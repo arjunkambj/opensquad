@@ -301,6 +301,9 @@ export const nextStep = internalQuery({
           .eq("operationKey", backfillOperationKey(workspace.connectedAt as number)),
       )
       .unique();
+    // `uncertain` still runs: the shared provider-operation sweep can relabel
+    // a stalled row (see `sweepStalledBackfills`), and a relabelled run is
+    // resumable — only `completed` and `failed` are terminal here.
     if (row === null || row.state === "completed" || row.state === "failed") {
       return { run: false as const, reason: "no run in progress" };
     }
@@ -675,31 +678,40 @@ export const sweepStalledBackfills = internalMutation({
   returns: v.object({ resumed: v.number() }),
   handler: async (ctx) => {
     const cutoff = Date.now() - BACKFILL_STALL_MS;
-    const rows = await ctx.db
-      .query("providerOperations")
-      .withIndex("by_state_and_updatedAt", (q) =>
-        q.eq("state", "accepted").lt("updatedAt", cutoff),
-      )
-      .take(BACKFILL_SWEEP_SCAN);
     let resumed = 0;
-    for (const row of rows) {
-      if (
-        row.provider !== "agentmail" ||
-        !row.operationKey.startsWith("inbox_backfill:")
-      ) {
-        continue;
+    // `uncertain` is swept too, and not because this file ever writes it:
+    // `integrations/firecrawl.sweepStaleFirecrawlOperations` scans the same
+    // global `by_state_and_updatedAt` index WITHOUT filtering by provider, so
+    // it can relabel a stalled backfill row before this sweep sees it. That
+    // relabelling is harmless — the row carries no reservation — as long as
+    // the run stays resumable, which is what including the state here buys.
+    for (const state of ["accepted", "uncertain"] as const) {
+      const rows = await ctx.db
+        .query("providerOperations")
+        .withIndex("by_state_and_updatedAt", (q) =>
+          q.eq("state", state).lt("updatedAt", cutoff),
+        )
+        .take(BACKFILL_SWEEP_SCAN);
+      for (const row of rows) {
+        if (
+          row.provider !== "agentmail" ||
+          !row.operationKey.startsWith("inbox_backfill:")
+        ) {
+          continue;
+        }
+        // Stamped before the schedule so the next sweep does not re-drive the
+        // same run while this one is still working.
+        await ctx.db.patch("providerOperations", row._id, {
+          state: "accepted" as const,
+          updatedAt: Date.now(),
+        });
+        await ctx.scheduler.runAfter(
+          0,
+          internal.inbox.backfill.runBackfillStep,
+          { workspaceId: row.workspaceId },
+        );
+        resumed += 1;
       }
-      // Stamped before the schedule so the next sweep does not re-drive the
-      // same run while this one is still working.
-      await ctx.db.patch("providerOperations", row._id, {
-        updatedAt: Date.now(),
-      });
-      await ctx.scheduler.runAfter(
-        0,
-        internal.inbox.backfill.runBackfillStep,
-        { workspaceId: row.workspaceId },
-      );
-      resumed += 1;
     }
     return { resumed };
   },
