@@ -260,6 +260,9 @@ export const strategyFields = {
   filters: vLeadFilters,
   excludeFilters: vLeadFilters,
   matchCount: v.number(),
+  // The provider's own flag for `matchCount` (spikes §3: read it, never infer
+  // it from a threshold). Absent = exact.
+  matchCountIsApproximate: v.optional(v.boolean()),
   enabled: v.boolean(),
   source: vStrategySource,
   nextPage: v.number(),
