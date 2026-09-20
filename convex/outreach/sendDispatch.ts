@@ -49,6 +49,8 @@ const vBeginResult = v.union(
   v.object({
     action: v.literal("dispatch"),
     sendAttemptId: v.id("sendAttempts"),
+    /** Whose key the request is made with — there is no platform key. */
+    workspaceId: v.id("workspaces"),
     inboxRef: v.string(),
     providerIdempotencyKey: v.string(),
     endpointOperation: v.union(v.literal("send"), v.literal("reply")),
@@ -237,6 +239,7 @@ export const beginDispatch = internalMutation({
     return {
       action: "dispatch" as const,
       sendAttemptId: attempt._id,
+      workspaceId: workspace._id,
       inboxRef: draft.inboxRef,
       providerIdempotencyKey: attempt.providerIdempotencyKey,
       endpointOperation: attempt.endpointOperation,

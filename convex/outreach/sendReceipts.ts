@@ -181,11 +181,19 @@ export async function recordReceipt(
   }
 
   // Late delivery event: the attempt already recorded its providerMessageRef
-  // — fold the verified facts on immediately instead of parking. Inbound
-  // receipts never match a send attempt, so this only touches delivery
-  // facts. Early events (no attempt yet) stay `pending` for the
-  // acknowledgement path in sendOutcome.ts.
-  if (!duplicateApplicationKey) {
+  // — fold the verified facts on immediately instead of parking. Early events
+  // (no attempt yet) stay `pending` for the acknowledgement path in
+  // sendOutcome.ts.
+  //
+  // OUTBOUND ONLY, and the direction test is not belt-and-braces. The connect
+  // backfill imports whole threads, including the messages WE sent, so an
+  // inbound-direction row can now carry a provider message ref that matches
+  // one of our attempts. Folding it would stamp `message.received` onto that
+  // attempt's delivery summary — a transport fact it never was.
+  if (
+    !duplicateApplicationKey &&
+    directionForApplicationKey(applicationKey) === "outbound"
+  ) {
     // .collect() not .unique(): a provider anomaly could put the same
     // message ref on two attempts — unique() would throw and wedge the
     // receipt forever. The workspace check picks our attempt out of any

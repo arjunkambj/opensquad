@@ -6,6 +6,7 @@
  * prospect rather than being dropped.
  */
 import { internalMutation } from "../_generated/server";
+import { vMessageSource } from "../lib/validators";
 import { vConversationDoc } from "../outreach/draftsModel";
 import { recordConversationNote } from "./conversationNotes";
 import { v } from "convex/values";
@@ -41,6 +42,12 @@ export const ensureUnassignedConversation = internalMutation({
     at: v.number(),
     messageRef: v.string(),
     fromAddress: v.optional(v.string()),
+    /**
+     * How the thread reached us. Live webhook mail by default; the connect
+     * backfill names itself, so imported history is marked as history and the
+     * reply gate can refuse to answer it (PLAN §9.4).
+     */
+    source: v.optional(vMessageSource),
   },
   returns: v.union(
     v.object({
@@ -84,7 +91,7 @@ export const ensureUnassignedConversation = internalMutation({
       state: "unassigned",
       // An unassigned thread is created by a live webhook event; the backfill
       // importer names its own source when it creates a thread.
-      source: "live",
+      source: args.source ?? "live",
       humanTakeover: true,
       takeoverReason: "unassigned_inbound",
       takeoverBy: "system",

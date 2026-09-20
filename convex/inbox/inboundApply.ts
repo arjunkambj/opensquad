@@ -14,6 +14,7 @@ import type { TakeoverReason } from "../lib/validators";
 import { recordConversationNote } from "./conversationNotes";
 import { resolveOutboundRecipient } from "./conversationsModel";
 import type { InboundFacts } from "./inboundModel";
+import { mergeConversationSource } from "./model";
 import {
   evaluateReplyAutomation,
   NOTED_REPLY_GATE_BLOCKS,
@@ -100,6 +101,12 @@ export async function applyToConversation(
       updatedAt: Date.now(),
     });
   }
+
+  // 2b. The thread-level source stamp. A live message on a thread the connect
+  //     backfill imported PROMOTES it — `mergeMessageSource` is the one
+  //     definition of that rule, shared with the message-row writer, and a
+  //     later backfill can never move it back (PLAN §9.4).
+  await mergeConversationSource(ctx, current, receipt.source);
 
   // 3. Opt-out, before anything could propose a reply.
   await enforceOptOut(ctx, current, facts);

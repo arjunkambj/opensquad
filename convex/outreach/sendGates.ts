@@ -259,6 +259,20 @@ export async function evaluateSendGates(
       "workspace has no assigned sender inbox",
     );
   }
+  // The inbox must be attached by the workspace's OWN key (PLAN §9.4).
+  // `legacy_platform_inbox` is receive-only — it still gets mail on the
+  // platform route and cannot send until its owner connects a key — and
+  // `invalid` is a key the provider refused at send time. Reported as
+  // `inbox_unassigned` on purpose: "connect your inbox" is already the UI
+  // meaning of that code, so no new block code has to be mapped.
+  if (workspace.inboxConnection !== "connected") {
+    return block(
+      "inbox_unassigned",
+      workspace.inboxConnection === "legacy_platform_inbox"
+        ? "this workspace receives on a platform inbox and cannot send until its own key is connected"
+        : "the workspace's mail key is not connected",
+    );
+  }
   if (
     workspace.inboxRef !== draft.inboxRef ||
     conversation.inboxRef !== draft.inboxRef

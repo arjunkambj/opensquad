@@ -53,6 +53,7 @@ import {
 } from "../lib/validators";
 import type { QuarantineReason } from "../lib/validators";
 import { recordReceipt } from "../outreach/sendReceipts";
+import { upsertMessage } from "./model";
 
 /** Longest application key `recordReceipt` accepts. */
 const APPLICATION_KEY_MAX_LENGTH = 500;
@@ -97,6 +98,8 @@ export async function recordQuarantinedEvent(
     eventType: string;
     reason: QuarantineReason;
     providerTimestamp?: number;
+    /** A bounded application note — never provider text. */
+    note?: string;
   },
 ): Promise<void> {
   const providerEventId = clipRef(args.providerEventId, 200);
@@ -140,6 +143,9 @@ export async function recordQuarantinedEvent(
       : {}),
     ...(args.providerTimestamp !== undefined
       ? { providerTimestamp: args.providerTimestamp }
+      : {}),
+    ...(args.note !== undefined
+      ? { note: clipRef(args.note, QUARANTINE_NOTE_MAX_LENGTH) }
       : {}),
   });
 }
@@ -284,25 +290,24 @@ async function replayOne(
     text: message.text,
     extractedText: message.extractedText,
   });
-  const { receipt, duplicate, duplicateApplicationKey } = await recordReceipt(
-    ctx,
-    {
-      workspaceId: workspace._id,
-      inboxRef: row.inboxRef,
-      providerEventId: row.providerEventId,
-      applicationKey: row.applicationKey,
-      providerMessageRef: row.providerMessageRef,
-      eventType: row.eventType,
-      receivedAt: row.receivedAt,
-      providerThreadRef: threadRef,
-      providerFacts: {
-        ...(fromAddress !== undefined ? { fromAddress } : {}),
-        optOutSignal: optOut.signal,
-        ...(optOut.rule !== undefined ? { optOutRule: optOut.rule } : {}),
-      },
+  // Through the single writer (PLAN §9.4), never a direct insert: a message
+  // the backfill imported while this row waited is MERGED and promoted to
+  // `live` rather than duplicated.
+  const { receipt, startsHandling } = await upsertMessage(ctx, {
+    workspaceId: workspace._id,
+    inboxRef: row.inboxRef,
+    providerEventId: row.providerEventId,
+    providerMessageRef: row.providerMessageRef,
+    providerThreadRef: threadRef,
+    source: "live" as const,
+    receivedAt: row.receivedAt,
+    providerFacts: {
+      ...(fromAddress !== undefined ? { fromAddress } : {}),
+      optOutSignal: optOut.signal,
+      ...(optOut.rule !== undefined ? { optOutRule: optOut.rule } : {}),
     },
-  );
-  if (!duplicate && !duplicateApplicationKey) {
+  });
+  if (startsHandling) {
     // Scheduled, not inlined: a throw in the business path must not roll back
     // the receipt that makes the event replayable a second time.
     await ctx.scheduler.runAfter(0, internal.inbox.inbound.applyInboundMessage, {
@@ -314,9 +319,9 @@ async function replayOne(
     row,
     "released",
     workspace._id,
-    duplicate || duplicateApplicationKey
-      ? "already recorded under this workspace; no second application effect"
-      : "replayed into inbound processing",
+    startsHandling
+      ? "replayed into inbound processing"
+      : "already recorded under this workspace; no second application effect",
   );
   return "released";
 }

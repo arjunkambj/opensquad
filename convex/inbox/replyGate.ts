@@ -135,6 +135,13 @@ export async function evaluateReplyAutomation(
   if (workspace.inboxRef === undefined) {
     return blocked("inbox_unassigned");
   }
+  // A legacy platform inbox is RECEIVE-ONLY (PLAN §9.4 "Legacy inboxes"):
+  // its mail is shown in the Inbox and never auto-answered. The same refusal
+  // covers a key the provider rejected — a workspace that cannot send cannot
+  // usefully start reply work either.
+  if (workspace.inboxConnection !== "connected") {
+    return blocked("inbox_unassigned");
+  }
   if (workspace.inboxRef !== conversation.inboxRef) {
     return blocked("inbox_mismatch");
   }

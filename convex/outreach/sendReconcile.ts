@@ -25,6 +25,8 @@ const vPrepareResult = v.union(
   v.object({
     action: v.literal("replay"),
     sendAttemptId: v.id("sendAttempts"),
+    /** Whose key the replay is made with — there is no platform key. */
+    workspaceId: v.id("workspaces"),
     inboxRef: v.string(),
     providerIdempotencyKey: v.string(),
     endpointOperation: v.union(v.literal("send"), v.literal("reply")),
@@ -115,6 +117,7 @@ export const prepareReconcile = internalMutation({
     return {
       action: "replay" as const,
       sendAttemptId: attempt._id,
+      workspaceId: workspace._id,
       inboxRef: draft.inboxRef,
       providerIdempotencyKey: attempt.providerIdempotencyKey,
       endpointOperation: attempt.endpointOperation,
@@ -179,6 +182,7 @@ export const reconcileUncertainAttempt = internalAction({
         const call = await ctx.runAction(
           internal.integrations.agentmail.reconcileReplyAttempt,
           {
+            workspaceId: prepared.workspaceId,
             inboxId: prepared.inboxRef,
             idempotencyKey: prepared.providerIdempotencyKey,
             parentMessageId: prepared.parentMessageId ?? "",
@@ -190,6 +194,7 @@ export const reconcileUncertainAttempt = internalAction({
         const call = await ctx.runAction(
           internal.integrations.agentmail.reconcileSendAttempt,
           {
+            workspaceId: prepared.workspaceId,
             inboxId: prepared.inboxRef,
             idempotencyKey: prepared.providerIdempotencyKey,
             payload: prepared.payload,
@@ -295,6 +300,7 @@ export const gatherProviderEvidence = internalAction({
     const provider = await ctx.runAction(
       internal.integrations.agentmail.lookupProviderMessage,
       {
+        workspaceId: attempt.workspaceId,
         inboxId: attempt.inboxRef,
         ...(attempt.providerMessageRef !== undefined
           ? { messageId: attempt.providerMessageRef }

@@ -3,8 +3,21 @@ import { registerStaticRoutes } from "@convex-dev/static-hosting";
 import { httpAction } from "./_generated/server";
 import { components } from "./_generated/api";
 import { agentmail } from "./integrations/agentmail";
+import {
+  inboundWebhook,
+  WORKSPACE_WEBHOOK_PATH_PREFIX,
+} from "./inbox/inboundRoute";
 
 const http = httpRouter();
+
+function unauthorizedResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: { code: "UNAUTHORIZED", message: "invalid signature" },
+    }),
+    { status: 401, headers: { "Content-Type": "application/json" } },
+  );
+}
 
 // The component's RunMutationCtx.runMutation is typed with the
 // (mutation, args, options?) ArgsAndOptions signature while convex 1.45's
@@ -14,25 +27,49 @@ const http = httpRouter();
 // element; runtime behavior is unchanged.
 type WebhookCtx = Parameters<typeof agentmail.handleWebhook>[0];
 
-// --- AgentMail (P05) ----------------------------------------------------------
-// POST /agentmail/webhook — signed AgentMail receiver. `handleWebhook` verifies
-// the svix-id / svix-timestamp / svix-signature headers over the raw request
-// body against AGENTMAIL_WEBHOOK_SECRET before any state change; unsigned or
-// badly signed requests get 401. This is the ONLY AgentMail HTTP route —
-// outbound sending is never reachable over HTTP (internalAction only, see
-// convex/integrations/agentmail.ts).
+// --- AgentMail: the per-workspace inbound route (T10) -------------------------
+// POST /agentmail/webhook/<token> — PLAN §4 step 4 / §9.4. The opaque path
+// token resolves to ONE workspace; the request is verified against that
+// workspace's own webhook secret (plus the rotated-out one during its
+// ten-minute overlap), and is accepted only when the event's `inbox_id` is
+// that workspace's `inboxRef`. Unknown token or bad signature → 401; a
+// verified event naming another inbox is quarantined. Registered as a PREFIX
+// route, so the exact legacy path below still wins for itself.
+http.route({
+  pathPrefix: WORKSPACE_WEBHOOK_PATH_PREFIX,
+  method: "POST",
+  handler: inboundWebhook,
+});
+
+// --- AgentMail: the legacy platform-inbox route (P05) -------------------------
+// POST /agentmail/webhook — kept mounted for workspaces still on the platform
+// account (`inboxConnection: "legacy_platform_inbox"`, PLAN §9.4 "Legacy
+// inboxes", MIGRATION.md §4.1.6). RECEIVE-ONLY: those workspaces are refused
+// at the send gate and are never auto-answered. `handleWebhook` verifies the
+// svix headers over the raw body against AGENTMAIL_WEBHOOK_SECRET before any
+// state change.
+//
+// That env var is no longer set on dev. The component THROWS when it is
+// missing, which would answer an unsigned request with a 500 — so the absence
+// is checked here and answered 401, the same as a bad signature: an endpoint
+// that cannot verify anything must refuse, not fail. Removing this route is a
+// T50 item gated on no workspace being in the legacy state.
 http.route({
   path: "/agentmail/webhook",
   method: "POST",
-  handler: httpAction(async (ctx, request) =>
-    agentmail.handleWebhook(
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.AGENTMAIL_WEBHOOK_SECRET;
+    if (secret === undefined || secret.length === 0) {
+      return unauthorizedResponse();
+    }
+    return await agentmail.handleWebhook(
       {
         runMutation: ((mutation, args) =>
           ctx.runMutation(mutation, args)) as WebhookCtx["runMutation"],
       },
       request,
-    ),
-  ),
+    );
+  }),
 });
 
 // --- Reserved-path method guards (P16) ----------------------------------------
