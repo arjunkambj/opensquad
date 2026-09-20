@@ -15,14 +15,11 @@
  *
  * Data-free: labels, logo and callbacks all arrive as props.
  */
-import {
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  Tick02Icon,
-} from "@hugeicons/core-free-icons"
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
+import { OnboardingStepper } from "@/components/kit/OnboardingStepper"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
@@ -59,52 +56,6 @@ export type OnboardingShellProps = {
   className?: string
 }
 
-function StepperDot({
-  index,
-  state,
-}: {
-  index: number
-  state: "done" | "current" | "upcoming"
-}) {
-  const done = state === "done" || state === "current"
-  return (
-    <span
-      className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-colors",
-        done
-          ? "border-foreground bg-foreground text-background"
-          : "border-border bg-card text-muted-foreground",
-        state === "current" && "ring-4 ring-primary/20",
-      )}
-    >
-      {done ? (
-        <HugeiconsIcon
-          icon={Tick02Icon}
-          strokeWidth={2.5}
-          className="size-4"
-          aria-hidden="true"
-        />
-      ) : (
-        index
-      )}
-    </span>
-  )
-}
-
-function StepperConnector({ fill }: { fill: number }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="mx-1 block h-px w-10 shrink-0 bg-border sm:w-20"
-    >
-      <span
-        className="block h-px bg-foreground transition-[width] duration-300"
-        style={{ width: `${Math.round(Math.min(1, Math.max(0, fill)) * 100)}%` }}
-      />
-    </span>
-  )
-}
-
 export function OnboardingShell({
   logo,
   dotCount,
@@ -127,7 +78,6 @@ export function OnboardingShell({
   stepperLabel = "Progress",
   className,
 }: OnboardingShellProps) {
-  const dots = Array.from({ length: Math.max(0, dotCount) }, (_, i) => i + 1)
   const subProgress =
     step !== undefined && stepCount !== undefined && stepCount > 0
       ? (step - 1) / stepCount
@@ -143,27 +93,13 @@ export function OnboardingShell({
     >
       <div className="flex justify-center">{logo}</div>
 
-      <ol
-        aria-label={stepperLabel}
-        className="mt-8 flex items-center justify-center"
-      >
-        {dots.map((n) => {
-          const state =
-            n < currentDot ? "done" : n === currentDot ? "current" : "upcoming"
-          const fill =
-            n - 1 < currentDot ? 1 : n - 1 === currentDot ? subProgress : 0
-          return (
-            <li
-              key={n}
-              aria-current={state === "current" ? "step" : undefined}
-              className="flex items-center"
-            >
-              {n > 1 ? <StepperConnector fill={fill} /> : null}
-              <StepperDot index={n} state={state} />
-            </li>
-          )
-        })}
-      </ol>
+      <OnboardingStepper
+        className="mt-8"
+        count={dotCount}
+        current={currentDot}
+        progress={subProgress}
+        label={stepperLabel}
+      />
 
       <section className="mt-10 w-full max-w-3xl rounded-[min(var(--radius-5xl),32px)] bg-card px-6 py-8 shadow-xl shadow-foreground/5 sm:px-10 sm:py-10">
         <div className="flex min-h-6 items-start justify-between gap-4">
