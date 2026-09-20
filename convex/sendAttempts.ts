@@ -31,8 +31,10 @@ import {
   domainError,
   invalid,
   PROVIDER_REF_MAX_LENGTH,
+  vMessageSource,
   vSendAttemptState,
 } from "./lib/validators";
+import type { MessageSource } from "./lib/validators";
 import { emailEventReceiptFields, sendAttemptFields } from "./schema";
 
 export const vSendAttemptDoc = v.object({
@@ -233,6 +235,8 @@ export const recordProviderEvent = internalMutation({
     applicationKey: v.string(),
     providerMessageRef: v.string(),
     eventType: v.string(),
+    /** Live webhook unless the connect-time backfill says otherwise. */
+    source: v.optional(vMessageSource),
     providerFacts: v.optional(v.record(v.string(), v.any())),
     providerThreadRef: v.optional(v.string()),
     receivedAt: v.optional(v.number()),
@@ -252,6 +256,7 @@ export async function recordReceipt(
     applicationKey: string;
     providerMessageRef: string;
     eventType: string;
+    source?: MessageSource;
     providerFacts?: Record<string, unknown>;
     providerThreadRef?: string;
     receivedAt?: number;
@@ -329,6 +334,10 @@ export async function recordReceipt(
     providerMessageRef,
     eventType,
     receivedAt: args.receivedAt ?? now,
+    // PLAN §9.4: the reply gate answers `live` mail only. Every writer that
+    // is not the connect-time backfill is recording live mail, so `live` is
+    // the default and `backfill` is stated explicitly.
+    source: args.source ?? "live",
     // Derived from the key, never passed in: the key already names the half
     // of the mail path this row belongs to, and two independent statements of
     // one fact is how the drain's index range would come to disagree with the

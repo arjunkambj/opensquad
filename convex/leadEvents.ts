@@ -38,7 +38,7 @@ import type {
   LeadEventActor,
   LeadEventDetails,
   LeadEventKind,
-  SalesStage,
+  LeadStage,
 } from "./lib/validators";
 import { leadEventFields } from "./schema";
 
@@ -117,8 +117,8 @@ export async function appendLeadEvent(
     kind: LeadEventKind;
     summary: string;
     operationKey: string;
-    fromStage?: SalesStage;
-    toStage?: SalesStage;
+    fromStage?: LeadStage;
+    toStage?: LeadStage;
     bookingId?: Id<"bookings">;
     details?: LeadEventDetails;
     /** Overrides the default `workflow` actor. The ONLY legitimate override

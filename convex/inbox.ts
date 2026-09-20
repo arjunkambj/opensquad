@@ -63,6 +63,7 @@ import {
   boundedString,
   domainError,
   OPT_OUT_SIGNALS,
+  SENDING_AGENT_MODES,
 } from "./lib/validators";
 import type { OptOutSignal, TakeoverReason } from "./lib/validators";
 import type { AuthCtx } from "./lib/auth";
@@ -141,8 +142,8 @@ export const REPLY_GATE_BLOCK_CODES = [
   "conversation_closed",
   "human_takeover",
   "association_missing",
-  "campaign_mismatch",
-  "campaign_inactive",
+  "agent_mismatch",
+  "agent_not_sending",
   "workspace_paused",
   "inbox_unassigned",
   "inbox_mismatch",
@@ -160,8 +161,8 @@ export const vReplyGateBlockCode = v.union(
   v.literal("conversation_closed"),
   v.literal("human_takeover"),
   v.literal("association_missing"),
-  v.literal("campaign_mismatch"),
-  v.literal("campaign_inactive"),
+  v.literal("agent_mismatch"),
+  v.literal("agent_not_sending"),
   v.literal("workspace_paused"),
   v.literal("inbox_unassigned"),
   v.literal("inbox_mismatch"),
@@ -641,7 +642,7 @@ export async function evaluateReplyAutomation(
   }
   if (
     conversation.prospectId === undefined ||
-    conversation.campaignId === undefined
+    conversation.agentId === undefined
   ) {
     return blocked("association_missing");
   }
@@ -649,17 +650,19 @@ export async function evaluateReplyAutomation(
   if (prospect === null || prospect.workspaceId !== conversation.workspaceId) {
     return blocked("association_missing");
   }
-  const campaign = await ctx.db.get("campaigns", conversation.campaignId);
-  if (campaign === null || campaign.workspaceId !== conversation.workspaceId) {
+  const agent = await ctx.db.get("agents", conversation.agentId);
+  if (agent === null || agent.workspaceId !== conversation.workspaceId) {
     return blocked("association_missing");
   }
-  // The campaign frozen on the conversation at association is the authority;
-  // a lead re-campaigned since must not silently retarget in-flight work.
-  if (prospect.campaignId !== conversation.campaignId) {
-    return blocked("campaign_mismatch");
+  // The agent frozen on the conversation at association is the authority; a
+  // lead re-pointed since must not silently retarget in-flight work.
+  if (prospect.agentId !== conversation.agentId) {
+    return blocked("agent_mismatch");
   }
-  if (campaign.status !== "active") {
-    return blocked("campaign_inactive");
+  // Sourcing-only and paused agents are shown their replies and answer none
+  // of them (PLAN §9.3).
+  if (!SENDING_AGENT_MODES.includes(agent.mode)) {
+    return blocked("agent_not_sending");
   }
   const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
   if (workspace === null || workspace.automationState !== "active") {
@@ -702,8 +705,8 @@ const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<ReplyGateBlockCode> = new Set<
   ReplyGateBlockCode
 >([
   "association_missing",
-  "campaign_mismatch",
-  "campaign_inactive",
+  "agent_mismatch",
+  "agent_not_sending",
   "workspace_paused",
   "inbox_unassigned",
   "inbox_mismatch",

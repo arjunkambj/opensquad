@@ -43,12 +43,13 @@ import {
   MAX_LIST_LIMIT,
   normalizeEmailAddress,
   PROVIDER_REF_MAX_LENGTH,
+  SENDING_AGENT_MODES,
   THREAD_BODY_MAX_LENGTH,
-  vCampaignStatus,
+  vAgentMode,
   vConversationState,
   vConversationTab,
+  vLeadStage,
   vReplyDisposition,
-  vSalesStage,
   vTakeoverReason,
 } from "./lib/validators";
 import type { ConversationNoteKind } from "./lib/validators";
@@ -64,15 +65,16 @@ import { conversationNoteFields } from "./schema";
 /** The lead behind a thread, projected to what a row or header renders. */
 export const vConversationProspectRef = v.object({
   prospectId: v.id("prospects"),
-  companyName: v.string(),
-  salesStage: vSalesStage,
+  /** Absent when the sourced row carried no company name. */
+  companyName: v.optional(v.string()),
+  stage: vLeadStage,
 });
 
-/** The campaign a thread's reply work runs under. */
-export const vConversationCampaignRef = v.object({
-  campaignId: v.id("campaigns"),
-  title: v.string(),
-  status: vCampaignStatus,
+/** The agent a thread's reply work runs under. */
+export const vConversationAgentRef = v.object({
+  agentId: v.id("agents"),
+  name: v.string(),
+  mode: vAgentMode,
 });
 
 /**
@@ -176,8 +178,10 @@ async function summarize(
         ? null
         : {
             prospectId: prospect._id,
-            companyName: prospect.companyName,
-            salesStage: prospect.salesStage,
+            ...(prospect.companyName === undefined
+              ? {}
+              : { companyName: prospect.companyName }),
+            stage: prospect.stage,
           },
     updatedAt: conversation.updatedAt,
   };
@@ -210,7 +214,7 @@ export async function resolveOutboundRecipient(
   let recipient: string | null = null;
   if (conversation.prospectId !== undefined) {
     const prospect = await ctx.db.get("prospects", conversation.prospectId);
-    const email = prospect?.contact?.email;
+    const email = prospect?.email;
     if (
       prospect !== null &&
       prospect.workspaceId === conversation.workspaceId &&
@@ -358,13 +362,13 @@ export const listForProspect = query({
 });
 
 /**
- * One thread's record, with its lead and campaign resolved so the detail
- * screen needs a single round trip.
+ * One thread's record, with its lead and agent resolved so the detail screen
+ * needs a single round trip.
  *
- * The campaign is the one FROZEN on the conversation at association; a
- * conversation that has none yet (or one staged by the P10 seam) falls back
- * to the lead's current campaign so the header still renders. The frozen
- * value always wins — that is the point of freezing it.
+ * The agent is the one FROZEN on the conversation at association; a
+ * conversation that has none yet falls back to the lead's current agent so
+ * the header still renders. The frozen value always wins — that is the point
+ * of freezing it.
  */
 export const get = query({
   args: {
@@ -374,7 +378,7 @@ export const get = query({
   returns: v.object({
     conversation: vConversationDoc,
     prospect: v.union(vConversationProspectRef, v.null()),
-    campaign: v.union(vConversationCampaignRef, v.null()),
+    agent: v.union(vConversationAgentRef, v.null()),
   }),
   handler: async (ctx, args) => {
     await requireWorkspaceMember(ctx, args.workspaceId);
@@ -391,15 +395,13 @@ export const get = query({
       prospectRow === null || prospectRow.workspaceId !== args.workspaceId
         ? null
         : prospectRow;
-    const campaignId = conversation.campaignId ?? prospect?.campaignId;
-    const campaignRow =
-      campaignId === undefined
+    const agentId = conversation.agentId ?? prospect?.agentId;
+    const agentRow =
+      agentId === undefined ? null : await ctx.db.get("agents", agentId);
+    const agent =
+      agentRow === null || agentRow.workspaceId !== args.workspaceId
         ? null
-        : await ctx.db.get("campaigns", campaignId);
-    const campaign =
-      campaignRow === null || campaignRow.workspaceId !== args.workspaceId
-        ? null
-        : campaignRow;
+        : agentRow;
     return {
       conversation,
       prospect:
@@ -407,17 +409,15 @@ export const get = query({
           ? null
           : {
               prospectId: prospect._id,
-              companyName: prospect.companyName,
-              salesStage: prospect.salesStage,
+              ...(prospect.companyName === undefined
+                ? {}
+                : { companyName: prospect.companyName }),
+              stage: prospect.stage,
             },
-      campaign:
-        campaign === null
+      agent:
+        agent === null
           ? null
-          : {
-              campaignId: campaign._id,
-              title: campaign.title,
-              status: campaign.status,
-            },
+          : { agentId: agent._id, name: agent.name, mode: agent.mode },
     };
   },
 });
@@ -1125,6 +1125,9 @@ export const ensureUnassignedConversation = internalMutation({
       workspaceId: args.workspaceId,
       inboxRef: args.inboxRef,
       state: "unassigned",
+      // An unassigned thread is created by a live webhook event; the backfill
+      // importer names its own source when it creates a thread.
+      source: "live",
       humanTakeover: true,
       takeoverReason: "unassigned_inbound",
       takeoverBy: "system",
@@ -1174,8 +1177,8 @@ export const ensureUnassignedConversation = internalMutation({
  */
 export const RESUME_BLOCK_CODES = [
   "association_missing",
-  "campaign_mismatch",
-  "campaign_inactive",
+  "agent_mismatch",
+  "agent_not_sending",
   "workspace_paused",
   "inbox_unassigned",
   "inbox_mismatch",
@@ -1206,13 +1209,12 @@ const vResumeResult = v.object({
 export type ResumeResult = typeof vResumeResult.type;
 
 /**
- * Link an unassigned thread to a lead and campaign already in this workspace
- * (§5 `associateProspect`).
+ * Link an unassigned thread to a lead and agent already in this workspace.
  *
  * Association is HUMAN-ONLY: email content can never choose a lead, and this
  * mutation takes ids from an authenticated editor only. It validates that the
- * lead is in this workspace and that it belongs to the named campaign — a
- * caller asserting which campaign it believes it is binding turns a
+ * lead is in this workspace and that it belongs to the named agent — a
+ * caller asserting which agent it believes it is binding turns a
  * disagreement into a CONFLICT instead of a silent bind.
  *
  * It DISPATCHES NOTHING. §8: "advance context, set state to open and keep
@@ -1231,7 +1233,7 @@ export const associateProspect = mutation({
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
     prospectId: v.id("prospects"),
-    campaignId: v.id("campaigns"),
+    agentId: v.id("agents"),
     requestId: v.string(),
   },
   returns: vConversationDoc,
@@ -1250,7 +1252,7 @@ export const associateProspect = mutation({
     // returns the doc rather than a spurious CONFLICT.
     if (
       conversation.prospectId === args.prospectId &&
-      conversation.campaignId === args.campaignId
+      conversation.agentId === args.agentId
     ) {
       return conversation;
     }
@@ -1267,22 +1269,19 @@ export const associateProspect = mutation({
     if (prospect === null || prospect.workspaceId !== args.workspaceId) {
       throw domainError("NOT_FOUND", "prospect not found");
     }
-    const campaign = await ctx.db.get("campaigns", args.campaignId);
-    if (campaign === null || campaign.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "campaign not found");
+    const agent = await ctx.db.get("agents", args.agentId);
+    if (agent === null || agent.workspaceId !== args.workspaceId) {
+      throw domainError("NOT_FOUND", "agent not found");
     }
-    if (prospect.campaignId !== args.campaignId) {
-      throw domainError(
-        "CONFLICT",
-        "prospect belongs to a different campaign",
-      );
+    if (prospect.agentId !== args.agentId) {
+      throw domainError("CONFLICT", "prospect belongs to a different agent");
     }
     const updated = await advanceContext(
       ctx,
       conversation,
       {
         prospectId: args.prospectId,
-        campaignId: args.campaignId,
+        agentId: args.agentId,
         state: "open",
         // Deliberately kept: association proves who the thread is about, not
         // that automation may speak for us again.
@@ -1297,7 +1296,7 @@ export const associateProspect = mutation({
       conversation,
       kind: "system",
       actor: identityKey,
-      body: `Associated with ${prospect.companyName} on campaign "${campaign.title}". Takeover stays on until resume.`,
+      body: `Associated with ${prospect.companyName ?? "this lead"} on agent "${agent.name}". Takeover stays on until resume.`,
     });
     // A reply that arrived while the thread was still unassigned is a reply
     // fact once the lead is named — stamp `lastReplyAt`/`replied` from the
@@ -1378,7 +1377,7 @@ export const resume = mutation({
 
     if (
       conversation.prospectId === undefined ||
-      conversation.campaignId === undefined
+      conversation.agentId === undefined
     ) {
       return blocked("association_missing");
     }
@@ -1386,15 +1385,17 @@ export const resume = mutation({
     if (prospect === null || prospect.workspaceId !== args.workspaceId) {
       return blocked("association_missing");
     }
-    const campaign = await ctx.db.get("campaigns", conversation.campaignId);
-    if (campaign === null || campaign.workspaceId !== args.workspaceId) {
+    const agent = await ctx.db.get("agents", conversation.agentId);
+    if (agent === null || agent.workspaceId !== args.workspaceId) {
       return blocked("association_missing");
     }
-    if (prospect.campaignId !== conversation.campaignId) {
-      return blocked("campaign_mismatch");
+    if (prospect.agentId !== conversation.agentId) {
+      return blocked("agent_mismatch");
     }
-    if (campaign.status !== "active") {
-      return blocked("campaign_inactive");
+    // Sourcing-only and paused agents never speak: automation may be re-armed
+    // only under a mode that is allowed to put mail on the wire (PLAN §9.3).
+    if (!SENDING_AGENT_MODES.includes(agent.mode)) {
+      return blocked("agent_not_sending");
     }
     if (workspace.automationState !== "active") {
       return blocked("workspace_paused");

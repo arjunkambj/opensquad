@@ -48,12 +48,14 @@ import {
   domainError,
   invalid,
   normalizeHttpUrl,
-  researchPageLimit,
   sha256Hex,
   unwrapConvexErrorText,
   vProviderOperationState,
   vRetrievedPage,
   RESEARCH_PAGES_PER_PROSPECT,
+  TRIAL_SCRAPES_LIFETIME_LIMIT,
+  USAGE_PERIOD_LIFETIME,
+  USAGE_SCOPE_WORKSPACE,
 } from "../lib/validators";
 import type { ProviderOperationState } from "../lib/validators";
 
@@ -444,7 +446,6 @@ function admitResearchUrl(raw: string): string {
  */
 export const beginFirecrawlOperation = internalMutation({
   args: {
-    campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
     url: v.string(),
   },
@@ -463,24 +464,15 @@ export const beginFirecrawlOperation = internalMutation({
     }),
   ),
   handler: async (ctx, args): Promise<BeginFirecrawlOperationResult> => {
-    const campaign = await ctx.db.get("campaigns", args.campaignId);
-    if (campaign === null) {
-      throw domainError("NOT_FOUND", "campaign not found");
-    }
     const prospect = await ctx.db.get("prospects", args.prospectId);
-    if (
-      prospect === null ||
-      prospect.workspaceId !== campaign.workspaceId ||
-      prospect.campaignId !== campaign._id
-    ) {
-      // Cross-workspace and cross-campaign rows are the same NOT_FOUND —
-      // existence never leaks across a scope boundary.
-      throw domainError("NOT_FOUND", "prospect not found for this campaign");
+    if (prospect === null) {
+      throw domainError("NOT_FOUND", "prospect not found");
     }
+    const workspaceId = prospect.workspaceId;
     // Admission runs FIRST: an inadmissible URL must never reserve.
     const url = admitResearchUrl(args.url);
 
-    const operationKey = `research:${campaign._id}:${args.prospectId}:${await sha256Hex(url)}`;
+    const operationKey = `research:${args.prospectId}:${await sha256Hex(url)}`;
     const requestDigest = await computeResultDigest({
       provider: "firecrawl",
       tool: "scrape",
@@ -491,7 +483,7 @@ export const beginFirecrawlOperation = internalMutation({
       .query("providerOperations")
       .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", campaign.workspaceId)
+          .eq("workspaceId", workspaceId)
           .eq("provider", "firecrawl")
           .eq("operationKey", operationKey),
       )
@@ -525,9 +517,7 @@ export const beginFirecrawlOperation = internalMutation({
     const priorForProspect = await ctx.db
       .query("providerOperations")
       .withIndex("by_workspaceId_and_prospectId_and_state", (q) =>
-        q
-          .eq("workspaceId", campaign.workspaceId)
-          .eq("prospectId", args.prospectId),
+        q.eq("workspaceId", workspaceId).eq("prospectId", args.prospectId),
       )
       .take(PROSPECT_OPERATION_SCAN_MAX);
     const counted = priorForProspect.filter(consumesPageAllowance).length;
@@ -542,18 +532,18 @@ export const beginFirecrawlOperation = internalMutation({
     // aborts everything above it — the operation row is never written, the
     // cap accounting never moves, and the provider is never contacted.
     const reservation = await ctx.runMutation(internal.usage.reserve, {
-      workspaceId: campaign.workspaceId,
-      scopeKey: `campaign:${campaign._id}`,
-      metric: "research_pages" as const,
-      periodKey: "lifetime",
-      limit: researchPageLimit(campaign.leadLimit),
+      workspaceId,
+      scopeKey: USAGE_SCOPE_WORKSPACE,
+      metric: "scrapes" as const,
+      periodKey: USAGE_PERIOD_LIFETIME,
+      limit: TRIAL_SCRAPES_LIFETIME_LIMIT,
       operationKey,
       quantity: 1,
     });
 
     const now = Date.now();
     const providerOperationId = await ctx.db.insert("providerOperations", {
-      workspaceId: campaign.workspaceId,
+      workspaceId,
       provider: "firecrawl" as const,
       operationKey,
       requestDigest,
@@ -679,7 +669,6 @@ export const settleFirecrawlOperation = internalMutation({
  */
 export const retrieveProspectPage = internalAction({
   args: {
-    campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
     url: v.string(),
   },
@@ -693,11 +682,7 @@ export const retrieveProspectPage = internalAction({
   handler: async (ctx, args): Promise<RetrieveProspectPageResult> => {
     const begin = await ctx.runMutation(
       internal.integrations.firecrawl.beginFirecrawlOperation,
-      {
-        campaignId: args.campaignId,
-        prospectId: args.prospectId,
-        url: args.url,
-      },
+      { prospectId: args.prospectId, url: args.url },
     );
     if (begin.decision === "replay") {
       return {
@@ -777,7 +762,7 @@ export const retrieveProspectPage = internalAction({
  * (§G2 Firecrawl route item 2), in ONE journaled workflow step.
  *
  * It never throws for a single URL. An inadmissible URL, an exhausted
- * campaign allowance, a per-prospect cap and a provider failure all land in
+ * workspace allowance, a per-prospect cap and a provider failure all land in
  * `failures` with a stated reason, because a research branch that loses one
  * page should still cite the pages it did retrieve — and because a step that
  * throws would take a `retry` policy with it and re-drive a refusal that is
@@ -789,7 +774,6 @@ export const retrieveProspectPage = internalAction({
  */
 export const retrieveProspectPages = internalAction({
   args: {
-    campaignId: v.id("campaigns"),
     prospectId: v.id("prospects"),
     urls: v.array(v.string()),
   },
@@ -822,16 +806,12 @@ export const retrieveProspectPages = internalAction({
       try {
         outcome = await ctx.runAction(
           internal.integrations.firecrawl.retrieveProspectPage,
-          {
-            campaignId: args.campaignId,
-            prospectId: args.prospectId,
-            url,
-          },
+          { prospectId: args.prospectId, url },
         );
       } catch (error) {
         // A refusal raised BEFORE the provider was contacted: an
-        // inadmissible URL, the prospect's own page cap, or the campaign's
-        // exhausted page allowance. Nothing was reserved and nothing was
+        // inadmissible URL, the prospect's own page cap, or the workspace's
+        // exhausted scrape allowance. Nothing was reserved and nothing was
         // forwarded, so it is recorded and the next URL is tried.
         failures.push({
           url: url.slice(0, 300),

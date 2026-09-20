@@ -9,13 +9,12 @@
  */
 
 import type * as activity from "../activity.js";
+import type * as agents from "../agents.js";
 import type * as approvals from "../approvals.js";
 import type * as bookings from "../bookings.js";
 import type * as businessProfiles from "../businessProfiles.js";
-import type * as campaigns from "../campaigns.js";
 import type * as conversations from "../conversations.js";
 import type * as crons from "../crons.js";
-import type * as demo from "../demo.js";
 import type * as drafts from "../drafts.js";
 import type * as evidence from "../evidence.js";
 import type * as http from "../http.js";
@@ -41,13 +40,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
+  agents: typeof agents;
   approvals: typeof approvals;
   bookings: typeof bookings;
   businessProfiles: typeof businessProfiles;
-  campaigns: typeof campaigns;
   conversations: typeof conversations;
   crons: typeof crons;
-  demo: typeof demo;
   drafts: typeof drafts;
   evidence: typeof evidence;
   http: typeof http;

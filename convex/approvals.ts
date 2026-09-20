@@ -195,6 +195,9 @@ async function resolveDraft(
   const now = Date.now();
   const approvalId = await ctx.db.insert("approvals", {
     workspaceId: args.workspaceId,
+    // This module is the HUMAN approval path; Autopilot writes its own row
+    // with `actor: "autopilot"` through the outreach loop (PLAN §9.3).
+    actor: "user",
     draftId: draft._id,
     draftRevision: draft.revision,
     payloadHash: draft.payloadHash,

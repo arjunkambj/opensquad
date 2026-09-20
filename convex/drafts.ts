@@ -39,6 +39,7 @@ import {
   normalizeEmailAddress,
   PROVIDER_REF_MAX_LENGTH,
   vConversationState,
+  vMessageSource,
 } from "./lib/validators";
 import type { EndpointOperation } from "./lib/validators";
 import { recordActivityEvent } from "./activity";
@@ -98,7 +99,7 @@ async function installRevision(
   args: {
     workspace: Doc<"workspaces">;
     conversation: Doc<"conversations">;
-    campaign: Doc<"campaigns"> | null;
+    agent: Doc<"agents"> | null;
     recipient: string;
     subject: string;
     body: string;
@@ -160,7 +161,11 @@ async function installRevision(
 
   const now = Date.now();
   if (latest !== null && latest.supersededAt === undefined) {
-    await ctx.db.patch("drafts", latest._id, { supersededAt: now });
+    // `state` and `supersededAt` move together — see `vDraftState`.
+    await ctx.db.patch("drafts", latest._id, {
+      state: "superseded",
+      supersededAt: now,
+    });
   }
   const draftId = await ctx.db.insert("drafts", {
     workspaceId: args.workspace._id,
@@ -178,8 +183,11 @@ async function installRevision(
     // A new current draft is an explicit context change (§8): bump the
     // version first so this revision binds the post-change context.
     basedOnContextVersion: args.conversation.contextVersion + 1,
-    campaignBriefVersion: args.campaign?.briefVersion ?? 0,
+    // A draft with no agent behind it is written under revision 0, which no
+    // live agent ever carries — so it can never pass a revision check.
+    agentRevision: args.agent?.revision ?? 0,
     policyVersion: args.workspace.policyVersion,
+    state: "current",
     evidenceIds,
     createdBy: args.createdBy,
     createdAt: now,
@@ -415,10 +423,10 @@ export const revise = mutation({
       throw invalid("revise requires at least one of recipient/subject/body");
     }
 
-    const campaign =
-      conversation.campaignId === undefined
+    const agent =
+      conversation.agentId === undefined
         ? null
-        : await ctx.db.get("campaigns", conversation.campaignId);
+        : await ctx.db.get("agents", conversation.agentId);
 
     // The booking link survives a content edit ONLY while it still names a
     // live proposal at the version the draft was written against. A
@@ -450,7 +458,7 @@ export const revise = mutation({
     const draft = await installRevision(ctx, {
       workspace,
       conversation,
-      campaign,
+      agent,
       recipient,
       subject,
       body,
@@ -546,14 +554,14 @@ export const createRevision = internalMutation({
     if (workspace === null) {
       throw domainError("NOT_FOUND", "workspace not found");
     }
-    const campaign =
-      conversation.campaignId === undefined
+    const agent =
+      conversation.agentId === undefined
         ? null
-        : await ctx.db.get("campaigns", conversation.campaignId);
+        : await ctx.db.get("agents", conversation.agentId);
     const draft = await installRevision(ctx, {
       workspace,
       conversation,
-      campaign,
+      agent,
       recipient: args.recipient,
       subject: args.subject,
       body: args.body,
@@ -599,6 +607,7 @@ export const stageConversation = internalMutation({
     inboxRef: v.string(),
     providerThreadRef: v.optional(v.string()),
     prospectId: v.optional(v.id("prospects")),
+    source: v.optional(vMessageSource),
     state: v.optional(vConversationState),
     humanTakeover: v.optional(v.boolean()),
     /** Staging override — real bumps flow through applyInboundContext etc. */
@@ -687,6 +696,9 @@ export const stageConversation = internalMutation({
       workspaceId: args.workspaceId,
       inboxRef,
       state: args.state ?? "open",
+      // A staged thread is live mail unless the caller says it came from the
+      // connect-time backfill.
+      source: args.source ?? "live",
       humanTakeover: args.humanTakeover ?? false,
       contextVersion: args.contextVersion ?? 1,
       unreadCount: args.unreadCount ?? 0,

@@ -1,8 +1,16 @@
 /**
- * Business profile — one current record per workspace (architecture §4.1).
+ * Business profile — one current record per workspace (PLAN §7), the company
+ * we are selling FOR. Website analysis (T20) fills it from the user's own
+ * site; every field stays editable afterwards.
+ *
  * Reads require any active member; writes require owner or operator and use
  * `expectedVersion` optimistic concurrency. Meaningful edits increment
  * `version`; `updatedBy` always records the authenticated actor.
+ *
+ * `analysisStatus` is owned by the analysis flow, not by this editor: a user
+ * correcting their industry must not overwrite "analyzing" with "idle". T20
+ * moves it through analyzing → ready|failed and sets `firstRunUsed` on
+ * success only, so a blocked site costs the user nothing (PLAN §5).
  */
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
@@ -12,6 +20,11 @@ import {
   boundedStringList,
   domainError,
   normalizeHttpUrl,
+  COMPANY_DESCRIPTION_MAX_LENGTH,
+  COMPANY_LIST_ITEM_MAX_LENGTH,
+  COMPANY_LIST_MAX_ITEMS,
+  COMPANY_NAME_MAX_LENGTH,
+  COMPANY_PAIN_POINTS_MAX_LENGTH,
 } from "./lib/validators";
 import { businessProfileFields } from "./schema";
 
@@ -40,31 +53,51 @@ export const get = query({
  * Create-or-update the profile. Pass `expectedVersion: 0` when no profile may
  * exist yet, or the current `version` to update. A stale version returns
  * `CONFLICT` with the authoritative record untouched.
+ *
+ * `websiteUrl` is optional because "I don't have a website" is a supported
+ * path (PLAN §5): the user types the name and description instead and
+ * everything downstream runs from those.
  */
 export const update = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     expectedVersion: v.number(),
-    websiteUrl: v.string(),
-    offer: v.string(),
-    idealCustomer: v.string(),
-    tone: v.string(),
-    exclusions: v.array(v.string()),
+    websiteUrl: v.optional(v.string()),
+    companyName: v.string(),
+    industry: v.string(),
+    description: v.string(),
+    keyFeatures: v.array(v.string()),
+    socialProof: v.array(v.string()),
+    painPoints: v.string(),
   },
   returns: vBusinessProfileDoc,
   handler: async (ctx, args) => {
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
 
-    const websiteUrl = normalizeHttpUrl(args.websiteUrl, "websiteUrl");
-    const offer = boundedString(args.offer, "offer", { min: 1, max: 2000 });
-    const idealCustomer = boundedString(args.idealCustomer, "idealCustomer", {
+    const websiteUrl =
+      args.websiteUrl === undefined
+        ? undefined
+        : normalizeHttpUrl(args.websiteUrl, "websiteUrl");
+    const companyName = boundedString(args.companyName, "companyName", {
       min: 1,
-      max: 2000,
+      max: COMPANY_NAME_MAX_LENGTH,
     });
-    const tone = boundedString(args.tone, "tone", { min: 1, max: 500 });
-    const exclusions = boundedStringList(args.exclusions, "exclusions", {
-      maxItems: 50,
-      itemMax: 200,
+    const industry = boundedString(args.industry, "industry", {
+      max: COMPANY_LIST_ITEM_MAX_LENGTH,
+    });
+    const description = boundedString(args.description, "description", {
+      max: COMPANY_DESCRIPTION_MAX_LENGTH,
+    });
+    const keyFeatures = boundedStringList(args.keyFeatures, "keyFeatures", {
+      maxItems: COMPANY_LIST_MAX_ITEMS,
+      itemMax: COMPANY_LIST_ITEM_MAX_LENGTH,
+    });
+    const socialProof = boundedStringList(args.socialProof, "socialProof", {
+      maxItems: COMPANY_LIST_MAX_ITEMS,
+      itemMax: COMPANY_LIST_ITEM_MAX_LENGTH,
+    });
+    const painPoints = boundedString(args.painPoints, "painPoints", {
+      max: COMPANY_PAIN_POINTS_MAX_LENGTH,
     });
 
     const existing = await ctx.db
@@ -84,11 +117,16 @@ export const update = mutation({
       }
       const id = await ctx.db.insert("businessProfiles", {
         workspaceId: args.workspaceId,
-        websiteUrl,
-        offer,
-        idealCustomer,
-        tone,
-        exclusions,
+        ...(websiteUrl !== undefined ? { websiteUrl } : {}),
+        companyName,
+        industry,
+        description,
+        keyFeatures,
+        socialProof,
+        painPoints,
+        // Typed by hand, so there is nothing for an analysis to report yet.
+        analysisStatus: { state: "idle" },
+        firstRunUsed: false,
         version: 1,
         updatedAt: now,
         updatedBy: identityKey,
@@ -107,20 +145,26 @@ export const update = mutation({
       );
     }
 
+    const sameList = (stored: readonly string[], next: readonly string[]) =>
+      stored.length === next.length &&
+      stored.every((value, index) => value === next[index]);
     const changed =
       existing.websiteUrl !== websiteUrl ||
-      existing.offer !== offer ||
-      existing.idealCustomer !== idealCustomer ||
-      existing.tone !== tone ||
-      existing.exclusions.length !== exclusions.length ||
-      existing.exclusions.some((value, index) => value !== exclusions[index]);
+      existing.companyName !== companyName ||
+      existing.industry !== industry ||
+      existing.description !== description ||
+      existing.painPoints !== painPoints ||
+      !sameList(existing.keyFeatures, keyFeatures) ||
+      !sameList(existing.socialProof, socialProof);
 
     await ctx.db.patch("businessProfiles", existing._id, {
       websiteUrl,
-      offer,
-      idealCustomer,
-      tone,
-      exclusions,
+      companyName,
+      industry,
+      description,
+      keyFeatures,
+      socialProof,
+      painPoints,
       version: changed ? existing.version + 1 : existing.version,
       updatedAt: now,
       updatedBy: identityKey,
