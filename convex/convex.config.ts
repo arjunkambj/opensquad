@@ -2,6 +2,7 @@ import { defineApp } from "convex/server";
 import { v } from "convex/values";
 import agentmail from "@agentmail/convex/convex.config";
 import firecrawl from "@firecrawl/firecrawl-convex/convex.config";
+import migrations from "@convex-dev/migrations/convex.config";
 import staticHosting from "@convex-dev/static-hosting/convex.config";
 
 const app = defineApp({
@@ -35,6 +36,11 @@ app.use(firecrawl, {
     FIRECRAWL_WEBHOOK_SECRET: app.env.FIRECRAWL_WEBHOOK_SECRET,
   },
 });
+
+// T06: Migrations — batched, cursor-resumable, dry-runnable data migrations
+// with their own state table (MIGRATION.md §2, §6.4). Only `convex/migrations/**`
+// uses it, and only during a cutover; nothing in the request path touches it.
+app.use(migrations);
 
 // P16: Static hosting for the Vite `dist` SPA — app-owned root routing per
 // integrations.md §G4. Deliberately NO `httpPrefix`: the component must not

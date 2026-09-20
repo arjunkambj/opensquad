@@ -17,6 +17,9 @@ importers:
       '@convex-dev/ai-sdk-provider':
         specifier: 0.2.0-alpha.1
         version: 0.2.0-alpha.1(ai@7.0.107(zod@4.6.2))(convex@1.45.0(react@19.3.0))(zod@4.6.2)
+      '@convex-dev/migrations':
+        specifier: ^0.3.6
+        version: 0.3.6(convex-helpers@0.1.124(@standard-schema/spec@1.1.0)(convex@1.45.0(react@19.3.0))(hono@4.13.7)(react@19.3.0)(typescript@7.0.2)(zod@4.6.2))(convex@1.45.0(react@19.3.0))
       '@convex-dev/static-hosting':
         specifier: 0.2.1
         version: 0.2.1(convex@1.45.0(react@19.3.0))(react@19.3.0)
@@ -438,6 +441,12 @@ packages:
     peerDependencies:
       ai: ^7.0.0
       convex: ^1.45.0
+
+  '@convex-dev/migrations@0.3.6':
+    resolution: {integrity: sha512-cURYG4uy323MDi55QWNF5HAGemS4QspSgJ4uP+gGPAJdBLBbk2KFO7toFlKhacc1NinJQiG6+D/YEFyFyBS1/A==}
+    peerDependencies:
+      convex: ^1.42.0
+      convex-helpers: ^0.1.115
 
   '@convex-dev/static-hosting@0.2.1':
     resolution: {integrity: sha512-QMcfKUOB8dHeLa81xzk2GEIn7LzhEvtdgYhfFpIFer6uE/+xMStDxHAZsX5h1qsttYi7wNbEKAMf7MfOQ7ZrMw==}
@@ -4497,6 +4506,11 @@ snapshots:
       convex: 1.45.0(react@19.3.0)
     transitivePeerDependencies:
       - zod
+
+  '@convex-dev/migrations@0.3.6(convex-helpers@0.1.124(@standard-schema/spec@1.1.0)(convex@1.45.0(react@19.3.0))(hono@4.13.7)(react@19.3.0)(typescript@7.0.2)(zod@4.6.2))(convex@1.45.0(react@19.3.0))':
+    dependencies:
+      convex: 1.45.0(react@19.3.0)
+      convex-helpers: 0.1.124(@standard-schema/spec@1.1.0)(convex@1.45.0(react@19.3.0))(hono@4.13.7)(react@19.3.0)(typescript@7.0.2)(zod@4.6.2)
 
   '@convex-dev/static-hosting@0.2.1(convex@1.45.0(react@19.3.0))(react@19.3.0)':
     dependencies:
