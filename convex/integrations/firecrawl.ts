@@ -53,11 +53,11 @@ import {
   vProviderOperationState,
   vRetrievedPage,
   RESEARCH_PAGES_PER_PROSPECT,
-  TRIAL_SCRAPES_LIFETIME_LIMIT,
   USAGE_PERIOD_LIFETIME,
   USAGE_SCOPE_WORKSPACE,
 } from "../lib/validators";
 import type { ProviderOperationState } from "../lib/validators";
+import { TRIAL_SCRAPES_LIFETIME_LIMIT } from "../lib/limits";
 
 /** Shared component client handle. `FIRECRAWL_API_KEY` /
  * `FIRECRAWL_WEBHOOK_SECRET` are bound to the component's typed env in

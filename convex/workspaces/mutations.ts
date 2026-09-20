@@ -8,6 +8,7 @@
  */
 import { mutation } from "../_generated/server";
 import { requireWorkspaceOwner } from "../lib/auth";
+import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../lib/limits";
 import {
   assertIanaTimezone,
   boundedInt,
@@ -137,11 +138,13 @@ export const setSendingPolicy = mutation({
         `policyVersion is ${workspace.policyVersion}, not ${args.expectedPolicyVersion}`,
       );
     }
+    // PLAN §6 layer 2: the trial's daily send ceiling is 30, whatever the
+    // owner types — the send allowance is a cap, not a preference.
     const dailySendLimit =
       args.dailySendLimit !== undefined
         ? boundedInt(args.dailySendLimit, "dailySendLimit", {
             min: 1,
-            max: 1000,
+            max: TRIAL_DAILY_SEND_LIMIT_MAX,
           })
         : undefined;
     if (args.sendWindow !== undefined) {

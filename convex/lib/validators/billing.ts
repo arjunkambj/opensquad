@@ -144,14 +144,6 @@ export function consumesPageAllowance(row: {
 export const RESEARCH_PAGES_PER_PROSPECT = 3;
 
 /**
- * The workspace's lifetime scrape allowance — PLAN §6 layer 2, "Firecrawl
- * pages: 80 lifetime". Provisional home: it moves to `convex/lib/limits.ts`
- * with the rest of the price/cap map in T02, which is also what grants the
- * bucket at workspace creation.
- */
-export const TRIAL_SCRAPES_LIFETIME_LIMIT = 80;
-
-/**
  * One page the BACKEND itself retrieved, in the shape the app stores and
  * cites. `retrievedAt` is epoch ms — `scrapePage` reports an ISO 8601
  * string, and the conversion happens once, here at the boundary, rather

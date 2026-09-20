@@ -45,4 +45,26 @@ crons.interval(
   {},
 );
 
+// The same belt for every paid call that goes through `withCredits`: an
+// operation whose action died before it could settle is parked `uncertain`,
+// which KEEPS its credits and provider units blocked. We cannot prove the
+// request never left, and releasing without proof hands back money we may
+// already have spent.
+crons.interval(
+  "paid-call-park-stale",
+  { minutes: 5 },
+  internal.billing.sweeps.parkStalePaidCalls,
+  {},
+);
+
+// The other half of PLAN §6's recovery rule: a hold that nothing reconciled
+// within 24 hours is committed at its worst case. Hourly is often enough —
+// every hold it resolves is a day old by definition.
+crons.interval(
+  "paid-call-commit-expired-holds",
+  { hours: 1 },
+  internal.billing.sweeps.commitExpiredHolds,
+  {},
+);
+
 export default crons;

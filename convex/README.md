@@ -10,12 +10,15 @@ contract this directory keeps.
 convex/
   schema.ts  http.ts  crons.ts  convex.config.ts  auth.config.ts  ← composition only
   lib/            cross-domain helpers only
-    auth.ts
+    auth.ts       identity, membership, and the verified-email gate
+    errors.ts     the one typed error-code union the client maps to copy
+    limits.ts     every price, cap, budget and recovery window
+    rateLimits.ts per-user token buckets on credit-spending entry points
     validators/   shared.ts + one file per domain, re-exported from index.ts
   integrations/   the ONLY place that talks HTTP to a provider
     agentmail.ts  firecrawl.ts
-  workspaces/     workspace records, memberships, workspace policy
-  billing/        the usage ledger: reservations, commits, releases
+  workspaces/     workspace records, memberships, policy, the trial grant
+  billing/        credits, the usage ledger, platform budgets, `withCredits`
   company/        the business profile we are selling FOR
   agents/         the one sales agent a workspace runs
   leads/          the person-level lead, its events and research evidence
@@ -44,10 +47,38 @@ is committed so task branches typecheck without a deployment.
   the file path: `api.leads.queries.list`,
   `internal.outreach.sendReserve.reserveSendIntent`,
   `internal.billing.reservations.reserve`.
-- Errors go through `domainError(code, message)` in `lib/validators/shared.ts`;
-  provider error text never leaves `integrations/`.
+- Errors go through `domainError(code, message)` from `lib/errors.ts` (also
+  re-exported by `lib/validators`); provider error text never leaves
+  `integrations/`.
 - Anything the browser does not call is an `internalQuery` / `internalMutation`
   / `internalAction`.
+
+## Money
+
+Nothing spends money outside `billing/`. One door, `withCredits`, reserves the
+action's credit price and its worst-case provider units — in the workspace
+buckets AND the platform budget — inside one transaction, runs the work, then
+settles in one transaction. It ends in exactly one of `billed`, `refunded` or
+`uncertain`, and is idempotent by `operationKey`, so a retry of a settled
+operation replays its recorded outcome instead of buying the work again.
+
+| file | what it owns |
+|---|---|
+| `paidCall.ts` | the vocabulary: actions, provider units, outcomes, operation keys |
+| `withCredits.ts` | the wrapper the callers use |
+| `reserve.ts` | its reserve half: check every layer, then take it all at once |
+| `settlement.ts` | its settle half, and the reconciliation door provider tasks call |
+| `model.ts` | the ledger's buckets, and how a debit is taken |
+| `transitions.ts` | how a debit is settled: the reservation state machine |
+| `reservations.ts` | the same ledger as internal mutations, for action callers |
+| `platformBudgets.ts` | the kill switch, platform budgets, signup capacity |
+| `trialBuckets.ts` | the grant a workspace is created with |
+| `sweeps.ts` | the belts: park a lost call, commit a hold nothing reconciled |
+| `credits.ts`, `queries.ts` | the balance, the Usage tab, the waitlist state |
+
+An `uncertain` hold is only ever RELEASED with proof — that is
+`settlement.reconcilePaidCall`, called by a provider task that looked the
+operation up. The sweep may only commit it.
 
 ## The send boundary
 

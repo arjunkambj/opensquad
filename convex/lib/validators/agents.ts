@@ -167,16 +167,9 @@ export const ICP_VALUE_MAX_LENGTH = 200;
 
 export const AGENT_FOLLOW_UP_DAYS_MAX = 4;
 
-/** Defaults from PLAN §9.2/§9.3; retuned in `lib/limits.ts` (T02). */
-export const AGENT_DAILY_LEAD_CAP_DEFAULT = 25;
-
-export const AGENT_DAILY_RESEARCH_CAP_DEFAULT = 5;
-
-export const AGENT_AUTO_REVEAL_DAILY_CAP_DEFAULT = 5;
-
-export const AGENT_AUTO_APPROVE_MIN_SCORE_DEFAULT = 2;
-
-export const AGENT_FOLLOW_UP_DAYS_DEFAULT: readonly number[] = [3, 7];
+// The agent's cap DEFAULTS are policy numbers, not vocabulary, so they live
+// with the rest of the limits in `lib/limits.ts` (PLAN §10 "No magic
+// numbers"). This file keeps only the shapes and bounds.
 
 /**
  * The signal a strategy is built on. Exactly the catalogue of PLAN §3 —

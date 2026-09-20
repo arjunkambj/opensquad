@@ -78,6 +78,44 @@ export async function requireUser(ctx: AuthCtx): Promise<AuthenticatedUser> {
 }
 
 /**
+ * A verified account — the gate in front of creating a workspace
+ * (PLAN §6 "Closing the ways in", spikes §5).
+ *
+ * Read entirely from the token: the identity provider's access token carries
+ * `email_verified` as a required claim, which Convex maps onto
+ * `UserIdentity.emailVerified`, so this costs no network call and no secret
+ * key. Strict equality against `true` means an ABSENT claim fails closed — a
+ * missing claim would mean the provider or its configuration changed, which
+ * is not a reason to hand someone a credit grant.
+ *
+ * `is_restricted` is refused as defence in depth. Every OTHER entry point
+ * keeps `requireUser`, so an unverified account can still sign in and see the
+ * "verify your email" state instead of looking signed out.
+ */
+export async function requireVerifiedUser(
+  ctx: AuthCtx,
+): Promise<AuthenticatedUser> {
+  const user = await requireUser(ctx);
+  const { identity } = user;
+  if (identity["is_restricted"] === true) {
+    throw domainError("ACCOUNT_RESTRICTED", "this account is not fully set up");
+  }
+  if (identity.emailVerified !== true) {
+    throw domainError(
+      "EMAIL_NOT_VERIFIED",
+      "verify your email address before creating a workspace",
+    );
+  }
+  if (typeof identity.email !== "string" || identity.email.length === 0) {
+    throw domainError(
+      "EMAIL_NOT_VERIFIED",
+      "an account email is required to create a workspace",
+    );
+  }
+  return user;
+}
+
+/**
  * Active membership of an identity in a workspace, or `null`. Revoked
  * memberships never satisfy a guard.
  */

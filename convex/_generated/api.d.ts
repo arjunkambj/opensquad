@@ -14,8 +14,17 @@ import type * as agents_model from "../agents/model.js";
 import type * as agents_mutations from "../agents/mutations.js";
 import type * as agents_queries from "../agents/queries.js";
 import type * as billing_credits from "../billing/credits.js";
+import type * as billing_model from "../billing/model.js";
+import type * as billing_paidCall from "../billing/paidCall.js";
+import type * as billing_platformBudgets from "../billing/platformBudgets.js";
 import type * as billing_queries from "../billing/queries.js";
 import type * as billing_reservations from "../billing/reservations.js";
+import type * as billing_reserve from "../billing/reserve.js";
+import type * as billing_settlement from "../billing/settlement.js";
+import type * as billing_sweeps from "../billing/sweeps.js";
+import type * as billing_transitions from "../billing/transitions.js";
+import type * as billing_trialBuckets from "../billing/trialBuckets.js";
+import type * as billing_withCredits from "../billing/withCredits.js";
 import type * as bookings_confirmations from "../bookings/confirmations.js";
 import type * as bookings_model from "../bookings/model.js";
 import type * as bookings_outcomes from "../bookings/outcomes.js";
@@ -46,6 +55,9 @@ import type * as leads_model from "../leads/model.js";
 import type * as leads_mutations from "../leads/mutations.js";
 import type * as leads_queries from "../leads/queries.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_errors from "../lib/errors.js";
+import type * as lib_limits from "../lib/limits.js";
+import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_validators_activity from "../lib/validators/activity.js";
 import type * as lib_validators_agents from "../lib/validators/agents.js";
 import type * as lib_validators_billing from "../lib/validators/billing.js";
@@ -83,6 +95,7 @@ import type * as outreach_suppressions from "../outreach/suppressions.js";
 import type * as workspaces_model from "../workspaces/model.js";
 import type * as workspaces_mutations from "../workspaces/mutations.js";
 import type * as workspaces_queries from "../workspaces/queries.js";
+import type * as workspaces_trialGrant from "../workspaces/trialGrant.js";
 
 import type {
   ApiFromModules,
@@ -97,8 +110,17 @@ declare const fullApi: ApiFromModules<{
   "agents/mutations": typeof agents_mutations;
   "agents/queries": typeof agents_queries;
   "billing/credits": typeof billing_credits;
+  "billing/model": typeof billing_model;
+  "billing/paidCall": typeof billing_paidCall;
+  "billing/platformBudgets": typeof billing_platformBudgets;
   "billing/queries": typeof billing_queries;
   "billing/reservations": typeof billing_reservations;
+  "billing/reserve": typeof billing_reserve;
+  "billing/settlement": typeof billing_settlement;
+  "billing/sweeps": typeof billing_sweeps;
+  "billing/transitions": typeof billing_transitions;
+  "billing/trialBuckets": typeof billing_trialBuckets;
+  "billing/withCredits": typeof billing_withCredits;
   "bookings/confirmations": typeof bookings_confirmations;
   "bookings/model": typeof bookings_model;
   "bookings/outcomes": typeof bookings_outcomes;
@@ -129,6 +151,9 @@ declare const fullApi: ApiFromModules<{
   "leads/mutations": typeof leads_mutations;
   "leads/queries": typeof leads_queries;
   "lib/auth": typeof lib_auth;
+  "lib/errors": typeof lib_errors;
+  "lib/limits": typeof lib_limits;
+  "lib/rateLimits": typeof lib_rateLimits;
   "lib/validators/activity": typeof lib_validators_activity;
   "lib/validators/agents": typeof lib_validators_agents;
   "lib/validators/billing": typeof lib_validators_billing;
@@ -166,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   "workspaces/model": typeof workspaces_model;
   "workspaces/mutations": typeof workspaces_mutations;
   "workspaces/queries": typeof workspaces_queries;
+  "workspaces/trialGrant": typeof workspaces_trialGrant;
 }>;
 
 /**
@@ -198,5 +224,6 @@ export declare const components: {
   agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
   firecrawl: import("@firecrawl/firecrawl-convex/_generated/component.js").ComponentApi<"firecrawl">;
   migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
 };

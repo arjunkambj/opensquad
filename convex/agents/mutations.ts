@@ -18,74 +18,36 @@
 import { mutation } from "../_generated/server";
 import { requireWorkspaceEditor } from "../lib/auth";
 import {
-  AGENT_AUTO_APPROVE_MIN_SCORE_DEFAULT,
-  AGENT_AUTO_REVEAL_DAILY_CAP_DEFAULT,
-  AGENT_DAILY_LEAD_CAP_DEFAULT,
-  AGENT_DAILY_RESEARCH_CAP_DEFAULT,
-  AGENT_FOLLOW_UP_DAYS_DEFAULT,
   AGENT_INSTRUCTIONS_MAX_LENGTH,
   AGENT_NAME_MAX_LENGTH,
   boundedString,
   domainError,
-  EMPTY_AGENT_ICP,
   invalid,
   normalizeHttpUrl,
 } from "../lib/validators";
-import { getWorkspaceAgent, requireWorkspaceAgent, vAgentDoc } from "./model";
+import { createDraftAgent, requireWorkspaceAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
 /**
  * Create the workspace's draft agent — the row onboarding fills in step by
  * step.
  *
- * ONE AGENT PER WORKSPACE, enforced here rather than by an index: the read
- * and the insert are in one serializable transaction, so a second create —
- * concurrent or later — sees the first and refuses. Callers that only want
- * "the agent" read `agents.get` first; a CONFLICT here means there already is
- * one, never that anything was lost.
+ * ONE AGENT PER WORKSPACE, enforced in `createDraftAgent` rather than by an
+ * index: the read and the insert are in one serializable transaction, so a
+ * second create — concurrent or later — sees the first and refuses. Callers
+ * that only want "the agent" read `agents.get` first; a CONFLICT here means
+ * there already is one, never that anything was lost.
  *
- * The agent starts in `sourcing_only`: until an inbox is connected it finds
- * and researches leads and contacts nobody (PLAN §1).
+ * Workspace creation makes this same draft agent in its own transaction, so
+ * onboarding progress always has a home; this mutation stays for the case
+ * where a workspace somehow has none.
  */
 export const createDraft = mutation({
   args: { workspaceId: v.id("workspaces") },
   returns: vAgentDoc,
   handler: async (ctx, args) => {
     await requireWorkspaceEditor(ctx, args.workspaceId);
-    const existing = await getWorkspaceAgent(ctx, args.workspaceId);
-    if (existing !== null) {
-      throw domainError(
-        "CONFLICT",
-        "this workspace already has an agent",
-      );
-    }
-    const now = Date.now();
-    const agentId = await ctx.db.insert("agents", {
-      workspaceId: args.workspaceId,
-      // Named from the ICP once onboarding knows one; until then the agent is
-      // unnamed rather than carrying a fabricated title.
-      name: "",
-      status: "draft",
-      mode: "sourcing_only",
-      onboardingStep: "company",
-      icp: EMPTY_AGENT_ICP,
-      goal: "start_conversations",
-      tone: "professional",
-      keywords: [],
-      dailyLeadCap: AGENT_DAILY_LEAD_CAP_DEFAULT,
-      dailyResearchCap: AGENT_DAILY_RESEARCH_CAP_DEFAULT,
-      autoRevealDailyCap: AGENT_AUTO_REVEAL_DAILY_CAP_DEFAULT,
-      autoApproveMinScore: AGENT_AUTO_APPROVE_MIN_SCORE_DEFAULT,
-      followUpDays: [...AGENT_FOLLOW_UP_DAYS_DEFAULT],
-      revision: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const created = await ctx.db.get("agents", agentId);
-    if (created === null) {
-      throw domainError("NOT_FOUND", "agent not found after insert");
-    }
-    return created;
+    return await createDraftAgent(ctx, args.workspaceId);
   },
 });
 
