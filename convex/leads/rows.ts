@@ -47,18 +47,26 @@ export const vLeadSignal = v.object({
   title: v.string(),
 });
 
-/** A lead's research state without its prose — see the file header. */
-export const vLeadResearchStatus = v.union(
-  v.literal("not_researched"),
-  v.literal("researching"),
-  v.literal("researched"),
-  v.literal("failed"),
-);
-
 export const vLeadScore = v.union(v.literal(1), v.literal(2), v.literal(3));
+
+/**
+ * A lead's research state without its prose — see the file header. A union
+ * rather than a status plus an optional score, so "researched with no score"
+ * is not a state the table has to render something for: a score exists
+ * exactly when the lead is researched (PLAN §7).
+ */
+export const vLeadRowResearch = v.union(
+  v.object({ status: v.literal("researched"), score: vLeadScore }),
+  v.object({ status: v.literal("not_researched") }),
+  v.object({ status: v.literal("researching") }),
+  v.object({ status: v.literal("failed") }),
+);
 
 export const vLeadRow = v.object({
   _id: v.id("prospects"),
+  /** The agent that found this lead — the association the Inbox binds a
+   *  held thread to, so the two can never name different agents. */
+  agentId: v.id("agents"),
   createdAt: v.number(),
   updatedAt: v.number(),
   firstName: v.optional(v.string()),
@@ -68,9 +76,7 @@ export const vLeadRow = v.object({
   companyName: v.optional(v.string()),
   /** The person's public profile link; the row's only outbound link. */
   linkedinUrl: v.optional(v.string()),
-  researchStatus: vLeadResearchStatus,
-  /** Present only when `researchStatus` is `researched` (PLAN §7). */
-  score: v.optional(vLeadScore),
+  research: vLeadRowResearch,
   stage: vLeadStage,
   stageReason: v.optional(v.string()),
   approval: vLeadApproval,
@@ -88,7 +94,6 @@ export type LeadRow = typeof vLeadRow.type;
 
 export const vLeadDetail = v.object({
   ...vLeadRow.fields,
-  agentId: v.id("agents"),
   /** The full research variant: summary, score reason, or the failure. */
   research: vLeadResearch,
   jobFunction: v.optional(v.string()),
@@ -134,6 +139,7 @@ export function toLeadRow(
       : [];
   return {
     _id: lead._id,
+    agentId: lead.agentId,
     createdAt: lead.createdAt,
     updatedAt: lead.updatedAt,
     ...optional("firstName", lead.firstName),
@@ -141,10 +147,10 @@ export function toLeadRow(
     ...optional("jobTitle", lead.jobTitle),
     ...optional("companyName", lead.companyName),
     ...optional("linkedinUrl", lead.linkedinUrl),
-    researchStatus: lead.research.status,
-    ...(lead.research.status === "researched"
-      ? { score: lead.research.aiScore }
-      : {}),
+    research:
+      lead.research.status === "researched"
+        ? { status: "researched" as const, score: lead.research.aiScore }
+        : { status: lead.research.status },
     stage: lead.stage,
     ...optional("stageReason", lead.stageReason),
     approval: lead.approval,
@@ -165,7 +171,6 @@ export function toLeadDetail(
 ): typeof vLeadDetail.type {
   return {
     ...toLeadRow(lead, titles),
-    agentId: lead.agentId,
     research: lead.research,
     ...optional("jobFunction", lead.jobFunction),
     ...optional("jobLevel", lead.jobLevel),

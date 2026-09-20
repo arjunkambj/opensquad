@@ -165,8 +165,18 @@ async function decideOne(
     approvedBy: "user",
     updatedAt: now,
     ...(args.reason !== undefined ? { stageReason: args.reason } : {}),
-    // A rejected lead leaves the pipeline and stops being due for work.
-    ...(rejected ? { stage: "rejected" as const, nextActionAt: undefined } : {}),
+    // A rejected lead leaves the pipeline and stops being due for work — but
+    // a reveal already in flight keeps its watchdog, because the sweep finds
+    // a lost job by the lead being DUE. Rejecting stops what has not started
+    // (PLAN §9.1); it does not strand a request that already left us.
+    ...(rejected
+      ? {
+          stage: "rejected" as const,
+          ...(prospect.emailStatus === "revealing"
+            ? {}
+            : { nextActionAt: undefined }),
+        }
+      : {}),
   });
   if (rejected) {
     await cancelWorkForRejectedLead(
