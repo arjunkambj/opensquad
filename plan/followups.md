@@ -25,6 +25,8 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] Owner rule (colours only from `src/index.css` tokens): pre-pivot offenders are `src/components/marketing/CompanyMark.tsx` (hex backgrounds AND made-up company names — also a no-mock violation), `marketing/Pricing.tsx` and `auth/SignInForm.tsx` (rgba shadow literals). Everything built since the pivot audits clean. Fix with the T50 landing rewrite.
+- [ ] Owner rule (no custom team step): the pre-pivot wizard's "Workspace & policy" step goes with T20; consider storing the auth provider's team id on the workspace and defaulting the workspace name from it.
 - [ ] Landing hero still has pre-pivot copy ("AI Sales Squad", "Give it a campaign, Scout finds…") and a Pricing nav link with no page (T50 landing copy).
 - [ ] `convex/**` comments still say "OpenSquad" in `inbox/receiptDrain.ts`, `integrations/firecrawl.ts`, `integrations/agentmail.ts`, `lib/auth.ts`, `outreach/sendOutcome.ts` (not user-visible; the T50 grep will hit them).
 - [ ] Unused after T04: `src/components/ui/command.tsx`, `ui/kbd.tsx`, deps `cmdk` and `@fontsource-variable/inter`.
