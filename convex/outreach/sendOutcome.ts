@@ -12,6 +12,7 @@ import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
 import { boundedString, domainError } from "../lib/validators";
+import { scheduleNextOutreachStep } from "./outreachLeadState";
 import { vSendAttemptDoc } from "./sendAttempts";
 import { applyReceiptToAttempt } from "./sendReceipts";
 import { v } from "convex/values";
@@ -303,6 +304,13 @@ export const recordSendOutcome = internalMutation({
         threadId,
         at: now,
       });
+      // Same transaction again (PLAN §9.1): an accepted send is what moves the
+      // outreach ladder on — `followUpsSent` and the next `nextActionAt`, or
+      // no due time at all once the agent's `followUpDays` are spent. It runs
+      // BEFORE `markSendAccepted` on purpose: the lead still carries its
+      // pre-send `lastContactedAt`, which is how "first touch or follow-up n"
+      // is read off the row rather than guessed.
+      await scheduleNextOutreachStep(ctx, attempt, now);
       // Same transaction again (§8 step 5, P19): the provider's acceptance is
       // the ONLY fact that may stamp `lastContactedAt` and advance the lead —
       // `contacted` for a plain send, `booking_proposed` when this exact
