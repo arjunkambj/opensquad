@@ -3,6 +3,7 @@
  * onboarding step, goal, tone, ICP, run state and autopilot caps — plus the
  * search-strategy and lead-filter vocabulary the agent sources leads with.
  */
+import { vOperationErrorCode } from "./shared";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
@@ -125,6 +126,29 @@ export const EMPTY_AGENT_ICP: AgentIcp = {
   excludeProfiles: [],
   excludeKeywords: [],
 };
+
+/**
+ * Live status of an AI generation that fills part of the agent during
+ * onboarding (the ICP, the recommended signals). Same shape as the website
+ * analysis status, so the client renders all three the same way. `failed`
+ * carries our own code, never provider text. `startedAt` fences a superseded
+ * run: a result is applied only if it matches the run that is current.
+ */
+export const vGenerationStatus = v.union(
+  v.object({ state: v.literal("idle") }),
+  v.object({ state: v.literal("generating"), startedAt: v.number() }),
+  v.object({ state: v.literal("ready"), generatedAt: v.number() }),
+  v.object({
+    state: v.literal("failed"),
+    code: vOperationErrorCode,
+    at: v.number(),
+  }),
+);
+
+export type GenerationStatus = Infer<typeof vGenerationStatus>;
+
+/** Keywords the model suggested and the user has not picked (ref 10). */
+export const AGENT_SUGGESTED_KEYWORDS_MAX = 30;
 
 /**
  * The single-flight lease a run holds (PLAN §9.1). A second trigger is a

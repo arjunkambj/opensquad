@@ -21,6 +21,7 @@ import {
   vAgentIcp,
   vAgentMode,
   vAgentRun,
+  vGenerationStatus,
   vAgentStatus,
   vAgentTone,
   vAnalysisStatus,
@@ -209,6 +210,12 @@ export const agentFields = {
   lastRunAt: v.optional(v.number()),
   /** Traceability for an agent folded out of a pre-pivot campaign. */
   legacyCampaignId: v.optional(v.id("legacyCampaigns")),
+  // Onboarding generations (absent = never run). The UI renders loading /
+  // retry from these; the generated values land on `icp`, `strategies` rows
+  // and `suggestedKeywords`.
+  icpGeneration: v.optional(vGenerationStatus),
+  strategyGeneration: v.optional(vGenerationStatus),
+  suggestedKeywords: v.optional(v.array(v.string())),
 };
 
 /**
