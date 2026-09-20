@@ -78,6 +78,24 @@ crons.weekly(
   {},
 );
 
+// The agent run loop (PLAN §9.1). This is not a belt: it is how a run
+// STARTS. "Confirm & find leads" and the end of every run only write
+// `nextRunAt`, and this picks up whatever is due — so nothing anywhere holds
+// a timer, and a deploy or a crash costs at most one minute of latency. The
+// pass itself is one index range over live, due agents; a minute is chosen so
+// the first leads appear while the user is still looking at the screen.
+crons.interval("agent-run", { minutes: 1 }, internal.agents.run.tickDueAgents, {});
+
+// The other half of PLAN §9.1: Convex does not re-run a failed action, so the
+// sweep IS the retry. Expired run leases, leads stuck mid-research, and
+// `uncertain` email-finder holds that nothing has asked the provider about.
+crons.interval(
+  "agent-recovery-sweep",
+  { minutes: 10 },
+  internal.agents.recovery.sweepStalledRuns,
+  {},
+);
+
 // Belt for the connect-time thread import. Every step schedules the next in
 // its own transaction, so a stalled run means a lost scheduled function.
 // Re-driving is safe: the cursor says what is still to do and the message

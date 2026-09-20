@@ -9,14 +9,23 @@
  */
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { SourcedLead } from "../integrations/enrich/rows";
 import {
   assertEpochMs,
   boundedLimit,
   domainError,
   EPOCH_MS_MIN,
   invalid,
+  leadSourceKey,
 } from "../lib/validators";
-import type { LeadApproval, LeadStage } from "../lib/validators";
+import type {
+  AgentIcp,
+  LeadApproval,
+  LeadOrigin,
+  LeadStage,
+} from "../lib/validators";
+import { preRankLead } from "./preRank";
+import type { CompanySizeRange } from "./preRank";
 import { prospectFields } from "../schema";
 import { v } from "convex/values";
 
@@ -210,6 +219,165 @@ export async function loadProspectForWrite(
     throw domainError("NOT_FOUND", "prospect not found");
   }
   return prospect;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sourcing — where a lead enters the table                            */
+/* ------------------------------------------------------------------ */
+
+/** What one upserted row did. `unchanged` is a page that found nobody new. */
+export type UpsertOutcome = "inserted" | "merged" | "unchanged";
+
+export type UpsertSourcedLeadArgs = {
+  workspaceId: Id<"workspaces">;
+  agentId: Id<"agents">;
+  /** The strategy whose page this row came back on. */
+  strategyId: Id<"strategies">;
+  lead: SourcedLead;
+  icp: AgentIcp;
+  sizeRange: CompanySizeRange;
+  now: number;
+};
+
+/**
+ * THE sourcing write: insert a found person, or merge a second signal into
+ * the row that already holds them (PLAN §3 "A lead matched by more than one
+ * strategy keeps all of them").
+ *
+ * Dedupe is on the provider's row id WITHIN THE AGENT, read through
+ * `by_agentId_and_sourceLeadKey` in the same transaction as the insert —
+ * Convex has no unique index, so that read IS the constraint, exactly as the
+ * one-agent-per-workspace and one-inbox-per-workspace rules are enforced.
+ *
+ * A merge only ever ADDS: it appends the strategy, re-ranks with the higher
+ * signal count and keeps the better `preRank`. It never rewrites the person's
+ * facts, because a later page of a different strategy is not newer knowledge
+ * — and it never touches `research`, `stage` or `approval`, so finding an
+ * already-contacted lead again cannot pull them back down the pipeline.
+ */
+export async function upsertSourcedLead(
+  ctx: MutationCtx,
+  args: UpsertSourcedLeadArgs,
+): Promise<UpsertOutcome> {
+  const existing = await ctx.db
+    .query("prospects")
+    .withIndex("by_agentId_and_sourceLeadKey", (q) =>
+      q.eq("agentId", args.agentId).eq("sourceLeadKey", args.lead.sourceLeadId),
+    )
+    .unique();
+
+  // The mail domain is a usable research target when the company row carried
+  // no site of its own — the same host, stated by a different field.
+  const canonicalDomain =
+    args.lead.canonicalDomain ?? args.lead.emailDomain;
+
+  if (existing === null) {
+    const origin: LeadOrigin = {
+      kind: "sourced",
+      sourceLeadId: args.lead.sourceLeadId,
+      strategyIds: [args.strategyId],
+    };
+    const preRank = preRankLead({
+      lead: {
+        ...(args.lead.jobTitle !== undefined
+          ? { jobTitle: args.lead.jobTitle }
+          : {}),
+        ...(args.lead.jobLevel !== undefined
+          ? { jobLevel: args.lead.jobLevel }
+          : {}),
+        ...(canonicalDomain !== undefined ? { canonicalDomain } : {}),
+        ...(args.lead.company?.employeeCount !== undefined
+          ? { employeeCount: args.lead.company.employeeCount }
+          : {}),
+      },
+      icp: args.icp,
+      sizeRange: args.sizeRange,
+      signalCount: 1,
+    });
+    await ctx.db.insert("prospects", {
+      workspaceId: args.workspaceId,
+      agentId: args.agentId,
+      origin,
+      // Written in the SAME insert as `origin`, never alone (PLAN §7).
+      sourceLeadKey: leadSourceKey(origin),
+      research: { status: "not_researched" },
+      stage: "found",
+      approval: "pending",
+      // A sourced row carries no address at all until someone pays for one.
+      emailStatus: "locked",
+      preRank,
+      followUpsSent: 0,
+      createdAt: args.now,
+      updatedAt: args.now,
+      ...(args.lead.firstName !== undefined
+        ? { firstName: args.lead.firstName }
+        : {}),
+      ...(args.lead.lastName !== undefined
+        ? { lastName: args.lead.lastName }
+        : {}),
+      ...(args.lead.jobTitle !== undefined
+        ? { jobTitle: args.lead.jobTitle }
+        : {}),
+      ...(args.lead.jobFunction !== undefined
+        ? { jobFunction: args.lead.jobFunction }
+        : {}),
+      ...(args.lead.jobLevel !== undefined
+        ? { jobLevel: args.lead.jobLevel }
+        : {}),
+      ...(args.lead.headline !== undefined
+        ? { headline: args.lead.headline }
+        : {}),
+      ...(args.lead.linkedinUrl !== undefined
+        ? { linkedinUrl: args.lead.linkedinUrl }
+        : {}),
+      ...(args.lead.location !== undefined
+        ? { location: args.lead.location }
+        : {}),
+      ...(args.lead.skills !== undefined ? { skills: args.lead.skills } : {}),
+      ...(args.lead.companyName !== undefined
+        ? { companyName: args.lead.companyName }
+        : {}),
+      ...(canonicalDomain !== undefined ? { canonicalDomain } : {}),
+      ...(args.lead.company !== undefined
+        ? { company: args.lead.company }
+        : {}),
+    });
+    return "inserted";
+  }
+
+  if (
+    existing.origin.kind !== "sourced" ||
+    existing.origin.strategyIds.includes(args.strategyId)
+  ) {
+    return "unchanged";
+  }
+
+  const origin: LeadOrigin = {
+    ...existing.origin,
+    strategyIds: [...existing.origin.strategyIds, args.strategyId],
+  };
+  const preRank = preRankLead({
+    lead: {
+      ...(existing.jobTitle !== undefined ? { jobTitle: existing.jobTitle } : {}),
+      ...(existing.jobLevel !== undefined ? { jobLevel: existing.jobLevel } : {}),
+      ...(existing.canonicalDomain !== undefined
+        ? { canonicalDomain: existing.canonicalDomain }
+        : {}),
+      ...(existing.company?.employeeCount !== undefined
+        ? { employeeCount: existing.company.employeeCount }
+        : {}),
+    },
+    icp: args.icp,
+    sizeRange: args.sizeRange,
+    signalCount: origin.strategyIds.length,
+  });
+  await ctx.db.patch("prospects", existing._id, {
+    origin,
+    sourceLeadKey: leadSourceKey(origin),
+    preRank: Math.max(existing.preRank, preRank),
+    updatedAt: args.now,
+  });
+  return "merged";
 }
 
 /** Re-read a patched lead; absence inside the writing transaction is a defect. */
