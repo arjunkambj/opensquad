@@ -206,15 +206,12 @@ export const updateIcp = mutation({
       throw domainError("NOT_FOUND", "this workspace has no agent yet");
     }
 
-    const lists = await readIcpOptionLists(ctx);
-    if (lists === null) {
-      // With no cached catalogue there is nothing to check an industry
-      // against, and an unchecked value silently matches nobody.
-      throw domainError(
-        "CONFLICT",
-        "the lead filter catalogue has not been cached yet",
-      );
-    }
+    // With no cached catalogue there is nothing to check an industry against,
+    // and an unchecked value silently matches nobody — so the closed groups
+    // fall back to EMPTY and `strict` refuses any value for them. The
+    // free-text groups are unaffected, which is what keeps the job-titles
+    // screen saving on a deployment whose catalogue has not been fetched yet.
+    const lists = (await readIcpOptionLists(ctx)) ?? EMPTY_ICP_OPTION_LISTS;
     const icp = normalizeIcp({ icp: args.icp, options: lists, strict: true });
 
     const changed = !sameIcp(agent.icp, icp);
