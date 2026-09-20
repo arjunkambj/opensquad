@@ -2,7 +2,7 @@ import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion, useReducedMotion } from "motion/react"
-import { HeroApprovalPreview } from "@/components/marketing/HeroApprovalPreview"
+import { HeroLeadSketch } from "@/components/marketing/HeroLeadSketch"
 import { MarketingChip } from "@/components/marketing/MarketingChip"
 import { Button } from "@/components/ui/button"
 
@@ -49,18 +49,19 @@ export function Hero() {
           custom={1}
           variants={heroItemVariants}
         >
-          <span className="block">Your AI Sales Squad</span>
-          <span className="block">Does the research, finds the leads, books the calls.</span>
+          <span className="block">An AI sales agent that finds</span>
+          <span className="block">your leads and emails them.</span>
         </motion.h1>
         <motion.div
           className="flex flex-col items-start gap-6"
           custom={2}
           variants={heroItemVariants}
         >
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-            Give it a campaign. Scout finds the companies, Researcher reads up
-            on them, and Outreach writes and sends the emails from your inbox.
-            Replies come back to one place.
+          <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
+            Point it at your website once. It finds people on real buying
+            signals, researches and scores them, sends a personal email from
+            your own inbox, follows up twice, and works the reply until there
+            is a meeting to book. Email only.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -78,7 +79,7 @@ export function Hero() {
             </Button>
             <Button
               nativeButton={false}
-              render={<a href="#how-it-works" />}
+              render={<a href="/#how-it-works" />}
               size="cta"
               variant="secondary"
             >
@@ -112,7 +113,7 @@ export function Hero() {
         </motion.div>
       </div>
       <motion.div custom={4} variants={heroItemVariants}>
-        <div className="relative overflow-hidden rounded-2xl bg-accent px-3 pt-12 sm:h-[560px] sm:px-12 sm:pt-16 lg:h-[640px]">
+        <div className="relative overflow-hidden rounded-2xl bg-accent px-3 pt-12 sm:h-[620px] sm:px-12 sm:pt-16 lg:h-[700px]">
           <img
             alt=""
             className="absolute inset-0 size-full object-cover object-right-bottom"
@@ -125,7 +126,7 @@ export function Hero() {
             className="pointer-events-none absolute inset-3 rounded-xl border border-background/40"
           />
           <div className="relative rounded-t-marketing-preview bg-background/40 p-3 backdrop-blur-md">
-            <HeroApprovalPreview />
+            <HeroLeadSketch />
           </div>
         </div>
       </motion.div>
