@@ -22,8 +22,10 @@ import {
 import type { AuthCtx } from "../lib/auth";
 import {
   boundedLimit,
+  boundedString,
   domainError,
   domainOfNormalizedEmail,
+  EMAIL_ADDRESS_MAX_LENGTH,
   normalizeDomain,
   normalizeEmailAddress,
   vSuppressionKind,
@@ -164,6 +166,131 @@ export const check = query({
       suppressed: true,
       matchedBy: match.matchedBy,
       suppression: match.suppression,
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* The Blocklist tab's read                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How many of a workspace's suppression rows one request will read.
+ *
+ * There is no (workspace, createdAt) index — the unique key indexes by value
+ * — so newest-first ordering and substring search are both done over a
+ * bounded scan. A trial workspace sends at most 30 mails a day, so its whole
+ * blocklist is tens of rows; the cap exists so a pathological workspace
+ * degrades honestly (`truncated`) instead of reading an unbounded table.
+ */
+const SUPPRESSION_SCAN_MAX = 1000;
+
+/** Rows one Blocklist page shows. */
+const SUPPRESSION_PAGE_MAX = 25;
+
+/**
+ * Where the next page starts. `createdAt` alone is not a key — a bounce sweep
+ * can write several rows in one transaction and they share a millisecond — so
+ * the row's id breaks the tie and no entry can fall between two pages.
+ */
+export const vSuppressionCursor = v.object({
+  at: v.number(),
+  id: v.id("suppressions"),
+});
+
+type SuppressionCursor = { at: number; id: Id<"suppressions"> };
+
+/** Newest first, ties broken by id so the order is total and stable. */
+function newerFirst(
+  left: Doc<"suppressions">,
+  right: Doc<"suppressions">,
+): number {
+  if (left.createdAt !== right.createdAt) {
+    return right.createdAt - left.createdAt;
+  }
+  return left._id < right._id ? 1 : left._id > right._id ? -1 : 0;
+}
+
+/** Is `row` strictly past `cursor` in newest-first order? */
+function isAfterCursor(
+  row: Doc<"suppressions">,
+  cursor: SuppressionCursor,
+): boolean {
+  if (row.createdAt !== cursor.at) {
+    return row.createdAt < cursor.at;
+  }
+  return row._id < cursor.id;
+}
+
+/**
+ * One page of the Blocklist tab: newest first, optionally narrowed to a kind
+ * and to rows whose normalized value contains `search`.
+ *
+ * `list` stays the flat read the rest of the backend uses; this exists
+ * because the tab needs ordering, a filter and a page boundary, and folding
+ * those into `list` would change what every other caller receives.
+ */
+export const page = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    kind: v.optional(vSuppressionKind),
+    /** Case-insensitive substring of the normalized address or domain. */
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    after: v.optional(vSuppressionCursor),
+  },
+  returns: v.object({
+    entries: v.array(vSuppressionDoc),
+    /** Pass back as `after` for the next page; `null` at the end. */
+    nextCursor: v.union(vSuppressionCursor, v.null()),
+    /** Rows matching the current filter, across every page. */
+    matched: v.number(),
+    /** The workspace holds more rows than one request reads. */
+    truncated: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireWorkspaceMember(ctx, args.workspaceId);
+    const limit = Math.min(boundedLimit(args.limit), SUPPRESSION_PAGE_MAX);
+    const kind = args.kind;
+    const term =
+      args.search === undefined
+        ? ""
+        : boundedString(args.search, "search", {
+            max: EMAIL_ADDRESS_MAX_LENGTH,
+          }).toLowerCase();
+
+    const scanned = await ctx.db
+      .query("suppressions")
+      .withIndex("by_workspaceId_and_kind_and_normalizedValue", (q) =>
+        kind === undefined
+          ? q.eq("workspaceId", args.workspaceId)
+          : q.eq("workspaceId", args.workspaceId).eq("kind", kind),
+      )
+      .take(SUPPRESSION_SCAN_MAX + 1);
+    const truncated = scanned.length > SUPPRESSION_SCAN_MAX;
+    const rows = truncated ? scanned.slice(0, SUPPRESSION_SCAN_MAX) : scanned;
+
+    const matching = (
+      term === ""
+        ? rows
+        : rows.filter((row) => row.normalizedValue.includes(term))
+    ).sort(newerFirst);
+
+    const after = args.after;
+    const remaining =
+      after === undefined
+        ? matching
+        : matching.filter((row) => isAfterCursor(row, after));
+    const entries = remaining.slice(0, limit);
+    const last = entries.at(-1);
+    return {
+      entries,
+      nextCursor:
+        remaining.length > entries.length && last !== undefined
+          ? { at: last.createdAt, id: last._id }
+          : null,
+      matched: matching.length,
+      truncated,
     };
   },
 });

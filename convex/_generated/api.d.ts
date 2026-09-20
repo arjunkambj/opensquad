@@ -125,6 +125,7 @@ import type * as outreach_sendSweeps from "../outreach/sendSweeps.js";
 import type * as outreach_suppressions from "../outreach/suppressions.js";
 import type * as workspaces_model from "../workspaces/model.js";
 import type * as workspaces_mutations from "../workspaces/mutations.js";
+import type * as workspaces_outreachDefaults from "../workspaces/outreachDefaults.js";
 import type * as workspaces_queries from "../workspaces/queries.js";
 import type * as workspaces_secrets from "../workspaces/secrets.js";
 import type * as workspaces_trialGrant from "../workspaces/trialGrant.js";
@@ -253,6 +254,7 @@ declare const fullApi: ApiFromModules<{
   "outreach/suppressions": typeof outreach_suppressions;
   "workspaces/model": typeof workspaces_model;
   "workspaces/mutations": typeof workspaces_mutations;
+  "workspaces/outreachDefaults": typeof workspaces_outreachDefaults;
   "workspaces/queries": typeof workspaces_queries;
   "workspaces/secrets": typeof workspaces_secrets;
   "workspaces/trialGrant": typeof workspaces_trialGrant;
