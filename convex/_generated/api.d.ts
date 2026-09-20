@@ -53,6 +53,7 @@ import type * as integrations_enrich_catalog from "../integrations/enrich/catalo
 import type * as integrations_enrich_client from "../integrations/enrich/client.js";
 import type * as integrations_enrich_filters from "../integrations/enrich/filters.js";
 import type * as integrations_enrich_rows from "../integrations/enrich/rows.js";
+import type * as integrations_enrich_search from "../integrations/enrich/search.js";
 import type * as integrations_enrich_wallet from "../integrations/enrich/wallet.js";
 import type * as integrations_firecrawl from "../integrations/firecrawl.js";
 import type * as leads_events from "../leads/events.js";
@@ -155,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/enrich/client": typeof integrations_enrich_client;
   "integrations/enrich/filters": typeof integrations_enrich_filters;
   "integrations/enrich/rows": typeof integrations_enrich_rows;
+  "integrations/enrich/search": typeof integrations_enrich_search;
   "integrations/enrich/wallet": typeof integrations_enrich_wallet;
   "integrations/firecrawl": typeof integrations_firecrawl;
   "leads/events": typeof leads_events;
