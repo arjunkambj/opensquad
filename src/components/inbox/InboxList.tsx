@@ -15,7 +15,7 @@ import {
   ConversationStateChip,
   DispositionChip,
 } from "@/components/inbox/inbox-presentation"
-import { Chip, formatWaited } from "@/components/decisions/decision-presentation"
+import { Chip, formatWaited } from "@/components/shared/presentation"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"

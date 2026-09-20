@@ -13,7 +13,7 @@ import {
   DetailRow,
   formatInstant,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import {
   NEXT_ACTION_KIND_LABEL,
   SALES_STAGE_LABEL,

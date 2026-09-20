@@ -48,7 +48,6 @@ import type { AuthCtx } from "./lib/auth";
 import {
   boundedString,
   domainError,
-  invalid,
   localCivilToUtc,
   localDayKey,
   localDayParts,

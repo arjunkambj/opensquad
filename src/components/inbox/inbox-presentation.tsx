@@ -5,7 +5,7 @@ import type {
   ReplyDisposition,
   TakeoverReason,
 } from "../../../convex/lib/validators"
-import { Chip } from "@/components/decisions/decision-presentation"
+import { Chip } from "@/components/shared/presentation"
 
 /**
  * Shared vocabulary for the inbox: every state is a word, never a colour

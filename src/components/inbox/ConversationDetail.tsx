@@ -18,7 +18,7 @@ import {
   Chip,
   DetailRow,
   formatInstant,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"

@@ -11,7 +11,7 @@ import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
  * It exists so a mistyped or not-yet-built URL keeps the sidebar. The root's
  * `notFoundComponent` renders outside the shell and strands the user with no
  * navigation, which is the wrong answer for a path inside the app: the routes
- * architecture §10 promises (`/leads`, `/inbox`, `/decisions`) are typed into
+ * architecture §10 promises (`/leads`, `/inbox`, `/overview`) are typed into
  * the address bar by people who already work here.
  */
 export const Route = createFileRoute("/_dashboard/$")({

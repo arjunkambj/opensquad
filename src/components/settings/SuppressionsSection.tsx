@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc } from "../../../convex/_generated/dataModel"
-import { formatInstant } from "@/components/decisions/decision-presentation"
+import { formatInstant } from "@/components/shared/presentation"
 import { FormError, LoadingState, PermissionNote } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {

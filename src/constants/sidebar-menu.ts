@@ -2,19 +2,11 @@ import {
   Briefcase01Icon,
   Home01Icon,
   InboxIcon,
-  RoboticIcon,
   Settings02Icon,
-  UserCheck01Icon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 
-export type MenuHref =
-  | "/decisions"
-  | "/inbox"
-  | "/leads"
-  | "/overview"
-  | "/employees"
-  | "/settings"
+export type MenuHref = "/inbox" | "/leads" | "/overview" | "/settings"
 
 export type MenuItem = {
   name: string
@@ -27,15 +19,14 @@ export type MenuCategory = {
   items: MenuItem[]
 }
 
-// The work band, in §3 order: Leads, Inbox, Decisions, Mission Control. Each
-// item lands in the same change as its route — never before, or the nav
-// promises a page that 404s. `/leads` is the CRM home; `/prospects` is a
-// redirect, not a second entry.
+// The work band, in §3 order: Leads, Inbox, Overview. Each item lands in the
+// same change as its route — never before, or the nav promises a page that
+// 404s. `/leads` is the CRM home; `/prospects` is a redirect, not a second
+// entry.
 //
-// Neither count badge is declared here, and deliberately so: Decisions' badge
-// comes from `useOpenDecisionCount` and Inbox's from `useInboxAttention` —
-// the same hook and arguments the attention surfaces use, one call each. Two
-// sources for one count is a defect.
+// Inbox's count badge is not declared here, and deliberately so: it comes from
+// `useInboxAttention` — the same hook and arguments the attention surface uses,
+// one call. Two sources for one count is a defect.
 export const sidebarMainItems: MenuItem[] = [
   {
     name: "Leads",
@@ -48,29 +39,13 @@ export const sidebarMainItems: MenuItem[] = [
     icon: InboxIcon,
   },
   {
-    name: "Decisions",
-    href: "/decisions",
-    icon: UserCheck01Icon,
-  },
-  {
     name: "Overview",
     href: "/overview",
     icon: Home01Icon,
   },
 ]
 
-export const sidebarCategories: MenuCategory[] = [
-  {
-    name: "Workspace",
-    items: [
-      {
-        name: "Employees",
-        href: "/employees",
-        icon: RoboticIcon,
-      },
-    ],
-  },
-]
+export const sidebarCategories: MenuCategory[] = []
 
 export const sidebarFooterItems: MenuItem[] = [
   {

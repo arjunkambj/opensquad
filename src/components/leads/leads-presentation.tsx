@@ -8,7 +8,7 @@ import type {
   Qualification,
   SalesStage,
 } from "../../../convex/lib/validators"
-import { Chip, formatInstant } from "@/components/decisions/decision-presentation"
+import { Chip, formatInstant } from "@/components/shared/presentation"
 
 /**
  * Shared vocabulary for the CRM — `/leads` and `/leads/$prospectId`.

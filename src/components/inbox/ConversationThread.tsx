@@ -9,7 +9,7 @@ import {
 import {
   Chip,
   formatInstant,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import { EmptyState } from "@/components/states/states"
 
 /**

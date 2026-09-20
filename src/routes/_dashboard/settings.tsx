@@ -5,7 +5,7 @@ import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
 import { AccountSection } from "@/components/settings/AccountSection"
 import { SettingsSections } from "@/components/settings/SettingsSections"
 import { LoadingState } from "@/components/states/states"
-import { Chip } from "@/components/decisions/decision-presentation"
+import { Chip } from "@/components/shared/presentation"
 import { cn } from "@/lib/utils"
 
 /**

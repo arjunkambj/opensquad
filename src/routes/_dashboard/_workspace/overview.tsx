@@ -1,23 +1,11 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router"
-import { MissionFocusProvider } from "@/components/missions/mission-focus"
 import { SetupBanner } from "@/components/onboarding/SetupBanner"
 import {
-  flag,
   optionalCursor,
   optionalEpochMs,
   optionalOneOf,
   optionalText,
 } from "@/lib/search-params"
-
-/** Board columns, mirroring `vBoardColumn` in convex/lib/validators.ts. */
-export const BOARD_COLUMNS = [
-  "backlog",
-  "needs_you",
-  "in_flight",
-  "done",
-] as const
-
-export type BoardColumn = (typeof BOARD_COLUMNS)[number]
 
 /** Receipt windows for the activity feed, not for unfinished work. */
 export const ACTIVITY_RANGES = ["today", "7d", "30d", "custom"] as const
@@ -25,25 +13,9 @@ export const ACTIVITY_RANGES = ["today", "7d", "30d", "custom"] as const
 export type ActivityRange = (typeof ACTIVITY_RANGES)[number]
 
 /**
- * Mission detail's tabs, declared here rather than on the detail route so the
- * whole `/overview` subtree has one search declaration. Absent means
- * `summary`; a stale or misspelled value falls back to it rather than throwing,
- * so an old bookmark still opens the mission.
- */
-export const MISSION_TABS = [
-  "summary",
-  "prospects",
-  "decisions",
-  "receipts",
-  "comments",
-] as const
-
-export type MissionTab = (typeof MISSION_TABS)[number]
-
-/**
  * Every member is optional, and a value equal to its default is written as
  * `undefined` so it never reaches the URL. Two consequences, both wanted: the
- * clean state of the board is the bare `/overview`, and a `<Link to="/overview">`
+ * clean state of the page is the bare `/overview`, and a `<Link to="/overview">`
  * does not have to spell out a search object — which it would if any member
  * were required, at every link in the app.
  *
@@ -53,87 +25,58 @@ export type MissionTab = (typeof MISSION_TABS)[number]
  * `?range=custom` alone: a relative label like `7d` means the last seven days
  * for whoever opens the link, which is right for a window and wrong for a
  * range someone pasted to a colleague to talk about. They bound the activity
- * feed only — `missions.listBoard` takes no date arguments at all, and hiding
- * an old unfinished mission behind a date range is the defect
- * `plan/architecture.md` §5 names.
+ * feed only.
  */
 export type OverviewSearch = {
   campaign?: string
-  column?: BoardColumn
-  archived?: boolean
   range?: ActivityRange
   from?: number
   to?: number
-  tab?: MissionTab
   cursor?: string
 }
 
 export const OVERVIEW_DEFAULTS = {
-  archived: false,
   range: "today",
-  tab: "summary",
-} as const satisfies Required<
-  Pick<OverviewSearch, "archived" | "range" | "tab">
->
+} as const satisfies Required<Pick<OverviewSearch, "range">>
 
 /** The search with defaults applied — total, for rendering. */
 export function overviewDefaults(search: OverviewSearch) {
   return {
     ...search,
-    archived: search.archived ?? OVERVIEW_DEFAULTS.archived,
     range: search.range ?? OVERVIEW_DEFAULTS.range,
-    tab: search.tab ?? OVERVIEW_DEFAULTS.tab,
   }
 }
 
 /**
- * Mission Control's URL contract, declared before the board is built so P12
- * does not have to retrofit it. §10 requires mission detail to be reloadable
- * and to preserve the board's filters when it closes — both follow from the
- * filters living here, in the parent of the detail route, rather than in
- * component state.
- *
- * `column` is optional because the wide board shows all four at once; it names
- * the single visible column at phone width, where four columns cannot fit.
+ * Overview's URL contract. §10 requires the page to be reloadable with its
+ * filters intact, which follows from the filters living here, in the parent
+ * route, rather than in component state.
  *
  * This file is the LAYOUT: `/overview` itself renders through
- * `overview/index.tsx`, and `overview/missions.$missionId.tsx` renders under
- * the same declaration. A child reads the search with
+ * `overview/index.tsx`. A child reads the search with
  * `useSearch({ from: "/_dashboard/_workspace/overview" })` — the id of whoever
  * declared `validateSearch`, never the child's own id.
  */
 export const Route = createFileRoute("/_dashboard/_workspace/overview")({
   validateSearch: (search): OverviewSearch => ({
     campaign: optionalText(search.campaign),
-    column: optionalOneOf(BOARD_COLUMNS, search.column),
-    archived: flag(search.archived) ? true : undefined,
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
     from: optionalEpochMs(search.from),
     to: optionalEpochMs(search.to),
-    tab: optionalOneOf(MISSION_TABS, search.tab),
     cursor: optionalCursor(search.cursor),
   }),
   component: OverviewLayout,
 })
 
 /**
- * The setup banner belongs to the layout rather than the board, so it stays on
- * screen while a mission detail is open: an unfinished onboarding is exactly
- * the reason a mission is stuck, and hiding the banner one click deep would
- * hide the fix from the person looking for it.
- *
- * The focus memory lives here for the same structural reason the filters do:
- * this is what survives the swap between the board and the detail, so it is
- * the only place that can still remember which card was opened once the
- * detail closes.
+ * The setup banner belongs to the layout rather than the page body, so an
+ * unfinished onboarding stays on screen wherever the operator is looking.
  */
 function OverviewLayout() {
   return (
     <>
       <SetupBanner />
-      <MissionFocusProvider>
-        <Outlet />
-      </MissionFocusProvider>
+      <Outlet />
     </>
   )
 }

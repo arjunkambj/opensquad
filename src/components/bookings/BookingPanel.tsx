@@ -17,7 +17,7 @@ import {
 import {
   formatInstant,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import { memberLabel } from "@/components/leads/leads-presentation"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

@@ -12,7 +12,7 @@ import {
   Chip,
   formatInstant,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import { LeadActivity } from "@/components/leads/LeadActivity"
 import { LeadConversations } from "@/components/leads/LeadConversations"
 import { LeadEvidence } from "@/components/leads/LeadEvidence"

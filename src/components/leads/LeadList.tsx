@@ -14,7 +14,7 @@ import { SALES_STAGES } from "../../../convex/lib/validators"
 import {
   Chip,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import {
   QualificationChip,
   SALES_STAGE_LABEL,

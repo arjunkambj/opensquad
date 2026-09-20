@@ -3,7 +3,7 @@ import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import type { BookingProposal } from "../../../convex/lib/validators"
-import { formatInstant } from "@/components/decisions/decision-presentation"
+import { formatInstant } from "@/components/shared/presentation"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {

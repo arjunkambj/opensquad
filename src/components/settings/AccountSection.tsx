@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import type { ProfileUser } from "@/components/Layout/UserProfileMenu"
-import { DetailRow } from "@/components/decisions/decision-presentation"
+import { DetailRow } from "@/components/shared/presentation"
 
 /**
  * The sign-in identity, presented AS identity — the email is the canonical

@@ -4,13 +4,13 @@ import { useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { EditDraftDialog } from "@/components/decisions/EditDraftDialog"
+import { EditDraftDialog } from "@/components/drafts/EditDraftDialog"
 import {
   Chip,
   attemptStateLabel,
   formatWaited,
   shortHash,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

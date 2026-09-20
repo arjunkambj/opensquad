@@ -3,7 +3,7 @@ import { useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { formatInstant } from "@/components/decisions/decision-presentation"
+import { formatInstant } from "@/components/shared/presentation"
 import {
   LEAD_EVENT_KIND_LABEL,
   SALES_STAGE_LABEL,

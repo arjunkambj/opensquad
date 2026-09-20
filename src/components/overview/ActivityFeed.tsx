@@ -1,15 +1,9 @@
-import {
-  CatchBoundary,
-  Link,
-  useNavigate,
-  useSearch,
-} from "@tanstack/react-router"
+import { CatchBoundary, useNavigate, useSearch } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { formatInstant } from "@/components/decisions/decision-presentation"
-import { actorLabel } from "@/components/missions/MissionReceipts"
+import { actorLabel, formatInstant } from "@/components/shared/presentation"
 import { OverviewDateRangePicker } from "@/components/overview/OverviewDateRangePicker"
 import {
   EmptyState,
@@ -51,15 +45,13 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
  * the page.
  *
  * That placement is the whole point. `activity.list` is the only query in this
- * screen that takes `from`/`to`; `missions.listBoard` takes no date arguments
- * and physically cannot be date-filtered. A picker sitting in the page header
- * reads as though it filters everything below it, which would mean an old
- * unfinished mission could be hidden by a date range — the defect
- * `plan/architecture.md` §5 calls out by name.
+ * screen that takes `from`/`to`. A picker sitting in the page header would
+ * read as though it filters everything below it, which would mean unfinished
+ * work could be hidden by a date range.
  *
  * The cursor for this feed is the one that belongs in the URL: a dated
  * receipts position is shared context, so `?range=30d&cursor=…` is a link
- * worth pasting. The board's four column cursors deliberately stay local.
+ * worth pasting.
  */
 export function ActivityFeed({
   workspaceId,
@@ -203,19 +195,14 @@ function ActivityFeedBody({
           ) : (
             <EmptyState
               title={`No activity in ${label}`}
-              description="Nothing was recorded in this window. Work in progress is on the board above — it is never hidden by this date range."
+              description="Nothing was recorded in this window."
             />
           )
         ) : (
           <ul className="flex flex-col gap-2">
             {page.items.map((event) => (
               <li key={event._id}>
-                <Link
-                  to="/overview/missions/$missionId"
-                  params={{ missionId: event.missionId }}
-                  search={true}
-                  className="flex flex-col gap-0.5 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 px-4 py-2 transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
-                >
+                <div className="flex flex-col gap-0.5 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 px-4 py-2">
                   <span className="text-sm text-foreground">
                     {event.summary}
                   </span>
@@ -223,7 +210,7 @@ function ActivityFeedBody({
                     {actorLabel(event.actor)} ·{" "}
                     {formatInstant(event.createdAt, timezone)}
                   </span>
-                </Link>
+                </div>
               </li>
             ))}
           </ul>

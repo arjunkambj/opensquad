@@ -2,7 +2,7 @@ import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
-import { useDecisionIntents } from "@/components/decisions/use-decision-intent"
+import { useRequestIntents } from "@/lib/use-request-intents"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,7 +45,7 @@ export function EditDraftDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const revise = useMutation(api.drafts.revise)
-  const intentId = useDecisionIntents()
+  const intentId = useRequestIntents()
 
   const [recipient, setRecipient] = useState(draft.recipient)
   const [subject, setSubject] = useState(draft.subject)

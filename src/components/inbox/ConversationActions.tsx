@@ -11,8 +11,8 @@ import {
   DetailRow,
   formatInstant,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
-import { useDecisionIntents } from "@/components/decisions/use-decision-intent"
+} from "@/components/shared/presentation"
+import { useRequestIntents } from "@/lib/use-request-intents"
 import {
   FormError,
   LoadingState,
@@ -161,7 +161,7 @@ function TakeoverControls({
   const resume = useMutation(api.conversations.resume)
   const close = useMutation(api.conversations.close)
   const reopen = useMutation(api.conversations.reopen)
-  const intentId = useDecisionIntents()
+  const intentId = useRequestIntents()
 
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -407,7 +407,7 @@ function AssociateCard({
   })
   const campaigns = useQuery(api.campaigns.list, { workspaceId })
   const associate = useMutation(api.conversations.associateProspect)
-  const intentId = useDecisionIntents()
+  const intentId = useRequestIntents()
 
   const [prospectId, setProspectId] = useState("")
   const [pending, setPending] = useState(false)

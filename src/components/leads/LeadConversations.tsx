@@ -8,7 +8,7 @@ import type { Id } from "../../../convex/_generated/dataModel"
 import {
   Chip,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import {
   ConversationStateChip,
   DispositionChip,

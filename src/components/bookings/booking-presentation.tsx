@@ -2,7 +2,7 @@ import type {
   BookingProposal,
   BookingState,
 } from "../../../convex/lib/validators"
-import { Chip, formatInstant } from "@/components/decisions/decision-presentation"
+import { Chip, formatInstant } from "@/components/shared/presentation"
 
 /**
  * Booking vocabulary — `/leads/$prospectId` Booking tab.

@@ -7,7 +7,7 @@ import {
   Chip,
   formatInstant,
   formatWaited,
-} from "@/components/decisions/decision-presentation"
+} from "@/components/shared/presentation"
 import {
   EmptyState,
   LoadingState,
