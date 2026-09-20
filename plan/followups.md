@@ -6,6 +6,8 @@ running list that pass starts from. Items come from task hand-offs
 ("unverified", deferred decisions) and from integrator checks. Tick when fixed.
 
 ## Decisions waiting on the owner
+- [ ] Set `SECRETS_ENCRYPTION_KEY` on dev (`npx convex env set SECRETS_ENCRYPTION_KEY "$(openssl rand -base64 32)"`). Nothing in the inbox connect flow works without it; it fails closed with `secrets_unconfigured`.
+- [ ] Backfilled threads import identity, sender and timestamps but **no message bodies** (one message store; imported history has no component row). Decide whether imported history needs bodies before the Inbox UI (T41) is judged.
 - [ ] Restore rehearsal on dev (T06): no pre-clear export exists. Accept the
       substitute (export current dev → `import --replace` → app runs) or skip.
 - [ ] Keep email+password sign-in (the only source of unverified emails), or
@@ -23,12 +25,18 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T02: the scripted ledger run (hand-off has the exact `npx convex run` sequence) — needs two real workspaces.
 - [ ] T03: `npx convex run ai/health:check '{"workspaceId":"…"}'` happy path, unknown-model refund, billed-and-retried, kill switch, budget, replay — needs a real workspace.
 - [ ] T11 (partly done 2026-09-20 on dev, real provider): catalogue refresh → 46 filters / 38 with values ✔; wallet 10,000 ✔; real count 89,731 for the spike's ICP ✔; wrong-case `jobLevel`, the silently-zero `jobFunction: "Marketing"` and an unknown key all refused with no network call ✔; balance watchdog `tripped: false` at floor 300 ✔. **Still owed (need a workspace):** `findLeads … summaryOnly` with the balance unchanged before/after (proves pages 1–3 cost 0), a one-lead reveal debiting 15 credits / 10 provider units, the breaker trip/release via `ENRICH_BALANCE_FLOOR`, and the two crons visible in the dashboard.
+- [ ] T10: the whole 18-step connect checklist in the T10 hand-off (connect, one webhook on reconnect, real mail arrives, bad signature/unknown token → 401, foreign `inbox_id` quarantined, backfill, second workspace refused, concurrent connects, backfill+webhook race, legacy route 401 without its secret, 401 at send time, rotate with overlap, disconnect) — needs the owner's real AgentMail key.
 - [ ] T12: 1-page and 4-page real scrapes (sizes/titles only), replay with the same key, and the four refused URLs leaving no operation row — exact commands in the T12 hand-off; needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
 - [ ] T04: shell click-through against refs 20 and 24 (needs an agent with `onboardingStep: "done"` — first writer is T23); sidebar collapse persistence; bell and credits block against real rows; dark mode.
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] T10 magic numbers to move into `lib/limits.ts`: rotation overlap, backfill window/max threads/attempts/retry/stall/scan, thread page sizes, request timeout, inbox lookup paging, last-event scan, secret max lengths.
+- [ ] T10 files above the size guideline: `inbox/backfill.ts` (~730), `integrations/agentmailApi.ts` (707), `inbox/connectActions.ts` (~460), `integrations/agentmail.ts` (1013).
+- [ ] T10: `inboxAddress` is reported from `workspaces.inboxRef` on the understanding that the provider's inbox id IS the address; `lastEventAt` is derived from recent conversations, not a webhook-event timestamp; backfill progress lives on a `providerOperations` row. Revisit if any of the three shows wrong in the Manage-inbox UI.
+- [ ] T10: the `new Request(...)` re-wrap inside the webhook httpAction has not run in the Convex runtime yet (first real inbound mail proves it).
+- [ ] T50 gate: remove the legacy `/agentmail/webhook` route only when a query proves no workspace has `inboxConnection = "legacy_platform_inbox"`.
 - [ ] T11: the 49 `martechCategoriesOrg` values are recorded nowhere, so that one filter is refused ("no cached allowed values") until the list is pasted into `CATALOGUE_SEEDS` in `integrations/enrich/catalog.ts`. No PLAN §3 signal needs it.
 - [ ] T11: no cron drives `integrations/enrich/revealPoll:reconcileRevealOperation` for `uncertain` `get_email` holds older than the 2-minute poll belt; wire it into the recovery sweep before `commitExpiredHolds` reaches them (T30 owns `agents/recovery.ts`).
 - [ ] T02/T11: `reconcilePaidCall` commits an `uncertain` reservation at its worst case and ignores a smaller `actualUnits` (harmless today: a reveal's worst case equals its actual).

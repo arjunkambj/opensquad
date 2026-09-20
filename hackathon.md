@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** openai/gpt-5.6-sol (Convex AI Gateway)
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-20T19:45:00Z
+- **Last updated:** 2026-09-20T20:30:00Z
 
 ## Log
 
@@ -667,3 +667,33 @@ yet verified: the ledger's scripted run, the AI health check and the shell
 click-through all need a signed-in workspace on dev, and are listed in
 `plan/followups.md`. Components: @convex-dev/migrations,
 @convex-dev/rate-limiter.
+
+### 2026-09-20 - d6766b6
+
+**Wave 1: the four provider boundaries, each behind the credit wrapper.**
+Lead data (`convex/integrations/enrich/`, `convex/agents/filterOptions.ts`,
+`convex/billing/platformBalance.ts`): a thin REST client with three outcomes
+(ok / provably-uncharged / unknown), a typed filter allow-list checked against
+a cached catalogue so a bad value is refused before any network call, free
+counts, paid page search, and an email reveal split into submit and poll that
+settles at the provider's reported actual; an hourly watchdog trips a breaker
+when the real balance falls below a floor. Run on dev against the real
+provider: catalogue refresh (46 filters), wallet read, a real count, and three
+invalid filters refused with no request. Website reading
+(`convex/integrations/firecrawl.ts`, `convex/lib/urlSafety.ts`): one budgeted
+scrape of a home page plus up to three same-origin pages, a pure URL admission
+policy in front of it, and stored pages so a failed AI step retries without
+buying the page again. Sending inbox (`convex/inbox/`, `convex/lib/secrets.ts`,
+`convex/workspaces/secrets.ts`, `convex/http.ts`): bring-your-own mail key
+encrypted with AES-GCM, a per-workspace webhook route that accepts an event
+only when the path token and the event's inbox both match, inbox ownership
+claimed in one serializable mutation, key rotation with a ten-minute overlap,
+a single writer for message rows, and a 30-day thread import as short
+scheduled steps. UI kit (`src/components/kit/`): fourteen data-free components
+for the onboarding and table screens, styled only through theme tokens. Also
+closed a leak found on the way: workspace queries no longer return the inbound
+webhook token to the browser (`convex/workspaces/model.ts`).
+
+Not yet verified: everything that needs a signed-in workspace or the owner's
+mail key — the search/reveal money path, real scrapes, and the whole connect
+flow. Listed in `plan/followups.md`.
