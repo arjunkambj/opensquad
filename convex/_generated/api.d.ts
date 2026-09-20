@@ -14,6 +14,7 @@ import type * as agents_filterOptions from "../agents/filterOptions.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_mutations from "../agents/mutations.js";
 import type * as agents_onboarding from "../agents/onboarding.js";
+import type * as agents_outreachGoals from "../agents/outreachGoals.js";
 import type * as agents_queries from "../agents/queries.js";
 import type * as ai_analyzeWebsite from "../ai/analyzeWebsite.js";
 import type * as ai_failures from "../ai/failures.js";
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   "agents/model": typeof agents_model;
   "agents/mutations": typeof agents_mutations;
   "agents/onboarding": typeof agents_onboarding;
+  "agents/outreachGoals": typeof agents_outreachGoals;
   "agents/queries": typeof agents_queries;
   "ai/analyzeWebsite": typeof ai_analyzeWebsite;
   "ai/failures": typeof ai_failures;

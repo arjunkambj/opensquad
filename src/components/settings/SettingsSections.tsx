@@ -7,7 +7,7 @@
 import { Link } from "@tanstack/react-router"
 import type { SettingsTab } from "@/components/settings/settings-model"
 import { AutomationSection } from "@/components/settings/AutomationSection"
-import { IntegrationsSection } from "@/components/settings/IntegrationsSection"
+import { InboxTab } from "@/components/settings/InboxTab"
 import { SendingPolicySection } from "@/components/settings/SendingPolicySection"
 import { SuppressionsSection } from "@/components/settings/SuppressionsSection"
 import { UsageSection } from "@/components/settings/UsageSection"
@@ -52,9 +52,9 @@ export function SettingsSections({ tab }: { tab: SettingsTab }) {
     case "company":
       return <WorkspaceSection workspace={workspace} isOwner={isOwner} />
     case "inbox":
-      // T22 replaces this with the connect/verify/sync flow of PLAN §4; until
-      // then it reports the inbox this workspace actually holds.
-      return <IntegrationsSection workspace={workspace} isOwner={isOwner} />
+      // The connect / verify / sync flow of PLAN §4, shared with onboarding
+      // dot 3; it does its own owner check, because the read is owner-guarded.
+      return <InboxTab workspaceId={workspace._id} />
     case "outreach":
       return <AutomationSection workspace={workspace} isOwner={isOwner} />
     case "blocklist":
