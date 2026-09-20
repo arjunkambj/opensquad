@@ -1,8 +1,8 @@
 # Hackathon log
 
-- **Project:** OpenSquad
+- **Project:** OpenIntent (formerly OpenSquad)
 - **Event:** Convex All Gas Hackathon
-- **What it does:** A squad of AI employees that handles sales research and outreach, with a built-in CRM to track leads, conversations, and next steps.
+- **What it does:** An AI sales agent that finds and researches leads from buying-intent signals, writes and sends the outreach email, and works the replies until a meeting is booked.
 - **Live app:** https://proficient-porcupine-63.convex.site
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** Convex static hosting

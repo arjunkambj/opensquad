@@ -1,4 +1,4 @@
-# OpenSquad MVP plan
+# OpenIntent MVP plan
 
 **An AI sales agent that finds and researches leads for you, contacts them for
 you, and works the replies until a meeting is booked.** Email only. UI modelled
@@ -234,7 +234,7 @@ Fallback if this proves heavy: AgentMail **pods** (one platform key, one
 webhook, a pod per workspace, zero user setup). Not the plan; noted only.
 
 ### White-label rule
-Lead data and web research are presented as OpenSquad's own capabilities.
+Lead data and web research are presented as OpenIntent's own capabilities.
 - No screen, email, error message, tooltip, landing copy or client-visible
   field names Enrich or Firecrawl. UI vocabulary: **lead search**, **email
   finder**, **website analysis**, **company research**, **credits**.

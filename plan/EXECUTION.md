@@ -161,12 +161,14 @@ own error codes. No task-specific prompts here.
 **Done when:** a smoke internal action returns a validated object from the
 gateway and debits exactly one `ai_calls` unit; failure releases it.
 
-### T04 · App shell, routes, theme — integrator
+### T04 · App shell, routes, theme, rename — integrator
 **Depends:** T01. **Refs:** `20-dashboard`, `24-inbox` (collapsed rail).
 **Owns:** `src/routes/**` structure, `src/routes/_dashboard.tsx`,
 `src/constants/sidebar-menu.ts`, `src/components/Layout/**`, `src/index.css`,
 redirects.
-**Build:** route map and guards from PLAN §5; redirects from removed paths;
+**Build:** product rename to **OpenIntent** everywhere user-visible (page
+title, logo text, landing copy, emails, `README.md`, `AGENTS.md`; repo name and
+Convex deployment stay); route map and guards from PLAN §5; redirects from removed paths;
 sidebar (Dashboard, Agent, Contacts, Inbox, Settings) with active pill + accent
 bar, collapsible to an icon rail, credits block wired to `credits.summary`,
 user menu, header bell with a feed from `activityEvents`; theme tokens toward the reference (warm coral primary, near-white
