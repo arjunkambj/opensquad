@@ -594,4 +594,4 @@ handled on production with real data, and the three audits are clean.
 - [ ] T50 ship
 
 Merged with all four verify commands passing, **live half still owed** (see
-[followups.md](followups.md)) — ticked only when that passes: T06, T02, T03, T04, T10, T11 (free checks passed on dev; search + reveal owed), T12, T13, T20, T21, T22, T23, T30, T31, T32, T40, T42, T43, T44, and the inbox-UI half of T41. In flight: the reply-automation half of T41 and the landing slice of T50. Not started: the rest of T50.
+[followups.md](followups.md)) — ticked only when that passes: every task from T06 to T44 (T11's free checks, the token claims, the onboarding guard and the verified-email gate have passed on dev — see followups.md 'Live checks passed'). T50: the landing slice is merged; the review-and-fix pass, the audits and the production cutover are not started.

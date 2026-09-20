@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** openai/gpt-5.6-sol (Convex AI Gateway)
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-20T23:40:00Z
+- **Last updated:** 2026-09-21T01:10:00Z
 
 ## Log
 
@@ -780,3 +780,37 @@ active org is the source of truth; the rename from workspaces to orgs is in
 progress as its own task. Not yet verified: no real email has been sent and
 no page has been clicked through with a signed-in account; see
 `plan/followups.md`.
+
+### 2026-09-21 - f406a22
+
+**Organizations as the tenant, reply handling, and an honest landing page.**
+Tenancy moved onto the auth provider's organization: the signed token's active
+organization decides whose data a request sees, one guard authorises a request
+only when the org row's id matches that claim, the `memberships` table and
+every role are gone, and the org row (credits, inbox, send policy, agent) is
+created silently for the active organization. Because anyone can create
+organizations in the auth provider, the trial grant goes only to the first
+organization a verified user initialises. Switching organization forces a
+fresh token so Convex never serves the old claim from cache
+(`convex/lib/auth.ts`, `convex/orgs/`, `src/components/ConvexClientProvider.tsx`,
+`src/components/layout/OrgSwitcherMenu.tsx`). Checked live on dev: a real
+session token carries the active-organization claim; an account with an
+unverified email was refused at org creation and nothing was written. That
+check also exposed a front-end race that left the setup screen spinning
+instead of showing the refusal, now fixed (`src/components/onboarding/OnboardingPage.tsx`).
+
+Reply handling closes the loop (`convex/inbox/replies*.ts`,
+`convex/inbox/replyGate.ts`, `convex/ai/handleReply.ts`): a history gate first
+(live mail only, newer than the connection, in a thread we started, from the
+person we wrote to), then free deterministic rules for unsubscribe, hard
+bounces and auto-replies that never touch the credit wrapper — so an opt-out
+is honoured at zero credits and with the kill switch on — and only then one
+schema-constrained classification that decides the next move: answer, propose
+the booking link, reschedule, close, or hand the thread to a person after two
+automatic replies. Only the user's click can mark a meeting booked. The
+landing page was rewritten around the real loop, the four modes and the trial
+credit prices, with the invented companies, portraits, third-party logos and
+pricing page removed (`src/components/marketing/`).
+
+Not yet verified: no real email has been sent or answered yet; that needs the
+owner's verified account and sending-inbox key. See `plan/followups.md`.
