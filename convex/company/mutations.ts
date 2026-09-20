@@ -10,8 +10,11 @@
  * moves it through analyzing → ready|failed and sets `firstRunUsed` on
  * success only, so a blocked site costs the user nothing (PLAN §5).
  */
+import { internal } from "../_generated/api";
 import { mutation } from "../_generated/server";
 import { requireWorkspaceEditor } from "../lib/auth";
+import { requireRateLimit } from "../lib/rateLimits";
+import { checkPublicHttpUrl } from "../lib/urlSafety";
 import {
   boundedString,
   boundedStringList,
@@ -21,8 +24,14 @@ import {
   COMPANY_NAME_MAX_LENGTH,
   COMPANY_PAIN_POINTS_MAX_LENGTH,
   domainError,
+  invalid,
   normalizeHttpUrl,
 } from "../lib/validators";
+import {
+  ANALYSIS_STALE_AFTER_MS,
+  analysisOperationKeys,
+  getWorkspaceProfile,
+} from "./model";
 import { vBusinessProfileDoc } from "./queries";
 import { v } from "convex/values";
 
@@ -77,12 +86,7 @@ export const update = mutation({
       max: COMPANY_PAIN_POINTS_MAX_LENGTH,
     });
 
-    const existing = await ctx.db
-      .query("businessProfiles")
-      .withIndex("by_workspaceId", (q) =>
-        q.eq("workspaceId", args.workspaceId),
-      )
-      .unique();
+    const existing = await getWorkspaceProfile(ctx, args.workspaceId);
 
     const now = Date.now();
     if (existing === null) {
@@ -151,5 +155,108 @@ export const update = mutation({
       throw domainError("NOT_FOUND", "business profile not found");
     }
     return updated;
+  },
+});
+
+/**
+ * Start a website analysis: onboarding step 1's Analyze, Retry and
+ * Regenerate all arrive here (PLAN §3 step 1, §5).
+ *
+ * The mutation is the only authenticated part of the flow. It checks
+ * membership, spends one rate-limit token, admits the URL under the SAME
+ * policy the fetch will use, records `analyzing` so the form can show live
+ * status from its own reactive query, and schedules the internal action that
+ * is allowed to spend money. No provider is contacted from here, and the URL
+ * the action is given is the NORMALISED one this mutation stored — never the
+ * raw string the browser sent (EXECUTION §0.5).
+ *
+ * Which of the three buttons pressed it is derived from the stored state
+ * rather than trusted from the client: a run that starts while the profile is
+ * already `ready` for this same URL is a Regenerate, and only it gets a fresh
+ * operation key, so only it buys the pages again. See `model.ts`.
+ */
+export const startAnalysis = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    websiteUrl: v.string(),
+  },
+  returns: v.object({ startedAt: v.number() }),
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    // Before the reserve, so a refused caller leaves nothing behind.
+    await requireRateLimit(ctx, "analyzeWebsite", identityKey);
+
+    const admitted = checkPublicHttpUrl(args.websiteUrl);
+    if (!admitted.ok) {
+      // One sentence for every rejection reason: the distinction is for
+      // operators, and the screen says "we can't read that address".
+      throw invalid("websiteUrl must be a public http(s) website address");
+    }
+    const websiteUrl = admitted.url.url;
+
+    const existing = await getWorkspaceProfile(ctx, args.workspaceId);
+    const now = Date.now();
+    if (
+      existing !== null &&
+      existing.analysisStatus.state === "analyzing" &&
+      now - existing.analysisStatus.startedAt < ANALYSIS_STALE_AFTER_MS
+    ) {
+      throw domainError(
+        "CONFLICT",
+        "an analysis of this workspace's website is already running",
+      );
+    }
+
+    const fresh =
+      existing !== null &&
+      existing.analysisStatus.state === "ready" &&
+      existing.websiteUrl === websiteUrl;
+    const keys = await analysisOperationKeys({
+      workspaceId: args.workspaceId,
+      websiteUrl,
+      startedAt: now,
+      fresh,
+    });
+
+    const analysisStatus = { state: "analyzing", startedAt: now } as const;
+    let profileId;
+    if (existing === null) {
+      profileId = await ctx.db.insert("businessProfiles", {
+        workspaceId: args.workspaceId,
+        websiteUrl,
+        // Empty until the analysis answers. The form shows its own analyzing
+        // state meanwhile, never blank fields presented as a result.
+        companyName: "",
+        industry: "",
+        description: "",
+        keyFeatures: [],
+        socialProof: [],
+        painPoints: "",
+        analysisStatus,
+        firstRunUsed: false,
+        version: 1,
+        updatedAt: now,
+        updatedBy: identityKey,
+      });
+    } else {
+      profileId = existing._id;
+      await ctx.db.patch("businessProfiles", profileId, {
+        websiteUrl,
+        analysisStatus,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.scheduler.runAfter(0, internal.company.actions.analyze, {
+      workspaceId: args.workspaceId,
+      profileId,
+      websiteUrl,
+      startedAt: now,
+      scrapeOperationKey: keys.scrape,
+      aiOperationKey: keys.ai,
+      updatedBy: identityKey,
+    });
+
+    return { startedAt: now };
   },
 });
