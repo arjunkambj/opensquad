@@ -1746,17 +1746,12 @@ function transportToOutcome(call: {
 /**
  * Entry point for dispatching an approved draft: reserves the intent, parks
  * on the send window/limit when necessary, or executes immediately. Called
- * from `approvals.approve`, the public `requestDispatch` trigger, the
- * delivery-uncertain replacement path and P09's journaled workflow step
- * (`workflows/send.ts` invokes this by name with `retry: false`).
- * Idempotent on the draft's operation key; `expectedWorkflowGeneration` lets
- * a superseded mission workflow abandon at preflight.
+ * from `approvals.approve` and the public `requestDispatch` trigger.
+ * Idempotent on the draft's operation key.
  */
 export const sendApprovedDraft = internalAction({
   args: {
     draftId: v.id("drafts"),
-    expectedWorkflowGeneration: v.optional(v.number()),
-    replacementDecisionId: v.optional(v.id("decisions")),
   },
   returns: vDispatchOutcome,
   handler: async (ctx, args): Promise<DispatchOutcome> => {
@@ -1876,7 +1871,7 @@ const vPrepareResult = v.union(
  * retention window, and only while workspace policy still permits dispatch
  * (not paused, no takeover, no suppression, context unchanged, inside the
  * send window). Anything else routes to human review — the recorded
- * `delivery_uncertain` decision stays open.
+ * attempt stays `uncertain`.
  */
 export const prepareReconcile = internalMutation({
   args: { sendAttemptId: v.id("sendAttempts") },
@@ -2165,7 +2160,6 @@ export const requestDispatch = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     draftId: v.id("drafts"),
-    replacementDecisionId: v.optional(v.id("decisions")),
   },
   returns: v.object({ scheduled: v.boolean() }),
   handler: async (ctx, args) => {
@@ -2209,7 +2203,7 @@ export const requestReconciliation = mutation({
     if (started + RECONCILE_WINDOW_MS < Date.now()) {
       throw domainError(
         "CONFLICT",
-        "the provider idempotency window has expired — resolve the delivery_uncertain decision instead",
+        "the provider idempotency window has expired — a human must resolve the uncertain attempt instead",
       );
     }
     await ctx.scheduler.runAfter(

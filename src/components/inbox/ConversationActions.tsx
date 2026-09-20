@@ -437,7 +437,7 @@ function AssociateCard({
           <LoadingState title="Loading leads" />
         ) : prospects.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            This workspace has no leads to link yet — a mission's pipeline
+            This workspace has no leads to link yet — the sourcing pipeline
             creates them. The thread stays held here meanwhile.
           </p>
         ) : !canAct ? (
@@ -530,8 +530,8 @@ function AssociateCard({
 
 /**
  * Two different assignments, kept visibly separate: the human OWNER of the
- * thread (`assigneeIdentityKey`, must be an active member) and the EMPLOYEE
- * that works it (`assignEmployee`). The backend bumps `contextVersion` on
+ * thread (`assigneeIdentityKey`, must be an active member).
+ * The backend bumps `contextVersion` on
  * either change, which is why both take the pinned version.
  */
 function AssignmentCard({

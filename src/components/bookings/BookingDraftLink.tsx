@@ -16,12 +16,11 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /**
- * The booking's proposal draft, and the way to its approval ask.
+ * The booking's proposal draft and its recorded approvals.
  *
- * The ask is resolved by `decisions.listForDraft` — one of this lane's
- * bounded reads — and links to `/decisions/$decisionId`, where the shared
- * `DraftApprovalPanel` does the approving. Nothing here re-renders approval
- * controls: this surface points at the queue, it does not re-implement it.
+ * Verdicts are read through `approvals.listForDraft` — one of this lane's
+ * bounded reads. Nothing here renders approval controls: this surface states
+ * what was recorded, it does not re-implement the approving.
  *
  * The draft preview shows the exact recipient/subject/body as stored — a
  * draft is a *staged* thing, so it is labelled as one and never rendered as

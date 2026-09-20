@@ -9,7 +9,7 @@
  * `providerEventId` and once per `applicationKey`. Outbound delivery events
  * use `outbound:<providerMessageRef>:<eventType>`; inbound messages use
  * `incoming:<inboxRef>:<providerMessageRef>` so a provider re-delivery under
- * a new event id can never start a second reply mission. A delivery event
+ * a new event id can never advance the conversation twice. A delivery event
  * that arrives BEFORE the send attempt recorded its providerMessageRef stays
  * `pending`; `sending.ts` folds it onto the attempt afterwards. P11 consumes
  * pending inbound receipts fully.

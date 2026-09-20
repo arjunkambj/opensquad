@@ -64,7 +64,7 @@ type EnsureWorkspaceArgs = {
 
 /**
  * Idempotent workspace provisioning: creates the workspace, the owner's
- * active membership and the three employee templates in one transaction.
+ * active membership in one transaction.
  *
  * Idempotency is keyed on the verified identity: a second call — including a
  * retried request — returns the workspace the caller owns. Concurrent first
@@ -207,7 +207,7 @@ export const getCurrent = query({
     // first (optIn refuses anyone already owning one), so the insertion-ordered
     // `find` would resolve a demo+real owner to the demo forever — with no
     // workspace switcher in the app, that strands them on a workspace that
-    // cannot connect a runtime.
+    // starts paused with the smallest quotas in the product.
     for (const entry of memberships) {
       if (entry.role !== "owner") {
         continue;

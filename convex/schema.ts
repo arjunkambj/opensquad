@@ -604,9 +604,7 @@ export const quarantinedEmailEventFields = {
 };
 
 /* ------------------------------------------------------------------ */
-/* §4.4 usage (P10) — send bucket + reservations. The §4.4 runtime      */
-/* transport tables (runtimeConnections, workerRequests, …) belong to   */
-/* P07 and are intentionally NOT declared here.                         */
+/* §4.4 usage (P10) — send bucket + reservations.                       */
 /* ------------------------------------------------------------------ */
 
 /**

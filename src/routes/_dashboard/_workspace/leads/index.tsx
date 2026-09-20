@@ -11,10 +11,9 @@ export const Route = createFileRoute("/_dashboard/_workspace/leads/")({
 })
 
 /**
- * `/leads` — the signed-in home and the CRM list (`plan/ux.md` §161, §225).
- * Mission Control is a named action, not a vanished page: the operator
- * arrives at the pipeline and can still reach execution detail from the
- * top bar.
+ * `/leads` — the signed-in home and the CRM list. Overview is a named
+ * action, not a vanished page: the operator arrives at the pipeline and can
+ * still reach the workspace's receipts from the top bar.
  */
 function LeadsPage() {
   const current = useCurrentWorkspace()
@@ -23,10 +22,10 @@ function LeadsPage() {
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
         title="Leads"
-        description="Every company the squad has found, and what each one is waiting on. Mission Control — what the squad is doing about it — stays linked at the top."
+        description="Every company the agent has found, and what each one is waiting on. Overview — what has happened in this workspace — stays linked at the top."
         actions={
           <Button variant="outline" size="sm" render={<Link to="/overview" />}>
-            Mission Control
+            Overview
           </Button>
         }
       />

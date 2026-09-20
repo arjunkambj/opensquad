@@ -701,10 +701,8 @@ function LeadListEmpty({
   return (
     <EmptyState
       title="No leads yet"
-      description="Leads appear here when a campaign's discovery run accepts a company. Confirm a campaign and run a mission to fill the pipeline."
-      action={
-        <Button render={<Link to="/overview" />}>Open Mission Control</Button>
-      }
+      description="Leads appear here once sourcing accepts a company for a campaign."
+      action={<Button render={<Link to="/overview" />}>Open Overview</Button>}
     />
   )
 }

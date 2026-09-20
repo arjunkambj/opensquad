@@ -29,7 +29,7 @@ import { useEscapeToParent } from "@/hooks/use-queue-navigation"
  *
  * Every mutation here takes `expectedContextVersion`, and the version sent is
  * the one the operator SAW, not the live one — pinned when the detail mounts,
- * exactly as `DecisionDetail` pins `reviewedVersion`. When the thread moves
+ * pinned when the detail mounts. When the thread moves
  * underneath (a reply landed, a colleague resumed it), the page flips to an
  * explicit stale state naming the current version with one action to load it,
  * rather than failing at the server or acting on unread state (J6 ⑧).
@@ -209,7 +209,7 @@ function LoadedConversation({
             {conversation.lastDispositionAt !== undefined
               ? ` at ${formatInstant(conversation.lastDispositionAt)}`
               : ""}
-            . A label is a read, not a decision — taking the thread over is
+            . A label is a read, not an action — taking the thread over is
             always a human act away.
           </p>
         ) : null}

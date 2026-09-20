@@ -46,7 +46,7 @@ export const Route = createFileRoute("/_dashboard/_workspace/inbox")({
 /**
  * List-beside-detail at ≥1280px; below that an open thread replaces the list
  * with a back control (`plan/ux.md` §6). The list stays MOUNTED either way —
- * hiding it is a CSS decision in the parent, not a different route structure,
+ * hiding it is a CSS choice in the parent, not a different route structure,
  * which is also what lets closing a thread return focus to the row that
  * opened it.
  */

@@ -63,7 +63,7 @@ function MockButton({
 }
 
 /**
- * Static, non-interactive mockup of the Decision "Draft approval" screen.
+ * Static, non-interactive mockup of the draft approval screen.
  * All names and domains are fictional demo data.
  */
 export function HeroApprovalPreview() {
@@ -102,7 +102,7 @@ export function HeroApprovalPreview() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-3 border-b border-border px-4 py-3 sm:px-6">
-            <span className="text-xs text-muted-foreground">Decisions</span>
+            <span className="text-xs text-muted-foreground">Inbox</span>
             <span className="text-xs text-muted-foreground">/</span>
             <span className="truncate text-xs font-medium">
               Draft approval

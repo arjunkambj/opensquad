@@ -15,7 +15,7 @@ import { useCallback, useState } from "react"
  * - A successful submit completes the intent, so `rotate()` mints the next
  *   one — submitting again afterwards is a new intent with a new id.
  *
- * This is the same shape `useRequestIntents` gives the decisions surface,
+ * This is the same shape `useRequestIntents` gives the approval surfaces,
  * generalised to one intent per component instance. The component is keyed
  * by its parent (`formEpoch` on the lead detail), so a new intent context
  * mounts a fresh id.

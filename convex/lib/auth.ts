@@ -144,7 +144,7 @@ export function requireWorkspaceOwner(
   return requireWorkspaceRole(ctx, workspaceId, ["owner"]);
 }
 
-/** Owner or operator: campaigns, employees, business profile edits. */
+/** Owner or operator: campaigns, leads and business profile edits. */
 export function requireWorkspaceEditor(
   ctx: AuthCtx,
   workspaceId: Id<"workspaces">,

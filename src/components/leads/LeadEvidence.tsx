@@ -89,7 +89,7 @@ function EvidencePage({
       {page.items.length === 0 && cursor === undefined ? (
         <EmptyState
           title="No evidence yet"
-          description="A research mission records source-backed observations here — each with the page it came from and whether the page stated it or the researcher inferred it."
+          description="Research records source-backed observations here — each with the page it came from and whether the page stated it or the researcher inferred it."
         />
       ) : (
         <ul className="flex flex-col gap-3">

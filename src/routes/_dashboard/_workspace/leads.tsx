@@ -16,7 +16,7 @@ import {
 
 /**
  * The CRM's URL contract, declared once on the layout so the list and the
- * lead detail cannot drift — the same arrangement `decisions.tsx` uses.
+ * lead detail cannot drift — the same arrangement `inbox.tsx` uses.
  * The detail inherits every list param, which is what makes "back to leads"
  * return to the same mode, filter and page rather than to page one of an
  * unfiltered list.

@@ -704,12 +704,10 @@ export const stageConversation = internalMutation({
 });
 
 /**
- * Staged inbound-reply application (internal only — P11's real inbound
- * processing replaces this seam). Advances `contextVersion`, records the
- * inbound reference/time, bumps the unread counter and supersedes any open
- * `draft_approval` decision on the now-stale current draft — the facts that
- * make a pending approval or a reserved send refuse at preflight (§8.5,
- * V17).
+ * Inbound-reply application (internal only). Advances `contextVersion`,
+ * records the inbound reference/time, bumps the unread counter and cancels
+ * the parked attempts on the now-stale current draft — the facts that make a
+ * recorded approval or a reserved send refuse at preflight (§8.5, V17).
  */
 export const applyInboundContext = internalMutation({
   args: {
@@ -834,24 +832,20 @@ export const assignWorkspaceInbox = internalMutation({
 
 /**
  * Retire the live work a conversation carries, because a fact just changed
- * that every open approval and every parked send was authorized against.
+ * that every recorded approval and every parked send was authorized against.
  *
- * This is the same pair `applyInboundContext` runs — supersede the open
- * `draft_approval` asks, then cancel the `reserved` attempts — exported so
- * P11's takeover, assignment, association and closure paths invalidate
- * EXACTLY the way an inbound reply does, rather than each growing its own
- * half-correct version.
+ * This is the same cancellation `applyInboundContext` runs, exported so the
+ * takeover, assignment, association and closure paths invalidate EXACTLY the
+ * way an inbound reply does, rather than each growing its own half-correct
+ * version.
  *
  * It is not optional politeness on a `contextVersion` bump. Once the version
- * moves, `approvals.resolveDraftDecision` refuses the bound ask forever
- * (`conversation.contextVersion !== draft.basedOnContextVersion`), so an ask
- * left open is unresolvable and pins `requiredDecisionCount` on its mission.
- * Superseding it through `internal.decisions.supersedeDecision` is what
- * decrements that count, un-parks the mission and wakes the waiting workflow.
+ * moves, `approvals.resolveDraft` refuses the bound revision forever
+ * (`conversation.contextVersion !== draft.basedOnContextVersion`), so a
+ * parked attempt left alive can never legally dispatch.
  *
- * Callers must not patch a decision or an attempt themselves: the decision
- * path owns the mission bookkeeping and the attempt path owns the usage
- * reservation release and the §8.7 coverage unwind.
+ * Callers must not patch an attempt themselves: the attempt path owns the
+ * usage reservation release.
  */
 export const retireConversationWork = internalMutation({
   args: {

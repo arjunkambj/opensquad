@@ -177,11 +177,11 @@ const boardColumns = [
   { label: "Done", leads: ["Marlow & Co"], tone: "muted" },
 ] as const
 
-/** Mission Control: every lead in a column, and what's waiting on you. */
-function MissionControlBoard() {
+/** The pipeline: every lead in a column, and what's waiting on you. */
+function PipelineBoard() {
   return (
     <div className={panelClassName}>
-      <PanelHeader meta="This week" title="Mission Control" />
+      <PanelHeader meta="This week" title="Pipeline" />
       <div className="grid grid-cols-4 gap-2.5 p-4">
         {boardColumns.map(({ label, leads, tone }) => (
           <div className="flex min-w-0 flex-col gap-2" key={label}>
@@ -261,7 +261,7 @@ const features = [
     description:
       "One board. Every step dated. Close the laptop and it carries on.",
     background: "/marketing/services/creators.webp",
-    Illustration: MissionControlBoard,
+    Illustration: PipelineBoard,
   },
 ] as const
 

@@ -77,7 +77,7 @@ export const vConversationCampaignRef = v.object({
 
 /**
  * One inbox row. `plan/ux.md` §165 asks a row to show the lead, the assigned
- * employee, the classification tag and "Draft ready"; resolving that here
+ * the classification tag and "Draft ready"; resolving that here
  * costs one indexed point read per listed conversation, against N client
  * round trips if the UI had to join it itself.
  */
@@ -542,15 +542,11 @@ export const thread = query({
 
 /**
  * The bounded attention counts the sidebar Inbox badge and the `/overview`
- * attention block both read (integrator decision D1).
+ * attention block both read.
  *
- * Unassigned mail can never appear in `decisions.listOpen`: a decision row
- * requires a `missionId`, a mission requires a campaign, and a campaign
- * requires an associated lead — so an unassigned conversation has no mission
- * and can carry no decision, no activity row and no mission comment. It is
- * therefore its own count here, never folded into the decision count. ONE
- * call serves both surfaces; two numbers for one thing would be a defect
- * (`plan/ux.md` §3).
+ * Unassigned mail is its own count here rather than being folded into any
+ * other. ONE call serves both surfaces; two numbers for one thing would be a
+ * defect.
  *
  * Both buckets are exact ranges on
  * `by_workspaceId_and_state_and_humanTakeover`, and they are disjoint by
@@ -569,8 +565,8 @@ export const thread = query({
  * `openTakeover`: open threads under takeover, which is the attention
  * definition and a strict subset of the tab. A UI that renders `openTakeover`
  * as the tab's badge would show a smaller number above a longer list, so the
- * field says which of the two it is. (integrator decision D1: two numbers for
- * one thing is a defect — these are two different things.)
+ * field says which of the two it is. (Two numbers for one thing is a defect
+ * — these are two different things.)
  *
  * Counts are capped at `MAX_LIST_LIMIT` and paired with `hasMore` so the UI
  * renders "50+". Architecture §5 forbids an exact unlimited counter.
@@ -634,15 +630,14 @@ export const vConversationNoteDoc = v.object({
 });
 
 /**
- * Append one note. `system` rows are the lifecycle trail a thread with no
- * mission is otherwise denied; `note` rows are human annotations.
+ * Append one note. `system` rows are the thread's lifecycle trail; `note`
+ * rows are human annotations.
  *
  * Notes deliberately do NOT advance `contextVersion`: architecture §8 limits
  * bumps to inbound replies, takeover/assignment/closure and explicit context
  * changes, and a private annotation must not invalidate every live approval
- * on the thread. And — keeping `activity.ts`'s invariant for
- * `missionComments` verbatim — a note can never resolve a business approval;
- * there is no path from this table to decision state.
+ * on the thread. A note can never resolve a business approval; there is no
+ * path from this table to approval state.
  */
 export async function recordConversationNote(
   ctx: MutationCtx,
@@ -741,9 +736,8 @@ export const addNote = mutation({
 
 /**
  * The optimistic-concurrency check every versioned mutation shares. It runs
- * AFTER the target-state check, following the `missions.pause` precedent: a
- * retried request that already committed returns the doc rather than a
- * spurious CONFLICT.
+ * AFTER the target-state check, so a retried request that already committed
+ * returns the doc rather than a spurious CONFLICT.
  */
 function assertContextVersion(
   conversation: Doc<"conversations">,
@@ -762,10 +756,9 @@ function assertContextVersion(
  * retire the work that was authorized against the old one.
  *
  * Both halves are mandatory together. The bump is what makes a live approval
- * stale at preflight (`context_changed`); retiring is what stops the now
- * permanently unresolvable ask from pinning `requiredDecisionCount` on its
- * mission, and what releases a `reserved` attempt's usage reservation. Doing
- * only the first leaves a thread that can never be worked again.
+ * stale at preflight (`context_changed`); retiring is what releases a
+ * `reserved` attempt's usage reservation. Doing only the first leaves a
+ * thread that can never be worked again.
  */
 async function advanceContext(
   ctx: MutationCtx,
@@ -1074,17 +1067,13 @@ export const markRead = mutation({
  * and it is human-only.
  *
  * The row is created with `state: "unassigned"` and `humanTakeover: true`, so
- * the reply-automation gate refuses it three separate ways. It carries NO
- * decision, NO activity row and NO mission comment, because all three require
- * a `missionId`, a mission requires a campaign and a campaign requires an
- * associated lead (integrator decision D1). Its lifecycle is recorded on the
- * conversation row and in `conversationNotes` instead.
+ * the reply-automation gate refuses it three separate ways. Its lifecycle is
+ * recorded on the conversation row and in `conversationNotes`.
  *
  * IT NEVER THROWS for a condition a retry cannot fix. This runs inside the
  * ingest transaction, and a throw there leaves the receipt `pending` for the
- * drain to retry forever. A workspace with no outreach employee — the one
- * required field that cannot be defaulted — is returned as a reason so the
- * receipt can record it as `failed` and an operator can see it.
+ * drain to retry forever. An unrecoverable condition is returned as a reason
+ * so the receipt can record it as `failed` and an operator can see it.
  */
 export const ensureUnassignedConversation = internalMutation({
   args: {
@@ -1227,8 +1216,8 @@ export type ResumeResult = typeof vResumeResult.type;
  * disagreement into a CONFLICT instead of a silent bind.
  *
  * It DISPATCHES NOTHING. §8: "advance context, set state to open and keep
- * takeover enabled." No mission, no workflow, no draft, no send — re-arming
- * automation is the separate, checked act of `resume` (V16 step 3).
+ * takeover enabled." No draft, no send — re-arming automation is the
+ * separate, checked act of `resume` (V16 step 3).
  *
  * `requestId` is accepted because §5 names it, and it is bounded; association
  * needs no receipt store because it is once-per-conversation by construction
@@ -1344,10 +1333,8 @@ export const associateProspect = mutation({
  * refuse, never grant — the send recipient is always resolved by the
  * application, never from the inbound payload.
  *
- * Once every check passes it hands off to `internal.inbox`, which starts AT
- * MOST ONE reply workflow for the conversation's latest inbound message. The
- * mission is keyed on that message, so a resume pressed twice — or a resume
- * racing the ingest that already started one — produces one mission, not two.
+ * Once every check passes the thread is re-armed. Drafting a reply to the
+ * latest inbound message is not yet wired up.
  */
 export const resume = mutation({
   args: {

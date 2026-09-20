@@ -12,7 +12,7 @@ const slots = [
 /**
  * A short reply thread for the closing CTA: a prospect answers, Outreach
  * drafts a booking reply with proposed slots, and nothing sends until a
- * human approves. The hero already shows the Decisions queue, so this panel
+ * human approves. The hero already shows the approval screen, so this panel
  * shows a real conversation moving forward instead.
  */
 export function CtaPreview() {

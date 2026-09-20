@@ -135,8 +135,8 @@ function DemoOptIn({ executionEnabled }: { executionEnabled: boolean }) {
           <CardTitle className="text-base">Try it live</CardTitle>
           <CardDescription>
             Hands-on demo execution is not enabled on this deployment — it
-            needs a funded runtime and a release decision. Ask the team to
-            open the opt-in when it is ready.
+            needs a funded model allowance. Ask the team to open the opt-in
+            when it is ready.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -161,10 +161,10 @@ function DemoOptIn({ executionEnabled }: { executionEnabled: boolean }) {
       <CardHeader>
         <CardTitle className="text-base">Try it live — isolated demo</CardTitle>
         <CardDescription>
-          Opt in to get your own isolated demo workspace: strict send and run
-          quotas, a fixed recipient allowlist, and a human approval before
-          anything sends. Execution stays gated until a shared demo runtime
-          is funded.
+          Opt in to get your own isolated demo workspace: strict send quotas,
+          a fixed recipient allowlist, and a human approval before anything
+          sends. Execution stays gated until a shared demo allowance is
+          funded.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

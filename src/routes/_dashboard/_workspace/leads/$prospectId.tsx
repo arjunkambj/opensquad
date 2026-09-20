@@ -15,6 +15,6 @@ function LeadDetailPage() {
   const { prospectId } = Route.useParams()
   // Keyed on the id so every per-lead ref — the seen-version pin, form epoch
   // and minted intent ids — is fresh when the route param changes without
-  // unmounting the component (the same reason decisions key on decisionId).
+  // unmounting the component.
   return <LeadDetail key={prospectId} prospectId={prospectId} />
 }

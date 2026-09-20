@@ -59,8 +59,8 @@ export function AutomationSection({
         <CardTitle>Automation</CardTitle>
         <CardDescription>
           {paused
-            ? "Automation is paused — employees will not start work."
-            : "Automation is active — employees may run within policy."}
+            ? "Automation is paused — the agent will not start work."
+            : "Automation is active — the agent may run within policy."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

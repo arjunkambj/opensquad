@@ -13,7 +13,7 @@ import { Chip, formatInstant } from "@/components/shared/presentation"
 /**
  * Shared vocabulary for the CRM — `/leads` and `/leads/$prospectId`.
  *
- * Same rule as the decision and inbox vocabularies: every state is a word,
+ * Same rule as the inbox vocabulary: every state is a word,
  * never a colour alone (V10). The strings are written for an operator, not
  * for the schema — `contact_needed` reads "Contact needed", not a lifecycle
  * enum name.

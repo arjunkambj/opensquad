@@ -122,7 +122,7 @@ export function ActivityFeed({
       <CardContent className="flex flex-col gap-3">
         {/* The `activity.list` query lives inside this boundary so a stale or
             foreign `?cursor=` throws HERE — never the whole overview — the
-            same arrangement the leads/inbox/decisions lists use. */}
+            same arrangement the leads and inbox lists use. */}
         <CatchBoundary
           getResetKey={() =>
             `${range}:${search.from ?? ""}:${search.to ?? ""}:${search.cursor ?? ""}`

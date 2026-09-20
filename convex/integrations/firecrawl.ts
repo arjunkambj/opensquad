@@ -10,13 +10,13 @@
  *
  * This file is the ONLY app-side surface (integrations.md §G2 "Firecrawl
  * route"): a narrow, allow-listed internal wrapper. Everything exported is
- * internal — unreachable from clients and public HTTP. The employee-facing
+ * internal — unreachable from clients and public HTTP. The app-facing
  * OpenSquad research tool (P09) reads scoped results; it never receives a
  * Firecrawl credential or an arbitrary crawl primitive.
  *
  * Allow-list vs the full component client (deliberately NOT exported):
  *   - `firecrawl.map` / `firecrawl.search` — discovery-shaped; the primary
- *     route is Apollo discovery + targeted page research. Not needed here.
+ *     route is targeted page research. Not needed here.
  *   - `firecrawl.cancelCrawl` / `resumeCrawl` / `deleteCrawl` — lifecycle
  *     management belongs to the owning workflow task (P09), not this spike.
  *
@@ -391,7 +391,7 @@ const PROVIDER_OPERATION_STALE_MS = 10 * 60 * 1000;
  *
  * `operationKey` is `research:<campaignId>:<prospectId>:sha256(url)` and is
  * unique per workspace, so a prospect accumulates at most one row per
- * distinct URL ever attempted for it — across every mission on the campaign.
+ * distinct URL ever attempted for it — across the whole campaign.
  * The scan window has to stay comfortably above that, because the index is
  * (workspaceId, prospectId, state) and a short `.take` would sort released
  * rows ahead of the live ones and undercount.

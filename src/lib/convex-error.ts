@@ -59,7 +59,7 @@ export function isConflictError(error: unknown): boolean {
  * the handler throws for a well-formed foreign id, and it arrives as a plain
  * `Error` with no domain code for `domainErrorCode` to read — which today
  * means the operator is shown `ArgumentValidationError … Validator:
- * v.id("missions")` and a request id. For the person who pasted a bad link,
+ * v.id("prospects")` and a request id. For the person who pasted a bad link,
  * that record simply does not exist, and this says so.
  *
  * Matched narrowly, on an ID validator specifically: any other argument

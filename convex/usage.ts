@@ -11,9 +11,6 @@
  * Sends are bucketed by the workspace-local day (`localDayKey(now,
  * workspace.timezone)`), enforced inside the reserving transaction so
  * concurrent sends cannot oversubscribe the daily limit.
- *
- * The runtime transport tables (runtimeConnections, workerRequests, …) are
- * P07's — not here.
  */
 import { internalMutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";

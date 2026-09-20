@@ -196,7 +196,7 @@ export const add = mutation({
 });
 
 /** Remove a suppression (owner/operator). Rows are deleted, not archived —
- * the activity record would live on the decision/run history. */
+ * the activity record lives on the workspace activity feed. */
 export const remove = mutation({
   args: {
     workspaceId: v.id("workspaces"),

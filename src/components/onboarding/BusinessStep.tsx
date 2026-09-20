@@ -120,7 +120,7 @@ export function BusinessStep({
               onChange={(event) => update({ websiteUrl: event.target.value })}
             />
             <FieldDescription>
-              A public http(s) URL employees can research.
+              A public http(s) URL the agent can research.
             </FieldDescription>
           </Field>
           <Field>
@@ -163,7 +163,7 @@ export function BusinessStep({
               }
             />
             <FieldDescription>
-              One entry per line. Employees must never target these.
+              One entry per line. The agent must never target these.
             </FieldDescription>
           </Field>
           <FormError message={error} />

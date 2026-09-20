@@ -35,8 +35,8 @@ export function ConversationThread({
   hasMore: boolean
   /**
    * The conversation's `currentDraftId` when one is pending. A draft entry
-   * matching it links out to its own `/decisions/$decisionId` — approve
-   * buttons are never duplicated into the thread (J4 ④).
+   * matching it is annotated inline — approve buttons are never duplicated
+   * into the thread (J4 ④).
    */
   pendingDraftId: Id<"drafts"> | undefined
 }) {
@@ -129,7 +129,7 @@ function OutboundMessage({
       <header className="flex flex-wrap items-center gap-2">
         {/* A pending draft never sits in the position or style of a sent
             message — dashed border, its own word, and a link to the shared
-            decision instead of any send-looking badge. */}
+            state instead of any send-looking badge. */}
         <Chip className={isDraft ? undefined : "bg-chart-2/15 text-chart-2"}>
           {isDraft ? "Draft — awaiting approval" : "Sent by the squad"}
         </Chip>

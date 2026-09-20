@@ -4,7 +4,7 @@ import { isTypingTarget } from "@/lib/keyboard"
 
 /**
  * Queue navigation for the two screens whose whole job is working a list:
- * `/inbox` and `/decisions` (`plan/ux.md` §6).
+ * `/inbox` and `/leads`.
  *
  * `j`/`k` move DOM focus between the row links — the rows are real links, so
  * once a row is focused, Enter opens it natively and a screen reader announces

@@ -123,7 +123,7 @@ export function SendingPolicySection({
       <CardHeader>
         <CardTitle>Sending policy</CardTitle>
         <CardDescription>
-          When employees may send approved email, and the per-day ceiling.
+          When the agent may send approved email, and the per-day ceiling.
           Saving bumps the policy version — an approval written against the
           old policy no longer applies, so in-flight drafts need a fresh
           approval.

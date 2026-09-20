@@ -6,8 +6,7 @@ import type { api } from "../../convex/_generated/api"
  *
  * Derived from `workspaces.getCurrent` rather than re-declared, so a role
  * added to the backend union cannot silently fall through a check here. One
- * definition for the whole app: `DecisionDetail` re-exports this name so the
- * decision panels keep their existing import path.
+ * definition for the whole app.
  */
 export type WorkspaceRole = NonNullable<
   FunctionReturnType<typeof api.workspaces.getCurrent>
@@ -17,8 +16,7 @@ export type WorkspaceRole = NonNullable<
  * Whether this role may write.
  *
  * `requireWorkspaceEditor` in `convex/lib/auth.ts` is `["owner", "operator"]`,
- * and every mission lifecycle mutation, `missions.create` and
- * `activity.addComment` are gated by it. This mirrors that one list, so the UI
+ * and every write mutation is gated by it. This mirrors that one list, so the UI
  * offers exactly what the server will accept — the server check is the
  * backstop, not the design (V23 step 2).
  */

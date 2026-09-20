@@ -5,10 +5,8 @@ import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 /**
  * Gate for every page that cannot do anything without a workspace.
  *
- * Before this, nothing routed a workspace-less user into setup: sign-in sends
- * everyone to `/overview`, and `/overview`, `/employees` and `/settings` each
- * dead-ended on their own copy of the same "No workspace yet" card. Three
- * identical dead ends and no gate.
+ * Before this, nothing routed a workspace-less user into setup: every page
+ * dead-ended on its own copy of the same "No workspace yet" card.
  *
  * Pathless, so it adds no URL segment — `/overview` stays `/overview`.
  *

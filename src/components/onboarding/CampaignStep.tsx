@@ -75,7 +75,7 @@ export function CampaignStep({
             <FieldLabel htmlFor="camp-brief">Brief</FieldLabel>
             <Textarea
               id="camp-brief"
-              placeholder="What should this campaign achieve? Context employees work from."
+              placeholder="What should this campaign achieve? Context the agent works from."
               value={form.brief}
               onChange={(event) => update({ brief: event.target.value })}
             />

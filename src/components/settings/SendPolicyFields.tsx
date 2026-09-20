@@ -59,7 +59,7 @@ export function SendPolicyFields({
           ))}
         </ToggleGroup>
         <FieldDescription>
-          Days employees may send approved email, in the workspace timezone.
+          Days the agent may send approved email, in the workspace timezone.
         </FieldDescription>
       </Field>
       <div className="grid grid-cols-2 gap-4">

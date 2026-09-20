@@ -55,7 +55,7 @@ export function optionalText(value: unknown, max = 200): string | undefined {
 }
 
 /**
- * A Convex document id carried in the URL (`?campaign=`, `?mission=`).
+ * A Convex document id carried in the URL (e.g. `?campaign=`).
  *
  * A free-text param is wrong for these: `v.id(…)` argument validation on the
  * backend THROWS on a value that is not an id — a hard error inside the list

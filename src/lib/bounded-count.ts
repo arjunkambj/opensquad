@@ -4,7 +4,7 @@
  * No Convex query in this codebase returns a total — every list returns
  * `{ items, cursor, hasMore }` and `plan/architecture.md` §5 forbids exact
  * unlimited counters. So a number on screen is either a stored field the
- * backend maintains (`mission.requiredDecisionCount`) or this: exact when the
+ * backend maintains or this: exact when the
  * whole set fit on one page, and explicitly bounded otherwise.
  *
  * Two rules go with it, and they are the reason this is a function rather than

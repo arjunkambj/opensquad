@@ -31,18 +31,14 @@ type LeadDetailResult = FunctionReturnType<typeof api.prospects.getDetail>
  * "Write the proposal email" — `bookings.draftProposal`: the exact staged
  * draft that carries the proposal out on the lead's thread.
  *
- * Two picks are required and both are real data, never free text:
- * `conversationId` — the lead's open thread — and `missionId` — the live
- * sales mission whose workflow owns the approval ask. The dialog lists only
- * choices the backend will accept (open threads; non-terminal missions with
- * a dispatched workflow), and a lead with no eligible thread or mission gets
- * the honest reason instead of a form that can never submit.
+ * The one pick is real data, never free text: `conversationId`, the lead's
+ * open thread. The dialog lists only threads the backend will accept, and a
+ * lead with no eligible thread gets the honest reason instead of a form that
+ * can never submit.
  *
- * What the submit produces is a DRAFT plus a `draft_approval` ask on the
- * shared Decisions queue — the dialog's success state links straight to it.
- * Nothing is sent by creating the draft; sending needs the approval, and
- * the send boundary re-checks the booking link against the approved payload
- * before anything goes out.
+ * What the submit produces is a DRAFT. Nothing is sent by creating it;
+ * sending needs a recorded approval, and the send boundary re-checks the
+ * booking link against the approved payload before anything goes out.
  */
 export function DraftProposalDialog({
   workspaceId,
@@ -68,8 +64,7 @@ export function DraftProposalDialog({
           <DialogTitle>Write the proposal email</DialogTitle>
           <DialogDescription>
             {proposalSummary(booking.proposal, timezone)}. The draft goes out
-            verbatim once a person approves it on the Decisions queue —
-            creating it sends nothing.
+            verbatim once a person approves it — creating it sends nothing.
           </DialogDescription>
         </DialogHeader>
         <CatchBoundary
@@ -283,8 +278,8 @@ function DraftProposalSourcesError({ error, reset }: ErrorComponentProps) {
     <div className="flex flex-col gap-2">
       <p className="text-sm text-muted-foreground">
         {missing
-          ? "The deployment behind this build does not yet serve the per-lead thread and mission reads — they land with this change's push. The proposal itself is unchanged."
-          : "The thread and mission lists could not be loaded."}
+          ? "The deployment behind this build does not yet serve the per-lead thread reads — they land with this change's push. The proposal itself is unchanged."
+          : "The thread list could not be loaded."}
       </p>
       <Button variant="outline" size="sm" className="self-start" onClick={reset}>
         Try again

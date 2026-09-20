@@ -348,8 +348,7 @@ function ActiveBookingCard({
         </div>
       ) : null}
 
-      {/* The outbound draft that carries this proposal — linked to its
-          approval ask on the shared Decisions queue. */}
+      {/* The outbound draft that carries this proposal. */}
       {booking.draftId !== undefined ? (
         <BookingDraftLink
           workspaceId={workspaceId}
