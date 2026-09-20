@@ -114,6 +114,13 @@ function SetupForActiveOrg({ user }: { user: CurrentUser }) {
   // One creation request per attempt: the mutation is idempotent, but firing
   // it on every render would still be a request per render.
   const requested = useRef(-1)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   // The row is named after the organization it belongs to, so the name a
   // member sees here is the one they chose in the auth provider. Trimmed and
   // bounded to what the mutation accepts: a name the provider allows but we
@@ -125,7 +132,11 @@ function SetupForActiveOrg({ user }: { user: CurrentUser }) {
       return
     }
     requested.current = attempt
-    let live = true
+    // The answer belongs to the ATTEMPT, not to this run of the effect: the
+    // effect re-runs (its dependencies change identity, and StrictMode runs
+    // it twice in development) while the request is still in flight, and the
+    // re-run returns early above. A per-run "still live" flag would therefore
+    // drop the refusal and leave the screen spinning forever.
     void (async () => {
       try {
         await ensureOrg({
@@ -133,14 +144,11 @@ function SetupForActiveOrg({ user }: { user: CurrentUser }) {
           ...(orgName === null ? {} : { name: orgName }),
         })
       } catch (cause) {
-        if (live) {
+        if (mounted.current && requested.current === attempt) {
           setRefusal(entryRefusalOf(cause))
         }
       }
     })()
-    return () => {
-      live = false
-    }
   }, [attempt, current, ensureOrg, orgName])
 
   if (current.status === "loading") {
