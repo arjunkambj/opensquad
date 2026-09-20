@@ -1,36 +1,43 @@
+/**
+ * Settings (reference 26): a page title, one horizontal tab bar, and the
+ * selected section as a stack of cards.
+ *
+ * This is the frame and the gate, nothing more. It resolves the signed-in
+ * user and the current workspace once — every tab needs both — and hands each
+ * section the workspace id and the caller's role. The sections own their own
+ * Convex reads and writes, because a tab that is not open must not be
+ * subscribed to anything.
+ *
+ * Account is the one section that renders without a workspace: it is an
+ * identity surface, and someone whose membership was revoked must still be
+ * able to see who they are signed in as and sign out.
+ */
 import { useUser } from "@hexclave/react"
-import { Link, useSearch } from "@tanstack/react-router"
-import { AccountSection } from "@/components/settings/AccountSection"
-import { SettingsSections } from "@/components/settings/SettingsSections"
+import { useSearch } from "@tanstack/react-router"
+import { AccountTab } from "@/components/settings/account/AccountTab"
+import { BlocklistTab } from "@/components/settings/blocklist/BlocklistTab"
+import { CompanyTab } from "@/components/settings/company/CompanyTab"
+import { InboxTab } from "@/components/settings/InboxTab"
+import { OutreachTab } from "@/components/settings/outreach/OutreachTab"
+import { SendingTab } from "@/components/settings/sending/SendingTab"
+import { SettingsTabBar } from "@/components/settings/SettingsTabBar"
 import {
   DEFAULT_SETTINGS_TAB,
-  SETTINGS_TABS,
-  SETTINGS_TAB_LABEL,
+  SETTINGS_TAB_DESCRIPTION,
 } from "@/components/settings/settings-model"
 import type { SettingsTab } from "@/components/settings/settings-model"
+import { UsageTab } from "@/components/settings/usage/UsageTab"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
-import { LoadingState } from "@/components/states/states"
-import { Chip } from "@/components/shared/presentation"
-import { cn } from "@/lib/utils"
-
-/**
- * The tabs whose write controls belong to the owner alone. Marked BEFORE the
- * user opens them so a non-owner learns from the tab bar why a control will
- * not be there — not after opening the card and hunting for it. `sending` is
- * marked too: its blocklist is editor-writable, but the policy itself is
- * owner-only.
- */
-const OWNER_ONLY: ReadonlySet<SettingsTab> = new Set([
-  "company",
-  "inbox",
-  "outreach",
-  "sending",
-])
+import { EmptyState, LoadingState } from "@/components/states/states"
+import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import type { WorkspaceRole } from "@/lib/workspace-role"
+import type { WorkspaceView } from "@/lib/workspace-view"
 
 export function SettingsPage() {
   const user = useUser()
   const search = useSearch({ from: "/_dashboard/settings" })
   const tab = search.tab ?? DEFAULT_SETTINGS_TAB
+  const current = useCurrentWorkspace()
 
   // `useUser()` resolves asynchronously; a null under `_dashboard` is a
   // session the shell is still checking or redirecting — loading is the
@@ -43,47 +50,58 @@ export function SettingsPage() {
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
         title="Settings"
-        description="Your company profile, how the agent sends, and who it may never contact."
+        description={SETTINGS_TAB_DESCRIPTION[tab]}
       />
-      <nav
-        aria-label="Settings tabs"
-        className="flex flex-wrap gap-1.5 border-b border-border pb-3"
-      >
-        {SETTINGS_TABS.map((value) => {
-          const active = tab === value
-          return (
-            <Link
-              key={value}
-              to="/settings"
-              search={{ tab: value }}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {SETTINGS_TAB_LABEL[value]}
-              {OWNER_ONLY.has(value) ? (
-                <Chip
-                  className={cn(
-                    "px-1.5 py-0 text-[10px]",
-                    active && "bg-primary-foreground/20 text-primary-foreground",
-                  )}
-                >
-                  owner
-                </Chip>
-              ) : null}
-            </Link>
-          )
-        })}
-      </nav>
+      <SettingsTabBar current={tab} />
       {tab === "account" ? (
-        <AccountSection user={user} />
+        <AccountTab user={user} />
+      ) : current === undefined ? (
+        <LoadingState
+          title="Loading your workspace"
+          description="Reading your company profile, sending policy and blocklist."
+        />
+      ) : current === null ? (
+        <EmptyState
+          title="Nothing to configure yet"
+          description="These settings appear once setup has run once. Finish setup and come back."
+        />
       ) : (
-        <SettingsSections tab={tab} />
+        <WorkspaceTab
+          tab={tab}
+          workspace={current.workspace}
+          role={current.role}
+        />
       )}
     </div>
   )
+}
+
+/** The workspace-scoped sections. Account is rendered by the page above. */
+function WorkspaceTab({
+  tab,
+  workspace,
+  role,
+}: {
+  tab: SettingsTab
+  workspace: WorkspaceView
+  role: WorkspaceRole
+}) {
+  switch (tab) {
+    case "company":
+      return <CompanyTab workspaceId={workspace._id} role={role} />
+    case "inbox":
+      // The connect / verify / sync flow of PLAN §4, shared with onboarding
+      // dot 3; it does its own owner check, because the read is owner-guarded.
+      return <InboxTab workspaceId={workspace._id} />
+    case "outreach":
+      return <OutreachTab workspaceId={workspace._id} role={role} />
+    case "blocklist":
+      return <BlocklistTab workspaceId={workspace._id} role={role} />
+    case "sending":
+      return <SendingTab workspace={workspace} role={role} />
+    case "usage":
+      return <UsageTab workspaceId={workspace._id} />
+    case "account":
+      return null
+  }
 }
