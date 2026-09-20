@@ -106,6 +106,16 @@ export const sweepStalledRuns = internalMutation({
         );
         leadsRecovered += 1;
       }
+
+      // The LEAD half of a stalled email reveal: the money half is settled
+      // below through the provider's job, but a lead whose poller died would
+      // stay `revealing` until someone clicked again. The mutation finds and
+      // resolves that workspace's stalled leads itself, and is safe to repeat.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.leads.emailRevealState.recoverStalledReveals,
+        { workspaceId: agent.workspaceId },
+      );
     }
 
     const holds = await ctx.db
