@@ -6,7 +6,8 @@ files, and how we know it is done*. Read PLAN.md fully before taking a task.
 
 ## 0. Ground rules for every agent
 
-1. **Read first:** PLAN.md, [flow.html](flow.html), `AGENTS.md`, then the
+1. **Read first:** PLAN.md (incl. the element-by-element coverage table in §2
+   — it says exactly which reference elements are built and which are cut), [flow.html](flow.html), `AGENTS.md`, then the
    reference image(s) named in your task (`temp-images/ref/*.png`, local only).
    Build to the image: layout, hierarchy, component shapes, spacing.
 2. **Stay in your lane.** Edit only the files under *Owns*. Files under
@@ -143,7 +144,7 @@ redirects.
 **Build:** route map and guards from PLAN §5; redirects from removed paths;
 sidebar (Dashboard, Agent, Contacts, Inbox, Settings) with active pill + accent
 bar, collapsible to an icon rail, credits block wired to `credits.summary`,
-user menu; theme tokens toward the reference (warm coral primary, near-white
+user menu, header bell with a feed from `activityEvents`; theme tokens toward the reference (warm coral primary, near-white
 ground, large radii, soft shadows) using the fonts already installed. Each
 route file renders its page header and a **real, query-backed empty state** so
 later tasks only fill the body.
@@ -251,7 +252,7 @@ connected state (last 4, address, last event, sync status, Disconnect).
 "Connect later" path. Goals: pain points (pre-filled from T21), campaign goal
 radio cards, tone radio cards.
 **Done when:** the full connect flow runs against a real key from both places;
-skipping leaves the agent in review mode with sending disabled and the banner
+skipping leaves the agent in Sourcing only mode with the banner
 described in PLAN §5.
 
 ### T23 · Onboarding dot 4 — signals, keywords, review, confirm
@@ -287,9 +288,10 @@ second run does not duplicate; out-of-credits stops paid steps cleanly.
 **Owns:** `src/routes/_dashboard/_workspace/contacts*.tsx`,
 `src/components/contacts/**`, `convex/contacts.ts` (list/filter queries,
 approve/reject, request email).
-**Build:** search + filters bar, dense table (contact, signal with "+n
-signals", flame score, email state with **Get email** → reveal job + poll,
-stage, imported, approval, row menu), pagination, bulk approve/reject, lead
+**Build:** search + filters bar, bulk actions (Get emails — bounded by credits, Approve,
+Reject), dense table (contact with profile link, signal with "+n signals",
+sortable flame score, email state with **Get email** → reveal job + poll,
+stage, imported, approval, row menu), page size + "Showing x to y of z", lead
 drawer (`?lead=`): research summary, score reason, signals, thread, actions.
 Zero-lead state explains which signals returned nothing.
 **Done when:** everything is live data; Get email spends 20 credits once and
@@ -301,8 +303,9 @@ is idempotent; rows appear while the run is in progress.
 agent mutations in `convex/agents.ts` that T21 did not add (coordinate: T21
 owns ICP mutations, T32 owns mode / instructions / bookingUrl / runNow /
 strategy toggle).
-**Build:** agent card with mode dropdown (Review / Autopilot / Paused), funnel
-metrics, signals list with on/off and leads per signal, instructions, booking
+**Build:** agent card with generated editable name, mode dropdown (Sourcing only /
+Review / Autopilot / Paused), funnel metrics (Contacted n / total, Opened from
+AgentMail open events, Replied, Interested), sender address, created date, signals list with on/off and leads per signal, instructions, booking
 link, follow-up days, Run now (rate-limited), "connect inbox" banner.
 **Done when:** toggling a signal changes the next run; Run now schedules one
 run and is rate-limited; counts match Contacts.
@@ -315,7 +318,7 @@ run and is rate-limited; counts match Contacts.
 needed to call them. **Hand-off to integrator:** outreach cron.
 **Build:** due leads (researched, score ≥ 2, approved in Review mode, email
 found, not suppressed) → write step 0 with opt-out line → draft → Autopilot
-sends, Review waits for approval → existing ledger (suppression, window, daily
+sends, Review waits, Sourcing only never reaches this step for approval → existing ledger (suppression, window, daily
 limit, idempotency key) → stage `contacted`, `nextActionAt`. Follow-ups at
 `followUpDays` in-thread while no reply.
 **Done when:** a real email reaches an address we control in both modes;
@@ -330,7 +333,8 @@ with no reply.
 **Build:** inbound → classify → next move per PLAN §1 / flow.html reply
 branches (answer, booking proposal, booked → `bookings`, not now → reschedule,
 not interested → closed lost, unsubscribe → suppression). Autopilot sends,
-Review queues. Inbox: list with Received / Interested / Unread / All, thread,
+Review queues. Inbox: list with conversation count, search, Received / Interested / Unread /
+All, thread,
 suggested reply with edit + send, mark interested, connect-inbox empty state.
 **Done when:** a real reply is classified and answered end to end; an
 unsubscribe reply blocks all later sends to that address.
@@ -339,8 +343,10 @@ unsubscribe reply blocks all later sends to that address.
 **Depends:** T30 (complete after T41). **Ref:** `20-dashboard`.
 **Owns:** `src/routes/_dashboard/_workspace/dashboard.tsx`,
 `src/components/dashboard/**`, `convex/dashboard.ts`.
-**Build:** welcome header, range pills, stat cards (found, contacted, replied,
-interested, meetings), activity chart from real daily counts, latest hot
+**Build:** welcome header with two status chips (active signals → `/agent`, inbox
+connection → Settings), range pills (7 days / 30 days / 3 months / This month),
+stat cards (hot leads, contacted, conversations, pipeline = `dealSize` ×
+(interested + meetings) with inline Edit), activity chart from real daily counts, latest hot
 leads, latest replies, next-step CTA card that reflects real state.
 **Done when:** every number reconciles with Contacts and Inbox for the same
 range; a new workspace shows designed empty states.
@@ -349,8 +355,9 @@ range; a new workspace shows designed empty states.
 **Depends:** T02, T22. **Ref:** `26-settings-templates`.
 **Owns:** `src/routes/_dashboard/settings.tsx`, `src/components/settings/**`
 except `InboxTab.tsx`.
-**Build:** tabs Company (edit profile, re-analyze), Inbox (mounts T22),
-Sending (days, hours, daily limit ≤ 30), Usage (balance + history from the
+**Build:** tabs Company (edit profile, re-analyze), Inbox (mounts T22), Outreach
+(default instructions used when the agent has none), Blocklist (emails and
+domains, backed by `suppressions`, checked by the send ledger), Sending (days, hours, daily limit ≤ 30), Usage (balance + history from the
 real ledger, neutral labels), Account. No billing, no upgrade.
 **Done when:** each tab reads and writes real data; Usage never shows a
 provider name.
