@@ -6,7 +6,7 @@
  * user types is as good as one we generated. Hence a plain `ChipInput` here
  * and a searched picker on the next screen.
  */
-import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpModel"
+import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpVocabulary"
 import { ChipInput } from "@/components/kit/ChipInput"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { IcpStepShell } from "@/components/onboarding/steps/icp/IcpStepShell"

@@ -13,7 +13,7 @@
  */
 import { useQuery } from "convex/react"
 import { api } from "../../../../../convex/_generated/api"
-import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpModel"
+import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpVocabulary"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { IcpChipGroup } from "@/components/onboarding/steps/icp/IcpChipGroup"
 import { IcpStepShell } from "@/components/onboarding/steps/icp/IcpStepShell"

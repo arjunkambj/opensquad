@@ -9,7 +9,7 @@
 import { useQuery } from "convex/react"
 import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { api } from "../../../../../convex/_generated/api"
-import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpModel"
+import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpVocabulary"
 import { CheckCard } from "@/components/kit/CheckCard"
 import { ChipInput } from "@/components/kit/ChipInput"
 import { InfoBanner } from "@/components/kit/InfoBanner"

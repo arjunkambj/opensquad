@@ -17,8 +17,9 @@
  *                  catalogue, so a value the screens never offered cannot get
  *                  in through a hand-made call.
  *
- * The paid half lives in `icpGeneration.ts`; the vocabulary and the checks
- * live in `icpModel.ts`.
+ * The paid half lives in `icpGeneration.ts` and the write that ends it in
+ * `icpResult.ts`; the vocabulary is `icpVocabulary.ts` and the checks against
+ * it are `icpModel.ts`.
  */
 import { internal } from "../_generated/api";
 import { mutation, query } from "../_generated/server";
@@ -27,13 +28,13 @@ import { requireWorkspaceEditor, requireWorkspaceMember } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
 import { domainError, invalid, vAgentIcp } from "../lib/validators";
 import {
-  EMPTY_ICP_OPTION_LISTS,
   ICP_GENERATION_STALE_AFTER_MS,
+  icpIsEmpty,
   icpOperationKey,
   normalizeIcp,
-  readIcpOptionLists,
   sameIcp,
 } from "./icpModel";
+import { EMPTY_ICP_OPTION_LISTS, readIcpOptionLists } from "./icpVocabulary";
 import { getWorkspaceAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
@@ -139,8 +140,12 @@ export const startGeneration = mutation({
     ) {
       return { status: "skipped", reason: "already_running" } as const;
     }
-    if (args.reason === "initial" && status !== undefined) {
-      // The screen asks on every entry; only the very first one runs.
+    if (
+      args.reason === "initial" &&
+      (status !== undefined || !icpIsEmpty(agent.icp))
+    ) {
+      // The screen asks on every entry; only the very first one runs, and only
+      // when there is nothing there to overwrite.
       return { status: "skipped", reason: "already_generated" } as const;
     }
     if (args.reason === "retry" && status?.state !== "failed") {

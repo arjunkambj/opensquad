@@ -3,11 +3,11 @@
  *
  * It says in our own words what happened and offers the two ways forward the
  * plan requires: try again, or write it yourself. The wording arrives already
- * chosen (`icp-model.ts`) — nothing here reads a provider's error.
+ * chosen (`icp-copy.ts`) — nothing here reads a provider's error.
  */
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import type { IcpMessage } from "@/components/onboarding/steps/icp/icp-model"
+import type { IcpMessage } from "@/components/onboarding/steps/icp/icp-copy"
 import { Button } from "@/components/ui/button"
 
 export type IcpFailurePanelProps = {

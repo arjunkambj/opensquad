@@ -14,6 +14,8 @@ import type * as agents_filterOptions from "../agents/filterOptions.js";
 import type * as agents_icp from "../agents/icp.js";
 import type * as agents_icpGeneration from "../agents/icpGeneration.js";
 import type * as agents_icpModel from "../agents/icpModel.js";
+import type * as agents_icpResult from "../agents/icpResult.js";
+import type * as agents_icpVocabulary from "../agents/icpVocabulary.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_mutations from "../agents/mutations.js";
 import type * as agents_onboarding from "../agents/onboarding.js";
@@ -145,6 +147,8 @@ declare const fullApi: ApiFromModules<{
   "agents/icp": typeof agents_icp;
   "agents/icpGeneration": typeof agents_icpGeneration;
   "agents/icpModel": typeof agents_icpModel;
+  "agents/icpResult": typeof agents_icpResult;
+  "agents/icpVocabulary": typeof agents_icpVocabulary;
   "agents/model": typeof agents_model;
   "agents/mutations": typeof agents_mutations;
   "agents/onboarding": typeof agents_onboarding;
