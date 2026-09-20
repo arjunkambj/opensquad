@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import type { ProfileUser } from "@/components/layout/UserProfileMenu"
+import type { ProfileUser } from "@/components/layout/SidebarUser"
 import { DetailRow } from "@/components/shared/presentation"
 
 /**
