@@ -129,13 +129,17 @@ function ContactsBody({
   const applyFilter = (patch: Partial<ContactsSearch>) => {
     setTrail([])
     setSelected(new Set())
-    if ("q" in patch) {
-      setText(patch.q ?? "")
+    // The company-search index filters on stage and approval only, so asking
+    // for a score means leaving the search rather than pretending both hold.
+    const applied =
+      patch.score === undefined ? patch : { ...patch, q: undefined }
+    if ("q" in applied) {
+      setText(applied.q ?? "")
     }
     void navigate({
       to: "/contacts",
       search: (currentSearch: ContactsSearch) =>
-        withContactFilters(currentSearch, exclusiveFilters(patch)),
+        withContactFilters(currentSearch, exclusiveFilters(applied)),
     })
   }
 

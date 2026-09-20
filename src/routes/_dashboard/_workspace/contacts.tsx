@@ -77,17 +77,40 @@ function pageNumber(value: unknown): number | undefined {
     : undefined
 }
 
+/**
+ * The one active filter, by precedence.
+ *
+ * The backend refuses a combination no index supports, so a hand-edited link
+ * carrying two of them would otherwise make the page throw. Narrowing here
+ * means a pasted URL always opens: it is simply read as the narrowest filter
+ * it names. `score` is not a filter field of the company-search index, so a
+ * search drops it rather than silently returning unscored matches.
+ */
+function oneFilter(search: Record<string, unknown>, searching: boolean) {
+  const score = searching ? undefined : optionalScore(search.score)
+  if (score !== undefined) {
+    return { score }
+  }
+  const approval = optionalOneOf(LEAD_APPROVALS, search.approval)
+  if (approval !== undefined) {
+    return { approval }
+  }
+  const stage = optionalOneOf(LEAD_STAGES, search.stage)
+  return stage === undefined ? {} : { stage }
+}
+
 export const Route = createFileRoute("/_dashboard/_workspace/contacts")({
-  validateSearch: (search): ContactsSearch => ({
-    stage: optionalOneOf(LEAD_STAGES, search.stage),
-    approval: optionalOneOf(LEAD_APPROVALS, search.approval),
-    score: optionalScore(search.score),
-    q: optionalText(search.q),
-    sort: optionalOneOf(["lowest"] as const, search.sort),
-    lead: optionalRecordId(search.lead),
-    cursor: optionalCursor(search.cursor),
-    page: pageNumber(search.page),
-    limit: pageSize(search.limit),
-  }),
+  validateSearch: (search): ContactsSearch => {
+    const q = optionalText(search.q)
+    return {
+      ...oneFilter(search, q !== undefined),
+      q,
+      sort: optionalOneOf(["lowest"] as const, search.sort),
+      lead: optionalRecordId(search.lead),
+      cursor: optionalCursor(search.cursor),
+      page: pageNumber(search.page),
+      limit: pageSize(search.limit),
+    }
+  },
   component: ContactsPage,
 })

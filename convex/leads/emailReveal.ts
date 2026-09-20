@@ -35,7 +35,7 @@ import {
   REVEAL_CREDITS_PER_LEAD,
 } from "../integrations/enrich/reveal";
 import { requireWorkspaceEditor } from "../lib/auth";
-import { ACTION_PRICES } from "../lib/limits";
+import { ACTION_PRICES, TRIAL_METRIC_CAPS } from "../lib/limits";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
   domainError,
@@ -213,17 +213,35 @@ async function affordableReveals(
   }
   const byCredits = Math.floor(bucketRemaining(credits) / price);
   const byProvider = Math.min(
-    await providerAllowance(ctx, workspace, USAGE_PERIOD_LIFETIME),
-    await providerAllowance(ctx, workspace, dailyPeriodKey(workspace, Date.now())),
+    await providerAllowance(
+      ctx,
+      workspace,
+      USAGE_PERIOD_LIFETIME,
+      TRIAL_METRIC_CAPS.enrich_credits.lifetime,
+    ),
+    await providerAllowance(
+      ctx,
+      workspace,
+      dailyPeriodKey(workspace, Date.now()),
+      TRIAL_METRIC_CAPS.enrich_credits.daily,
+    ),
   );
   return Math.max(0, Math.min(byCredits, byProvider, MAX_LEADS_PER_REVEAL));
 }
 
-/** Addresses the hidden per-workspace allowance still covers in one period. */
+/**
+ * Addresses the hidden per-workspace allowance still covers in one period.
+ *
+ * A period with no bucket yet is not "unlimited": the reserve will create it
+ * from the trial cap, so the cap is what this workspace can spend today.
+ * Reading it as unbounded would submit reveals the reserve then refuses one
+ * by one, which costs a round trip each and tells the user nothing.
+ */
 async function providerAllowance(
   ctx: MutationCtx,
   workspace: Doc<"workspaces">,
   periodKey: string,
+  capWhenUnused: number,
 ): Promise<number> {
   const bucket = await findBucket(
     ctx,
@@ -231,11 +249,9 @@ async function providerAllowance(
     "enrich_credits",
     periodKey,
   );
-  // No bucket means the allowance has never been touched in this period, and
-  // the reserve creates it from the trial caps — not a reason to refuse.
-  return bucket === null
-    ? MAX_LEADS_PER_REVEAL
-    : Math.floor(bucketRemaining(bucket) / REVEAL_CREDITS_PER_LEAD);
+  const remaining =
+    bucket === null ? capWhenUnused : bucketRemaining(bucket);
+  return Math.floor(remaining / REVEAL_CREDITS_PER_LEAD);
 }
 
 /**
