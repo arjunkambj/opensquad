@@ -35,7 +35,13 @@ files, and how we know it is done*. Read PLAN.md fully before taking a task.
 8. **Verify before hand-off:** `pnpm lint`, `pnpm exec tsc -b`,
    `pnpm exec tsc -p convex/tsconfig.json --noEmit`, `pnpm build`. All four
    pass, or the task is not done. Paste the tail of each into the hand-off.
-9. **Hand-off note** (final message): commits made, verification output,
+9. **Structure** (PLAN §9). Domain folders on both sides; thin Convex
+   functions over a `model.ts`; page containers own data, children are
+   presentational; one component per file; no `utils`/`helpers` dumping
+   grounds, no barrels, no magic numbers, no cross-domain imports. Files past
+   ~300 lines (backend) / ~200 lines (component) split. Put new files where
+   PLAN §9 says, even if your task's *Owns* list names only the folder.
+10. **Hand-off note** (final message): commits made, verification output,
    anything needed from Integrator-only files, anything unverified. Never claim
    a provider integration works unless you saw a real response.
 
@@ -61,7 +67,7 @@ committed `convex/_generated`.
 ## 1. Task graph
 
 ```
-Wave 0 (serial)     T00 ─▶ T01 ─▶ T02 ─▶ T03 ─▶ T04
+Wave 0 (serial)     T00 ─▶ T01 ─▶ T05 ─▶ T02 ─▶ T03 ─▶ T04
 Wave 1 (parallel)   T10 inbox backend   T11 lead-data client   T12 scraper   T13 UI kit
 Wave 2 (parallel)   T20 company ─▶ T21 ICP ─▶ T23 signals        T22 inbox + goals UI
 Wave 3 (parallel)   T30 sourcing + research ─▶ T31 contacts      T32 agent page
@@ -109,11 +115,30 @@ sites minimally so the tree typechecks.
 **Done when:** codegen + all four verify commands pass; no table or field from
 PLAN §7 is missing.
 
+### T05 · Restructure into domain folders — integrator
+**Depends:** T01. **Owns:** the whole tree, for this task only.
+**Build:** mechanical moves, **no behaviour change**, per PLAN §9:
+- Backend: move kept modules into `workspaces/`, `billing/`, `company/`,
+  `agents/`, `leads/`, `outreach/`, `inbox/`, `bookings/`, `activity/`; split
+  `lib/validators.ts` into `lib/validators/<domain>.ts` + `index.ts`
+  re-export; split the oversized files along their existing section banners
+  (`sending.ts` → reserve / dispatch / reconcile; `prospects.ts` → queries /
+  mutations / model; `conversations.ts`, `bookings.ts` likewise). Update every
+  `api.*` / `internal.*` reference, `crons.ts` and `http.ts`.
+- Frontend: `Layout` → `layout`, `Marketing` → `marketing` (two-step
+  `git mv` so the case change is recorded), `leads/` → `contacts/`, route files
+  reduced to param/guard + one page component, create the empty-of-logic
+  folder skeleton only where a file lands in it.
+- Update `convex/README.md` and root `README.md` to describe the layout.
+One commit per domain moved, so each diff is reviewable as a pure move.
+**Done when:** codegen + the four verify commands pass, the app behaves
+exactly as before, and `git diff --stat -M` shows renames rather than
+rewrites for untouched logic.
+
 ### T02 · Credits, caps and breakers — integrator
-**Depends:** T01. **Owns:** `convex/lib/limits.ts`, `convex/usage.ts`,
-`convex/credits.ts`, `convex/platformBudgets.ts`, rate-limiter setup in
-`convex/convex.config.ts`, `convex/lib/rateLimits.ts`, trial grant inside
-`convex/workspaces.ts`.
+**Depends:** T05. **Owns:** `convex/lib/limits.ts`, `convex/lib/rateLimits.ts`,
+`convex/billing/**`, rate-limiter setup in `convex/convex.config.ts`, trial
+grant inside `convex/workspaces/`.
 **Build:** PLAN §6 entirely — typed price map and caps; `withCredits` (reserve
 credits + worst-case provider units in workspace **and** platform buckets in
 one transaction → run → commit actuals → release rest; `uncertain` on unknown
@@ -155,8 +180,8 @@ nothing in the shell is hard-coded data.
 
 ### T10 · Inbox connection backend
 **Depends:** T02. **Owns:** `convex/lib/secrets.ts`,
-`convex/workspaceSecrets.ts`, `convex/integrations/agentmail.ts`,
-`convex/inboxConnection.ts`, `convex/inboxBackfill.ts`.
+`convex/workspaces/secrets.ts`, `convex/integrations/agentmail.ts`,
+`convex/inbox/connection.ts`, `convex/inbox/backfill.ts`.
 **Hand-off to integrator:** new `POST /agentmail/webhook/<token>` route and
 removal of the env-secret route in `convex/http.ts`.
 **Build:** PLAN §4 "Manage inbox" steps 1–7: AES-GCM helper
@@ -173,7 +198,7 @@ backfill imports existing threads, disconnect deletes the webhook.
 
 ### T11 · Lead-data client
 **Depends:** T02. **Owns:** `convex/integrations/enrich.ts`,
-`convex/leadFilterOptions.ts`, `convex/platformBalance.ts`.
+`convex/agents/filterOptions.ts`, `convex/billing/platformBalance.ts`.
 **Hand-off to integrator:** hourly balance cron + weekly filter-options
 refresh in `convex/crons.ts`.
 **Build:** thin REST client (header auth, explicit `User-Agent`, envelope
@@ -218,9 +243,9 @@ data of its own.
 
 ### T20 · Onboarding dot 1 — company
 **Depends:** T03, T12, T13. **Refs:** `01-website-empty`, `02-company-profile`.
-**Owns:** `convex/ai/analyzeWebsite.ts`, `convex/businessProfiles.ts`,
-`src/routes/_dashboard/onboarding.tsx`,
-`src/components/onboarding/CompanyStep.tsx`, `src/components/onboarding/model.ts`.
+**Owns:** `convex/ai/analyzeWebsite.ts`, `convex/company/**`,
+`src/routes/_dashboard/onboarding.tsx`, `src/components/onboarding/OnboardingPage.tsx`,
+`src/components/onboarding/steps/company/**`, `src/components/onboarding/onboarding-model.ts`.
 **Build:** website → Analyze (mutation → scheduled scrape → `analyzeWebsite` →
 save) with live status, editable profile form (name, industry, description,
 key features rows, social proof), "I don't have a website", failure state with
@@ -232,8 +257,8 @@ resumes on the same step; the no-website and failure paths work.
 
 ### T21 · Onboarding dot 2 — ICP
 **Depends:** T20. **Refs:** `06`, `07`, `08`.
-**Owns:** `convex/ai/generateIcp.ts`, `convex/agents.ts` (draft agent + ICP
-mutations), `src/components/onboarding/Icp*.tsx`.
+**Owns:** `convex/ai/generateIcp.ts`, `convex/agents/icp.ts` (draft agent + ICP
+mutations), `src/components/onboarding/steps/icp/**`.
 **Build:** three sub-steps — job titles, company filters (industry, location,
 company type, company size with "All …"), exclusions (profile checkbox,
 competitor/keyword chips). AI-generated on entry, fully editable, saved to the
@@ -244,7 +269,7 @@ persists.
 ### T22 · Onboarding dot 3 + Manage inbox UI
 **Depends:** T10, T13. **Refs:** `04-connect-accounts`, `05-goals-tone`, `26-settings-templates`.
 **Owns:** `src/components/inbox-connection/**`,
-`src/components/onboarding/OutreachStep.tsx`, `src/components/onboarding/GoalsStep.tsx`,
+`src/components/onboarding/steps/outreach/**`,
 `src/components/settings/InboxTab.tsx`.
 **Build:** one shared `InboxConnection` component used by onboarding and
 Settings → Inbox: paste key → verify → pick/create inbox → sync progress →
@@ -257,8 +282,8 @@ described in PLAN §5.
 
 ### T23 · Onboarding dot 4 — signals, keywords, review, confirm
 **Depends:** T11, T21. **Refs:** `09-signals`, `10-keywords`, `11-icp-review`.
-**Owns:** `convex/ai/recommendStrategies.ts`, `convex/strategies.ts`,
-`src/components/onboarding/Signals*.tsx`, `KeywordsStep.tsx`, `ReviewStep.tsx`.
+**Owns:** `convex/ai/recommendStrategies.ts`, `convex/agents/strategies.ts`,
+`src/components/onboarding/steps/signals/**` (signals, keywords, review).
 **Build:** PLAN §3 pipeline steps 2–5: recommend 3–5 strategies from profile +
 ICP + catalogue + cached allowed values; free count per strategy; one
 relax/tighten pass; cards with rationale, live count and recommended
@@ -271,9 +296,9 @@ matches is pre-checked; Confirm lands on Contacts with the run in progress.
 ---
 
 ### T30 · Sourcing and research
-**Depends:** T23, T12. **Owns:** `convex/agentRun.ts`, `convex/sourcing.ts`,
-`convex/ai/researchLead.ts`, `convex/prospects.ts` (source/upsert/research
-parts). **Hand-off to integrator:** `agent-run` cron.
+**Depends:** T23, T12. **Owns:** `convex/agents/run.ts`, `convex/agents/sourcing.ts`,
+`convex/ai/researchLead.ts`, `convex/leads/research.ts`, source/upsert parts of
+`convex/leads/model.ts`. **Hand-off to integrator:** `agent-run` cron.
 **Build:** per enabled strategy: search next free page → upsert, dedupe on
 `sourceLeadId`, merge `strategyIds` → schedule research (scrape company home
 page → score 1–3, reason, summary, hooks; multi-signal boost) → stage
@@ -286,8 +311,8 @@ second run does not duplicate; out-of-credits stops paid steps cleanly.
 ### T31 · Contacts
 **Depends:** T30. **Ref:** `23-contacts`.
 **Owns:** `src/routes/_dashboard/_workspace/contacts*.tsx`,
-`src/components/contacts/**`, `convex/contacts.ts` (list/filter queries,
-approve/reject, request email).
+`src/components/contacts/**` (`table/`, `drawer/`, `filters/`),
+`convex/leads/queries.ts`, `convex/leads/mutations.ts`, `convex/leads/emailReveal.ts`.
 **Build:** search + filters bar, bulk actions (Get emails — bounded by credits, Approve,
 Reject), dense table (contact with profile link, signal with "+n signals",
 sortable flame score, email state with **Get email** → reveal job + poll,
@@ -300,9 +325,8 @@ is idempotent; rows appear while the run is in progress.
 ### T32 · Agent page
 **Depends:** T30. **Ref:** `21-agents` (+ per-signal table from `25-insights`).
 **Owns:** `src/routes/_dashboard/_workspace/agent.tsx`, `src/components/agent/**`,
-agent mutations in `convex/agents.ts` that T21 did not add (coordinate: T21
-owns ICP mutations, T32 owns mode / instructions / bookingUrl / runNow /
-strategy toggle).
+`convex/agents/settings.ts` (mode, instructions, bookingUrl, dealSize, runNow,
+strategy toggle — ICP mutations stay in T21's `agents/icp.ts`).
 **Build:** agent card with generated editable name, mode dropdown (Sourcing only /
 Review / Autopilot / Paused), funnel metrics (Contacted n / total, Opened from
 AgentMail open events, Replied, Interested), sender address, created date, signals list with on/off and leads per signal, instructions, booking
@@ -314,8 +338,7 @@ run and is rate-limited; counts match Contacts.
 
 ### T40 · Outreach
 **Depends:** T31, T10. **Owns:** `convex/ai/writeOutreach.ts`,
-`convex/outreach.ts`, changes inside `convex/sending.ts` / `convex/drafts.ts`
-needed to call them. **Hand-off to integrator:** outreach cron.
+`convex/outreach/**`. **Hand-off to integrator:** outreach cron.
 **Build:** due leads (researched, score ≥ 2, approved in Review mode, email
 found, not suppressed) → write step 0 with opt-out line → draft → Autopilot
 sends, Review waits, Sourcing only never reaches this step for approval → existing ledger (suppression, window, daily
@@ -327,8 +350,8 @@ with no reply.
 
 ### T41 · Close + Inbox
 **Depends:** T40. **Ref:** `24-inbox`.
-**Owns:** `convex/ai/handleReply.ts`, the AI seams left in `convex/inbox.ts`
-(search for `AI classify/draft`), `src/routes/_dashboard/_workspace/inbox*.tsx`,
+**Owns:** `convex/ai/handleReply.ts`, `convex/inbox/replies.ts`, the AI seams left in
+`convex/inbox/inbound.ts` (search for `AI classify/draft`), `src/routes/_dashboard/_workspace/inbox*.tsx`,
 `src/components/inbox/**`.
 **Build:** inbound → classify → next move per PLAN §1 / flow.html reply
 branches (answer, booking proposal, booked → `bookings`, not now → reschedule,
@@ -342,7 +365,7 @@ unsubscribe reply blocks all later sends to that address.
 ### T42 · Dashboard
 **Depends:** T30 (complete after T41). **Ref:** `20-dashboard`.
 **Owns:** `src/routes/_dashboard/_workspace/dashboard.tsx`,
-`src/components/dashboard/**`, `convex/dashboard.ts`.
+`src/components/dashboard/**`, `convex/dashboard/queries.ts`.
 **Build:** welcome header with two status chips (active signals → `/agent`, inbox
 connection → Settings), range pills (7 days / 30 days / 3 months / This month),
 stat cards (hot leads, contacted, conversations, pipeline = `dealSize` ×
@@ -368,7 +391,8 @@ provider name.
 **Build:** loading/error/empty pass on every screen; landing copy for the new
 product; audits: `grep -ri` client bundle and `src/` for provider names
 (white-label), for hard-coded sample data, for any public action; confirm every
-paid call path goes through `withCredits`; set production env budgets; deploy
+paid call path goes through `withCredits`; structure audit against PLAN §9
+(no cross-domain imports, no oversized files, no `utils`/barrels, READMEs true); set production env budgets; deploy
 to the production Convex host; final `hackathon.md` entry.
 **Done when:** a fresh signup completes website → leads → email sent → reply
 handled on production with real data, and the three audits are clean.
@@ -381,7 +405,7 @@ handled on production with real data, and the three audits are clean.
 > images named in the task before writing code. Edit only the files under
 > *Owns*. Follow every ground rule in §0 — especially no mock data,
 > white-label, `withCredits` around every paid call, and the commit rules.
-> Finish with the hand-off note described in §0.9.
+> Finish with the hand-off note described in §0.10.
 
 ## 4. Integrator checklist per wave
 
@@ -396,7 +420,7 @@ handled on production with real data, and the three audits are clean.
 
 ## 5. Status
 
-- [ ] T00 spikes · [ ] T01 schema · [ ] T02 credits · [ ] T03 AI · [ ] T04 shell
+- [ ] T00 spikes · [ ] T01 schema · [ ] T05 restructure · [ ] T02 credits · [ ] T03 AI · [ ] T04 shell
 - [ ] T10 inbox backend · [ ] T11 lead data · [ ] T12 scraper · [ ] T13 UI kit
 - [ ] T20 company · [ ] T21 ICP · [ ] T22 inbox + goals · [ ] T23 signals
 - [ ] T30 sourcing · [ ] T31 contacts · [ ] T32 agent

@@ -429,7 +429,105 @@ whatever is due.
 | `writeOutreach.ts` | lead + research + profile + tone/goal/instructions, step 0/1/2 → subject, body |
 | `handleReply.ts` | inbound + thread + profile → class (`interested | question | objection | not_now | not_interested | ooo | unsubscribe`) and the next move: reply draft, booking proposal, stop, or reschedule |
 
-## 9. Milestones
+## 9. Code structure
+
+Organised by **domain**, not by technical layer. A new contributor should find
+everything about "leads" in one backend folder and one frontend folder.
+
+### Backend — `convex/`
+```
+convex/
+  schema.ts  http.ts  crons.ts  convex.config.ts  auth.config.ts   ← composition only
+  lib/            cross-domain helpers only
+    auth.ts  errors.ts  limits.ts  rateLimits.ts  secrets.ts  urlSafety.ts  time.ts
+    validators/   shared.ts + one file per domain, re-exported from index.ts
+  integrations/   the ONLY place that talks HTTP to a provider
+    agentmail.ts  enrich.ts  firecrawl.ts
+  ai/             gateway plumbing + one file per AI task
+    models.ts  run.ts  analyzeWebsite.ts  generateIcp.ts  recommendStrategies.ts
+    researchLead.ts  writeOutreach.ts  handleReply.ts
+  workspaces/     workspaces, memberships, secrets
+  billing/        credits, usage ledger, platform budgets, balance watchdog
+  company/        business profile, website analysis orchestration
+  agents/         agents, strategies, filter-option cache, run loop, sourcing
+  leads/          prospects: queries, mutations, research, email reveal, events, evidence
+  outreach/       drafts, approvals, sending ledger, send attempts, suppressions, follow-ups
+  inbox/          connection, backfill, inbound, conversations, notes, replies, quarantine
+  bookings/
+  dashboard/      read-only aggregates
+  activity/
+```
+Inside a domain folder:
+- `queries.ts`, `mutations.ts`, `actions.ts` — the public/internal Convex
+  functions. Thin: validate args, authorise, call the model, return. A file
+  that grows past ~300 lines splits by sub-topic (`leads/emailReveal.ts`).
+- `model.ts` — plain typed functions taking `ctx` that hold the actual logic
+  and are shared by the functions above (Convex's recommended model layer).
+  No `ctx.runQuery`/`runMutation` hops between our own functions inside one
+  transaction — call the model function.
+- Domain validators live in `lib/validators/<domain>.ts`; table field objects
+  stay exported from `schema.ts` as they are today.
+- Dependency direction: `domain → lib | integrations | ai`. Domains do not
+  import each other's function files; they share through a `model.ts` import
+  or a scheduled internal function. `integrations/` and `ai/` never import a
+  domain.
+- Names say what they do: `leads.mutations.approve`, `agents.actions.runOnce`,
+  `billing.queries.summary`. No `utils.ts`, `helpers.ts`, `misc.ts`,
+  `handleStuff`. Internal functions use `internalQuery/Mutation/Action`;
+  anything not called by the browser is internal.
+- Errors: one `lib/errors.ts` with a typed code union and `domainError(code)`;
+  the client maps codes to copy in one place. Provider error text never leaves
+  `integrations/`.
+- No magic numbers: limits, prices, page sizes, follow-up days, truncation
+  budgets live in `lib/limits.ts`.
+
+### Frontend — `src/`
+```
+src/
+  routes/            file routes — thin: params, guard, render ONE page component
+  components/
+    ui/              shadcn primitives (generated; do not hand-edit structure)
+    kit/             our design kit: data-free, reference-styled building blocks
+    layout/          shell, sidebar, header, credits block, notifications
+    marketing/
+    onboarding/      OnboardingPage + steps/  (company, icp, outreach, signals)
+    dashboard/  agent/  contacts/  inbox/  inbox-connection/  settings/  credits/
+    states/          shared loading / empty / error
+  hooks/             cross-domain hooks only
+  lib/               cross-domain pure helpers only (formatting, search params, errors → copy)
+  constants/
+```
+Inside a component domain folder:
+- `XxxPage.tsx` is the container: it owns the Convex `useQuery`/`useMutation`
+  calls and passes plain props down. Children are presentational and know
+  nothing about Convex — that is what keeps them reusable and easy to restyle.
+- One component per file, PascalCase file = component name. Hooks are
+  `use-xxx.ts`; pure helpers and view-model types are `xxx-model.ts`. Folder
+  names are lowercase (rename `Layout` → `layout`, `Marketing` → `marketing`).
+- A component past ~200 lines, or with more than one job, splits. Sub-parts
+  used only by one parent sit in a sub-folder named after it
+  (`contacts/table/`, `contacts/drawer/`, `onboarding/steps/`).
+- `kit/` and `ui/` never import from a domain folder or from `convex/`.
+  Domain folders do not import from each other; shared pieces move to `kit/`,
+  `layout/` or `states/`.
+- No barrel `index.ts` files (they hide dependencies and slow the build);
+  import the file.
+- Types come from Convex (`Doc<"prospects">`, `FunctionReturnType<…>`), not
+  hand-copied interfaces. Status → label/colour maps are typed `Record`s over
+  the union so a new status fails the build until it is handled.
+- Styling through theme tokens and `cn()`; no inline hex colours, no
+  one-off spacing hacks.
+
+### Maintainability basics
+- Every domain folder on both sides opens with a 3–6 line header comment in
+  its main file: what the domain owns and what it does not.
+- Comments explain *why* (a provider quirk, an invariant, a money rule), never
+  restate the code. No commented-out code, no TODOs without an owner task id.
+- Delete what a change makes unused in the same commit.
+- `convex/README.md` and the root `README.md` describe this layout and how to
+  run the app; keep them true.
+
+## 10. Milestones
 
 Each ends with `pnpm lint`, `pnpm exec tsc -b`, `pnpm build`, a manual
 click-through, feature-wise commits and a `hackathon.md` entry.
@@ -475,7 +573,7 @@ states, landing copy, production deploy, final log entry.
 
 Strictly sequential M0 → M4; dashboard work in M5 can start once M2 data exists.
 
-## 10. Working rules
+## 11. Working rules
 
 - No tests unless asked. Idiomatic TypeScript, explicit unions, no `any`.
 - Feature-wise commits. No co-author trailers, no tool/vendor attribution in commits.
