@@ -6,10 +6,9 @@ import { HeroApprovalPreview } from "@/components/Marketing/HeroApprovalPreview"
 import { MarketingChip } from "@/components/Marketing/MarketingChip"
 import { Button } from "@/components/ui/button"
 
-/** Bring your own Codex or Claude plan; the squad runs on it. */
+/** The model provider the agent's writing runs on. */
 const providers = [
-  { name: "Codex", logo: "/marketing/logos/openai.svg" },
-  { name: "Claude", logo: "/marketing/logos/claude.svg" },
+  { name: "OpenAI", logo: "/marketing/logos/openai.svg" },
 ] as const
 
 export function Hero() {
@@ -93,7 +92,7 @@ export function Hero() {
           variants={heroItemVariants}
         >
           <p className="text-sm text-muted-foreground">
-            Runs on your own Codex or Claude plan
+            Runs on OpenAI models
           </p>
           <ul aria-label="Providers" className="flex flex-wrap gap-2">
             {providers.map((provider) => (

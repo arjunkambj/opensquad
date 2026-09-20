@@ -1,12 +1,10 @@
 import {
-  CheckListIcon,
   ArrowUpRight01Icon,
   DashboardSquare01Icon,
   InboxIcon,
   Link01Icon,
   Search01Icon,
   UserGroupIcon,
-  AiUserIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
@@ -20,11 +18,9 @@ const navItems: {
   count?: number
   active?: boolean
 }[] = [
-  { label: "Mission Control", icon: DashboardSquare01Icon },
-  { label: "Decisions", icon: CheckListIcon, count: 3, active: true },
-  { label: "Inbox", icon: InboxIcon },
   { label: "Leads", icon: UserGroupIcon },
-  { label: "Employees", icon: AiUserIcon },
+  { label: "Inbox", icon: InboxIcon, count: 3, active: true },
+  { label: "Overview", icon: DashboardSquare01Icon },
 ]
 
 const evidence = [

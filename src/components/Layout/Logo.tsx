@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 
 /**
  * The OpenSquad mark: a solid rounded tile with three dots cut out of it,
- * one per AI employee. The dots are masked, not drawn, so the mark reads on
+ * one per pipeline stage. The dots are masked, not drawn, so the mark reads on
  * light and dark surfaces with a single `currentColor`.
  *
  * The mask id is per-instance: several marks render on one page (navbar,

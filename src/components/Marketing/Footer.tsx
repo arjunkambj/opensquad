@@ -31,8 +31,8 @@ export function Footer() {
               <Logo className="text-background hover:text-background/80" />
             </Link>
             <p className="text-sm leading-relaxed text-background/70">
-              An AI sales squad for small agencies. Scout finds the leads,
-              Researcher reads up on them, Outreach sends the emails.
+              An AI outbound agent for small agencies. It finds the leads,
+              reads up on them and writes the emails you approve.
             </p>
             <a
               aria-label="OpenSquad on X"
@@ -76,7 +76,7 @@ export function Footer() {
 
         <div className="flex flex-col gap-3 border-t border-background/10 pt-6 text-xs text-background/50 sm:flex-row sm:items-center sm:justify-between">
           <p>&copy; {new Date().getFullYear()} OpenSquad. All rights reserved.</p>
-          <p>Runs on your own Codex or Claude plan.</p>
+          <p>Runs on OpenAI models.</p>
         </div>
       </div>
     </footer>

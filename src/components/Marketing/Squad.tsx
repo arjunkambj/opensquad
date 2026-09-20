@@ -166,18 +166,18 @@ const members = [
   },
 ] as const
 
-/** The three AI employees and the one thing each of them does. */
+/** The three stages of the outbound agent, and what each one does. */
 export function Squad() {
   const revealViewport = useRevealViewport()
 
   return (
     <MarketingSection id="squad">
       <MarketingSectionIntro
-        description="Give it a campaign and they take it from there."
+        description="Give it a campaign and it takes the rest from there."
         eyebrow="What it does"
         icon={AiUserIcon}
         revealViewport={revealViewport}
-        title="Three AI employees. One job each."
+        title="Three steps. One job each."
       />
       <motion.div
         className="grid gap-5 md:grid-cols-3"

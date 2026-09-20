@@ -92,8 +92,8 @@ export const faqItems = [
   },
   {
     content:
-      "They run on your own Codex or OpenAI plan, inside a private space for your workspace. Your work never mixes with another team's.",
-    title: "What do the agents run on?",
+      "OpenAI models, called from the backend on your workspace's own data. Your work never mixes with another team's.",
+    title: "What does the agent run on?",
   },
   {
     content:

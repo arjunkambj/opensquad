@@ -29,11 +29,9 @@ type IntegrationRow = {
 }
 
 /**
- * Provider integrations. The Codex runtime now has its own working section
- * (`RuntimeSection`, wired to `runtimeConnections`/`runtimeControlRequests`);
- * the rows below remain honest pending states — Apollo awaits the P04 gate,
- * Firecrawl is backend-managed, and the AgentMail inbox is assigned by the
- * backend, so nothing here offers a control that could lie.
+ * Provider integrations. Every row below is an honest state — Firecrawl is
+ * backend-managed and the AgentMail inbox is assigned by the backend — so
+ * nothing here offers a control that could lie.
  */
 export function IntegrationsSection({
   workspace,
@@ -46,17 +44,17 @@ export function IntegrationsSection({
   const rows: IntegrationRow[] = [
     {
       icon: PlugIcon,
-      name: "Apollo",
+      name: "Lead sourcing",
       description:
-        "Company discovery and contact enrichment source used by Scout inside the runtime.",
-      status: "Pending provider gate (P04)",
-      note: "Scoped through the runtime tool policy — never a raw key in the browser.",
+        "The B2B data source sourced leads come from. Configured server-side.",
+      status: "Not connected yet",
+      note: "Scoped server-side — never a raw key in the browser.",
     },
     {
       icon: Globe02Icon,
       name: "Firecrawl",
       description:
-        "Backend-owned website research for Researcher. Runs server-side via the crawl component.",
+        "Backend-owned website research. Runs server-side via the crawl component.",
       status: "Backend-managed — no user connection",
       note: "Configured by deployment env, not per-workspace login.",
     },
@@ -64,11 +62,9 @@ export function IntegrationsSection({
       icon: Mail01Icon,
       name: "AgentMail inbox",
       description:
-        "The sending inbox employees use for approved email. Assigned by the backend.",
+        "The sending inbox approved email goes out through. Assigned by the backend.",
       status:
-        workspace.inboxRef !== undefined
-          ? "Assigned"
-          : "Not assigned — arrives with P05/P10",
+        workspace.inboxRef !== undefined ? "Assigned" : "Not assigned yet",
       live: workspace.inboxRef !== undefined,
       note:
         workspace.inboxRef !== undefined
@@ -82,8 +78,8 @@ export function IntegrationsSection({
       <CardHeader>
         <CardTitle>Integrations</CardTitle>
         <CardDescription>
-          Runtime and provider connections. These are pending — nothing here is
-          simulated or implied to be connected.
+          Provider connections. Nothing here is simulated or implied to be
+          connected.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
