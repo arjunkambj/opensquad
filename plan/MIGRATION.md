@@ -13,6 +13,14 @@ on any deployment that has data. Tables that were removed from the schema
 (`missions`, `runs`, `employees`, …) do not block a deploy; their rows simply
 become unreachable and are cleaned up at the end.
 
+## Decision (2026-09-20): clean-slate path
+
+The owner confirmed there are no real users and no data worth keeping, on dev
+or production. **Use §6.** Sections §1–§5 stay as the reference for the day
+real data exists; they are not executed now. Still take the export in §6.2
+and still carry `suppressions` across — it costs nothing and an opt-out is the
+one thing that must never be lost.
+
 ## 0. Decide the path (user decision, before T01)
 
 Run on production, read-only:

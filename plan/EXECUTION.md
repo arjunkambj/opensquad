@@ -86,8 +86,10 @@ Tasks never call a function another in-flight task is still writing.
   in its hand-off; the integrator pastes it into `crons.ts` / `http.ts`.
 
 ### Worktrees
-One git worktree + branch per task (`task/T20-company-analysis`), branched from
-the integrated tip of the previous wave. Tasks inside a wave own disjoint
+The integration branch is **`main`** (the owner confirmed there are no real
+users, so building on it is fine). One git worktree + branch per task
+(`task/T20-company-analysis`), branched from the integrated tip of the
+previous wave and merged back into `main` by the integrator. Tasks inside a wave own disjoint
 files, so merges are clean. All agents share the one dev Convex deployment for
 type generation only through the integrator; task agents typecheck against the
 committed `convex/_generated`.
@@ -148,9 +150,8 @@ before T01.
 indexes for every query in PLAN §5 (`prospects` by workspace+stage,
 workspace+nextActionAt, workspace+aiScore, agent+sourceLeadId; `strategies` by
 agent; `conversations` by workspace+state). Migrate/rename `campaigns` call
-sites minimally so the tree typechecks. Land it as MIGRATION.md's **widened**
-schema (deploy A): new fields optional, removed fields still optional, so it
-deploys onto existing data. Includes the unique indexes from PLAN §9.4.
+sites minimally so the tree typechecks. Land the **final** schema (clean-slate path, see T06) — no widened
+transitional shape, no legacy fields. Includes the unique indexes from PLAN §9.4.
 **Done when:** codegen + all four verify commands pass; no table or field from
 PLAN §7 is missing.
 
@@ -158,14 +159,14 @@ PLAN §7 is missing.
 **Depends:** T01, user's path decision from T00.8. **Owns:**
 `convex/migrations/**`, `plan/migration-log.md`, the migrations component in
 `convex/convex.config.ts`.
-**Build:** MIGRATION.md end to end **on dev**: migrations `m01`–`m07`, each
-idempotent with a dry run; verification queries; then the narrowed final
-schema (deploy B). Production cutover is a separate, user-approved step run
-from the same runbook (normally just before T50).
-**Done when:** on dev, every check in MIGRATION.md §3 passes and is recorded;
-re-running every migration changes nothing; the rollback in §5 has been
-rehearsed once on dev (deploy A commit redeployed over migrated data, app
-still works).
+**Build:** the owner chose the **clean-slate path** (MIGRATION.md Decision +
+§6): on dev, export, carry `suppressions` across, clear app tables, push the
+final schema from PLAN §7 directly — so T01 lands the final schema, not a
+widened one, and no migration code is written. Production gets the same
+clean-slate steps just before T50, when the owner says go.
+**Done when:** dev runs the final schema with empty app tables and its
+suppressions intact; the export file exists outside git; the steps taken are
+noted in `plan/migration-log.md`.
 
 ### T05 · Restructure into domain folders — integrator
 **Depends:** T06. **Owns:** the whole tree, for this task only.
@@ -515,8 +516,8 @@ handled on production with real data, and the three audits are clean.
 5. Run the white-label and no-mock greps.
 6. Run the wave's **live** acceptance checks handed over by task agents, plus
    the standing manual checks that apply so far:
-   - *Migration:* MIGRATION.md §3 counts on dev; old conversation opens; a
-     legacy suppressed address is still refused.
+   - *Migration:* clean-slate steps recorded; a suppressed address carried
+     across is still refused by the send ledger.
    - *Concurrency:* double-click Run now / Get email / Approve → one effect,
      one charge.
    - *Timeouts:* force a provider timeout (bad base URL env on dev) → hold
