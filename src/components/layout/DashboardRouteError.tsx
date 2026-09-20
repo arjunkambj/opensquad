@@ -29,7 +29,7 @@ export function DashboardRouteError({ error, reset }: ErrorComponentProps) {
         }
         description={
           code === "FORBIDDEN"
-            ? "Your role in this workspace doesn't allow this page. An owner can change it in Settings."
+            ? "Your role in this organization doesn't allow this page. An owner can change it in Settings."
             : "Sign in again to continue."
         }
         action={
@@ -52,9 +52,9 @@ export function DashboardRouteError({ error, reset }: ErrorComponentProps) {
           code === "NOT_FOUND"
             ? errorMessage(
                 error,
-                "That record doesn't exist, or it belongs to another workspace.",
+                "That record doesn't exist, or it belongs to another organization.",
               )
-            : "That link doesn't name a record in this workspace. It may have been edited, truncated or copied from somewhere else."
+            : "That link doesn't name a record in this organization. It may have been edited, truncated or copied from somewhere else."
         }
         action={
           <Button render={<Link to="/dashboard" />}>Back to the dashboard</Button>

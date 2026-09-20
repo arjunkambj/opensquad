@@ -51,13 +51,13 @@ export const pricingPlans: PricingPlan[] = [
   {
     key: "studio",
     name: "Studio",
-    description: "For studios that need more workspaces and want things done faster.",
+    description: "For studios that need more organizations and want things done faster.",
     priceAmount: null,
     priceLabel: "Custom",
     ctaLabel: "Talk to us",
     features: [
       "Everything in Agency",
-      "More workspaces, kept apart from each other",
+      "More organizations, kept apart from each other",
       "Your work goes first in the queue",
       "We set up your first campaigns with you",
     ],
@@ -92,7 +92,7 @@ export const faqItems = [
   },
   {
     content:
-      "OpenAI models, called from the backend on your workspace's own data. Your work never mixes with another team's.",
+      "OpenAI models, called from the backend on your organization's own data. Your work never mixes with another team's.",
     title: "What does the agent run on?",
   },
   {

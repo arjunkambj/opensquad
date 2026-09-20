@@ -255,8 +255,8 @@ async function enforceOptOut(
         body:
           `Opt-out honoured: the verified sender asked to be removed (rule ${rule}). ` +
           (targets.size === 1
-            ? "This address is suppressed for the workspace"
-            : "The address that asked and this thread's outbound contact address are both suppressed for the workspace") +
+            ? "This address is suppressed for the organization"
+            : "The address that asked and this thread's outbound contact address are both suppressed for the organization") +
           "; remove the suppression to contact them again.",
       });
       return;

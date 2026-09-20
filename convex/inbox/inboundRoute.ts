@@ -155,7 +155,7 @@ export const quarantineForeignEvent = internalMutation({
       // cannot attribute the inbox it was handed. `note` records that the
       // cause was a token/inbox mismatch rather than a missing assignment.
       reason: "inbox_unassigned",
-      note: "event arrived on a workspace webhook whose inbox it does not name",
+      note: "event arrived on an organization webhook whose inbox it does not name",
     });
     return null;
   },

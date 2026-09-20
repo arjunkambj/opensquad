@@ -102,7 +102,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
     balance === undefined
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so we can't suggest more."
+        ? "This organization has no credit allowance, so we can't suggest more."
         : balance.remaining < KEYWORDS_GENERATION_CREDITS
           ? `More suggestions cost ${KEYWORDS_GENERATION_CREDITS} credits and you have ${balance.remaining} left.`
           : null

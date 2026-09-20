@@ -53,7 +53,7 @@ export const save = mutation({
 
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     const profile = await ctx.db
       .query("businessProfiles")
@@ -64,7 +64,7 @@ export const save = mutation({
       // there is nowhere to put pain points before it exists.
       throw domainError(
         "NOT_FOUND",
-        "this workspace has no business profile yet",
+        "this organization has no business profile yet",
       );
     }
 

@@ -221,11 +221,11 @@ export const beginBackfill = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      return { started: false, reason: "workspace not found" };
+      return { started: false, reason: "organization not found" };
     }
     const { inboxRef, connectedAt } = workspace;
     if (inboxRef === undefined || connectedAt === undefined) {
-      return { started: false, reason: "workspace has no connected inbox" };
+      return { started: false, reason: "organization has no connected inbox" };
     }
     const operationKey = backfillOperationKey(connectedAt);
     const existing = await ctx.db
@@ -290,7 +290,7 @@ export const nextStep = internalQuery({
       workspace.inboxRef === undefined ||
       workspace.connectedAt === undefined
     ) {
-      return { run: false as const, reason: "workspace has no connected inbox" };
+      return { run: false as const, reason: "organization has no connected inbox" };
     }
     const row = await ctx.db
       .query("providerOperations")
@@ -345,7 +345,7 @@ export const runBackfillStep = internalAction({
       await ctx.runMutation(internal.inbox.backfill.failBackfill, {
         operationId: step.operationId,
         code: "unauthorized",
-        message: "the workspace's mail key is no longer usable",
+        message: "the organization's mail key is no longer usable",
       });
       return null;
     }

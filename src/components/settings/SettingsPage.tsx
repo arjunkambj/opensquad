@@ -57,7 +57,7 @@ export function SettingsPage() {
         <AccountTab user={user} />
       ) : current === undefined ? (
         <LoadingState
-          title="Loading your workspace"
+          title="Loading your organization"
           description="Reading your company profile, sending policy and blocklist."
         />
       ) : current === null ? (

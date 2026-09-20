@@ -190,7 +190,7 @@ export const beginPaidCall = internalMutation({
 
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
 
     // 3. No grant, no spend — the trial buckets are made with the workspace.

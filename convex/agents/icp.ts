@@ -126,7 +126,7 @@ export const startGeneration = mutation({
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
 
     const now = Date.now();
@@ -208,7 +208,7 @@ export const updateIcp = mutation({
     await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
 
     // With no cached catalogue there is nothing to check an industry against,

@@ -101,7 +101,7 @@ export function InstructionsCard({
             onChange={(event) => setDraft(event.target.value)}
           />
           <FieldDescription>
-            Leave this empty to use the workspace default from{" "}
+            Leave this empty to use the organization default from{" "}
             <Link to="/settings" search={{ tab: "outreach" }}>
               Settings → Outreach
             </Link>

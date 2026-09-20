@@ -194,7 +194,7 @@ async function affordableReveals(
   if (credits === null) {
     throw domainError(
       "NO_CREDIT_GRANT",
-      "this workspace has no credit grant; no paid step can run",
+      "this organization has no credit grant; no paid step can run",
     );
   }
   const byCredits = Math.floor(bucketRemaining(credits) / price);
@@ -264,6 +264,6 @@ async function refusal(
   }
   return domainError(
     "TRIAL_LIMIT_REACHED",
-    "this workspace's email allowance for the trial is used up",
+    "this organization's email allowance for the trial is used up",
   );
 }

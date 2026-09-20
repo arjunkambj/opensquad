@@ -115,7 +115,7 @@ async function linkConversationThread(
       detail:
         conversation === null
           ? "the attempt's conversation row is missing"
-          : "the attempt's conversation belongs to another workspace",
+          : "the attempt's conversation belongs to another organization",
     });
     return;
   }

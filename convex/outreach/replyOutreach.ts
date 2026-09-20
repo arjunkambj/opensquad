@@ -102,7 +102,7 @@ export const draftAndSendReply = internalMutation({
     }
     const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     if (conversation.state !== "open") {
       return refuse("conversation_not_open");

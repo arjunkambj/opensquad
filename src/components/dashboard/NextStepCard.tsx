@@ -56,7 +56,7 @@ function NextStepBody({ next }: { next: NextStep }) {
             next.inboxConnection === "invalid"
               ? "Your inbox key stopped working, so nothing can go out. Reconnect it to resume sending."
               : next.inboxConnection === "legacy_platform_inbox"
-                ? "This workspace can receive mail but not send it. Connect your own inbox to start outreach."
+                ? "This organization can receive mail but not send it. Connect your own inbox to start outreach."
                 : "Connect the inbox your agent will send from. Until then it finds and researches leads and contacts nobody."
           }
           action={

@@ -26,7 +26,7 @@ import type { LeadResearch, LeadStage } from "../lib/validators";
 import { v } from "convex/values";
 
 /** What a retried lead's history records. */
-const RETRY_STAGE_REASON = "Put back in the queue by the workspace";
+const RETRY_STAGE_REASON = "Put back in the queue by the organization";
 
 /**
  * Switch one signal on or off.

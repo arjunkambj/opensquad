@@ -407,7 +407,7 @@ export const recordSuppression = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return await insertSuppression(ctx, workspace._id, args);
   },

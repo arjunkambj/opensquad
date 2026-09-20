@@ -80,7 +80,7 @@ export const createRevision = internalMutation({
     }
     const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     const agent =
       conversation.agentId === undefined

@@ -28,7 +28,7 @@ export function UsageTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
       <SectionHeaderCard
         icon={Coins01Icon}
         title="Credits"
-        description="One grant per workspace. Browsing, approving, sending and handling unsubscribes are free and never touch it."
+        description="One grant per organization. Browsing, approving, sending and handling unsubscribes are free and never touch it."
       />
 
       {/* `null` is not zero: the workspace holds no grant at all, so every
@@ -36,7 +36,7 @@ export function UsageTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
       {balance === null ? (
         <EmptyState
           title="No credits granted"
-          description="This workspace has no credit grant, so paid steps — finding emails, researching companies, writing email — will refuse. Finishing setup creates the grant."
+          description="This organization has no credit grant, so paid steps — finding emails, researching companies, writing email — will refuse. Finishing setup creates the grant."
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -53,7 +53,7 @@ export function UsageTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
             value={balance?.pending ?? 0}
           />
           <StatCard
-            hint="The lifetime grant this workspace was created with."
+            hint="The lifetime grant this organization was created with."
             label="Granted"
             loading={loading}
             value={balance?.granted ?? 0}

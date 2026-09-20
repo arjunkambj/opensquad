@@ -110,7 +110,7 @@ function SetupFlow() {
     return (
       <SetupFrame>
         <LoadingState
-          description="Checking your account and workspace."
+          description="Checking your account and organization."
           title="Opening setup"
         />
       </SetupFrame>
@@ -133,7 +133,7 @@ function SetupFlow() {
     return (
       <SetupFrame>
         <LoadingState
-          description="Setting up the workspace your agent runs in."
+          description="Setting up the organization your agent runs in."
           title="Just a moment"
         />
       </SetupFrame>
@@ -144,8 +144,8 @@ function SetupFlow() {
     return (
       <SetupFrame>
         <EmptyState
-          description="Setup writes the company profile and activates the agent, which read-only access cannot do. An owner or operator in this workspace can finish it."
-          title="You have read-only access to this workspace"
+          description="Setup writes the company profile and activates the agent, which read-only access cannot do. An owner or operator in this organization can finish it."
+          title="You have read-only access to this organization"
         />
       </SetupFrame>
     )
@@ -227,7 +227,7 @@ function EntryRefusalState({
     return (
       <SetupFrame>
         <EmptyState
-          description="This account can't create a workspace. If you think that's wrong, reply to the email you signed up with and we'll take a look."
+          description="This account can't create an organization. If you think that's wrong, reply to the email you signed up with and we'll take a look."
           title="This account isn't ready yet"
         />
       </SetupFrame>
@@ -253,7 +253,7 @@ function EntryRefusalState({
   return (
     <SetupFrame>
       <ErrorState
-        description="We couldn't prepare your workspace. Nothing was lost — try again."
+        description="We couldn't prepare your organization. Nothing was lost — try again."
         onRetry={onRetry}
         title="Setup couldn't start"
       />
@@ -283,7 +283,7 @@ function AgentFlow({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
     return (
       <SetupFrame>
         <ErrorState
-          description="This workspace has no agent to set up, which shouldn't happen. Reload the page and we'll try again."
+          description="This organization has no agent to set up, which shouldn't happen. Reload the page and we'll try again."
           onRetry={() => window.location.reload()}
           retryLabel="Reload"
           title="Your agent is missing"

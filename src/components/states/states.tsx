@@ -158,7 +158,7 @@ export function PermissionNote({
       className={cn("text-sm text-muted-foreground", className)}
     >
       {role === "viewer"
-        ? `You have read-only access to this workspace. An owner or operator can ${action}.`
+        ? `You have read-only access to this organization. An owner or operator can ${action}.`
         : `Your ${role} role cannot ${action}. An owner can.`}
     </p>
   )

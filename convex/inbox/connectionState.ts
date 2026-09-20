@@ -55,7 +55,7 @@ export const claimInbox = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     const inboxRef = providerId(args.inboxRef, "inboxRef");
     const claimants = await ctx.db
@@ -133,7 +133,7 @@ export const applyRotation = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     await putWorkspaceSecret(ctx, {
       workspaceId: args.workspaceId,

@@ -48,7 +48,7 @@ export function ContactsPage() {
       {current === undefined || current === null ? (
         <LoadingState
           title="Loading contacts"
-          description="Reading this workspace's pipeline."
+          description="Reading this organization's pipeline."
         />
       ) : (
         <ContactsBody
@@ -156,7 +156,7 @@ function ContactsBody({
       {page === undefined ? (
         <LoadingState
           title="Loading contacts"
-          description="Reading this workspace's leads."
+          description="Reading this organization's leads."
         />
       ) : page.items.length === 0 ? (
         <NoLeadsState

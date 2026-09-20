@@ -93,7 +93,7 @@ export function useStrategyRecommendation(
     balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so another run can't happen. Pick from the signals already here and carry on."
+        ? "This organization has no credit allowance, so another run can't happen. Pick from the signals already here and carry on."
         : balance.remaining < price
           ? `Another run costs ${price} credits and you have ${balance.remaining} left.`
           : null

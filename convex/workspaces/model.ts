@@ -82,10 +82,10 @@ function defaultWorkspaceName(identity: UserIdentity): string {
   if (display !== undefined) {
     const trimmed = display.trim().slice(0, 60);
     if (trimmed.length > 0) {
-      return `${trimmed}'s workspace`;
+      return `${trimmed}'s organization`;
     }
   }
-  return "My workspace";
+  return "My organization";
 }
 
 type EnsureWorkspaceArgs = {
@@ -151,7 +151,7 @@ export async function ensureWorkspaceImpl(
   if (!(await trialCapacityOpen(ctx))) {
     throw domainError(
       "TRIAL_CAPACITY_REACHED",
-      "the trial is full; new workspaces are waitlisted",
+      "the trial is full; new organizations are waitlisted",
     );
   }
 

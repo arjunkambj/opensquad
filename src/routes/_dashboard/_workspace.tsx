@@ -43,8 +43,8 @@ function WorkspaceGate() {
   if (current === undefined) {
     return (
       <LoadingState
-        title="Loading workspace"
-        description="Checking your workspace membership."
+        title="Loading organization"
+        description="Checking your organization membership."
       />
     )
   }

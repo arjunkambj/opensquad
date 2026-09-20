@@ -105,7 +105,7 @@ export function AssociateLeadCard({
           <PermissionNote role={role} action="link this thread to a lead" />
         ) : leads.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            This workspace has no leads to link yet. The thread stays here
+            This organization has no leads to link yet. The thread stays here
             meanwhile.
           </p>
         ) : (

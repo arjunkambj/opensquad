@@ -139,7 +139,7 @@ export const finishOnboarding = internalMutation({
     await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     if (agent.onboardingStep === "done") {
       return { status: "already_done" as const };

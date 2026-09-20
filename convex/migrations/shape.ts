@@ -199,7 +199,7 @@ function finalWorkspace(
   doc: Doc<"workspaces">,
 ): WithoutSystemFields<Doc<"workspaces">> {
   const row = raw(doc);
-  const label = `workspace ${doc._id}`;
+  const label = `organization ${doc._id}`;
   // Without an owner identity key nobody can ever sign in to this workspace.
   // Fail the batch and name the document rather than write it.
   const ownerIdentityKey = requireString(row, "ownerIdentityKey", label);
@@ -207,7 +207,7 @@ function finalWorkspace(
   const createdAt = readNumber(row, "createdAt") ?? doc._creationTime;
 
   return {
-    name: readString(row, "name") ?? "My workspace",
+    name: readString(row, "name") ?? "My organization",
     ownerIdentityKey,
     timezone: readString(row, "timezone") ?? "UTC",
     plan: "trial",

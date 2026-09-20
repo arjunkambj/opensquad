@@ -24,7 +24,7 @@ export const grantTrialBucketsForWorkspace = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return { created: await grantTrialBuckets(ctx, args.workspaceId) };
   },

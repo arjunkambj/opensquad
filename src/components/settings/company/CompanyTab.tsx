@@ -99,7 +99,7 @@ export function CompanyTab({
     : balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so website analysis can't run. You can still edit the profile below."
+        ? "This organization has no credit allowance, so website analysis can't run. You can still edit the profile below."
         : balance.remaining < price
           ? `Another analysis costs ${price} credits and you have ${balance.remaining} left. You can still edit the profile below.`
           : null

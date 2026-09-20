@@ -128,7 +128,7 @@ export const assignOwner = mutation({
         next,
       );
       if (membership === null) {
-        throw invalid("assignee must be an active member of this workspace");
+        throw invalid("assignee must be an active member of this organization");
       }
     }
     if (conversation.assigneeIdentityKey === next) {

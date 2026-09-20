@@ -85,7 +85,7 @@ export function useIcpGeneration(
     balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so another run can't happen. You can still edit everything here yourself."
+        ? "This organization has no credit allowance, so another run can't happen. You can still edit everything here yourself."
         : balance.remaining < price
           ? `Another run costs ${price} credits and you have ${balance.remaining} left. Edit the chips yourself to carry on.`
           : null

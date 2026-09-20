@@ -70,7 +70,7 @@ export function DashboardPage() {
         />
         <LoadingState
           title="Loading dashboard"
-          description="Reading your workspace."
+          description="Reading your organization."
         />
       </div>
     )

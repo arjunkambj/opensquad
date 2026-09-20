@@ -86,8 +86,8 @@ const REFUSAL_COPY: Record<DomainErrorCode, string> = {
   INVALID: "That request could not be made.",
   EMAIL_NOT_VERIFIED: "Verify your email address first.",
   ACCOUNT_RESTRICTED: "This account is not fully set up.",
-  TRIAL_CAPACITY_REACHED: "New workspaces are at capacity right now.",
-  NO_CREDIT_GRANT: "This workspace has no credits.",
+  TRIAL_CAPACITY_REACHED: "New organizations are at capacity right now.",
+  NO_CREDIT_GRANT: "This organization has no credits.",
   INSUFFICIENT_CREDITS: "Not enough credits left for that.",
   // PLAN §6: the hidden provider cap, which is NOT the visible balance.
   TRIAL_LIMIT_REACHED: "Trial limit for emails reached.",

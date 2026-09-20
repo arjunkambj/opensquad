@@ -135,7 +135,7 @@ export function BlocklistTab({
 
           {result?.truncated === true ? (
             <InfoBanner title="Showing the most recent entries.">
-              This workspace holds more blocked entries than one page request
+              This organization holds more blocked entries than one page request
               reads. Search for an address or a domain to find a specific one.
             </InfoBanner>
           ) : null}

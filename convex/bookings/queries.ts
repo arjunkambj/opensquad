@@ -117,7 +117,7 @@ export const list = query({
       };
     }
     throw invalid(
-      "list requires one of prospectId, state or owner — the schema declares an index per supported slice and no workspace-wide range exists",
+      "list requires one of prospectId, state or owner — the schema declares an index per supported slice and no organization-wide range exists",
     );
   },
 });

@@ -99,7 +99,7 @@ export const preflight = query({
       return {
         permitted: false,
         code: "outside_window",
-        reason: "outside the workspace send window",
+        reason: "outside the organization send window",
         nextPermittedAt: window.nextPermittedAt,
         attempts: attemptsView,
       };

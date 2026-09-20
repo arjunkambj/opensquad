@@ -321,7 +321,7 @@ async function replayOne(
     workspace._id,
     startsHandling
       ? "replayed into inbound processing"
-      : "already recorded under this workspace; no second application effect",
+      : "already recorded under this organization; no second application effect",
   );
   return "released";
 }

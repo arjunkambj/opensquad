@@ -40,8 +40,8 @@ export function DisconnectInboxDialog({
           <DialogTitle>Disconnect the sending inbox?</DialogTitle>
           <DialogDescription>
             {inboxAddress === undefined
-              ? "This workspace will stop sending and receiving mail."
-              : `${inboxAddress} will stop serving this workspace.`}
+              ? "This organization will stop sending and receiving mail."
+              : `${inboxAddress} will stop serving this organization.`}
           </DialogDescription>
         </DialogHeader>
         <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">

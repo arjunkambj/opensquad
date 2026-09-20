@@ -175,7 +175,7 @@ export const startRecommendation = mutation({
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     if (agent.status !== "draft") {
       throw invalid("this agent has already finished setup");
@@ -258,7 +258,7 @@ export const setSelection = mutation({
     await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     if (agent.onboardingStep === "done") {
       throw invalid("setup is finished; change signals on the agent page");
@@ -306,7 +306,7 @@ export const saveKeywords = mutation({
     await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     const keywords = boundedKeywords(args.keywords);
     await ctx.db.patch("agents", agent._id, {
@@ -329,7 +329,7 @@ export const generateMoreKeywords = mutation({
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
     const agent = await getWorkspaceAgent(ctx, args.workspaceId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     await requireRateLimit(ctx, "regenerate", identityKey);
     // The key carries the moment it was asked for, so each press really

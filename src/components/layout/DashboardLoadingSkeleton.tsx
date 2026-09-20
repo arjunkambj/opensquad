@@ -13,7 +13,7 @@ export function DashboardLoadingSkeleton() {
     <div
       role="status"
       aria-busy="true"
-      aria-label="Loading your workspace"
+      aria-label="Loading your organization"
       className="flex min-h-dvh bg-background"
     >
       <div className="hidden w-64 shrink-0 flex-col gap-3 border-r border-sidebar-border bg-sidebar p-3 md:flex">

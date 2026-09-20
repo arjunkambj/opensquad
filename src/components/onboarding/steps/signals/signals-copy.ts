@@ -86,14 +86,14 @@ const START_REFUSALS: Record<string, SignalsMessage> = {
   FORBIDDEN: {
     title: "You can't change this agent",
     description:
-      "Choosing signals edits the workspace's agent, which needs an owner or operator role.",
+      "Choosing signals edits the organization's agent, which needs an owner or operator role.",
   },
   UNAUTHENTICATED: {
     title: "Your session expired",
     description: "Sign in again and pick up where you left off.",
   },
   NOT_FOUND: {
-    title: "This workspace has no agent yet",
+    title: "This organization has no agent yet",
     description: "Reload the page and setup will make one.",
   },
 }
@@ -130,7 +130,7 @@ export function confirmBlockCopy(
 ): SignalsMessage {
   return reason === "no_agent"
     ? {
-        title: "This workspace has no agent yet",
+        title: "This organization has no agent yet",
         description: "Reload the page and setup will make one.",
       }
     : {

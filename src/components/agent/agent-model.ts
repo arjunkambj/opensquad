@@ -97,7 +97,7 @@ export const RUN_NOW_COPY: Record<RunNowReason, string> = {
   started: "Run started.",
   already_running: "Already running — this run will finish on its own.",
   not_live: "Finish setup before running the agent.",
-  not_found: "This workspace has no agent yet.",
+  not_found: "This organization has no agent yet.",
 }
 
 /**

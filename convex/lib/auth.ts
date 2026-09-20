@@ -71,7 +71,7 @@ export async function requireUser(ctx: AuthCtx): Promise<AuthenticatedUser> {
   if (identity.issuer !== expectedUsersIssuer()) {
     throw domainError(
       "FORBIDDEN",
-      "anonymous or foreign-issuer sessions cannot use workspace APIs",
+      "anonymous or foreign-issuer sessions cannot use organization APIs",
     );
   }
   return { identity, identityKey: identity.tokenIdentifier };
@@ -103,13 +103,13 @@ export async function requireVerifiedUser(
   if (identity.emailVerified !== true) {
     throw domainError(
       "EMAIL_NOT_VERIFIED",
-      "verify your email address before creating a workspace",
+      "verify your email address before creating an organization",
     );
   }
   if (typeof identity.email !== "string" || identity.email.length === 0) {
     throw domainError(
       "EMAIL_NOT_VERIFIED",
-      "an account email is required to create a workspace",
+      "an account email is required to create an organization",
     );
   }
   return user;
@@ -149,11 +149,11 @@ export async function requireWorkspaceMember(
   const user = await requireUser(ctx);
   const workspace = await ctx.db.get("workspaces", workspaceId);
   if (workspace === null) {
-    throw domainError("NOT_FOUND", "workspace not found");
+    throw domainError("NOT_FOUND", "organization not found");
   }
   const membership = await getActiveMembership(ctx, workspaceId, user.identityKey);
   if (membership === null) {
-    throw domainError("NOT_FOUND", "workspace not found");
+    throw domainError("NOT_FOUND", "organization not found");
   }
   return { ...user, workspace, membership };
 }

@@ -60,7 +60,7 @@ export const ensureUnassignedConversation = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      return { ok: false as const, reason: "workspace not found" };
+      return { ok: false as const, reason: "organization not found" };
     }
     // Re-check the claim inside this transaction. `.collect()` plus a
     // workspace filter, not `.unique()`: the pair's uniqueness is

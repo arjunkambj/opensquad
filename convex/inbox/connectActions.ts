@@ -286,7 +286,7 @@ export const connectInbox = action({
       await deleteWebhook(apiKey, registered.value.webhookId);
       return failure(
         "inbox_claimed_elsewhere",
-        "That inbox is connected to another workspace.",
+        "That inbox is connected to another organization.",
       );
     }
     return { ok: true as const, inboxRef, inboxAddress };
@@ -367,7 +367,7 @@ export const rotateKey = action({
     if (found === null) {
       return failure(
         "inbox_not_visible_to_key",
-        "That key cannot see this workspace's inbox. Disconnect first if you are moving to a different mailbox.",
+        "That key cannot see this organization's inbox. Disconnect first if you are moving to a different mailbox.",
       );
     }
     const webhookUrl = `${siteUrl.replace(/\/+$/, "")}/agentmail/webhook/${owner.webhookToken}`;

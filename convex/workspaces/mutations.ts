@@ -107,7 +107,7 @@ export const update = mutation({
     await ctx.db.patch("workspaces", workspace._id, patch);
     const updated = await ctx.db.get("workspaces", workspace._id);
     if (updated === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return toWorkspaceView(updated);
   },
@@ -188,7 +188,7 @@ export const setSendingPolicy = mutation({
     await ctx.db.patch("workspaces", workspace._id, patch);
     const updated = await ctx.db.get("workspaces", workspace._id);
     if (updated === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return toWorkspaceView(updated);
   },
@@ -222,7 +222,7 @@ export const setAutomationState = mutation({
           });
           const updated = await ctx.db.get("workspaces", workspace._id);
           if (updated === null) {
-            throw domainError("NOT_FOUND", "workspace not found");
+            throw domainError("NOT_FOUND", "organization not found");
           }
           return toWorkspaceView(updated);
         }
@@ -241,7 +241,7 @@ export const setAutomationState = mutation({
     });
     const updated = await ctx.db.get("workspaces", workspace._id);
     if (updated === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return toWorkspaceView(updated);
   },
@@ -273,7 +273,7 @@ export const setMemberRole = mutation({
       if (owners <= 1) {
         throw domainError(
           "CONFLICT",
-          "cannot demote the last active workspace owner",
+          "cannot demote the last active organization owner",
         );
       }
     }
@@ -311,7 +311,7 @@ export const revokeMembership = mutation({
       if (owners <= 1) {
         throw domainError(
           "CONFLICT",
-          "cannot revoke the last active workspace owner",
+          "cannot revoke the last active organization owner",
         );
       }
     }

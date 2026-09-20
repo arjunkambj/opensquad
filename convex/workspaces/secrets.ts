@@ -189,7 +189,7 @@ export async function putWorkspaceSecret(
     });
     const patched = await ctx.db.get("workspaceSecrets", existing._id);
     if (patched === null) {
-      throw domainError("NOT_FOUND", "workspace secret not found after write");
+      throw domainError("NOT_FOUND", "organization secret not found after write");
     }
     return patched;
   }
@@ -206,7 +206,7 @@ export async function putWorkspaceSecret(
   });
   const inserted = await ctx.db.get("workspaceSecrets", id);
   if (inserted === null) {
-    throw domainError("NOT_FOUND", "workspace secret not found after insert");
+    throw domainError("NOT_FOUND", "organization secret not found after insert");
   }
   return inserted;
 }

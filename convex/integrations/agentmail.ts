@@ -116,13 +116,13 @@ async function workspaceApiKey(
   if (envelope === null) {
     throw domainError(
       "FORBIDDEN",
-      "this workspace has no connected mail key",
+      "this organization has no connected mail key",
     );
   }
   if (envelope.status === "invalid") {
     throw domainError(
       "FORBIDDEN",
-      "this workspace's mail key was refused by the provider — reconnect the inbox",
+      "this organization's mail key was refused by the provider — reconnect the inbox",
     );
   }
   return await decryptSecret(envelope);
@@ -763,7 +763,7 @@ async function resolveWorkspaceByInbox(
     return { workspace: null, reason: "inbox_unassigned" };
   }
   if (rows.length > 1) {
-    console.info(`${context}: inbox claimed by multiple workspaces`, {
+    console.info(`${context}: inbox claimed by multiple organizations`, {
       inboxRef,
       claims: rows.length,
     });

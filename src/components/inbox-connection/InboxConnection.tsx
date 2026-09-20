@@ -44,7 +44,7 @@ export function InboxConnection({
   if (access.state === "no_workspace") {
     return (
       <p className="text-sm text-muted-foreground">
-        We could not read your workspace just now. Refresh the page and try
+        We could not read your organization just now. Refresh the page and try
         again.
       </p>
     )
@@ -136,7 +136,7 @@ export function InboxConnection({
     return (
       <div className="flex flex-col gap-4">
         <InfoBanner
-          title="AgentMail refused this workspace's key."
+          title="AgentMail refused this organization's key."
           className="border-destructive/30 bg-destructive/5"
         >
           Sending is paused and replies are not being read. Paste a new key
@@ -148,7 +148,7 @@ export function InboxConnection({
           label="AgentMail API key"
           description={
             view.last4 === undefined
-              ? "Paste a key from the account that owns this workspace's inbox."
+              ? "Paste a key from the account that owns this organization's inbox."
               : `The stored key ending ${view.last4} no longer works. Paste a current one from the same account.`
           }
           submitLabel="Reconnect"
@@ -163,7 +163,7 @@ export function InboxConnection({
   return (
     <div className="flex flex-col gap-4">
       {view.connection === "legacy_platform_inbox" ? (
-        <InfoBanner title="This workspace is on a shared inbox.">
+        <InfoBanner title="This organization is on a shared inbox.">
           It can receive and read mail, but it cannot send. Connect your own
           AgentMail key to send from an address you control.
         </InfoBanner>

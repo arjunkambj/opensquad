@@ -53,7 +53,7 @@ export async function createDraftAgent(
 ): Promise<Doc<"agents">> {
   const existing = await getWorkspaceAgent(ctx, workspaceId);
   if (existing !== null) {
-    throw domainError("CONFLICT", "this workspace already has an agent");
+    throw domainError("CONFLICT", "this organization already has an agent");
   }
   const now = Date.now();
   const agentId = await ctx.db.insert("agents", {

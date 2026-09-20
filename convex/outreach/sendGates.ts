@@ -169,7 +169,7 @@ export async function evaluateSendGates(
   if (workspace.automationState !== "active") {
     return block(
       "workspace_paused",
-      `workspace automation is ${workspace.automationState}`,
+      `organization automation is ${workspace.automationState}`,
     );
   }
   // Sourcing-only and paused agents never put mail on the wire (PLAN §9.3).
@@ -203,7 +203,7 @@ export async function evaluateSendGates(
   if (workspace.policyVersion !== draft.policyVersion) {
     return block(
       "policy_changed",
-      `workspace policy is v${workspace.policyVersion}; draft was written against v${draft.policyVersion}`,
+      `organization policy is v${workspace.policyVersion}; draft was written against v${draft.policyVersion}`,
     );
   }
   // Revision fencing (PLAN §9.1): instructions, tone, goal, ICP or mode
@@ -256,7 +256,7 @@ export async function evaluateSendGates(
     if (booking === null || booking.workspaceId !== workspace._id) {
       return block(
         "booking_not_current",
-        "the linked booking no longer exists in this workspace",
+        "the linked booking no longer exists in this organization",
       );
     }
     if (
@@ -289,7 +289,7 @@ export async function evaluateSendGates(
   if (workspace.inboxRef === undefined) {
     return block(
       "inbox_unassigned",
-      "workspace has no assigned sender inbox",
+      "organization has no assigned sender inbox",
     );
   }
   // The inbox must be attached by the workspace's OWN key (PLAN §9.4).
@@ -302,8 +302,8 @@ export async function evaluateSendGates(
     return block(
       "inbox_unassigned",
       workspace.inboxConnection === "legacy_platform_inbox"
-        ? "this workspace receives on a platform inbox and cannot send until its own key is connected"
-        : "the workspace's mail key is not connected",
+        ? "this organization receives on a platform inbox and cannot send until its own key is connected"
+        : "the organization's mail key is not connected",
     );
   }
   if (

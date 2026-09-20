@@ -203,7 +203,7 @@ export const startAnalysis = mutation({
     ) {
       throw domainError(
         "CONFLICT",
-        "an analysis of this workspace's website is already running",
+        "an analysis of this organization's website is already running",
       );
     }
 

@@ -264,7 +264,7 @@ export const assignWorkspaceInbox = internalMutation({
   handler: async (ctx, args) => {
     const workspace = await ctx.db.get("workspaces", args.workspaceId);
     if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     const inboxRef = boundedString(args.inboxRef, "inboxRef", {
       min: 1,
@@ -277,7 +277,7 @@ export const assignWorkspaceInbox = internalMutation({
     if (holder !== null && holder._id !== workspace._id) {
       throw domainError(
         "CONFLICT",
-        "inbox is already assigned to another workspace",
+        "inbox is already assigned to another organization",
       );
     }
     await ctx.db.patch("workspaces", workspace._id, {

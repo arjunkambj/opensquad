@@ -82,7 +82,7 @@ export function ConversationNotes({
       <CardHeader>
         <CardTitle>Notes</CardTitle>
         <CardDescription>
-          Private to this workspace. A note records context — it can never
+          Private to this organization. A note records context — it can never
           approve, resume or send anything.
         </CardDescription>
       </CardHeader>
@@ -165,7 +165,7 @@ export function ConversationNotes({
           <p className="text-sm text-muted-foreground">
             {readOnly
               ? "Closed threads are read-only — reopen it to add a note."
-              : "You have read-only access to this workspace. An owner or operator can add notes."}
+              : "You have read-only access to this organization. An owner or operator can add notes."}
           </p>
         )}
         <FormError message={error} />

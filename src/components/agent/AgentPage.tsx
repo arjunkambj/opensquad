@@ -53,7 +53,7 @@ export function AgentPage() {
         {header}
         <LoadingState
           title="Loading your agent"
-          description="Reading this workspace's agent."
+          description="Reading this organization's agent."
         />
       </div>
     )
@@ -67,7 +67,7 @@ export function AgentPage() {
       <div className="flex flex-col gap-6">
         {header}
         <EmptyState
-          title="No workspace yet"
+          title="No organization yet"
           description="Finish setup to create your agent."
           action={<Button render={<Link to="/onboarding" />}>Finish setup</Button>}
         />

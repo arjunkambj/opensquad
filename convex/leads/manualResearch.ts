@@ -90,7 +90,7 @@ export const researchNow = mutation({
     if (credits === null) {
       throw domainError(
         "NO_CREDIT_GRANT",
-        "this workspace has no credit grant; no paid step can run",
+        "this organization has no credit grant; no paid step can run",
       );
     }
     const affordable = Math.floor(bucketRemaining(credits) / price);

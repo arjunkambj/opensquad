@@ -66,7 +66,7 @@ export function UsageHistory({
       <CardHeader>
         <CardTitle>History</CardTitle>
         <CardDescription>
-          Every paid step this workspace has taken, newest first. Browsing,
+          Every paid step this organization has taken, newest first. Browsing,
           approving, sending and handling unsubscribes are free and never
           appear here.
         </CardDescription>
@@ -83,7 +83,7 @@ export function UsageHistory({
             description={
               trail.length === 0
                 ? "Your first website analysis, lead search or researched company will show up here the moment it runs."
-                : "You have reached the end of this workspace's history."
+                : "You have reached the end of this organization's history."
             }
           />
         ) : (

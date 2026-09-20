@@ -83,7 +83,7 @@ export const save = mutation({
     });
     const updated = await ctx.db.get("workspaces", workspace._id);
     if (updated === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return {
       instructions: updated.defaultInstructions ?? null,

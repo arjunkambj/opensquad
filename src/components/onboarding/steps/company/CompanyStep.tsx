@@ -94,7 +94,7 @@ export function CompanyStep({
     balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so website analysis can't run. You can still fill your profile in yourself."
+        ? "This organization has no credit allowance, so website analysis can't run. You can still fill your profile in yourself."
         : balance.remaining < price
           ? `Another analysis costs ${price} credits and you have ${balance.remaining} left. Fill your profile in yourself to carry on.`
           : null

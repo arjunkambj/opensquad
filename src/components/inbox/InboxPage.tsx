@@ -29,7 +29,7 @@ export function InboxPage() {
         <DashboardPageTitle title="Inbox" />
         <LoadingState
           title="Loading your inbox"
-          description="Reading this workspace's conversations."
+          description="Reading this organization's conversations."
         />
       </div>
     )
