@@ -63,7 +63,9 @@ export function WebsiteAnalyzeField({
   return (
     <Field>
       <FieldLabel htmlFor="company-website">Website</FieldLabel>
-      <InputGroup className="h-12 rounded-2xl">
+      {/* h-10 to match the profile fields below it, so the column reads as one
+          form rather than as a control bolted above one. */}
+      <InputGroup className="h-10">
         <InputGroupInput
           aria-describedby={noteId}
           autoComplete="url"
