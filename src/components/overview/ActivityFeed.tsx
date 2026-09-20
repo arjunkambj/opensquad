@@ -158,7 +158,7 @@ function ActivityFeedBody({
   const search = useSearch({ from: OVERVIEW_ROUTE })
   const navigate = useNavigate()
 
-  const page = useQuery(api.activity.list, {
+  const page = useQuery(api.activity.queries.list, {
     workspaceId,
     from: bounds.from,
     to: bounds.to,

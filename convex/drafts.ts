@@ -42,7 +42,7 @@ import {
   vMessageSource,
 } from "./lib/validators";
 import type { EndpointOperation } from "./lib/validators";
-import { recordActivityEvent } from "./activity";
+import { recordActivityEvent } from "./activity/model";
 import { conversationFields, draftFields } from "./schema";
 
 export const vConversationDoc = v.object({

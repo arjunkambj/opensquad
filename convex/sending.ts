@@ -56,7 +56,7 @@ import {
   UNRESOLVED_ATTEMPT_STATES,
   vSendAttemptState,
 } from "./lib/validators";
-import { recordActivityEvent } from "./activity";
+import { recordActivityEvent } from "./activity/model";
 import { matchSuppression } from "./suppressions";
 import {
   applyReceiptToAttempt,

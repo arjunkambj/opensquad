@@ -34,7 +34,7 @@ import {
   domainError,
 } from "./lib/validators";
 import type { ApprovalVerdict, DraftResolution } from "./lib/validators";
-import { recordActivityEvent } from "./activity";
+import { recordActivityEvent } from "./activity/model";
 import { approvalFields } from "./schema";
 
 export const vApprovalDoc = v.object({
