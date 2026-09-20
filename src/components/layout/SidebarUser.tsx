@@ -8,12 +8,14 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp, useUser } from "@hexclave/react"
 import { useNavigate } from "@tanstack/react-router"
+import { Suspense } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -120,7 +122,14 @@ export function SidebarUser({ user }: { user: ProfileUser }) {
         <DropdownMenuSeparator />
         {account === null ? null : (
           <>
-            <OrgSwitcherMenu user={account} />
+            {/* Its own boundary: the organizations come from a suspending SDK
+                hook, and a cold cache here must not take the whole shell down
+                to a skeleton while a menu is open. */}
+            <Suspense
+              fallback={<DropdownMenuLabel>Organization</DropdownMenuLabel>}
+            >
+              <OrgSwitcherMenu user={account} />
+            </Suspense>
             <DropdownMenuSeparator />
           </>
         )}

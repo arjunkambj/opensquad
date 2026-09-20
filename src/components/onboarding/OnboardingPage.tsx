@@ -59,6 +59,12 @@ export function OnboardingPage() {
   )
 }
 
+/** The provider's organization name, as `ensureOrg` will accept it. */
+function boundedOrgName(displayName: string | null | undefined): string | null {
+  const trimmed = (displayName ?? "").trim().slice(0, 100)
+  return trimmed.length === 0 ? null : trimmed
+}
+
 /** The frame every pre-step state sits in, so setup never changes shape. */
 function SetupFrame({ children }: { children: ReactNode }) {
   return (
@@ -92,7 +98,9 @@ function SetupFlow() {
         </SetupFrame>
       }
     >
-      <SetupForActiveOrg user={user} />
+      {/* Keyed by the organization: switching one must start setup over
+          rather than carry the previous one's "already asked for a row". */}
+      <SetupForActiveOrg key={user.selectedTeam?.id} user={user} />
     </OrgBoundary>
   )
 }
@@ -106,6 +114,11 @@ function SetupForActiveOrg({ user }: { user: CurrentUser }) {
   // One creation request per attempt: the mutation is idempotent, but firing
   // it on every render would still be a request per render.
   const requested = useRef(-1)
+  // The row is named after the organization it belongs to, so the name a
+  // member sees here is the one they chose in the auth provider. Trimmed and
+  // bounded to what the mutation accepts: a name the provider allows but we
+  // do not must not turn setup into an error screen.
+  const orgName = boundedOrgName(user.selectedTeam?.displayName)
 
   useEffect(() => {
     if (current.status !== "not_initialised" || requested.current === attempt) {
@@ -115,7 +128,10 @@ function SetupForActiveOrg({ user }: { user: CurrentUser }) {
     let live = true
     void (async () => {
       try {
-        await ensureOrg({ timezone: detectLocalTimezone() })
+        await ensureOrg({
+          timezone: detectLocalTimezone(),
+          ...(orgName === null ? {} : { name: orgName }),
+        })
       } catch (cause) {
         if (live) {
           setRefusal(entryRefusalOf(cause))
@@ -125,7 +141,7 @@ function SetupForActiveOrg({ user }: { user: CurrentUser }) {
     return () => {
       live = false
     }
-  }, [attempt, current, ensureOrg])
+  }, [attempt, current, ensureOrg, orgName])
 
   if (current.status === "loading") {
     return (

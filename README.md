@@ -14,7 +14,7 @@ The tenant is the **Hexclave organization**, and the organization active in
 Hexclave is the source of truth: the signed token's `selected_team_id` claim
 decides whose data a request sees. Convex keeps one `orgs` row per Hexclave
 organization — it is where credits, the inbox connection, the send policy and
-the agent live — created silently on first entry. There is no membership table
+the agent live — created silently on first entry. We keep no member records
 and no roles of our own: Hexclave owns who belongs to an organization, and
 every member of the active one may use the whole product. Nothing in the app
 asks the user to create, name or pick an organization; the sidebar's account

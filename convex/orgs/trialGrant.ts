@@ -1,15 +1,19 @@
 /**
  * The trial grant, as functions the cutover can run.
  *
- * Org creation grants its buckets in its OWN transaction by calling the
- * model directly (`billing/trialBuckets.ts`), so an org never exists for
- * an instant without an allowance. These two functions exist for the data
- * migration: MIGRATION step H grants the orgs that were created before
- * the credit model existed.
+ * `ensureOrg` grants a FIRST org its buckets in its own transaction by
+ * calling the model directly (`billing/trialBuckets.ts`). These two functions
+ * exist for the data migration instead: MIGRATION step H grants the orgs that
+ * were created before the credit model existed.
+ *
+ * They deliberately do NOT re-apply the one-grant-per-user rule `ensureOrg`
+ * enforces — that rule stops a user minting allowances by creating
+ * organizations, and these are run by an operator over rows that already
+ * exist, one allowance each, once.
  *
  * Both are idempotent. A bucket that already exists keeps its counters — so
- * running the backfill twice, or over orgs that were granted at
- * creation, hands out nothing extra.
+ * running the backfill twice, or over orgs that were granted at creation,
+ * hands out nothing extra.
  */
 import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";

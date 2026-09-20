@@ -24,7 +24,7 @@ leads, emails them, and works the replies until a meeting is booked.
 - **The tenant is the Hexclave organization**, and the org ACTIVE in Hexclave
   is the source of truth: the token's `selected_team_id` claim decides whose
   data a request sees (PLAN §4). One `orgs` row per Hexclave organization, no
-  membership table and no roles of our own — every member of the active
+  member records and no roles of our own — every member of the active
   organization may use the whole product. No screen ever asks the user to
   create, name or pick one.
 - Keep Vite, React, TanStack Router, Convex, Hexclave, pnpm, shadcn/Base UI and
