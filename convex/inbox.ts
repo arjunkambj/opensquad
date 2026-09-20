@@ -411,7 +411,7 @@ async function applyToConversation(
   //     un-reply the reply. Keyed on the message ref so the receipt drain's
   //     replay dedupes.
   if (settled.prospectId !== undefined) {
-    await ctx.runMutation(internal.prospects.markReplied, {
+    await ctx.runMutation(internal.leads.mutations.markReplied, {
       conversationId: settled._id,
       messageRef: receipt.providerMessageRef,
       at: receipt.receivedAt,

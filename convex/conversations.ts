@@ -1306,7 +1306,7 @@ export const associateProspect = mutation({
       updated.lastInboundMessageRef !== undefined &&
       updated.lastInboundAt !== undefined
     ) {
-      await ctx.runMutation(internal.prospects.markReplied, {
+      await ctx.runMutation(internal.leads.mutations.markReplied, {
         conversationId: updated._id,
         messageRef: updated.lastInboundMessageRef,
         at: updated.lastInboundAt,

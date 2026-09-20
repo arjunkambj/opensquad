@@ -9,11 +9,11 @@
  *
  * // AI research/synthesis: reimplemented via Convex AI Gateway (see plan)
  */
-import { query } from "./_generated/server";
+import { query } from "../_generated/server";
 import { v } from "convex/values";
-import { requireWorkspaceMember } from "./lib/auth";
-import { boundedLimit, domainError } from "./lib/validators";
-import { evidenceFields } from "./schema";
+import { requireWorkspaceMember } from "../lib/auth";
+import { boundedLimit, domainError } from "../lib/validators";
+import { evidenceFields } from "../schema";
 
 export const vEvidenceDoc = v.object({
   _id: v.id("evidence"),

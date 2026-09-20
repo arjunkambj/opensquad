@@ -401,7 +401,7 @@ function AssociateCard({
   conversation: Doc<"conversations">
   expectedContextVersion: number
 }) {
-  const prospects = useQuery(api.prospects.list, {
+  const prospects = useQuery(api.leads.queries.list, {
     workspaceId,
     limit: 50,
   })

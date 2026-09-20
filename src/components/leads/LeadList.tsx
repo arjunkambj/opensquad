@@ -27,7 +27,7 @@ import type { LeadsSearch } from "@/routes/_dashboard/_workspace/leads"
 
 const LEADS_ROUTE = "/_dashboard/_workspace/leads"
 
-type LeadRow = FunctionReturnType<typeof api.prospects.list>["items"][number]
+type LeadRow = FunctionReturnType<typeof api.leads.queries.list>["items"][number]
 
 const STAGE_LABEL: Record<LeadStage, string> = {
   found: "Found",
@@ -92,7 +92,7 @@ function scoreLabel(lead: LeadRow): string {
 export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
   const search = useSearch({ from: LEADS_ROUTE })
   const navigate = useNavigate()
-  const setApproval = useMutation(api.prospects.setApproval)
+  const setApproval = useMutation(api.leads.mutations.setApproval)
   const intentFor = useRequestIntents()
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +106,7 @@ export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
     ...(search.limit !== undefined ? { limit: search.limit } : {}),
   }
   const page = useQuery(
-    text === "" ? api.prospects.list : api.prospects.search,
+    text === "" ? api.leads.queries.list : api.leads.queries.search,
     text === "" ? listArgs : { ...listArgs, text },
   )
 

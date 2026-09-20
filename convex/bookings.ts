@@ -70,7 +70,7 @@ import type { LeadStage } from "./lib/validators";
 import {
   appendLeadEvent,
   findLeadEventByOperationKey,
-} from "./leadEvents";
+} from "./leads/events";
 import { resolveOutboundRecipient } from "./conversations";
 import { vDraftDoc } from "./drafts";
 import { bookingFields } from "./schema";

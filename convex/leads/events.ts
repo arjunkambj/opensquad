@@ -24,23 +24,23 @@
  * `identityKey`, and it comes from `ctx.auth` — never from model output or
  * email content.
  */
-import { query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import { query } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { v } from "convex/values";
-import { requireWorkspaceMember } from "./lib/auth";
+import { requireWorkspaceMember } from "../lib/auth";
 import {
   boundedLimit,
   boundedString,
   domainError,
-} from "./lib/validators";
+} from "../lib/validators";
 import type {
   LeadEventActor,
   LeadEventDetails,
   LeadEventKind,
   LeadStage,
-} from "./lib/validators";
-import { leadEventFields } from "./schema";
+} from "../lib/validators";
+import { leadEventFields } from "../schema";
 
 export const vLeadEventDoc = v.object({
   _id: v.id("leadEvents"),

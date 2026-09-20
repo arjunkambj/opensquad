@@ -1239,7 +1239,7 @@ export const recordSendOutcome = internalMutation({
       // `contacted` for a plain send, `booking_proposed` when this exact
       // draft carries a live booking link. Non-throwing by contract: a broken
       // association records less, never rolls back the acceptance.
-      await ctx.runMutation(internal.prospects.markSendAccepted, {
+      await ctx.runMutation(internal.leads.mutations.markSendAccepted, {
         sendAttemptId: attempt._id,
         at: now,
       });
