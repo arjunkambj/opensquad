@@ -13,6 +13,7 @@ import type * as activity_queries from "../activity/queries.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_mutations from "../agents/mutations.js";
 import type * as agents_queries from "../agents/queries.js";
+import type * as billing_credits from "../billing/credits.js";
 import type * as billing_queries from "../billing/queries.js";
 import type * as billing_reservations from "../billing/reservations.js";
 import type * as bookings_confirmations from "../bookings/confirmations.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   "agents/model": typeof agents_model;
   "agents/mutations": typeof agents_mutations;
   "agents/queries": typeof agents_queries;
+  "billing/credits": typeof billing_credits;
   "billing/queries": typeof billing_queries;
   "billing/reservations": typeof billing_reservations;
   "bookings/confirmations": typeof bookings_confirmations;
