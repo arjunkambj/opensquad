@@ -1,12 +1,6 @@
 /**
- * Agents — the one sales agent a workspace runs (PLAN §7), successor to the
- * pre-pivot `campaigns` module.
- *
- * What lives here in T01: reading the workspace's agent, creating the draft
- * agent onboarding fills in, and editing the basics the Agent page and
- * Settings expose. ICP and strategy mutations arrive with onboarding
- * (T21/T23); mode, Run now and the strategy toggle with the Agent page (T32);
- * the run loop itself with T30. Nothing here schedules work.
+ * Agent writes — creating the draft agent onboarding fills in, and editing
+ * the basics the Agent page and Settings expose. Nothing here schedules work.
  *
  * Two rules govern every write below:
  *
@@ -21,16 +15,9 @@
  *   not. Unsent drafts under an older revision are superseded by the outreach
  *   loop rather than sent.
  */
-import { mutation, query } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { v } from "convex/values";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "./lib/auth";
+import { mutation } from "../_generated/server";
+import { requireWorkspaceEditor } from "../lib/auth";
 import {
-  boundedString,
-  domainError,
-  invalid,
-  normalizeHttpUrl,
   AGENT_AUTO_APPROVE_MIN_SCORE_DEFAULT,
   AGENT_AUTO_REVEAL_DAILY_CAP_DEFAULT,
   AGENT_DAILY_LEAD_CAP_DEFAULT,
@@ -38,51 +25,14 @@ import {
   AGENT_FOLLOW_UP_DAYS_DEFAULT,
   AGENT_INSTRUCTIONS_MAX_LENGTH,
   AGENT_NAME_MAX_LENGTH,
+  boundedString,
+  domainError,
   EMPTY_AGENT_ICP,
-} from "./lib/validators";
-import { agentFields } from "./schema";
-
-export const vAgentDoc = v.object({
-  _id: v.id("agents"),
-  _creationTime: v.number(),
-  ...agentFields,
-});
-
-/** The workspace's agent, or `null` before onboarding creates one. */
-export async function getWorkspaceAgent(
-  ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
-): Promise<Doc<"agents"> | null> {
-  return await ctx.db
-    .query("agents")
-    .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId))
-    .first();
-}
-
-/** Load the agent for a write, or refuse. */
-async function requireWorkspaceAgent(
-  ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
-  agentId: Id<"agents">,
-): Promise<Doc<"agents">> {
-  const agent = await ctx.db.get("agents", agentId);
-  if (agent === null || agent.workspaceId !== workspaceId) {
-    // A row in another workspace is the same NOT_FOUND — existence never
-    // leaks across a workspace boundary.
-    throw domainError("NOT_FOUND", "agent not found");
-  }
-  return agent;
-}
-
-/** The workspace's agent. `null` is the pre-onboarding state, not an error. */
-export const get = query({
-  args: { workspaceId: v.id("workspaces") },
-  returns: v.union(vAgentDoc, v.null()),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    return await getWorkspaceAgent(ctx, args.workspaceId);
-  },
-});
+  invalid,
+  normalizeHttpUrl,
+} from "../lib/validators";
+import { getWorkspaceAgent, requireWorkspaceAgent, vAgentDoc } from "./model";
+import { v } from "convex/values";
 
 /**
  * Create the workspace's draft agent — the row onboarding fills in step by
