@@ -48,8 +48,8 @@ export function WorkspaceStep({
   workspace: Doc<"workspaces">
   onDone: () => void
 }) {
-  const updateWorkspace = useMutation(api.workspaces.update)
-  const setSendingPolicy = useMutation(api.workspaces.setSendingPolicy)
+  const updateWorkspace = useMutation(api.workspaces.mutations.update)
+  const setSendingPolicy = useMutation(api.workspaces.mutations.setSendingPolicy)
 
   const [detectedTimezone] = useState(detectLocalTimezone)
   const [form, setForm] = useState<WorkspacePolicyForm>(() =>

@@ -547,7 +547,7 @@ function AssignmentCard({
   conversation: Doc<"conversations">
   expectedContextVersion: number
 }) {
-  const members = useQuery(api.workspaces.listMembers, { workspaceId })
+  const members = useQuery(api.workspaces.queries.listMembers, { workspaceId })
   const assignOwner = useMutation(api.conversations.assignOwner)
 
   const [pending, setPending] = useState<string | null>(null)

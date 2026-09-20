@@ -9,5 +9,5 @@ import { api } from "../../convex/_generated/api"
  * Callers must handle all three cases (V11 honest loading/empty states).
  */
 export function useCurrentWorkspace() {
-  return useQuery(api.workspaces.getCurrent)
+  return useQuery(api.workspaces.queries.getCurrent)
 }

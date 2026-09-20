@@ -41,7 +41,9 @@ import type * as sendAttempts from "../sendAttempts.js";
 import type * as sending from "../sending.js";
 import type * as suppressions from "../suppressions.js";
 import type * as usage from "../usage.js";
-import type * as workspaces from "../workspaces.js";
+import type * as workspaces_model from "../workspaces/model.js";
+import type * as workspaces_mutations from "../workspaces/mutations.js";
+import type * as workspaces_queries from "../workspaces/queries.js";
 
 import type {
   ApiFromModules,
@@ -83,7 +85,9 @@ declare const fullApi: ApiFromModules<{
   sending: typeof sending;
   suppressions: typeof suppressions;
   usage: typeof usage;
-  workspaces: typeof workspaces;
+  "workspaces/model": typeof workspaces_model;
+  "workspaces/mutations": typeof workspaces_mutations;
+  "workspaces/queries": typeof workspaces_queries;
 }>;
 
 /**

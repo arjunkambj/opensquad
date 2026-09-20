@@ -36,7 +36,7 @@ export function WorkspaceSection({
   workspace: Doc<"workspaces">
   isOwner: boolean
 }) {
-  const updateWorkspace = useMutation(api.workspaces.update)
+  const updateWorkspace = useMutation(api.workspaces.mutations.update)
 
   const [form, setForm] = useState({
     name: workspace.name,

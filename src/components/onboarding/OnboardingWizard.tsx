@@ -83,7 +83,7 @@ export function OnboardingWizard() {
 
 /** Explicit, idempotent workspace creation — the only way in for a new user. */
 function ProvisionWorkspace() {
-  const ensureWorkspace = useMutation(api.workspaces.ensureWorkspace)
+  const ensureWorkspace = useMutation(api.workspaces.mutations.ensureWorkspace)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

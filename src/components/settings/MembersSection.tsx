@@ -53,9 +53,9 @@ export function MembersSection({
   isOwner: boolean
   selfMembershipId: Id<"memberships">
 }) {
-  const members = useQuery(api.workspaces.listMembers, { workspaceId })
-  const setMemberRole = useMutation(api.workspaces.setMemberRole)
-  const revokeMembership = useMutation(api.workspaces.revokeMembership)
+  const members = useQuery(api.workspaces.queries.listMembers, { workspaceId })
+  const setMemberRole = useMutation(api.workspaces.mutations.setMemberRole)
+  const revokeMembership = useMutation(api.workspaces.mutations.revokeMembership)
 
   const [pendingId, setPendingId] = useState<Id<"memberships"> | null>(null)
   const [confirmRevokeId, setConfirmRevokeId] =

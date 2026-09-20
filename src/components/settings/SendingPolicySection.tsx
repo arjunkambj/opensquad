@@ -36,7 +36,7 @@ export function SendingPolicySection({
   workspace: Doc<"workspaces">
   isOwner: boolean
 }) {
-  const setSendingPolicy = useMutation(api.workspaces.setSendingPolicy)
+  const setSendingPolicy = useMutation(api.workspaces.mutations.setSendingPolicy)
 
   const [form, setForm] = useState<SendPolicyValues>({
     weekdays: [...workspace.sendWindow.weekdays],
