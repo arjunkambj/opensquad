@@ -121,6 +121,10 @@ export const workspaceFields = {
    */
   connectedAt: v.optional(v.number()),
   pauseReason: v.optional(v.string()),
+  // Settings → Outreach: the workspace's default outreach instructions, used
+  // by the writer when the agent has none of its own (PLAN §1 "templates as
+  // one instructions field"). Absent = none set.
+  defaultInstructions: v.optional(v.string()),
 };
 
 export const membershipFields = {
