@@ -1,28 +1,22 @@
 /**
- * Billing — usage accounting (architecture §4.4, §9 "Billable/limited
- * resources are debited inside transactions").
+ * The usage ledger's internal mutation surface — reserve → commit | release |
+ * uncertain, for callers that settle from an ACTION and therefore need a
+ * function reference rather than a model call.
  *
- * This domain owns the ledger: a `usageBuckets` row is one (workspaceId,
- * scopeKey, metric, periodKey) counter, and a `usageReservations` row tracks
- * one logical debit — `reserved` at intent, then exactly one of `committed`,
- * `released` or `uncertain` (unknown outcome: capacity stays blocked). It
- * decides nothing about WHEN to spend; callers hold that rule.
+ * Every handler here is thin: it validates, then calls the ledger model
+ * (`billing/model.ts`, `billing/transitions.ts`), where the rules live. Anything already running inside a
+ * mutation (the credit wrapper, the send boundary's own reserve) calls the
+ * model directly — a `ctx.runMutation` hop would split one transaction in two.
  *
  * Sends are bucketed by the workspace-local day (`localDayKey(now,
  * workspace.timezone)`), enforced inside the reserving transaction so
  * concurrent sends cannot oversubscribe the daily limit.
  */
-import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
-import type { MutationCtx } from "../_generated/server";
-import {
-  boundedString,
-  domainError,
-  invalid,
-  vUsageMetric,
-} from "../lib/validators";
-import type { UsageReservationState } from "../lib/validators";
+import { boundedString, vUsageMetric } from "../lib/validators";
+import { reserveInBucket } from "./model";
 import { vUsageReservationDoc } from "./queries";
+import { settleReservationsByKey } from "./transitions";
 import { v } from "convex/values";
 
 export const vReserveResult = v.object({
@@ -34,11 +28,9 @@ export const vReserveResult = v.object({
 });
 
 /**
- * Reserve `quantity` from the bucket, creating the bucket on first use.
- * The capacity check (`reserved + committed + uncertain + quantity <=
- * limit`) runs inside this transaction, so concurrent sends serialize on
- * the bucket row and cannot oversubscribe. `limit` is refreshed on every
- * call so a lowered policy applies immediately.
+ * Reserve `quantity` from the bucket, creating the bucket on first use. The
+ * capacity check runs inside this transaction, so concurrent callers
+ * serialize on the bucket row and cannot oversubscribe.
  *
  * Idempotent per (workspaceId, operationKey, bucket): a replayed reserve
  * returns the live reservation instead of double-debiting.
@@ -54,116 +46,7 @@ export const reserve = internalMutation({
     quantity: v.optional(v.number()),
   },
   returns: vReserveResult,
-  handler: async (ctx, args) => {
-    const quantity = args.quantity ?? 1;
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      throw invalid("quantity must be a positive integer");
-    }
-    const scopeKey = boundedString(args.scopeKey, "scopeKey", {
-      min: 1,
-      max: 100,
-    });
-    const periodKey = boundedString(args.periodKey, "periodKey", {
-      min: 1,
-      max: 100,
-    });
-    const operationKey = boundedString(args.operationKey, "operationKey", {
-      min: 1,
-      max: 200,
-    });
-    if (!Number.isFinite(args.limit) || args.limit < 0) {
-      throw invalid("limit must be a non-negative number");
-    }
-
-    const bucket = await ctx.db
-      .query("usageBuckets")
-      .withIndex(
-        "by_workspaceId_and_scopeKey_and_metric_and_periodKey",
-        (q) =>
-          q
-            .eq("workspaceId", args.workspaceId)
-            .eq("scopeKey", scopeKey)
-            .eq("metric", args.metric)
-            .eq("periodKey", periodKey),
-      )
-      .unique();
-
-    const now = Date.now();
-    let bucketId: Id<"usageBuckets">;
-    if (bucket === null) {
-      bucketId = await ctx.db.insert("usageBuckets", {
-        workspaceId: args.workspaceId,
-        scopeKey,
-        metric: args.metric,
-        periodKey,
-        limit: args.limit,
-        reserved: 0,
-        committed: 0,
-        uncertain: 0,
-        updatedAt: now,
-      });
-    } else {
-      bucketId = bucket._id;
-    }
-
-    const prior = await ctx.db
-      .query("usageReservations")
-      .withIndex("by_workspaceId_and_operationKey_and_bucketId", (q) =>
-        q
-          .eq("workspaceId", args.workspaceId)
-          .eq("operationKey", operationKey)
-          .eq("bucketId", bucketId),
-      )
-      .unique();
-    if (prior !== null) {
-      if (prior.state !== "reserved" && prior.state !== "uncertain") {
-        throw domainError(
-          "CONFLICT",
-          `reservation for ${operationKey} is already ${prior.state}`,
-        );
-      }
-      return { bucketId, reservationId: prior._id, replayed: true };
-    }
-
-    // Keep the cap current — a lowered policy applies to new reservations
-    // immediately. Replayed calls return above without touching the bucket,
-    // so a stale caller can never silently rewrite the shared limit.
-    if (bucket !== null && bucket.limit !== args.limit) {
-      await ctx.db.patch("usageBuckets", bucketId, {
-        limit: args.limit,
-        updatedAt: now,
-      });
-    }
-
-    const effective = await ctx.db.get("usageBuckets", bucketId);
-    if (effective === null) {
-      throw domainError("NOT_FOUND", "usage bucket not found");
-    }
-    if (
-      effective.reserved + effective.committed + effective.uncertain + quantity >
-      effective.limit
-    ) {
-      throw domainError(
-        "CONFLICT",
-        `${args.metric} limit reached for period ${periodKey} ` +
-          `(${effective.reserved + effective.committed + effective.uncertain}/${effective.limit})`,
-      );
-    }
-    await ctx.db.patch("usageBuckets", bucketId, {
-      reserved: effective.reserved + quantity,
-      updatedAt: now,
-    });
-    const reservationId = await ctx.db.insert("usageReservations", {
-      workspaceId: args.workspaceId,
-      bucketId,
-      operationKey,
-      quantity,
-      state: "reserved",
-      createdAt: now,
-      updatedAt: now,
-    });
-    return { bucketId, reservationId, replayed: false };
-  },
+  handler: async (ctx, args) => await reserveInBucket(ctx, args),
 });
 
 const vSettleResult = v.object({
@@ -173,133 +56,7 @@ const vSettleResult = v.object({
   replayed: v.boolean(),
 });
 
-/**
- * Shared settle path: every reservation under the operation key moves to the
- * target state and each owning bucket's counters shift by that row's
- * `quantity`. An operation may hold per-bucket reservations (the reserve
- * dedupe key is `(operationKey, bucketId)`), so all of them settle together
- * — one logical outcome, every debit accounted. Rows already in `target`
- * replay; any other illegal transition is a `CONFLICT` and rolls the whole
- * batch back — a released reservation can never be re-committed, an
- * uncertain one can only commit or release.
- *
- * Rows left behind by an earlier bucket are the exception: see the skip below.
- */
-async function settleReservation(
-  ctx: MutationCtx,
-  args: {
-    workspaceId: Id<"workspaces">;
-    operationKey: string;
-    target: UsageReservationState;
-    providerReference?: string;
-  },
-): Promise<{ reservation: Doc<"usageReservations">; replayed: boolean }> {
-  const operationKey = boundedString(args.operationKey, "operationKey", {
-    min: 1,
-    max: 200,
-  });
-  const reservations = await ctx.db
-    .query("usageReservations")
-    .withIndex("by_workspaceId_and_operationKey_and_bucketId", (q) =>
-      q
-        .eq("workspaceId", args.workspaceId)
-        .eq("operationKey", operationKey),
-    )
-    .collect();
-  if (reservations.length === 0) {
-    throw domainError(
-      "NOT_FOUND",
-      `no reservation for operation ${operationKey}`,
-    );
-  }
-  const allowed: Record<UsageReservationState, UsageReservationState[]> = {
-    reserved: ["committed", "released", "uncertain"],
-    committed: [],
-    released: [],
-    uncertain: ["committed", "released"],
-  };
-  const now = Date.now();
-  // An attempt parked past its local day releases the stale-bucket row and
-  // re-reserves under today's bucket (`beginDispatch`), so one operationKey can
-  // own several rows. The newest is this operation's live reservation; every
-  // older row already moved its own bucket's counters and is settled history,
-  // so it is skipped instead of conflicting the whole settle. The newest row is
-  // never skipped — a live reservation that cannot reach the target is a
-  // genuine illegal transition and still throws.
-  const current = reservations.reduce((newest, row) =>
-    row._creationTime > newest._creationTime ? row : newest,
-  );
-  let settled: Doc<"usageReservations"> | null = null;
-  let replayed: Doc<"usageReservations"> | null = null;
-  for (const reservation of reservations) {
-    if (reservation.state === args.target) {
-      replayed ??= reservation;
-      continue;
-    }
-    if (
-      reservation._id !== current._id &&
-      (reservation.state === "committed" || reservation.state === "released")
-    ) {
-      continue;
-    }
-    if (!allowed[reservation.state].includes(args.target)) {
-      throw domainError(
-        "CONFLICT",
-        `reservation is ${reservation.state}, cannot become ${args.target}`,
-      );
-    }
-    const bucket = await ctx.db.get("usageBuckets", reservation.bucketId);
-    if (bucket === null) {
-      throw domainError("NOT_FOUND", "usage bucket not found");
-    }
-    const qty = reservation.quantity;
-    const counters: Record<
-      UsageReservationState,
-      Partial<Doc<"usageBuckets">>
-    > = {
-      committed:
-        reservation.state === "uncertain"
-          ? {
-              uncertain: bucket.uncertain - qty,
-              committed: bucket.committed + qty,
-            }
-          : {
-              reserved: bucket.reserved - qty,
-              committed: bucket.committed + qty,
-            },
-      released:
-        reservation.state === "uncertain"
-          ? { uncertain: bucket.uncertain - qty }
-          : { reserved: bucket.reserved - qty },
-      uncertain: {
-        reserved: bucket.reserved - qty,
-        uncertain: bucket.uncertain + qty,
-      },
-      reserved: {},
-    };
-    await ctx.db.patch("usageBuckets", bucket._id, {
-      ...counters[args.target],
-      updatedAt: now,
-    });
-    await ctx.db.patch("usageReservations", reservation._id, {
-      state: args.target,
-      updatedAt: now,
-      ...(args.providerReference !== undefined
-        ? { providerReference: args.providerReference }
-        : {}),
-    });
-    settled ??= await ctx.db.get("usageReservations", reservation._id);
-  }
-  // Prefer the row this call moved: a stale sibling must never stand in for
-  // the live reservation the caller settled.
-  const first = settled ?? replayed;
-  if (first === null) {
-    throw domainError("NOT_FOUND", "reservation not found after update");
-  }
-  return { reservation: first, replayed: settled === null };
-}
-
-/** Commit — the debited capacity became a real provider-accepted send. */
+/** Commit — the debited capacity became real, provider-accepted work. */
 export const commit = internalMutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -308,7 +65,7 @@ export const commit = internalMutation({
   },
   returns: vSettleResult,
   handler: async (ctx, args) =>
-    await settleReservation(ctx, {
+    await settleReservationsByKey(ctx, {
       workspaceId: args.workspaceId,
       operationKey: args.operationKey,
       target: "committed",
@@ -333,7 +90,7 @@ export const release = internalMutation({
   },
   returns: vSettleResult,
   handler: async (ctx, args) =>
-    await settleReservation(ctx, {
+    await settleReservationsByKey(ctx, {
       workspaceId: args.workspaceId,
       operationKey: args.operationKey,
       target: "released",
@@ -349,7 +106,7 @@ export const markUncertain = internalMutation({
   },
   returns: vSettleResult,
   handler: async (ctx, args) =>
-    await settleReservation(ctx, {
+    await settleReservationsByKey(ctx, {
       workspaceId: args.workspaceId,
       operationKey: args.operationKey,
       target: "uncertain",
