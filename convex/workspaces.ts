@@ -27,8 +27,6 @@ import {
   invalid,
   vRole,
 } from "./lib/validators";
-import type { CapabilityId, EmployeeTemplate } from "./lib/validators";
-import { HOST_CAPABILITY_POLICY } from "./lib/validators";
 import { membershipFields, workspaceFields } from "./schema";
 
 export const vWorkspaceDoc = v.object({
@@ -42,50 +40,6 @@ export const vMembershipDoc = v.object({
   _creationTime: v.number(),
   ...membershipFields,
 });
-
-/* ------------------------------------------------------------------ */
-/* Employee templates created with every workspace                     */
-/* ------------------------------------------------------------------ */
-
-export type EmployeeSeed = {
-  template: EmployeeTemplate;
-  name: string;
-  instructions: string;
-  capabilities: readonly CapabilityId[];
-};
-
-/** Exported for the flag-gated demo bootstrap in `convex/demo.ts` (P16) —
- *  demo workspaces are provisioned with the same employee templates. */
-export const EMPLOYEE_SEEDS: readonly EmployeeSeed[] = [
-  {
-    template: "scout",
-    name: "Scout",
-    instructions:
-      "Discover up to five candidate companies matching the campaign's " +
-      "confirmed source plan. Request paid contact enrichment only for " +
-      "prospects the campaign qualified, and never invent contact details.",
-    capabilities: HOST_CAPABILITY_POLICY.scout,
-  },
-  {
-    template: "researcher",
-    name: "Researcher",
-    instructions:
-      "Research assigned prospects through the workspace-owned website " +
-      "research results. Record source URL, retrieval time and confidence " +
-      "for every observation; label hypotheses and never claim absent " +
-      "content as proof.",
-    capabilities: HOST_CAPABILITY_POLICY.researcher,
-  },
-  {
-    template: "outreach",
-    name: "Outreach",
-    instructions:
-      "Propose exact draft emails and reply classifications for approved " +
-      "prospects using saved evidence. Never send without a recorded human " +
-      "approval decision.",
-    capabilities: HOST_CAPABILITY_POLICY.outreach,
-  },
-];
 
 /* ------------------------------------------------------------------ */
 /* Provisioning                                                        */
@@ -186,19 +140,6 @@ async function ensureWorkspaceImpl(
     createdAt: now,
     updatedAt: now,
   });
-
-  for (const seed of EMPLOYEE_SEEDS) {
-    await ctx.db.insert("employees", {
-      workspaceId,
-      template: seed.template,
-      name: seed.name,
-      instructions: seed.instructions,
-      instructionVersion: 1,
-      enabled: true,
-      allowedCapabilities: [...seed.capabilities],
-      updatedAt: now,
-    });
-  }
 
   return { workspaceId, created: true };
 }

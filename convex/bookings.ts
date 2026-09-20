@@ -317,18 +317,6 @@ async function retireLinkedDrafts(
     if (draft.supersededAt === undefined) {
       await ctx.db.patch("drafts", draft._id, { supersededAt: Date.now() });
     }
-    const asks = await ctx.db
-      .query("decisions")
-      .withIndex("by_draftId", (q) => q.eq("draftId", draft._id))
-      .collect();
-    for (const ask of asks) {
-      if (ask.kind === "draft_approval" && ask.state === "open") {
-        await ctx.runMutation(internal.decisions.supersedeDecision, {
-          decisionId: ask._id,
-          reason,
-        });
-      }
-    }
     await ctx.runMutation(internal.sending.cancelDraftParkedAttempts, {
       workspaceId: booking.workspaceId,
       draftId: draft._id,
@@ -542,18 +530,15 @@ export const propose = mutation({
 });
 
 /**
- * Create the EXACT draft that carries this proposal out — the P10/P11 path,
- * not a booking-specific send. `internal.drafts.createRevision` does the
- * revision numbering, payload hash, context-version bump, prior-ask
- * supersede, parked-attempt retirement and the required `draft_approval`
- * ask; this mutation only proves the booking belongs on the draft
- * (`proposed`, this version, this lead's thread) and links the result back.
+ * Create the EXACT draft that carries this proposal out — the ordinary draft
+ * path, not a booking-specific send. `internal.drafts.createRevision` does
+ * the revision numbering, payload hash, context-version bump and
+ * parked-attempt retirement; this mutation only proves the booking belongs
+ * on the draft (`proposed`, this version, this lead's thread) and links the
+ * result back.
  *
- * The ask binds `missionId`'s workflow, so the mission must be live and have
- * a dispatched workflow — the reply mission that owns the thread, or the
- * sales mission that opened it. Sending is NEVER implied: the draft sits on
- * the approval ask until a human resolves it, and the dispatch preflight
- * re-validates the booking link one last time.
+ * Sending is NEVER implied: the draft waits for a recorded approval, and the
+ * dispatch preflight re-validates the booking link one last time.
  */
 export const draftProposal = mutation({
   args: {
@@ -561,7 +546,6 @@ export const draftProposal = mutation({
     bookingId: v.id("bookings"),
     expectedVersion: v.number(),
     conversationId: v.id("conversations"),
-    missionId: v.id("missions"),
     subject: v.string(),
     body: v.string(),
     requestId: v.string(),
@@ -569,18 +553,16 @@ export const draftProposal = mutation({
   returns: v.object({
     booking: vBookingDoc,
     draft: vDraftDoc,
-    decisionId: v.id("decisions"),
   }),
   // Explicit return annotation: the inferred cycle draftProposal →
-  // internal.drafts.createRevision → decision helpers → back here would
-  // otherwise make the handler `any`.
+  // internal.drafts.createRevision → back here would otherwise make the
+  // handler `any`.
   handler: async (
     ctx,
     args,
   ): Promise<{
     booking: Doc<"bookings">;
     draft: Doc<"drafts">;
-    decisionId: Id<"decisions">;
   }> => {
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
     const requestId = boundedString(args.requestId, "requestId", {
@@ -611,20 +593,7 @@ export const draftProposal = mutation({
           `requestId ${requestId} already created a different draft`,
         );
       }
-      const priorAsk = await ctx.db
-        .query("decisions")
-        .withIndex("by_draftId", (q) => q.eq("draftId", priorDraft._id))
-        .collect();
-      const openAsk = priorAsk.find(
-        (decision) => decision.kind === "draft_approval",
-      );
-      if (openAsk === undefined) {
-        throw domainError(
-          "CONFLICT",
-          "the recorded draft has no draft_approval ask to return",
-        );
-      }
-      return { booking, draft: priorDraft, decisionId: openAsk._id };
+      return { booking, draft: priorDraft };
     }
     if (booking.state !== "proposed") {
       throw domainError(
@@ -657,32 +626,6 @@ export const draftProposal = mutation({
         `conversation is ${conversation.state}; drafts can only be proposed on an open thread`,
       );
     }
-    const mission = await ctx.db.get("missions", args.missionId);
-    if (mission === null || mission.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "mission not found");
-    }
-    if (mission.campaignId !== prospect.campaignId) {
-      throw domainError(
-        "CONFLICT",
-        "the mission belongs to a different campaign than the lead",
-      );
-    }
-    if (
-      mission.state === "completed" ||
-      mission.state === "cancelled" ||
-      mission.state === "failed"
-    ) {
-      throw domainError(
-        "CONFLICT",
-        `mission is ${mission.state}; its approval ask could never be resolved`,
-      );
-    }
-    if (mission.workflowId === undefined) {
-      throw domainError(
-        "CONFLICT",
-        "mission has no dispatched workflow — a draft_approval ask could never be delivered",
-      );
-    }
     const { recipient } = await resolveOutboundRecipient(ctx, conversation);
     if (recipient === null) {
       throw domainError(
@@ -694,7 +637,6 @@ export const draftProposal = mutation({
       internal.drafts.createRevision,
       {
         conversationId: conversation._id,
-        missionId: mission._id,
         recipient,
         subject: args.subject,
         body: args.body,
@@ -702,36 +644,18 @@ export const draftProposal = mutation({
         bookingVersion: booking.version,
         createdBy: identityKey,
         requestId,
-        openDecision: true,
-        targetWorkflowId: mission.workflowId,
       },
     );
-    const asks = await ctx.db
-      .query("decisions")
-      .withIndex("by_draftId", (q) => q.eq("draftId", draft._id))
-      .collect();
-    const ask = asks.find(
-      (decision) =>
-        decision.kind === "draft_approval" && decision.state === "open",
-    );
-    if (ask === undefined) {
-      // Mirrors installReplyDraft: a draft nobody can approve is a trap.
-      throw domainError(
-        "CONFLICT",
-        "the draft was installed but no draft_approval ask opened",
-      );
-    }
     await ctx.db.patch("bookings", booking._id, {
       conversationId: conversation._id,
       draftId: draft._id,
-      missionId: mission._id,
       updatedAt: Date.now(),
     });
     const updated = await ctx.db.get("bookings", booking._id);
     if (updated === null) {
       throw domainError("NOT_FOUND", "booking not found after patch");
     }
-    return { booking: updated, draft, decisionId: ask._id };
+    return { booking: updated, draft };
   },
 });
 

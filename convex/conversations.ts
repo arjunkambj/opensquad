@@ -89,7 +89,6 @@ export const vConversationSummary = v.object({
   takeoverAt: v.optional(v.number()),
   contextVersion: v.number(),
   unreadCount: v.number(),
-  employeeId: v.id("employees"),
   assigneeIdentityKey: v.optional(v.string()),
   lastDisposition: v.optional(vReplyDisposition),
   lastDispositionAt: v.optional(v.number()),
@@ -164,7 +163,6 @@ async function summarize(
     takeoverAt: conversation.takeoverAt,
     contextVersion: conversation.contextVersion,
     unreadCount: conversation.unreadCount,
-    employeeId: conversation.employeeId,
     assigneeIdentityKey: conversation.assigneeIdentityKey,
     lastDisposition: conversation.lastDisposition,
     lastDispositionAt: conversation.lastDispositionAt,
@@ -859,52 +857,6 @@ export const setTakeover = mutation({
 });
 
 /**
- * Assign the MACHINE that works this thread (§5 `assignEmployee`).
- * `assignOwner` assigns the human; the two are separate facts.
- */
-export const assignEmployee = mutation({
-  args: {
-    workspaceId: v.id("workspaces"),
-    conversationId: v.id("conversations"),
-    expectedContextVersion: v.number(),
-    employeeId: v.id("employees"),
-  },
-  returns: vConversationDoc,
-  handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
-      ctx,
-      args.workspaceId,
-    );
-    const conversation = await getConversationInWorkspace(
-      ctx,
-      args.workspaceId,
-      args.conversationId,
-    );
-    const employee = await ctx.db.get("employees", args.employeeId);
-    if (employee === null || employee.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "employee not found");
-    }
-    if (conversation.employeeId === args.employeeId) {
-      return conversation;
-    }
-    assertContextVersion(conversation, args.expectedContextVersion);
-    const updated = await advanceContext(
-      ctx,
-      conversation,
-      { employeeId: args.employeeId },
-      "the assigned employee changed",
-    );
-    await recordConversationNote(ctx, {
-      conversation,
-      kind: "system",
-      actor: identityKey,
-      body: `Assigned employee changed to ${employee.name}.`,
-    });
-    return updated;
-  },
-});
-
-/**
  * Assign the HUMAN who owns this thread, or clear the assignment by omitting
  * `assigneeIdentityKey`.
  *
@@ -1179,29 +1131,10 @@ export const ensureUnassignedConversation = internalMutation({
       return { ok: true as const, created: false, conversation: claimed[0] };
     }
 
-    // `conversationFields.employeeId` is required and there is nothing to
-    // infer it from, so the workspace's outreach employee is the fallback —
-    // the same one `drafts.stageConversation` uses. `.first()` rather than
-    // `.unique()` so a duplicated template row degrades to a deterministic
-    // pick instead of a throw.
-    const outreach = await ctx.db
-      .query("employees")
-      .withIndex("by_workspaceId_and_template", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("template", "outreach"),
-      )
-      .first();
-    if (outreach === null) {
-      return {
-        ok: false as const,
-        reason: "workspace has no outreach employee for the conversation",
-      };
-    }
-
     const now = Date.now();
     const conversationId = await ctx.db.insert("conversations", {
       workspaceId: args.workspaceId,
       inboxRef: args.inboxRef,
-      employeeId: outreach._id,
       state: "unassigned",
       humanTakeover: true,
       takeoverReason: "unassigned_inbound",

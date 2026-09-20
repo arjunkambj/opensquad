@@ -491,30 +491,17 @@ export const getDetail = query({
 /* Shared write helpers                                                */
 /* ------------------------------------------------------------------ */
 
-/** Load a prospect and its mission together, refusing any cross-scope pair. */
-async function loadBranchTarget(
+/** Load a prospect for an internal pipeline write, scoped to its workspace. */
+async function loadPipelineTarget(
   ctx: MutationCtx,
   prospectId: Id<"prospects">,
-  missionId: Id<"missions">,
-  runId: Id<"runs">,
-): Promise<{ prospect: Doc<"prospects">; mission: Doc<"missions"> }> {
-  const mission = await ctx.db.get("missions", missionId);
-  if (mission === null) {
-    throw domainError("NOT_FOUND", "mission not found");
-  }
+  workspaceId: Id<"workspaces">,
+): Promise<Doc<"prospects">> {
   const prospect = await ctx.db.get("prospects", prospectId);
-  if (
-    prospect === null ||
-    prospect.workspaceId !== mission.workspaceId ||
-    prospect.campaignId !== mission.campaignId
-  ) {
-    throw domainError("NOT_FOUND", "prospect not found for this mission");
+  if (prospect === null || prospect.workspaceId !== workspaceId) {
+    throw domainError("NOT_FOUND", "prospect not found");
   }
-  const run = await ctx.db.get("runs", runId);
-  if (run === null || run.missionId !== mission._id) {
-    throw domainError("NOT_FOUND", "run not found for this mission");
-  }
-  return { prospect, mission };
+  return prospect;
 }
 
 /** Re-read a patched prospect; the row always exists inside the transaction
@@ -568,22 +555,19 @@ async function resolveOwnerIdentityKey(
 /**
  * Persist a batch of candidate companies as leads on a confirmed campaign.
  *
- * This is the seam Apollo company search (P09) plugs into: P21 ships the
- * importer, the `leadLimit` ceiling, the canonical-domain dedupe and the
- * provenance merge; it ships no Apollo call, because P04's OAuth grant is
- * deferred. A candidate array from any confirmed source imports identically.
+ * This is the seam lead sourcing plugs into: the importer, the `leadLimit`
+ * ceiling, the canonical-domain dedupe and the provenance merge. A candidate
+ * array from any source imports identically.
  *
  * Per-candidate refusals are COLLECTED, never thrown. One malformed candidate
  * in a batch of five must not cost the other four: an inadmissible URL, a
  * source the campaign never confirmed, an anonymous company and a batch that
  * has reached the campaign's `leadLimit` each land in `skipped` with a stated
- * reason. This is also the FIRST code in the repo that reads
- * `campaigns.leadLimit` to gate anything — it has been validated at write time
- * since P06 and never consulted since.
+ * reason.
  */
 export const importCampaignProspects = internalMutation({
   args: {
-    missionId: v.id("missions"),
+    campaignId: v.id("campaigns"),
     candidates: v.array(vProspectCandidate),
   },
   returns: v.object({
@@ -600,30 +584,9 @@ export const importCampaignProspects = internalMutation({
         `candidates allows at most ${PROSPECT_IMPORT_CANDIDATES_MAX} entries`,
       );
     }
-    const mission = await ctx.db.get("missions", args.missionId);
-    if (mission === null) {
-      throw domainError("NOT_FOUND", "mission not found");
-    }
-    if (
-      mission.state === "completed" ||
-      mission.state === "cancelled" ||
-      mission.state === "failed"
-    ) {
-      throw domainError(
-        "CONFLICT",
-        `mission is ${mission.state}; it cannot accept new leads`,
-      );
-    }
-    const campaign = await ctx.db.get("campaigns", mission.campaignId);
+    const campaign = await ctx.db.get("campaigns", args.campaignId);
     if (campaign === null) {
-      throw domainError("NOT_FOUND", "campaign not found for mission");
-    }
-    // The confirmed-campaign predicate, exactly as §4.1 states it.
-    if (campaign.sourcePlan.confirmedBy === undefined) {
-      throw domainError(
-        "CONFLICT",
-        "campaign source plan is not confirmed; no lead may be imported",
-      );
+      throw domainError("NOT_FOUND", "campaign not found");
     }
     if (campaign.status !== "active") {
       throw domainError(
@@ -631,7 +594,7 @@ export const importCampaignProspects = internalMutation({
         `campaign is ${campaign.status}; no lead may be imported`,
       );
     }
-    const workspace = await ctx.db.get("workspaces", mission.workspaceId);
+    const workspace = await ctx.db.get("workspaces", campaign.workspaceId);
     if (workspace === null) {
       throw domainError("NOT_FOUND", "workspace not found");
     }
@@ -639,9 +602,6 @@ export const importCampaignProspects = internalMutation({
       ctx,
       workspace,
       campaign,
-    );
-    const confirmedSources = new Set(
-      campaign.sourcePlan.sources.map((source) => source.source),
     );
 
     // ONE range read over the campaign's whole prospect range. It is both the
@@ -652,8 +612,8 @@ export const importCampaignProspects = internalMutation({
       .query("prospects")
       .withIndex("by_workspaceId_and_campaignId_and_canonicalDomain", (q) =>
         q
-          .eq("workspaceId", mission.workspaceId)
-          .eq("campaignId", mission.campaignId),
+          .eq("workspaceId", campaign.workspaceId)
+          .eq("campaignId", campaign._id),
       )
       .take(CAMPAIGN_PROSPECT_SCAN_LIMIT);
     const byDomain = new Map<string, Doc<"prospects">>();
@@ -677,7 +637,7 @@ export const importCampaignProspects = internalMutation({
         contact: ReturnType<typeof assertProspectContact> | undefined;
       };
       try {
-        admitted = admitCandidate(candidate, confirmedSources);
+        admitted = admitCandidate(candidate);
       } catch (error) {
         skipped.push({ companyName: label, reason: refusalOf(error) });
         continue;
@@ -716,7 +676,6 @@ export const importCampaignProspects = internalMutation({
           // Source refs only ever grow, so the resulting count is a stable
           // identity for THIS merge step and a replay dedupes on it.
           operationKey: `prospect:${existing._id}:merge:${mergedRefs.length}`,
-          missionId: mission._id,
           details: {
             note: `Merged provenance from ${admitted.sourceRefs
               .map((ref) => ref.source)
@@ -739,8 +698,8 @@ export const importCampaignProspects = internalMutation({
       }
 
       const prospectId = await ctx.db.insert("prospects", {
-        workspaceId: mission.workspaceId,
-        campaignId: mission.campaignId,
+        workspaceId: campaign.workspaceId,
+        campaignId: campaign._id,
         companyName: admitted.companyName,
         canonicalDomain: admitted.canonicalDomain,
         sourceRefs: admitted.sourceRefs,
@@ -756,13 +715,12 @@ export const importCampaignProspects = internalMutation({
         ...(admitted.contact !== undefined ? { contact: admitted.contact } : {}),
       });
       await appendLeadEvent(ctx, {
-        workspaceId: mission.workspaceId,
+        workspaceId: campaign.workspaceId,
         prospectId,
         kind: "stage_changed",
         summary: `Discovered ${admitted.companyName} (${admitted.canonicalDomain})`,
         operationKey: `prospect:${prospectId}:discovered`,
         toStage: "discovered",
-        missionId: mission._id,
       });
       byDomain.set(admitted.canonicalDomain, await reread(ctx, prospectId));
       created += 1;
@@ -800,10 +758,7 @@ function refusalOf(error: unknown): string {
  * say an anonymous business is not a lead, and a row whose only identity is a
  * domain cannot be reviewed by a human.
  */
-function admitCandidate(
-  candidate: ProspectCandidate,
-  confirmedSources: ReadonlySet<string>,
-): {
+function admitCandidate(candidate: ProspectCandidate): {
   companyName: string;
   canonicalDomain: string;
   sourceRefs: ProspectSourceRef[];
@@ -818,17 +773,10 @@ function admitCandidate(
     candidate.websiteUrl,
     "websiteUrl",
   );
-  for (const ref of candidate.sourceRefs) {
-    if (!confirmedSources.has(ref.source)) {
-      throw invalid(
-        `source ${ref.source} is not in the campaign's confirmed source plan`,
-      );
-    }
-  }
   const sourceRefs = assertSourceRefs(candidate.sourceRefs);
   const fitReason =
     candidate.fitReason === undefined
-      ? "Imported from a confirmed source; fit not yet assessed."
+      ? "Imported from a lead source; fit not yet assessed."
       : boundedString(candidate.fitReason, "fitReason", {
           min: 1,
           max: PROSPECT_FIT_REASON_MAX_LENGTH,
@@ -879,35 +827,22 @@ function mergeSourceRefs(
 export const applyResearchOutcome = internalMutation({
   args: {
     prospectId: v.id("prospects"),
-    missionId: v.id("missions"),
-    runId: v.id("runs"),
+    workspaceId: v.id("workspaces"),
     expectedVersion: v.number(),
     qualification: vQualification,
     fitReason: v.string(),
     evidenceCount: v.number(),
-    /** Present when a PERSON settled the fit rather than the research run.
-     *  The lead history is keyed per operation and the fit ask is a SECOND
-     *  operation on the same run, so without its own key the reviewer's
-     *  answer collided with the research row this run already wrote and
-     *  `appendLeadEvent` returned that row instead of appending. The lead
-     *  then flipped qualification with no history of who decided, or that a
-     *  person decided at all. */
-    decidedBy: v.optional(
-      v.object({
-        decisionId: v.id("decisions"),
-        /** `decisions.resolvedBy` — an identityKey `decisions.resolve`
-         *  captured from `ctx.auth`, never model output. */
-        identityKey: v.optional(v.string()),
-      }),
-    ),
+    /** Present when a PERSON settled the fit rather than the research step:
+     *  an identityKey the backend captured from `ctx.auth`, never model
+     *  output. */
+    decidedByIdentityKey: v.optional(v.string()),
   },
   returns: vProspectDoc,
   handler: async (ctx, args) => {
-    const { prospect, mission } = await loadBranchTarget(
+    const prospect = await loadPipelineTarget(
       ctx,
       args.prospectId,
-      args.missionId,
-      args.runId,
+      args.workspaceId,
     );
     assertExpectedVersion(prospect.version, args.expectedVersion, "prospect");
     const fitReason = boundedString(args.fitReason, "fitReason", {
@@ -921,7 +856,7 @@ export const applyResearchOutcome = internalMutation({
       args.qualification === "qualified" ? "qualified" : "researched";
     const nextStage = advancedStage(prospect.salesStage, target);
     const stageReason = boundedString(
-      args.decidedBy === undefined
+      args.decidedByIdentityKey === undefined
         ? `Research ${args.qualification} on ${args.evidenceCount} cited observation(s)`
         : `Reviewer answered ${args.qualification} on ${args.evidenceCount} cited observation(s)`,
       "stageReason",
@@ -941,24 +876,22 @@ export const applyResearchOutcome = internalMutation({
       prospectId: prospect._id,
       kind: "research_applied",
       summary: stageReason,
-      // The fit ask is a SECOND operation on the same run, so it needs its
-      // own identity or `appendLeadEvent` finds the research row under this
-      // run's key and returns it — dropping the human decision, the
+      // A human answering the fit question is a SECOND operation on the same
+      // version, so it needs its own identity or `appendLeadEvent` finds the
+      // research row and returns it — dropping the human decision, the
       // transition it caused and the person who made it from the history.
       operationKey:
-        args.decidedBy === undefined
-          ? `prospect:${prospect._id}:research:${args.runId}`
-          : `prospect:${prospect._id}:fit:${args.decidedBy.decisionId}`,
+        args.decidedByIdentityKey === undefined
+          ? `prospect:${prospect._id}:research:${args.expectedVersion}`
+          : `prospect:${prospect._id}:fit:${args.expectedVersion}`,
       ...(nextStage === prospect.salesStage
         ? {}
         : { fromStage: prospect.salesStage, toStage: nextStage }),
-      missionId: mission._id,
-      runId: args.runId,
-      ...(args.decidedBy?.identityKey !== undefined
+      ...(args.decidedByIdentityKey !== undefined
         ? {
             actor: {
               source: "human" as const,
-              identityKey: args.decidedBy.identityKey,
+              identityKey: args.decidedByIdentityKey,
             },
           }
         : {}),
@@ -980,18 +913,16 @@ export const applyResearchOutcome = internalMutation({
 export const setContactNeeded = internalMutation({
   args: {
     prospectId: v.id("prospects"),
-    missionId: v.id("missions"),
-    runId: v.id("runs"),
+    workspaceId: v.id("workspaces"),
     expectedVersion: v.number(),
     reason: v.string(),
   },
   returns: vProspectDoc,
   handler: async (ctx, args) => {
-    const { prospect, mission } = await loadBranchTarget(
+    const prospect = await loadPipelineTarget(
       ctx,
       args.prospectId,
-      args.missionId,
-      args.runId,
+      args.workspaceId,
     );
     assertExpectedVersion(prospect.version, args.expectedVersion, "prospect");
     if (prospect.qualification !== "qualified") {
@@ -1027,12 +958,10 @@ export const setContactNeeded = internalMutation({
       prospectId: prospect._id,
       kind: "next_action_set",
       summary: `Contact needed: ${reason}`,
-      operationKey: `prospect:${prospect._id}:contact-needed:${args.runId}`,
+      operationKey: `prospect:${prospect._id}:contact-needed:${args.expectedVersion}`,
       ...(nextStage === prospect.salesStage
         ? {}
         : { fromStage: prospect.salesStage, toStage: nextStage }),
-      missionId: mission._id,
-      runId: args.runId,
       details: {
         ...(prospect.nextAction !== undefined
           ? { fromNextAction: prospect.nextAction }
@@ -1050,9 +979,8 @@ export const setContactNeeded = internalMutation({
  *
  * G2 item 5 requires the gateway to "reject enrichment until Convex has
  * accepted qualification evidence for that prospect". Both halves are checked
- * here, BEFORE any Apollo call could exist: the lead must be `qualified`, and
- * at least one `evidence` row must already name it. The refusal is therefore
- * provable with Apollo blocked, which is exactly the half P21 owns.
+ * here, before any paid enrichment call could exist: the lead must be
+ * `qualified`, and at least one `evidence` row must already name it.
  *
  * This never advances `salesStage`. Once an address exists the lead is ready
  * to draft, and `draft_ready` is `markDraftReady`'s to assert; going back from
@@ -1064,18 +992,16 @@ export const setContactNeeded = internalMutation({
 export const applyContactEnrichment = internalMutation({
   args: {
     prospectId: v.id("prospects"),
-    missionId: v.id("missions"),
-    runId: v.id("runs"),
+    workspaceId: v.id("workspaces"),
     expectedVersion: v.number(),
     contact: vProspectContact,
   },
   returns: vProspectDoc,
   handler: async (ctx, args) => {
-    const { prospect, mission } = await loadBranchTarget(
+    const prospect = await loadPipelineTarget(
       ctx,
       args.prospectId,
-      args.missionId,
-      args.runId,
+      args.workspaceId,
     );
     assertExpectedVersion(prospect.version, args.expectedVersion, "prospect");
     if (prospect.qualification !== "qualified") {
@@ -1122,9 +1048,7 @@ export const applyContactEnrichment = internalMutation({
       prospectId: prospect._id,
       kind: "contact_enriched",
       summary: stageReason,
-      operationKey: `prospect:${prospect._id}:contact:${args.runId}`,
-      missionId: mission._id,
-      runId: args.runId,
+      operationKey: `prospect:${prospect._id}:contact:${args.expectedVersion}`,
       details: {
         ...(prospect.nextAction !== undefined
           ? { fromNextAction: prospect.nextAction }
@@ -1144,18 +1068,16 @@ export const applyContactEnrichment = internalMutation({
 export const markDraftReady = internalMutation({
   args: {
     prospectId: v.id("prospects"),
-    missionId: v.id("missions"),
-    runId: v.id("runs"),
+    workspaceId: v.id("workspaces"),
     expectedVersion: v.number(),
     draftId: v.id("drafts"),
   },
   returns: vProspectDoc,
   handler: async (ctx, args) => {
-    const { prospect, mission } = await loadBranchTarget(
+    const prospect = await loadPipelineTarget(
       ctx,
       args.prospectId,
-      args.missionId,
-      args.runId,
+      args.workspaceId,
     );
     assertExpectedVersion(prospect.version, args.expectedVersion, "prospect");
     const draft = await ctx.db.get("drafts", args.draftId);
@@ -1194,8 +1116,6 @@ export const markDraftReady = internalMutation({
       ...(nextStage === prospect.salesStage
         ? {}
         : { fromStage: prospect.salesStage, toStage: nextStage }),
-      missionId: mission._id,
-      runId: args.runId,
       details: {
         ...(prospect.nextAction !== undefined
           ? { fromNextAction: prospect.nextAction }
@@ -1680,7 +1600,6 @@ export const markSendAccepted = internalMutation({
       kind: "send_accepted",
       summary: `Outbound send accepted by the provider (attempt ${attempt._id})`,
       operationKey: `prospect:${prospect._id}:send-accepted:${attempt._id}`,
-      ...(draft !== null ? { missionId: draft.missionId } : {}),
       ...(booking !== null ? { bookingId: booking._id } : {}),
     });
     if (moved) {

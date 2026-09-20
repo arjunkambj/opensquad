@@ -1,22 +1,19 @@
 /**
- * Approvals — owner/operator resolution of `draft_approval` decisions
- * (architecture §4.3/§8, verification V13).
+ * Approvals — owner/operator resolution of a draft (architecture §4.3/§8,
+ * verification V13).
  *
  * `approve` / `requestChanges` / `reject` are three DISTINCT operations; all
- * of them (a) check the decision's expectedVersion, (b) dedupe on
- * (workspaceId, requestId) through the approvals table, (c) bind the exact
- * draft revision — payload hash, normalized recipient, current-draft pointer
- * and conversation context version — then (d) write one immutable
- * `approvals` row and (e) resolve the decision through `decisions.resolveBound`
- * (P06's single resolution path: it also delivers the workflow continuation
- * transactionally).
+ * of them (a) dedupe on (workspaceId, requestId) through the approvals table,
+ * (b) bind the exact draft revision — payload hash, normalized recipient,
+ * current-draft pointer and conversation context version — then (c) write one
+ * immutable `approvals` row.
  *
  * The verdict written on the approvals row is `approved` or `rejected`;
  * `requestChanges` records `rejected` (this exact content is not approved)
- * while the decision answer's `fields.draftResolution` carries the
- * workflow-visible distinction (`changes_requested` → redraft, `rejected` →
- * intentional terminal rejection). Stale approvals fail `CONFLICT` rather
- * than silently applying to newer content.
+ * while `draftResolution` carries the caller-visible distinction
+ * (`changes_requested` → redraft, `rejected` → intentional terminal
+ * rejection). Stale approvals fail `CONFLICT` rather than silently applying to
+ * newer content.
  *
  * Send authorization is NOT granted here: `sending.ts` re-runs the full
  * preflight immediately before dispatch, and only an `approved` approvals
@@ -35,7 +32,6 @@ import {
   boundedLimit,
   boundedString,
   domainError,
-  invalid,
 } from "./lib/validators";
 import type { ApprovalVerdict, DraftResolution } from "./lib/validators";
 import { recordActivityEvent } from "./activity";
@@ -95,11 +91,11 @@ export const listForDraft = query({
 
 type ResolveInput = {
   workspaceId: Id<"workspaces">;
-  decisionId: Id<"decisions">;
-  expectedVersion: number;
+  draftId: Id<"drafts">;
   requestId: string;
   verdict: ApprovalVerdict;
-  /** Carried on `answer.fields.draftResolution` for the waiting workflow. */
+  /** The caller-visible distinction between a redraft request and a
+   *  deliberate terminal rejection. */
   draftResolution: DraftResolution;
   /** Human-readable comment/reason — required for non-approvals. */
   body?: string;
@@ -107,12 +103,10 @@ type ResolveInput = {
 
 /**
  * Shared resolution path for all three operations. The whole flow — dedupe
- * check, draft/context binding checks, approval insert, decision resolution
- * and the `approvalId` link — runs in ONE transaction; the nested
- * `decisions.resolveBound` re-validates `expectedVersion` and rejects a
- * second/different resolution of the same decision.
+ * check, draft/context binding checks and the approval insert — runs in ONE
+ * transaction.
  */
-async function resolveDraftDecision(
+async function resolveDraft(
   ctx: MutationCtx,
   args: ResolveInput,
 ): Promise<{ approval: Doc<"approvals">; replayed: boolean }> {
@@ -122,85 +116,48 @@ async function resolveDraftDecision(
     max: 100,
   });
 
-  const decision = await ctx.db.get("decisions", args.decisionId);
-  if (decision === null || decision.workspaceId !== args.workspaceId) {
-    throw domainError("NOT_FOUND", "decision not found");
-  }
-  if (decision.kind !== "draft_approval") {
-    throw invalid("decision is not a draft approval ask");
+  const draft = await ctx.db.get("drafts", args.draftId);
+  if (draft === null || draft.workspaceId !== args.workspaceId) {
+    throw domainError("NOT_FOUND", "draft not found");
   }
 
-  // Idempotent replay — the recorded row is returned verbatim; the decision
-  // stays resolved exactly once and the activity feed stays unique. The
-  // dedupe is bound to THIS decision's recorded approval: reusing the same
-  // requestId against a different ask (e.g. the new revision's decision
-  // after a supersede) must surface a CONFLICT, not silently return a
-  // verdict recorded for unrelated content while this ask stays open.
+  // Idempotent replay — the recorded row is returned verbatim, so the
+  // activity feed stays unique. The dedupe is bound to THIS draft: reusing
+  // the same requestId against a different revision must surface a CONFLICT,
+  // not silently return a verdict recorded for unrelated content.
   const prior = await ctx.db
     .query("approvals")
     .withIndex("by_workspaceId_and_requestId", (q) =>
-      q
-        .eq("workspaceId", args.workspaceId)
-        .eq("requestId", requestId),
+      q.eq("workspaceId", args.workspaceId).eq("requestId", requestId),
     )
     .unique();
   if (prior !== null) {
+    if (prior.draftId !== draft._id) {
+      throw domainError(
+        "CONFLICT",
+        `requestId ${requestId} was already used to resolve a different draft`,
+      );
+    }
     if (prior.decision !== args.verdict) {
       throw domainError(
         "CONFLICT",
         `requestId ${requestId} already recorded a "${prior.decision}" verdict`,
       );
     }
-    if (decision.approvalId !== String(prior._id)) {
-      throw domainError(
-        "CONFLICT",
-        `requestId ${requestId} was already used to resolve a different decision`,
-      );
-    }
-    // `requestChanges` and `reject` share the "rejected" verdict — the
-    // workflow-visible distinction lives on the recorded answer. Reusing
-    // one operation's requestId for the other must CONFLICT, not silently
-    // replay a terminal rejection as a redraft request (or vice versa).
-    if (decision.answer?.fields?.draftResolution !== args.draftResolution) {
-      throw domainError(
-        "CONFLICT",
-        `requestId ${requestId} recorded a different draft resolution`,
-      );
-    }
     return { approval: prior, replayed: true };
   }
 
-  if (decision.state !== "open") {
-    throw domainError(
-      "CONFLICT",
-      `decision is already ${decision.state} — a prior resolution stands`,
-    );
-  }
-  if (decision.version !== args.expectedVersion) {
-    throw domainError(
-      "CONFLICT",
-      `decision version is ${decision.version}, not ${args.expectedVersion}`,
-    );
-  }
-  if (decision.draftId === undefined) {
-    throw invalid("draft approval decision is not bound to a draft");
-  }
-
-  const draft = await ctx.db.get(
-    "drafts",
-    decision.draftId as Id<"drafts">,
-  );
-  if (draft === null || draft.workspaceId !== args.workspaceId) {
-    throw domainError("NOT_FOUND", "draft not found");
-  }
   const conversation = await ctx.db.get("conversations", draft.conversationId);
   if (conversation === null) {
     throw domainError("NOT_FOUND", "conversation not found");
   }
-  // Exact-draft binding (§8): the ask is answerable only while the bound
+  // Exact-draft binding (§8): the draft is answerable only while this
   // revision is still current and no inbound/context change has moved the
   // conversation past the version the draft was written against.
-  if (conversation.currentDraftId !== draft._id || draft.supersededAt !== undefined) {
+  if (
+    conversation.currentDraftId !== draft._id ||
+    draft.supersededAt !== undefined
+  ) {
     throw domainError(
       "CONFLICT",
       "the bound draft revision is no longer the conversation's current draft",
@@ -217,7 +174,7 @@ async function resolveDraftDecision(
   // confirmed/rescheduled/cancelled booking means the mailed times or link
   // are no longer the offer on the table — approving this revision would
   // authorize content that no longer matches the agreement. The dispatch
-  // preflight runs the same check a third time before any wire call.
+  // preflight runs the same check a second time before any wire call.
   if (draft.bookingId !== undefined) {
     const booking = await ctx.db.get("bookings", draft.bookingId);
     if (booking === null || booking.workspaceId !== args.workspaceId) {
@@ -253,29 +210,6 @@ async function resolveDraftDecision(
     throw domainError("NOT_FOUND", "approval not found after insert");
   }
 
-  // Resolve through the bound internal path (the public `resolve` refuses
-  // artifact-bound kinds): version + state checks are re-applied there and
-  // the workflow continuation is delivered in the same transaction. The same
-  // requestId marks the decision's resolutionRequestId. The verdict
-  // distinction (changes requested vs rejected) rides in fields.
-  const answer = {
-    approved: args.verdict === "approved",
-    ...(args.body !== undefined ? { body: args.body } : {}),
-    fields: { draftResolution: args.draftResolution },
-  };
-  await ctx.runMutation(internal.decisions.resolveBound, {
-    workspaceId: args.workspaceId,
-    decisionId: args.decisionId,
-    expectedVersion: args.expectedVersion,
-    requestId,
-    answer,
-    resolvedBy: identityKey,
-  });
-  // Link the decision to its immutable approval row (forward string ref).
-  await ctx.db.patch("decisions", args.decisionId, {
-    approvalId,
-  });
-
   const verb =
     args.draftResolution === "approved"
       ? "approved"
@@ -284,7 +218,6 @@ async function resolveDraftDecision(
         : "rejected";
   await recordActivityEvent(ctx, {
     workspaceId: args.workspaceId,
-    missionId: decision.missionId,
     kind: "approval_recorded",
     summary:
       `Draft revision ${draft.revision} ${verb} by an authorized ` +
@@ -301,15 +234,14 @@ async function resolveDraftDecision(
 /* ------------------------------------------------------------------ */
 
 /**
- * Approve the exact bound draft revision. Produces an `approved` approvals
- * row — the ONLY artifact that can satisfy the send preflight's exact-draft
- * gate. `comment` is optional review context.
+ * Approve the exact draft revision. Produces an `approved` approvals row —
+ * the ONLY record that can satisfy the send preflight's exact-draft gate.
+ * `comment` is optional review context.
  */
 export const approve = mutation({
   args: {
     workspaceId: v.id("workspaces"),
-    decisionId: v.id("decisions"),
-    expectedVersion: v.number(),
+    draftId: v.id("drafts"),
     requestId: v.string(),
     comment: v.optional(v.string()),
   },
@@ -318,10 +250,9 @@ export const approve = mutation({
     replayed: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const result = await resolveDraftDecision(ctx, {
+    const result = await resolveDraft(ctx, {
       workspaceId: args.workspaceId,
-      decisionId: args.decisionId,
-      expectedVersion: args.expectedVersion,
+      draftId: args.draftId,
       requestId: args.requestId,
       verdict: "approved",
       draftResolution: "approved",
@@ -346,17 +277,15 @@ export const approve = mutation({
 });
 
 /**
- * Request changes — resolves the ask as NOT approved with a required comment
- * describing what must change. The workflow-visible distinction
- * (`fields.draftResolution = "changes_requested"`) tells the pipeline to
- * redraft; the approvals row records an immutable `rejected` verdict for
- * this exact content.
+ * Request changes — records NOT approved with a required comment describing
+ * what must change. The approvals row records an immutable `rejected` verdict
+ * for this exact content; `changes_requested` is the caller-visible signal to
+ * redraft.
  */
 export const requestChanges = mutation({
   args: {
     workspaceId: v.id("workspaces"),
-    decisionId: v.id("decisions"),
-    expectedVersion: v.number(),
+    draftId: v.id("drafts"),
     requestId: v.string(),
     comment: v.string(),
   },
@@ -369,10 +298,9 @@ export const requestChanges = mutation({
       min: 1,
       max: 2000,
     });
-    return await resolveDraftDecision(ctx, {
+    return await resolveDraft(ctx, {
       workspaceId: args.workspaceId,
-      decisionId: args.decisionId,
-      expectedVersion: args.expectedVersion,
+      draftId: args.draftId,
       requestId: args.requestId,
       verdict: "rejected",
       draftResolution: "changes_requested",
@@ -382,14 +310,13 @@ export const requestChanges = mutation({
 });
 
 /**
- * Reject the exact bound draft revision with a required reason — the
- * deliberate terminal "do not send this" verdict.
+ * Reject the exact draft revision with a required reason — the deliberate
+ * terminal "do not send this" verdict.
  */
 export const reject = mutation({
   args: {
     workspaceId: v.id("workspaces"),
-    decisionId: v.id("decisions"),
-    expectedVersion: v.number(),
+    draftId: v.id("drafts"),
     requestId: v.string(),
     reason: v.string(),
   },
@@ -402,10 +329,9 @@ export const reject = mutation({
       min: 1,
       max: 2000,
     });
-    return await resolveDraftDecision(ctx, {
+    return await resolveDraft(ctx, {
       workspaceId: args.workspaceId,
-      decisionId: args.decisionId,
-      expectedVersion: args.expectedVersion,
+      draftId: args.draftId,
       requestId: args.requestId,
       verdict: "rejected",
       draftResolution: "rejected",

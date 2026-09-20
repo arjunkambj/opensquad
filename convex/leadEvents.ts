@@ -120,8 +120,6 @@ export async function appendLeadEvent(
     fromStage?: SalesStage;
     toStage?: SalesStage;
     bookingId?: Id<"bookings">;
-    missionId?: Id<"missions">;
-    runId?: Id<"runs">;
     details?: LeadEventDetails;
     /** Overrides the default `workflow` actor. The ONLY legitimate override
      *  is a `human` carrying an identityKey the backend itself captured from
@@ -152,8 +150,6 @@ export async function appendLeadEvent(
     ...(event.fromStage !== undefined ? { fromStage: event.fromStage } : {}),
     ...(event.toStage !== undefined ? { toStage: event.toStage } : {}),
     ...(event.bookingId !== undefined ? { bookingId: event.bookingId } : {}),
-    ...(event.missionId !== undefined ? { missionId: event.missionId } : {}),
-    ...(event.runId !== undefined ? { runId: event.runId } : {}),
     ...(event.details !== undefined ? { details: event.details } : {}),
   });
 }

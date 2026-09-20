@@ -5,10 +5,10 @@
  * subject, body, reply parent}; `payloadHash` commits to the canonical
  * serialization of those fields (`computePayloadHash`). Nothing here edits
  * a row in place — `revise`/`createRevision` insert revision N+1, move
- * `conversations.currentDraftId`, advance `contextVersion` (a new current
- * draft is an explicit context change), supersede the old open
- * `draft_approval` decision and open a fresh one through the P06 decision
- * APIs. Old revisions keep `supersededAt` so history stays auditable.
+ * `conversations.currentDraftId` and advance `contextVersion` (a new current
+ * draft is an explicit context change). An approval is recorded against a
+ * specific revision, so a newer revision simply leaves the old approval
+ * inapplicable. Old revisions keep `supersededAt` so history stays auditable.
  *
  * CONVERSATION HELPERS BELOW ARE A MINIMAL P10 SEAM: P11 owns the real
  * `convex/conversations.ts` module (inbox listing, inbound association,
@@ -89,92 +89,16 @@ function endpointFor(replyToMessageRef: string | undefined): EndpointOperation {
 }
 
 /**
- * Supersede every OPEN `draft_approval` decision bound to drafts of this
- * conversation (there is at most one by askKey uniqueness, but a stale ask
- * on an older revision is retired too). The lookup is by draft, not by
- * mission: a revision installed under a different mission (a P11 reply
- * mission revising an outreach conversation) must still retire the ask the
- * outgoing revision left open — otherwise that ask stays bound to a
- * superseded draft forever, unresolvable and pinning `requiredDecisionCount`
- * on the originating mission.
- */
-async function supersedeOpenDraftDecisions(
-  ctx: MutationCtx,
-  conversationId: Id<"conversations">,
-): Promise<Doc<"decisions">[]> {
-  const draftsOfConversation = await ctx.db
-    .query("drafts")
-    .withIndex("by_conversationId_and_revision", (q) =>
-      q.eq("conversationId", conversationId),
-    )
-    .collect();
-  const retired: Doc<"decisions">[] = [];
-  for (const draft of draftsOfConversation) {
-    const bound = await ctx.db
-      .query("decisions")
-      .withIndex("by_draftId", (q) => q.eq("draftId", draft._id))
-      .collect();
-    for (const decision of bound) {
-      if (decision.kind === "draft_approval" && decision.state === "open") {
-        await ctx.runMutation(internal.decisions.supersedeDecision, {
-          decisionId: decision._id,
-          reason: "replaced by a newer draft revision",
-        });
-        retired.push(decision);
-      }
-    }
-  }
-  return retired;
-}
-
-/**
- * Open the fresh `draft_approval` ask for a new current draft. Binds to the
- * superseded decision's workflow when there is one (a branch child workflow
- * stays the waiter), else the mission's own workflow.
- */
-async function openDraftApprovalDecision(
-  ctx: MutationCtx,
-  args: {
-    mission: Doc<"missions">;
-    draft: Doc<"drafts">;
-    targetWorkflowId?: string;
-  },
-): Promise<void> {
-  const targetWorkflowId =
-    args.targetWorkflowId ?? args.mission.workflowId;
-  if (targetWorkflowId === undefined) {
-    // A mission without a dispatched workflow has nothing to wake — this is
-    // reachable only on staged/probe data; the draft exists but cannot gain
-    // an approval path until a workflow owns the ask.
-    return;
-  }
-  await ctx.runMutation(internal.decisions.openRequiredDecision, {
-    missionId: args.mission._id,
-    kind: "draft_approval",
-    reason:
-      `Approve the exact draft (revision ${args.draft.revision}) to ` +
-      `${args.draft.normalizedRecipient}. Approving binds this revision's ` +
-      `payload hash and the current conversation context only.`,
-    askKey: `draft_approval:${args.draft._id}`,
-    required: true,
-    draftId: args.draft._id,
-    targetWorkflowId,
-  });
-}
-
-/**
  * The single immutable-revision write path shared by `revise` and
  * `createRevision`. Runs entirely inside the caller's transaction: insert
- * the new revision row, move `currentDraftId`, advance `contextVersion`,
- * supersede the old open ask and open the fresh one.
+ * the new revision row, move `currentDraftId` and advance `contextVersion`.
  */
 async function installRevision(
   ctx: MutationCtx,
   args: {
     workspace: Doc<"workspaces">;
     conversation: Doc<"conversations">;
-    mission: Doc<"missions">;
-    campaign: Doc<"campaigns">;
+    campaign: Doc<"campaigns"> | null;
     recipient: string;
     subject: string;
     body: string;
@@ -186,9 +110,6 @@ async function installRevision(
      *  the approval and dispatch gates re-check it against live state. */
     bookingId?: Id<"bookings">;
     bookingVersion?: number;
-    /** Workflow that should wait on the fresh approval ask. */
-    targetWorkflowId?: string;
-    openDecision: boolean;
   },
 ): Promise<Doc<"drafts">> {
   const normalizedRecipient = normalizeEmailAddress(args.recipient);
@@ -245,7 +166,6 @@ async function installRevision(
     workspaceId: args.workspace._id,
     conversationId: args.conversation._id,
     inboxRef: args.conversation.inboxRef,
-    missionId: args.mission._id,
     revision,
     recipient: boundedString(args.recipient, "recipient", {
       min: 3,
@@ -258,7 +178,7 @@ async function installRevision(
     // A new current draft is an explicit context change (§8): bump the
     // version first so this revision binds the post-change context.
     basedOnContextVersion: args.conversation.contextVersion + 1,
-    campaignBriefVersion: args.campaign.briefVersion,
+    campaignBriefVersion: args.campaign?.briefVersion ?? 0,
     policyVersion: args.workspace.policyVersion,
     evidenceIds,
     createdBy: args.createdBy,
@@ -281,14 +201,6 @@ async function installRevision(
     throw domainError("NOT_FOUND", "draft not found after insert");
   }
 
-  // Superseding open draft_approval asks is a correctness invariant of the
-  // revision change itself — independent of whether a fresh ask opens. An
-  // `openDecision:false` install must not strand the prior revision's ask.
-  const retired = await supersedeOpenDraftDecisions(
-    ctx,
-    args.conversation._id,
-  );
-
   // A parked (pre-dispatch) send intent authorized against the superseded
   // revision can never legally dispatch now — retire it in the same
   // transaction so its stale wake cannot block the corrected send.
@@ -298,20 +210,6 @@ async function installRevision(
     reason: `revision ${revision} superseded the draft it was authorized against`,
   });
 
-  if (args.openDecision) {
-    // The fresh ask prefers an explicitly passed waiter, then a retired ask
-    // from THIS mission (a foreign mission's targetWorkflowId would fail
-    // openRequiredDecision's ownership check), then the mission workflow.
-    const sameMission = retired.find(
-      (decision) => decision.missionId === args.mission._id,
-    );
-    await openDraftApprovalDecision(ctx, {
-      mission: args.mission,
-      draft,
-      targetWorkflowId:
-        args.targetWorkflowId ?? sameMission?.targetWorkflowId,
-    });
-  }
   return draft;
 }
 
@@ -425,38 +323,14 @@ export const listForConversation = query({
   },
 });
 
-/** Drafts produced under one mission (all conversations), newest first. */
-export const listForMission = query({
-  args: {
-    workspaceId: v.id("workspaces"),
-    missionId: v.id("missions"),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(vDraftDoc),
-  handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const mission = await ctx.db.get("missions", args.missionId);
-    if (mission === null || mission.workspaceId !== args.workspaceId) {
-      throw domainError("NOT_FOUND", "mission not found");
-    }
-    const limit = boundedLimit(args.limit);
-    return await ctx.db
-      .query("drafts")
-      .withIndex("by_missionId", (q) => q.eq("missionId", args.missionId))
-      .order("desc")
-      .take(limit);
-  },
-});
-
 /* ------------------------------------------------------------------ */
 /* Public mutation: human revision                                     */
 /* ------------------------------------------------------------------ */
 
 /**
  * Revise the current draft (owner/operator). Any send-field change inserts
- * revision N+1, moves `currentDraftId`, advances `contextVersion`,
- * supersedes the open approval ask and opens a fresh one — an old approval
- * can never silently apply to changed content (§8).
+ * revision N+1, moves `currentDraftId` and advances `contextVersion` — an
+ * old approval can never silently apply to changed content (§8).
  *
  * `expectedRevision` is the optimistic-concurrency guard and the natural
  * idempotency: a replay sees `draft.revision !== expectedRevision` and gets
@@ -541,14 +415,10 @@ export const revise = mutation({
       throw invalid("revise requires at least one of recipient/subject/body");
     }
 
-    const mission = await ctx.db.get("missions", current.missionId);
-    if (mission === null) {
-      throw domainError("NOT_FOUND", "mission not found");
-    }
-    const campaign = await ctx.db.get("campaigns", mission.campaignId);
-    if (campaign === null) {
-      throw domainError("NOT_FOUND", "campaign not found");
-    }
+    const campaign =
+      conversation.campaignId === undefined
+        ? null
+        : await ctx.db.get("campaigns", conversation.campaignId);
 
     // The booking link survives a content edit ONLY while it still names a
     // live proposal at the version the draft was written against. A
@@ -580,7 +450,6 @@ export const revise = mutation({
     const draft = await installRevision(ctx, {
       workspace,
       conversation,
-      mission,
       campaign,
       recipient,
       subject,
@@ -589,13 +458,11 @@ export const revise = mutation({
       replyToMessageRef: current.replyToMessageRef,
       createdBy: identityKey,
       requestId,
-      openDecision: true,
       ...(bookingLink !== undefined ? bookingLink : {}),
     });
 
     await recordActivityEvent(ctx, {
       workspaceId: args.workspaceId,
-      missionId: mission._id,
       kind: "draft_revised",
       summary: `Draft revised to revision ${draft.revision} for ${draft.normalizedRecipient}`,
       actor: identityKey,
@@ -611,21 +478,14 @@ export const revise = mutation({
 /* ------------------------------------------------------------------ */
 
 /**
- * Propose a new immutable draft revision on a conversation (pipeline path —
- * P09's draft-proposal step and P11's reply flow call this). Validates the
- * recipient, bounds subject/body, records `basedOnContextVersion`,
- * `campaignBriefVersion` and `policyVersion`, installs the revision and —
- * unless `openDecision` is false — supersedes the stale open ask and opens
- * the fresh required `draft_approval` decision transactionally.
- *
- * `requestId` dedupes retries; `targetWorkflowId` may name the branch child
- * workflow that should be woken (must be owned by the mission — enforced by
- * `openRequiredDecision`).
+ * Propose a new immutable draft revision on a conversation (pipeline path).
+ * Validates the recipient, bounds subject/body, records
+ * `basedOnContextVersion`, `campaignBriefVersion` and `policyVersion`, and
+ * installs the revision. `requestId` dedupes retries.
  */
 export const createRevision = internalMutation({
   args: {
     conversationId: v.id("conversations"),
-    missionId: v.id("missions"),
     recipient: v.string(),
     subject: v.string(),
     body: v.string(),
@@ -633,8 +493,6 @@ export const createRevision = internalMutation({
     replyToMessageRef: v.optional(v.string()),
     requestId: v.optional(v.string()),
     createdBy: v.optional(v.string()),
-    targetWorkflowId: v.optional(v.string()),
-    openDecision: v.optional(v.boolean()),
     /** Booking-proposal link (§4.3, P19): the proposal this content offers
      *  and the booking version it was written against. Validated against
      *  live state here, then AGAIN at approval and dispatch — a rescheduled
@@ -647,10 +505,6 @@ export const createRevision = internalMutation({
     const conversation = await ctx.db.get("conversations", args.conversationId);
     if (conversation === null) {
       throw domainError("NOT_FOUND", "conversation not found");
-    }
-    const mission = await ctx.db.get("missions", args.missionId);
-    if (mission === null || mission.workspaceId !== conversation.workspaceId) {
-      throw domainError("NOT_FOUND", "mission not found");
     }
     if ((args.bookingId === undefined) !== (args.bookingVersion === undefined)) {
       throw invalid("bookingId and bookingVersion must be supplied together");
@@ -689,14 +543,16 @@ export const createRevision = internalMutation({
       );
     }
     const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
-    const campaign = await ctx.db.get("campaigns", mission.campaignId);
-    if (workspace === null || campaign === null) {
-      throw domainError("NOT_FOUND", "workspace or campaign not found");
+    if (workspace === null) {
+      throw domainError("NOT_FOUND", "workspace not found");
     }
+    const campaign =
+      conversation.campaignId === undefined
+        ? null
+        : await ctx.db.get("campaigns", conversation.campaignId);
     const draft = await installRevision(ctx, {
       workspace,
       conversation,
-      mission,
       campaign,
       recipient: args.recipient,
       subject: args.subject,
@@ -708,15 +564,12 @@ export const createRevision = internalMutation({
           ? "workflow"
           : boundedString(args.createdBy, "createdBy", { min: 1, max: 300 }),
       requestId,
-      targetWorkflowId: args.targetWorkflowId,
-      openDecision: args.openDecision ?? true,
       ...(args.bookingId !== undefined && args.bookingVersion !== undefined
         ? { bookingId: args.bookingId, bookingVersion: args.bookingVersion }
         : {}),
     });
     await recordActivityEvent(ctx, {
       workspaceId: workspace._id,
-      missionId: mission._id,
       kind: "draft_created",
       summary: `Draft revision ${draft.revision} proposed for ${draft.normalizedRecipient}`,
       actor: "workflow",
@@ -744,7 +597,6 @@ export const stageConversation = internalMutation({
     conversationId: v.optional(v.id("conversations")),
     workspaceId: v.id("workspaces"),
     inboxRef: v.string(),
-    employeeId: v.optional(v.id("employees")),
     providerThreadRef: v.optional(v.string()),
     prospectId: v.optional(v.id("prospects")),
     state: v.optional(vConversationState),
@@ -793,9 +645,6 @@ export const stageConversation = internalMutation({
         }
       }
       await ctx.db.patch("conversations", existing._id, {
-        ...(args.employeeId !== undefined
-          ? { employeeId: args.employeeId }
-          : {}),
         ...(providerThreadRef !== undefined ? { providerThreadRef } : {}),
         ...(prospectId !== undefined ? { prospectId } : {}),
         ...(args.state !== undefined ? { state: args.state } : {}),
@@ -833,30 +682,10 @@ export const stageConversation = internalMutation({
       }
     }
 
-    let employeeId = args.employeeId;
-    if (employeeId === undefined) {
-      const outreach = await ctx.db
-        .query("employees")
-        .withIndex("by_workspaceId_and_template", (q) =>
-          q.eq("workspaceId", args.workspaceId).eq("template", "outreach"),
-        )
-        .unique();
-      if (outreach === null) {
-        throw invalid("workspace has no outreach employee for the conversation");
-      }
-      employeeId = outreach._id;
-    } else {
-      const employee = await ctx.db.get("employees", employeeId);
-      if (employee === null || employee.workspaceId !== args.workspaceId) {
-        throw domainError("NOT_FOUND", "employee not found");
-      }
-    }
-
     const now = Date.now();
     const conversationId = await ctx.db.insert("conversations", {
       workspaceId: args.workspaceId,
       inboxRef,
-      employeeId,
       state: args.state ?? "open",
       humanTakeover: args.humanTakeover ?? false,
       contextVersion: args.contextVersion ?? 1,
@@ -931,12 +760,12 @@ export const applyInboundContext = internalMutation({
       updatedAt: Date.now(),
     });
 
-    // Inbound mail makes a pending draft approval obsolete (§8.5) — and a
+    // Inbound mail makes a pending draft approval obsolete (§8.5): the
+    // context version just moved, so no recorded approval still matches. A
     // parked send intent authorized against the now-stale context can never
     // legally dispatch either, so retire it here rather than letting it
     // block the conversation until its stale wake fires.
     if (conversation.currentDraftId !== undefined) {
-      await supersedeOpenDraftDecisions(ctx, conversation._id);
       await ctx.runMutation(
         internal.sending.cancelParkedConversationAttempts,
         {
@@ -1036,12 +865,11 @@ export const retireConversationWork = internalMutation({
       throw domainError("NOT_FOUND", "conversation not found");
     }
     const reason = boundedString(args.reason, "reason", { min: 1, max: 500 });
-    // A conversation that never had a draft has no ask and no reserved
-    // attempt to retire — the same guard `applyInboundContext` uses.
+    // A conversation that never had a draft has no reserved attempt to
+    // retire — the same guard `applyInboundContext` uses.
     if (conversation.currentDraftId === undefined) {
       return null;
     }
-    await supersedeOpenDraftDecisions(ctx, conversation._id);
     // The retired counts are deliberately not returned: `sending.ts` imports
     // this module, so typing this call's result here would make the two
     // modules' inference circular. Nothing needs the numbers — the retiring
