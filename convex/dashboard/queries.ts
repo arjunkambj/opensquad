@@ -8,7 +8,8 @@
  * reads as a counted result.
  *
  * `from`/`to` are instants the caller derived in the workspace's own zone;
- * `model.ts` explains the bounds and names the rows behind every number.
+ * `model.ts` explains the bounds, and `leadReads.ts` / `outcomeReads.ts`
+ * name the rows behind every number.
  */
 import { query } from "../_generated/server";
 import { requireWorkspaceMember } from "../lib/auth";

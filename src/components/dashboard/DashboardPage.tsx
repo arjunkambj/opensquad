@@ -10,8 +10,8 @@
  * every query on this page is given the same two instants, derived in the
  * WORKSPACE's zone. That is what makes the acceptance check possible: each
  * figure counts rows Contacts and the Inbox can be filtered to over the same
- * window (each query's doc comment in `convex/dashboard/model.ts` names its
- * rows exactly).
+ * window (`convex/dashboard/leadReads.ts` and `outcomeReads.ts` name the rows
+ * behind each one exactly).
  *
  * A brand-new workspace reaches every panel's designed empty state. Nothing
  * here renders a zero that was not counted, and nothing renders sample rows.
