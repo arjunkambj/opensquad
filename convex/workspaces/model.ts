@@ -8,7 +8,10 @@
  */
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { requireUser } from "../lib/auth";
+import { createDraftAgent } from "../agents/model";
+import { trialCapacityOpen } from "../billing/platformBudgets";
+import { grantTrialBuckets } from "../billing/trialBuckets";
+import { requireVerifiedUser } from "../lib/auth";
 import type { AuthCtx } from "../lib/auth";
 import {
   assertIanaTimezone,
@@ -66,8 +69,20 @@ type EnsureWorkspaceArgs = {
 };
 
 /**
- * Idempotent workspace provisioning: creates the workspace, the owner's
- * active membership in one transaction.
+ * Idempotent workspace provisioning: ONE transaction creates the workspace,
+ * the owner's active membership, the trial credit grant and the draft agent
+ * onboarding fills in. All four or none — a workspace that existed for an
+ * instant without an allowance could spend nothing, and one without an agent
+ * would have nowhere to save an onboarding answer.
+ *
+ * Three rules from PLAN §6 "Closing the ways in" meet here:
+ *   VERIFIED EMAIL. `requireVerifiedUser`, only on this path; every other
+ *   entry point keeps `requireUser`.
+ *   ONE TRIAL WORKSPACE PER USER. The first workspace the caller already owns
+ *   IS their workspace, and this call returns it instead of making a second.
+ *   TRIAL CAPACITY. `MAX_TRIAL_WORKSPACES` refuses a NEW workspace once the
+ *   platform is full; an existing owner is returned theirs regardless, so the
+ *   cap never locks anyone out of what they already have.
  *
  * Idempotency is keyed on the verified identity: a second call — including a
  * retried request — returns the workspace the caller owns. Concurrent first
@@ -86,7 +101,7 @@ export async function ensureWorkspaceImpl(
   ctx: MutationCtx,
   args: EnsureWorkspaceArgs,
 ): Promise<{ workspaceId: Id<"workspaces">; created: boolean }> {
-  const { identity, identityKey } = await requireUser(ctx);
+  const { identity, identityKey } = await requireVerifiedUser(ctx);
 
   const existing = await ctx.db
     .query("memberships")
@@ -104,6 +119,14 @@ export async function ensureWorkspaceImpl(
     if (workspace !== null) {
       return { workspaceId: workspace._id, created: false };
     }
+  }
+
+  // Only a NEW workspace is subject to the platform's signup capacity.
+  if (!(await trialCapacityOpen(ctx))) {
+    throw domainError(
+      "TRIAL_CAPACITY_REACHED",
+      "the trial is full; new workspaces are waitlisted",
+    );
   }
 
   const name =
@@ -152,6 +175,13 @@ export async function ensureWorkspaceImpl(
     createdAt: now,
     updatedAt: now,
   });
+
+  // The trial grant is part of creating the workspace, never implied and
+  // never lazy: no bucket means every paid call refuses (PLAN §6).
+  await grantTrialBuckets(ctx, workspaceId);
+
+  // The one draft agent, so onboarding progress always has a home.
+  await createDraftAgent(ctx, workspaceId);
 
   return { workspaceId, created: true };
 }
