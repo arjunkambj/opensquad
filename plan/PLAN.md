@@ -328,7 +328,7 @@ retuned without touching call sites.
 | Firecrawl pages | 80 | 15 |
 | Emails sent | — (user's own AgentMail key) | existing daily send limit, max 30 |
 
-Also: 1 workspace per user, 1 agent per workspace. The hidden 100-credit cap
+Also: 1 agent per org, and **one trial grant per verified user** — because a user can create any number of organizations in the auth provider, only the first org a verified user initialises receives the trial credits and provider caps; any further org of theirs gets its row and agent with no grant (every paid call refuses with the designed "no credits granted" state), and `MAX_TRIAL_ORGS` still caps the total. The hidden 100-credit cap
 means at most 10 emails found per trial whatever the visible balance says; the
 button explains "Trial limit for emails reached" rather than "out of credits".
 
@@ -369,7 +369,7 @@ cannot overspend. Changes:
 ### Platform-wide circuit breakers
 Table `platformBudgets`: `{ provider, periodKey, limit, used }`, limits from env
 (`ENRICH_DAILY_CREDIT_BUDGET`, `ENRICH_MONTHLY_SEARCH_BUDGET`,
-`AI_DAILY_CALL_BUDGET`, `FIRECRAWL_DAILY_BUDGET`, `MAX_TRIAL_WORKSPACES`).
+`AI_DAILY_CALL_BUDGET`, `FIRECRAWL_DAILY_BUDGET`, `MAX_TRIAL_ORGS`).
 The wrapper debits the workspace bucket **and** the platform bucket in the same
 transaction; if the platform bucket is empty the call refuses for everyone and
 the UI says "Lead search is at capacity today". Worst case per day is therefore
@@ -394,7 +394,7 @@ cannot become an overdraft.
   reveal 10/min) so a script cannot burn a day's allowance in a second or spam
   the scheduler.
 - Signup: verified email (existing Hexclave OTP) before a workspace can be
-  created; one trial workspace per user; `MAX_TRIAL_WORKSPACES` caps total
+  created; one trial grant per verified user; `MAX_TRIAL_ORGS` caps total
   trials, after which new users see a waitlist state.
 - Platform keys live only in Convex env. They are never written to a table,
   log, error message, `activityEvents` row or client payload; provider error
