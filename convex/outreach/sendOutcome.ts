@@ -138,7 +138,7 @@ async function linkConversationThread(
     // orphan every reply already threaded under the first ref, so the first
     // one stands and the second is surfaced. This is not only a provider
     // anomaly: a follow-up with no inbound reply dispatches as `send` rather
-    // than `reply` (`endpointFor` in drafts.ts), and AgentMail mints a fresh
+    // than `reply` (`endpointFor` in draftsModel.ts), and AgentMail mints a fresh
     // thread for a send — so the second thread stays unmapped by design and
     // its replies need assignment.
     mapping = {
@@ -147,7 +147,7 @@ async function linkConversationThread(
     };
   } else {
     // §4.3 uniqueness on (inboxRef, providerThreadRef) — the same guard
-    // `drafts.stageConversation` applies before it patches or inserts a
+    // `conversationStaging.stageConversation` applies before it patches or inserts a
     // thread ref, except it may not throw here. `.collect()`, not `.unique()`:
     // an already-violated pair must not strand an acknowledged send, and the
     // index is not workspace-scoped, so a foreign row must neither block the

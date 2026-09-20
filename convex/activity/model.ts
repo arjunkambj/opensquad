@@ -15,7 +15,7 @@ export type WriteCtx = { db: GenericDatabaseWriter<DataModel> };
 
 export type ActivityInput = {
   workspaceId: Id<"workspaces">;
-  /** One of the ACTIVITY_KINDS lists (lib/validators.ts); stored as a
+  /** One of the ACTIVITY_KINDS lists (lib/validators/activity.ts); stored as a
    *  bounded string. */
   kind: string;
   summary: string;

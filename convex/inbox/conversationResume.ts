@@ -53,8 +53,8 @@ export type ResumeBlockCode = (typeof RESUME_BLOCK_CODES)[number];
 
 /**
  * Declared as a const rather than inline so the handler can be annotated with
- * its own return type — the same reason `drafts.retireConversationWork`
- * returns `v.null()` and every handler in `inbox.ts` states its type.
+ * its own return type — the same reason `conversationStaging.retireConversationWork`
+ * returns `v.null()` and every handler in this domain states its type.
  */
 const vResumeResult = v.object({
   conversation: vConversationDoc,

@@ -76,7 +76,7 @@ export const vApplyInboundMessageResult = v.object({
  * A Convex handler's return type is otherwise inferred, and these handlers
  * reach other modules through the generated `internal` object — which is typed
  * from this module too, so the inference would be circular (TS7022/TS7023).
- * The same reason `drafts.retireConversationWork` returns `v.null()`.
+ * The same reason `conversationStaging.retireConversationWork` returns `v.null()`.
  */
 export type ApplyInboundMessageResult = typeof vApplyInboundMessageResult.type;
 
@@ -191,7 +191,7 @@ export const applyInboundMessage = internalMutation({
     // invalidating the draft an operator is looking at for the newer message
     // and answering the older one instead.
     //
-    // `drafts.applyInboundContext` already clamps `lastMessageAt` for exactly
+    // `conversationStaging.applyInboundContext` already clamps `lastMessageAt` for exactly
     // this reason and says so; its own guard compares only the LAST applied
     // message, so it cannot see a late A behind an applied B. This is that
     // same clamp for everything the late message would otherwise carry.

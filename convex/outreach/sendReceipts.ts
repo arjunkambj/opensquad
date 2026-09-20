@@ -184,7 +184,7 @@ export async function recordReceipt(
   // — fold the verified facts on immediately instead of parking. Inbound
   // receipts never match a send attempt, so this only touches delivery
   // facts. Early events (no attempt yet) stay `pending` for the
-  // acknowledgement path in sending.ts.
+  // acknowledgement path in sendOutcome.ts.
   if (!duplicateApplicationKey) {
     // .collect() not .unique(): a provider anomaly could put the same
     // message ref on two attempts — unique() would throw and wedge the
@@ -210,7 +210,7 @@ export async function recordReceipt(
 /**
  * Fold one pending delivery receipt onto a send attempt: merge its verified
  * facts into `providerDeliveryFacts` and mark the receipt handled. Called by
- * `sending.ts` when an attempt records its providerMessageRef and by the
+ * `sendOutcome.ts` when an attempt records its providerMessageRef and by the
  * receipt path when the attempt already carries it.
  */
 export async function applyReceiptToAttempt(

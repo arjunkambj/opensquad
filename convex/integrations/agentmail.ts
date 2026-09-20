@@ -811,7 +811,7 @@ export const onEvent = internalMutation({
  * projects the payload, resolves the workspace from the saved inbox
  * assignment, writes the receipt and schedules. Conversation matching,
  * `contextVersion` advancement, approval invalidation and everything
- * downstream live in `convex/inbox.ts`, where a throw costs a retry instead of
+ * downstream live in `convex/inbox/`, where a throw costs a retry instead of
  * the event.
  */
 export const onMessageReceived = internalMutation({

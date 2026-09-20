@@ -77,7 +77,7 @@ export type ThreadEntry = FunctionReturnType<
 
 /**
  * One outbound thread entry's state in words. The codes come from
- * `sendResultCode` in `convex/sending.ts` — `sent` means the provider
+ * `sendResultCode` in `convex/outreach/sendGates.ts` — `sent` means the provider
  * accepted the message, which is never rendered "Delivered" (§6, J3 ④).
  * A `draft` is a distinct variant, not an outbound message wearing a state.
  */

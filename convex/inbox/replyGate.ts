@@ -19,7 +19,7 @@ import { v } from "convex/values";
  * prospect/campaign is linked, retain the reply for human review without a
  * reply workflow, draft or send."
  *
- * Names line up with `SEND_BLOCK_CODES` and `conversations.RESUME_BLOCK_CODES`
+ * Names line up with `SEND_BLOCK_CODES` and `conversationResume.RESUME_BLOCK_CODES`
  * wherever the same gate exists, so the inbox, the resume path and the send
  * preflight speak one vocabulary.
  */

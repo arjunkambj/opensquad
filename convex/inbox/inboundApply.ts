@@ -156,7 +156,7 @@ export async function applyToConversation(
  * mail next — the linked lead's contact. Neither is ever read out of the
  * inbound payload, so a message cannot nominate its own suppression target.
  * Suppression is `kind: "email"` for each; an individual opt-out never implies
- * the domain (`suppressions.ts` keeps that rule and P11 does not weaken it).
+ * the domain (`outreach/suppressions.ts` keeps that rule and P11 does not weaken it).
  *
  * AND THE SENDER MUST BE THE PERSON WE MAILED. An explicit opt-out from some
  * other address — a colleague on cc, an assistant, an unparseable header — is
@@ -177,7 +177,7 @@ export async function applyToConversation(
  *
  * A VERIFIED EXPLICIT OPT-OUT DOES NOT TAKE THE THREAD OVER. The suppression
  * row is the durable block, and it is honoured in both directions that matter:
- * `sending.evaluateSendGates` refuses dispatch with `suppressed_email`, and
+ * `sendGates.evaluateSendGates` refuses dispatch with `suppressed_email`, and
  * both `conversations.resume` and the reply gate re-run `matchSuppression`. A
  * takeover flag on top would add a hold an operator has to clear by hand for
  * no additional protection.
@@ -225,7 +225,7 @@ async function enforceOptOut(
       // contact record — and neither is ever read out of the inbound
       // payload, so a message still cannot nominate its own suppression
       // target. Still `kind: "email"` for each: an individual opt-out never
-      // implies the domain, and `suppressions.ts` keeps that rule.
+      // implies the domain, and `outreach/suppressions.ts` keeps that rule.
       const targets = new Set<string>([latestDraft.normalizedRecipient]);
       if (recipient !== null) {
         targets.add(recipient);

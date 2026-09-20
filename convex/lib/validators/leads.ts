@@ -438,7 +438,7 @@ export const RESEARCH_OBSERVATIONS_MAX = 12;
  * `hypothesis`.
  *
  * Matched case-insensitively on the trimmed topic. Nothing else about the
- * model's wording contributes to `confidence` — see `evidence.ts`.
+ * model's wording contributes to `confidence` — see `leads/evidence.ts`.
  */
 export const EVIDENCE_HYPOTHESIS_MARKER = "hypothesis:";
 

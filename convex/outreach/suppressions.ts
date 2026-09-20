@@ -2,7 +2,7 @@
  * Suppressions — explicit email/domain blocks (architecture §4.3/§8.6,
  * integrations G3 step 9).
  *
- * A suppression row is the only thing `sending.ts` honors as "do not send":
+ * A suppression row is the only thing the send boundary honors as "do not send":
  * the preflight normalizes the draft's recipient, checks the exact email
  * key, then the domain key. Email unsubscribe NEVER implies the domain —
  * domain rows are always created explicitly (`kind: "domain"`), which is
@@ -262,7 +262,7 @@ async function insertSuppression(
 
 /**
  * Record a suppression from backend paths (inbound unsubscribe/bounce —
- * P11; delivery-fact folding — sending.ts). Same normalized-unique-key
+ * P11; delivery-fact folding — sendOutcome.ts). Same normalized-unique-key
  * semantics as the public mutation.
  */
 export const recordSuppression = internalMutation({

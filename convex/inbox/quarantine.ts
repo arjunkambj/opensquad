@@ -10,12 +10,12 @@
  * the time a callback runs, the component has already committed its `events`
  * row and marked the `event_id` ingested, so the provider's retry returns from
  * `handleEvent` before enqueueing anything; `@convex-dev/workpool` does not
- * retry mutations; and `inbox.drainPendingInboundReceipts` scans
+ * retry mutations; and `receiptDrain.drainPendingInboundReceipts` scans
  * `emailEventReceipts`, which in this case has no row to scan. A customer's
  * reply vanished with one log line and no artefact anyone could replay.
  *
  * Both causes are ordinary and resolvable, not corruption: the AgentMail inbox
- * is provisioned before `drafts.assignWorkspaceInbox` commits, so there is a
+ * is provisioned before `conversationStaging.assignWorkspaceInbox` commits, so there is a
  * real window during onboarding and during any re-provision; and two
  * workspaces can transiently claim one `inboxRef` because that uniqueness is a
  * transactional convention, not a database constraint.
@@ -30,10 +30,10 @@
  * replayed message is judged by today's rules rather than by a snapshot of the
  * rules in force when it was dropped.
  *
- * HOW IT GETS OUT. `drafts.assignWorkspaceInbox` schedules `replayForInbox`
+ * HOW IT GETS OUT. `conversationStaging.assignWorkspaceInbox` schedules `replayForInbox`
  * for the inbox it just assigned, so the onboarding window closes itself.
  * An operator can also drive it by hand for an inbox whose ambiguity they have
- * resolved. Replay goes through `sendAttempts.recordReceipt` and the ordinary
+ * resolved. Replay goes through `sendReceipts.recordReceipt` and the ordinary
  * `internal.inbox.inbound.applyInboundMessage` path — this module has no second
  * ingest of its own — so the application-key dedupe, the ordering guard and
  * every gate apply to a replayed message exactly as they would have at the
@@ -157,7 +157,7 @@ export type QuarantineReplayResult = typeof vReplayResult.type;
 /**
  * Replay everything held for one inbox, now that it has exactly one claimant.
  *
- * Scheduled by `drafts.assignWorkspaceInbox` the moment an assignment commits,
+ * Scheduled by `conversationStaging.assignWorkspaceInbox` the moment an assignment commits,
  * and callable by hand once an operator has resolved a double claim. It
  * re-resolves the workspace itself rather than trusting a caller's — the
  * quarantine exists precisely because that resolution can fail, and a replay

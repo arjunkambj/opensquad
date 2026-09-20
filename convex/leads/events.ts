@@ -8,7 +8,7 @@
  *   Atomic with the business update. Every mutation that changes a lead or a
  *   booking inserts its event in the SAME transaction, so the history can
  *   never disagree with the row it describes. `appendLeadEvent` below is the
- *   single write path — `prospects.ts` and `bookings.ts` both go through it.
+ *   single write path — the lead mutations and the booking mutations both go through it.
  *
  *   Idempotent by `operationKey`. `(workspaceId, operationKey)` is looked up
  *   in the same transaction as the insert, so a replayed mutation returns the
@@ -54,7 +54,7 @@ export const vLeadEventDoc = v.object({
 
 /**
  * The full history of one lead, newest first, cursor-paginated. A prospect in
- * another workspace is NOT_FOUND — the same rule `prospects.getDetail`
+ * another workspace is NOT_FOUND — the same rule `leads.getDetail`
  * applies to the lead itself.
  */
 export const list = query({

@@ -101,7 +101,7 @@ export async function settleReceipt(
  * Resolve `(inboxRef, providerThreadRef)` to a conversation in the receipt's
  * OWN workspace.
  *
- * This follows `sending.linkConversationThread`, not `drafts.stageConversation`:
+ * This follows `sendOutcome.linkConversationThread`, not `conversationStaging.stageConversation`:
  * the pair's uniqueness is a transactional convention, not a database
  * constraint, and `by_inboxRef_and_providerThreadRef` is not workspace-scoped.
  * `.unique()` would throw on an already-violated pair and wedge the receipt

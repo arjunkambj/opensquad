@@ -95,7 +95,7 @@ export const ensureUnassignedConversation = internalMutation({
       updatedAt: now,
       providerThreadRef: args.providerThreadRef,
       // The inbound facts are written at insert so the very first message is
-      // already applied. `drafts.applyInboundContext` then no-ops for it
+      // already applied. `conversationStaging.applyInboundContext` then no-ops for it
       // (`lastInboundMessageRef` already matches) and the row opens at
       // contextVersion 1 rather than 2 — while a SECOND message on the same
       // unassigned thread advances it normally.

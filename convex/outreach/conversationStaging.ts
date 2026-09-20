@@ -172,7 +172,7 @@ export const applyInboundContext = internalMutation({
     }
     const at = args.at ?? Date.now();
     // `lastMessageAt` backs the inbox ordering indexes, so it is MONOTONIC —
-    // the same guard `sending.linkConversationThread` applies on the outbound
+    // the same guard `sendOutcome.linkConversationThread` applies on the outbound
     // side. Signed provider deliveries arrive out of order (P05 observed
     // `message.delivered` before `message.sent` for one message), and P11's
     // receipt drain can re-drive an older inbound after a newer one has
@@ -301,7 +301,7 @@ export const retireConversationWork = internalMutation({
     if (conversation.currentDraftId === undefined) {
       return null;
     }
-    // The retired counts are deliberately not returned: `sending.ts` imports
+    // The retired counts are deliberately not returned: the send boundary imports
     // this module, so typing this call's result here would make the two
     // modules' inference circular. Nothing needs the numbers — the retiring
     // mutations record their own activity.

@@ -200,7 +200,7 @@ export const addNote = mutation({
 });
 
 /**
- * THE contacted / meeting_proposed derivation — called by `sending.ts`
+ * THE contacted / meeting_proposed derivation — called by the send boundary
  * exactly once per provider-acknowledged send, inside the outcome
  * transaction. It is deliberately non-throwing: a broken association must
  * never roll back the acceptance record the send boundary just committed; it
@@ -328,7 +328,7 @@ export const markSendAccepted = internalMutation({
 });
 
 /**
- * THE replied derivation — called by `inbox.ts` once per verified inbound on
+ * THE replied derivation — called by inbound ingest once per verified inbound on
  * a conversation already linked to a lead, and by
  * `conversations.associateProspect` when a held thread is bound. Keyed on the
  * provider message ref so a replayed receipt dedupes rather than double-

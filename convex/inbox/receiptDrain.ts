@@ -94,10 +94,10 @@ export const drainPendingInboundReceipts = internalMutation({
 /**
  * Settle outbound delivery receipts that can no longer reach an attempt.
  *
- * `sendAttempts.recordReceipt` folds a delivery fact onto its attempt the
+ * `sendReceipts.recordReceipt` folds a delivery fact onto its attempt the
  * moment either side knows about the other — at insert when the attempt
  * already carries the provider message reference, and from
- * `sending.recordSendOutcome` when the acknowledgement lands afterwards.
+ * `sendOutcome.recordSendOutcome` when the acknowledgement lands afterwards.
  * Nothing settles a receipt whose reference never appears on an attempt at
  * all: mail sent from the shared AgentMail inbox by something other than
  * OpenSquad, or the original of a timed-out send an operator resolved as
