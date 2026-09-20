@@ -488,7 +488,7 @@ export const revise = mutation({
 /**
  * Propose a new immutable draft revision on a conversation (pipeline path).
  * Validates the recipient, bounds subject/body, records
- * `basedOnContextVersion`, `campaignBriefVersion` and `policyVersion`, and
+ * `basedOnContextVersion`, `agentRevision` and `policyVersion`, and
  * installs the revision. `requestId` dedupes retries.
  */
 export const createRevision = internalMutation({

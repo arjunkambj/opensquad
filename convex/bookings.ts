@@ -354,9 +354,9 @@ function assertAgreedTimes(
  *
  * The proposal is NOT the send: `draftProposal` wraps it in an exact draft,
  * `approvals.approve` is the human gate and the send boundary mails it. This
- * mutation creates the record, sets the lead's next action to getting the
- * proposal sent, and appends the `booking_proposed` history — without moving
- * `salesStage`, which only the provider's send acceptance may advance.
+ * mutation creates the record and appends the `booking_proposed` history —
+ * without moving `stage`, which only the provider's send acceptance may
+ * advance to `meeting_proposed`.
  */
 export const propose = mutation({
   args: {
