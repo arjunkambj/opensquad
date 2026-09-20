@@ -1,3 +1,9 @@
+/**
+ * Marketing — the public site: the landing page and its sections.
+ *
+ * Signed-out only, and data-free — nothing here reads Convex or knows about a
+ * workspace.
+ */
 import { CTA } from "@/components/marketing/CTA"
 import { FAQ } from "@/components/marketing/FAQ"
 import { Features } from "@/components/marketing/Features"

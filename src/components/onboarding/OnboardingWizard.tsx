@@ -1,3 +1,10 @@
+/**
+ * Onboarding — the setup wizard: the workspace, the business and what the
+ * squad may do before anything runs.
+ *
+ * Each step owns its own save; the wizard owns which step is current and
+ * derives the starting step from what is already saved.
+ */
 import { ArrowRight01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"

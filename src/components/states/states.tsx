@@ -1,3 +1,10 @@
+/**
+ * States — the shared loading, empty and error renderings.
+ *
+ * One vocabulary for "nothing yet", "still reading" and "this failed", so a
+ * new screen never invents its own. Data-free: callers pass the copy and the
+ * action, and nothing here knows about Convex.
+ */
 import { Alert02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"

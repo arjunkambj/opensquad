@@ -1,3 +1,10 @@
+/**
+ * Inbox — the conversation queue and, beside it, one thread.
+ *
+ * The list owns the tab/cursor contract the URL carries and the Convex reads
+ * behind it. Sending is not reachable from here: the inbox reads replies and
+ * records human decisions about them.
+ */
 import {
   CatchBoundary,
   Link,

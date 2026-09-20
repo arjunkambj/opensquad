@@ -1,3 +1,10 @@
+/**
+ * Layout — the signed-in shell: sidebar, header, page frame and the
+ * boundaries around a page that fails.
+ *
+ * It owns chrome only. No screen's data lives here; a page container fetches
+ * its own and renders inside `children`.
+ */
 import type { ReactNode } from "react"
 import { AppSidebar } from "@/components/layout/AppSidebar"
 import { DashboardHeader } from "@/components/layout/DashboardHeader"

@@ -1,3 +1,10 @@
+/**
+ * Contacts — the lead table and its filters (the backend table is
+ * `prospects`).
+ *
+ * The container owns the Convex reads, the URL-borne filters and approval
+ * writes. The lead drawer and the agent that finds leads are elsewhere.
+ */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"

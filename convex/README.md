@@ -1,90 +1,75 @@
-# Welcome to your Convex functions directory!
+# Convex backend
 
-Write your Convex functions here.
-See https://docs.convex.dev/functions for more.
+Organised by **domain**, not by technical layer: everything about leads is in
+`leads/`, everything about sending is in `outreach/`. `plan/PLAN.md` §10 is the
+contract this directory keeps.
 
-A query function that takes two arguments looks like:
+## Layout
 
-```ts
-// convex/myFunctions.ts
-import { query } from "./_generated/server";
-import { v } from "convex/values";
-
-export const myQueryFunction = query({
-  // Validators for arguments.
-  args: {
-    first: v.number(),
-    second: v.string(),
-  },
-
-  // Function implementation.
-  handler: async (ctx, args) => {
-    // Read the database as many times as you need here.
-    // See https://docs.convex.dev/database/reading-data.
-    const documents = await ctx.db.query("tablename").collect();
-
-    // Arguments passed from the client are properties of the args object.
-    console.log(args.first, args.second);
-
-    // Write arbitrary JavaScript here: filter, aggregate, build derived data,
-    // remove non-public properties, or create new objects.
-    return documents;
-  },
-});
+```
+convex/
+  schema.ts  http.ts  crons.ts  convex.config.ts  auth.config.ts  ← composition only
+  lib/            cross-domain helpers only
+    auth.ts
+    validators/   shared.ts + one file per domain, re-exported from index.ts
+  integrations/   the ONLY place that talks HTTP to a provider
+    agentmail.ts  firecrawl.ts
+  workspaces/     workspace records, memberships, workspace policy
+  billing/        the usage ledger: reservations, commits, releases
+  company/        the business profile we are selling FOR
+  agents/         the one sales agent a workspace runs
+  leads/          the person-level lead, its events and research evidence
+  outreach/       drafts, approvals, suppressions and the send boundary
+  inbox/          inbound ingest, conversations, quarantine
+  bookings/       the meeting lifecycle
+  activity/       the deduped workspace receipt feed
 ```
 
-Using this query function in a React component looks like:
+`convex/_generated/` is produced by `npx convex codegen` (integrator only) and
+is committed so task branches typecheck without a deployment.
 
-```ts
-const data = useQuery(api.myFunctions.myQueryFunction, {
-  first: 10,
-  second: "hello",
-});
-```
+## Conventions
 
-A mutation function looks like:
+- Inside a domain: `queries.ts` / `mutations.ts` / `actions.ts` hold the Convex
+  functions — thin: validate args, authorise, call the model, return.
+  `model.ts` holds the plain typed `ctx` functions with the actual logic. A
+  file past ~300 lines splits by sub-topic (`leads/evidence.ts`,
+  `outreach/sendReserve.ts`).
+- Domain validators live in `lib/validators/<domain>.ts`; table field objects
+  stay exported from `schema.ts`. `lib/validators/index.ts` is the one barrel
+  in the codebase, so every module keeps importing from `./lib/validators`.
+- Dependency direction is `domain → lib | integrations`. `integrations/` never
+  imports a domain's public function file.
+- Every function reference in the generated `api` / `internal` object follows
+  the file path: `api.leads.queries.list`,
+  `internal.outreach.sendReserve.reserveSendIntent`,
+  `internal.billing.reservations.reserve`.
+- Errors go through `domainError(code, message)` in `lib/validators/shared.ts`;
+  provider error text never leaves `integrations/`.
+- Anything the browser does not call is an `internalQuery` / `internalMutation`
+  / `internalAction`.
 
-```ts
-// convex/myFunctions.ts
-import { mutation } from "./_generated/server";
-import { v } from "convex/values";
+## The send boundary
 
-export const myMutationFunction = mutation({
-  // Validators for arguments.
-  args: {
-    first: v.string(),
-    second: v.string(),
-  },
+`outreach/` splits the send lifecycle across one file per step, in the order
+architecture §8 runs them:
 
-  // Function implementation.
-  handler: async (ctx, args) => {
-    // Insert or modify documents in the database here.
-    // Mutations can also read from the database like queries.
-    // See https://docs.convex.dev/database/writing-data.
-    const message = { body: args.first, author: args.second };
-    const id = await ctx.db.insert("messages", message);
+| file | step |
+|---|---|
+| `sendGates.ts` | the shared gate checklist, re-run at every step |
+| `sendModel.ts` | loaders, limits, reservation and attempt inserts |
+| `sendReserve.ts` | §8 step 3 — durable intent + every static gate, atomically |
+| `sendDispatch.ts` | §8 step 4 — the commit point |
+| `sendActions.ts` | §8 steps 4–7 — one provider request, never retried |
+| `sendOutcome.ts` | §8 steps 7/9 — the attempt settles |
+| `sendReconcile.ts` | §8.7 — replaying an `uncertain` attempt |
+| `sendSweeps.ts` | the belts that re-drive a lost recovery path |
+| `sendControls.ts` | the public triggers |
+| `sendPreflight.ts` | the honest "why is this blocked" preview |
+| `sendAttempts.ts`, `sendReceipts.ts` | the attempt read surface and the provider-event ledger |
 
-    // Optionally, return a value from your mutation.
-    return await ctx.db.get("messages", id);
-  },
-});
-```
+## Running it
 
-Using this mutation function in a React component looks like:
-
-```ts
-const mutation = useMutation(api.myFunctions.myMutationFunction);
-function handleButtonPress() {
-  // fire and forget, the most common way to use mutations
-  mutation({ first: "Hello!", second: "me" });
-  // OR
-  // use the result once the mutation has completed
-  mutation({ first: "Hello!", second: "me" }).then((result) =>
-    console.log(result),
-  );
-}
-```
-
-Use the Convex CLI to push your functions to a deployment. See everything
-the Convex CLI can do by running `npx convex -h` in your project root
-directory. To learn more, launch the docs with `npx convex docs`.
+Task agents never talk to a deployment. The integrator runs `npx convex
+codegen` and `npx convex dev` against the dev deployment; anything against
+production happens only after the owner says go.
