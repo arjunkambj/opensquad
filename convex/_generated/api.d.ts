@@ -50,6 +50,8 @@ import type * as company_model from "../company/model.js";
 import type * as company_mutations from "../company/mutations.js";
 import type * as company_queries from "../company/queries.js";
 import type * as crons from "../crons.js";
+import type * as dashboard_model from "../dashboard/model.js";
+import type * as dashboard_queries from "../dashboard/queries.js";
 import type * as http from "../http.js";
 import type * as inbox_backfill from "../inbox/backfill.js";
 import type * as inbox_connectActions from "../inbox/connectActions.js";
@@ -187,6 +189,8 @@ declare const fullApi: ApiFromModules<{
   "company/mutations": typeof company_mutations;
   "company/queries": typeof company_queries;
   crons: typeof crons;
+  "dashboard/model": typeof dashboard_model;
+  "dashboard/queries": typeof dashboard_queries;
   http: typeof http;
   "inbox/backfill": typeof inbox_backfill;
   "inbox/connectActions": typeof inbox_connectActions;
