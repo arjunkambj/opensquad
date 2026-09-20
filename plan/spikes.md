@@ -7,62 +7,76 @@ Status legend: **recorded** = a real response or primary source was observed;
 
 | # | Probe | Status |
 |---|---|---|
-| 1 | AI Gateway enabled on dev, model ids, `MODELS.fast` / `MODELS.smart` | **blocked** — needs a push to dev (see §1) |
-| 2 | Schema-constrained object output through the gateway provider | **blocked** — same push (see §2) |
-| 3 | Lead-data account: plan, balance, free pages, shapes | docs half **recorded**; live half **blocked** — no `ENRICH_API_KEY` on dev or locally |
+| 1 | AI Gateway enabled on dev, model ids, `MODELS.fast` / `MODELS.smart` | **recorded — BLOCKER**: the gateway is not enabled for this team (see §1) |
+| 2 | Schema-constrained object output through the gateway provider | **blocked** by probe 1 (see §2) |
+| 3 | Lead-data account: plan, balance, free pages, shapes | **recorded** live: balance, filter options, counts per signal kind, validation behaviour. People-search page cost + row shape **not run** (session policy refused the call) |
 | 4 | AgentMail inbox / webhook / thread shapes | docs half **recorded** (OpenAPI); live half **blocked** — provider call not permitted in this session |
 | 5 | Verified-email status in Convex auth | **recorded** (source + docs); one live identity dump still to do |
 | 6 | Open tracking | **recorded**: provider supports it, installed component does not; owner decision needed |
 | 7 | Does `npx convex codegen` push to dev | **recorded** (CLI source): yes, a non-dry-run `start_push` without `finish_push` |
 | 8 | Data census + migration path | dev **recorded**; production census **not run** (needs the owner's go); path already decided: clean slate |
 
-## 0. Finding that reorders the start of the plan
+## 0. State of the dev deployment
 
-The dev deployment (`dev:flexible-grasshopper-…`, also serving the staging
-site) still runs the **pre-pivot** code: `npx convex function-spec` lists 275
-functions including `missions`, `runs`, `employees`, `decisions`,
-`workerBridge`, `workerOperations`, `runtimeConnections`,
-`integrations/apollo` and `workflows/*`. Its documents carry fields the
-current `main` schema no longer declares (`conversations.employeeId` on 10/10
-rows, `drafts.missionId` on 5/5 rows, `prospects.campaignId` + `sourceRefs`,
-`campaigns` table with 30 rows).
+**First reading (21:40):** dev still ran the pre-pivot code — 275 functions
+including `missions`, `runs`, `employees`, `decisions`, `workerBridge`,
+`integrations/apollo`, `workflows/*` — and held pre-pivot documents
+(`conversations.employeeId` 10/10, `drafts.missionId` 5/5, 30 `campaigns`,
+31 workspaces, 31 memberships, 40 prospects, 1 suppression). `main` could not
+be pushed onto that data: Convex validates existing documents against the
+pushed schema.
 
-Consequence: **`main` cannot be pushed to dev until the dev data is cleared**
-— Convex validates existing documents against the pushed schema and the push
-fails. EXECUTION orders T00 (push `convex/spikes.ts`) before T01/T06, which is
-not possible from `main`. Two ways through, both need the owner's go because
-they write to the shared dev deployment:
+**Second reading (22:30), after the owner cleared dev and started
+`convex dev` from the main checkout:** dev runs `main` (133 functions, no
+pre-pivot modules). Every app table is empty **including `workspaces` and
+`memberships`**; `suppressions` still holds its 1 row, whose `workspaceId` now
+points at a deleted workspace. Pre-pivot tables still exist, empty. Dev env
+now has `ENRICH_API_KEY`, `FIRECRAWL_API_KEY`, `FIRECRAWL_WEBHOOK_SECRET`,
+`VITE_HEXCLAVE_PROJECT_ID`; `AGENTMAIL_API_KEY` and
+`AGENTMAIL_WEBHOOK_SECRET` are no longer set.
 
-- **A (least invasive, prepared):** a throwaway worktree of the pre-pivot
-  commit `4eab4dc` (= the code dev runs today) plus one internal-only module
-  `convex/spikes.ts` and the two gateway packages. Pushing it changes nothing
-  on dev except adding three `internalAction`s; a second push without the file
-  removes them. Prepared at `../opensquad-worktrees/T00-spike`, **not pushed**.
-- **B:** run the dev half of T06 first (freeze → drain → export → clear), then
-  push `main` with the spike. Reorders the plan to T06-dev → T00.1/2 → T01.
+Consequences for T06 on dev (to confirm with the owner, not assumed):
+- the clear happened outside the runbook, so there is no pre-clear export and
+  no recorded freeze/drain; on test data that loses nothing of value;
+- MIGRATION §6.3 ("keep workspaces, memberships, suppressions") cannot be met
+  on dev any more — the one suppression is orphaned and suppresses nothing.
+  T06's proof on dev therefore becomes: create a workspace, add a suppression,
+  show a real send preflight is refused. Production still follows §6 exactly;
+- with no workspace in `legacy_platform_inbox` state and no platform mail key
+  on dev, the legacy `/agentmail/webhook` route has nothing to serve on dev.
 
-## 1. AI Gateway — blocked
+The throwaway module `convex/spikes.ts` (internal actions only, never
+committed) is what ran the live probes below; it is deleted when T00 closes.
 
-What is known without a push:
-- Provider package `@convex-dev/ai-sdk-provider@0.1.0` (latest; `0.2.0-alpha.1`
-  exists). Peer deps `ai ^7.0.0` (latest `7.0.107`), `convex ^1.44.0`
-  (installed `1.45.0`, exports `getServiceToken`). Engines: Node ≥ 22.
-- It is a thin wrapper: `createOpenAICompatible({ baseURL: "https://ai-gateway.convex.dev/v1" })`
-  with `Authorization: Bearer <getServiceToken("ai-gateway")>` minted inside
-  the action. No API key, no env var. `getServiceToken` only works inside a
-  Convex action, so **the only way to learn whether the gateway is enabled for
-  this deployment's plan, and which OpenAI model ids it serves, is to run an
-  action on dev.**
-- Probe module written (three `internalAction`s): `gatewayModels`
-  (`GET /v1/models` with the service token), `gatewayText` (one-word
-  generation per candidate id), `gatewayObject` (§2).
+## 1. AI Gateway — BLOCKER
 
-Blocked: the push to dev was refused by this session's permission policy.
-Fallback if the gateway turns out not to be enabled: none inside the plan —
-PLAN §4 fixes the gateway as the only AI path and stores no model key. That is
-a stop-and-ask blocker by the owner's instruction.
+Real response, 2026-09-20, `internalAction` on dev calling
+`getServiceToken("ai-gateway")`:
 
-## 2. Structured output — blocked (same push)
+```
+Error: The Convex AI gateway is not enabled for your team. Upgrade to a paid
+plan to enable it, or contact support@convex.dev if you believe this is an error.
+```
+
+The token is refused before any model call, so no model list could be read
+and `MODELS.fast` / `MODELS.smart` are **not chosen**. Package facts, for
+whichever way this goes: `@convex-dev/ai-sdk-provider@0.1.0` (peer `ai ^7`,
+`convex ^1.44`, Node ≥ 22) is a thin OpenAI-compatible wrapper around
+`https://ai-gateway.convex.dev/v1` with the deployment token as bearer.
+
+PLAN §4 fixes the gateway as the only AI path, so this is the owner's call:
+- **A — enable it:** move the Convex team to a paid plan (or ask Convex
+  support for hackathon access). PLAN stays as written; probes 1–2 re-run in
+  two minutes with the spike module that is already deployed.
+- **B — fallback, same call sites:** AI SDK 7 with the OpenAI provider and a
+  platform `OPENAI_API_KEY` in Convex env. Only `convex/ai/models.ts` and
+  `convex/ai/run.ts` differ (a `languageModel(id)` factory), metering through
+  `withCredits` / `ai_calls` is unchanged, and switching back to the gateway
+  later is a one-file change. Costs: PLAN §4 "no model key stored" and the
+  AGENTS.md gateway line change, and a platform model key joins the keys
+  guarded by §6.
+
+## 2. Structured output — blocked by probe 1
 
 Probe prepared: AI SDK 7 `generateText({ output: Output.object({ schema: jsonSchema(...) }) })`
 (`generateObject` still exists in v7 but `Output.object` is the current API;
@@ -74,10 +88,51 @@ re-check.
 
 ## 3. Lead-data provider
 
-**Live half blocked:** `ENRICH_API_KEY` is not set on the dev deployment
-(`convex env list` shows only AgentMail, Firecrawl, Hexclave project id and
-one unrelated key) and is not in the local environment. Plan, balance and
-"pages 1–3 cost 0 on this account" are therefore **unverified**.
+**Live half recorded** (2026-09-20, internal actions on dev, key read from
+deployment env only):
+
+- `GET /wallets/balance` → 200 `{ success, data: { organizationId, balance, currency, asOf }, meta: { requestId } }`.
+  Balance **10,000 credits** — a paid pack, not the 100-credit free grant.
+  Rate-limit headers on lead-finder calls: `x-ratelimit-limit: 600` per 60 s.
+- `GET /lead-finder/filter-options` → 200, top level `success / data / meta`,
+  **46 filters**. Empty `values` for `city`, `companyName`, `domain`,
+  `headquartersCity`, `jobTitle`, `languages`, `skills` (free text) and
+  `martechCategoriesOrg` (the documented bug). `jobLevel` 6, `jobFunction` 22,
+  `companyEntityType` 10, `lastFundingTypeOrg` 28, `continent` 7,
+  `countryName` 249, `crmTechOrg` 6, `eCommercePlatformTechOrg` 5,
+  `linkedinIndustry` 454, `revenueBuckets` 6, `personHeadline` 75 suggestions.
+- `POST /lead-finder/count` (free) — one real ICP, each PLAN §3 signal kind:
+
+  | Filters | Count |
+  |---|---|
+  | core ICP: VP/Director · Advertising & Marketing · United States · 50–500 staff | 89,731 |
+  | + funded (`lastFundingTypeOrg`: Seed Round, Series A, Series B) | 2,577 |
+  | + hiring (`marketingOpenRolesCountOrg` ≥ 1) | 15,256 |
+  | + uses a tool (`crmTechOrg`: Hubspot) | 17,797 |
+  | + growth (`employeeOnLinkedinGrowthRateOrg` ≥ 10) | 4,540 |
+  | + ad spend (`monthlyGoogleAdspendOrg` ≥ 1000) | 11,544 |
+  | + keyword (`personHeadline`: SaaS) | 476 |
+
+  Response `{ count, isApproximate, searchType: "unified", searchedTotalResult }`.
+  `isApproximate` was **false at 89,731**, contrary to the docs' "true above
+  10,000" — do not key UI copy on the 10k threshold, read the flag.
+- **Validation is inconsistent per filter — observed, not inferred:**
+  wrong-case `jobLevel: ["vp"]` → **400** problem JSON
+  (`title: "Validation Error"`, `detail` lists the valid values); an unknown
+  filter key → **400** (`Unrecognized key`); but `jobFunction: ["Marketing"]`
+  (not an allowed value — the real one is `"Advertising & Marketing"`) →
+  **200 with count 0**, silently; and `crmTechOrg: ["hubspot"]` matched the
+  same 17,797 as `"Hubspot"` (case-insensitive there). So PLAN §3's rule
+  stands: every enum value is re-checked against the cached options before
+  the call, and a zero count is never trusted as "no market" without that
+  check. The 400 `detail` text is provider wording and must be mapped, not
+  shown.
+- **Not run:** `POST /lead-finder/search` pages 1–3 with balance before/after
+  (the proof that those pages cost 0 on this account) and the live preview-row
+  shape. The probe is written (returns field shapes and counts only, no names)
+  but the call was refused by this session's policy because the response
+  carries personal data. Also not run: a real reveal (10 credits) — that is
+  T11's acceptance.
 
 **Docs half recorded.** Enrich's Lead Finder is fully documented and matches what PLAN.md assumes, with a handful of shape corrections the build must apply. Base URL is `https://dev.enrich.so/api/v3` with `x-api-key: sk_...` (or `Authorization: Bearer`); errors are RFC 9457 problem JSON (`type`/`title`/`status`/`detail`/`instance`), plus a simpler `{error}` shape on auth failures and `{statusCode,error,message,retryAfter}` on 429. The Lead Finder free tier is stated verbatim on the Search leads page: "First 3 pages OR 75 results free per search, whichever comes first" and "50 free searches per month, where a search = a unique filter combination" (paging or re-running the same filters does not consume another free search); page 4+ is 1 credit per result, max 40 pages. Reveal is async (`rj_` jobId), reserves credits up front (`creditsReserved`), has NO documented 402 — insufficient credits surface as a `failed` poll with `data.error: "Insufficient credits (balance: 100, required: 2875)"` and `data.creditsRefunded` — and a field revealed by anyone on the team in the last 24h is served from cache free. Every filter name used in PLAN §3's signal catalogue exists in the official schema (139 filter fields; zero misses). Three shape corrections matter: `GET /wallets/balance` returns `{success,data:{organizationId,balance,currency,asOf}}` not a bare `{balance}`; lead-finder `meta` carries only `requestId` (no `creditsUsed`/`creditsRemaining` — that `EnrichmentMeta` belongs to the enrichment endpoints); and `POST /lead-finder/search` DOES document a synchronous 402 while `/reveal` does not. The one thing docs cannot settle is whether the free search tier is identical on every account plan — the pages never qualify it by plan, so PLAN §12's "search pages 1–3 are free on it" still needs the live check with a real key.
 
