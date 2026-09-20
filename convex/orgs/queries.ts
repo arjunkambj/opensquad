@@ -1,7 +1,7 @@
 /**
  * Reads of the org row, resolved from the organization active in the token.
  *
- * There is no "pick a tenant" step and no membership lookup: the auth
+ * There is no "pick a tenant" step and no member lookup: the auth
  * provider decides which organization the caller is in, and `getCurrent`
  * simply resolves the row that belongs to it (PLAN §4).
  */

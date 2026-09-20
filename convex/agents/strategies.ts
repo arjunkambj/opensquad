@@ -75,9 +75,9 @@ const vStrategyOverview = v.object({
 });
 
 /**
- * Everything dot 4 shows. Membership rather than editor: a viewer may look at
- * what the agent searches for, and nothing here is a provider's vocabulary —
- * the filter sets themselves stay on the server (PLAN §4).
+ * Everything dot 4 shows. Guarded by the active organization, like every
+ * other entry point, and nothing here is a provider's vocabulary — the
+ * filter sets themselves stay on the server (PLAN §4).
  */
 export const overview = query({
   args: { orgId: v.id("orgs") },

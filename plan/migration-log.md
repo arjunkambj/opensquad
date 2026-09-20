@@ -535,3 +535,24 @@ this in at cutover; leave the rows in place and unticked until then.
    `migrations/*` modules and the `migrations` component, because task agents
    have no deployment access. The integrator regenerates after the merge and
    takes codegen's version over this one.
+8. **The kept pre-pivot rows carry no Hexclave organization id — owner
+   decision needed before the cutover.** T44 made the Hexclave organization
+   the tenant: `workspaces` is now `orgs`, keyed by a required
+   `hexclaveOrgId`, and `requireOrgMember` authorises a request only when the
+   token's active organization equals that value. Production's kept rows were
+   written when the tenant was a local record with its own member list, so
+   they have no such id, and `migrations/shape:orgsToFinalShape` therefore
+   fails the batch and names any row that lacks one rather than inventing it —
+   a row with the wrong id, or none, is reachable by nobody. Before step F of
+   the cutover the owner picks one of two paths for each kept row: **map** it,
+   by reading its former owner's personal organization id through the auth
+   provider's server API (`GET /api/v1/users/{id}` → `selected_team_id`, or
+   the teams listing) and writing `hexclaveOrgId` / `createdByIdentityKey`
+   onto the row first; or **clear** it, dropping `orgs` from the keep-list so
+   every organization starts fresh and only `suppressions` is kept — in which
+   case each kept suppression must be re-pointed at the new row of the
+   organization that owns it, or it suppresses nothing (§6.6). Not decided
+   here: it is a data-ownership call, not a code one. The `memberships` table
+   is gone from the schema, so its rows are unreachable from application code
+   and are deleted from the dashboard like the other out-of-schema tables
+   (item 6).

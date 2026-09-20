@@ -4,7 +4,7 @@
  *
  * Three functions, and the boundary each one guards:
  *
- *   `options`      what the three screens may offer. Membership-guarded, and
+ *   `options`      what the three screens may offer. Org-guarded, and
  *                  deliberately narrow: the neutral value lists the chips need
  *                  and nothing about where they come from (PLAN §4).
  *   `startGeneration`  the only authenticated part of a paid run. It checks
@@ -65,7 +65,7 @@ const vIcpOptions = v.object({
 /**
  * The values a chip may carry on references 06–08.
  *
- * Membership rather than editor: a viewer may look at the ICP, and this
+ * Guarded by the active organization, like every other entry point: this
  * returns nothing that is not already a public vocabulary (industry names,
  * country names, kinds of organisation). Company sizes are our own bands.
  */

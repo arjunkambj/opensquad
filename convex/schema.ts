@@ -470,7 +470,7 @@ export const leadEventFields = {
 export const bookingFields = {
   orgId: v.id("orgs"),
   prospectId: v.id("prospects"),
-  /** identityKey of the responsible member; must be an ACTIVE membership. */
+  /** identityKey of the responsible member of the organization. */
   ownerIdentityKey: v.string(),
   state: vBookingState,
   version: v.number(),
@@ -558,7 +558,7 @@ export const conversationFields = {
   agentId: v.optional(v.id("agents")),
   /**
    * Human owner of this thread (identityKey). Must resolve to an ACTIVE
-   * membership before it is stored.
+   * member of the organization before it is stored.
    */
   assigneeIdentityKey: v.optional(v.string()),
   /** Why automation is frozen. Present whenever `humanTakeover` is true. */

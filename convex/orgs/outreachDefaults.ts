@@ -47,8 +47,8 @@ export const get = query({
 });
 
 /**
- * Save (or clear) the default instructions. Owner or operator, like every
- * other write that changes what the agent will say.
+ * Save (or clear) the default instructions, guarded by the active
+ * organization like every other write that changes what the agent will say.
  *
  * Unguarded by `policyVersion` on purpose: instructions do not change WHEN or
  * WHETHER a queued draft may go out, so invalidating pending approvals here

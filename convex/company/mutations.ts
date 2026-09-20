@@ -1,8 +1,8 @@
 /**
  * Business profile edits (PLAN §7).
  *
- * Writes require owner or operator and use `expectedVersion` optimistic
- * concurrency. Meaningful edits increment `version`; `updatedBy` always
+ * Writes are guarded by the active organization and use `expectedVersion`
+ * optimistic concurrency. Meaningful edits increment `version`; `updatedBy` always
  * records the authenticated actor.
  *
  * `analysisStatus` is owned by the analysis flow, not by this editor: a user
@@ -163,7 +163,7 @@ export const update = mutation({
  * Regenerate all arrive here (PLAN §3 step 1, §5).
  *
  * The mutation is the only authenticated part of the flow. It checks
- * membership, spends one rate-limit token, admits the URL under the SAME
+ * organization, spends one rate-limit token, admits the URL under the SAME
  * policy the fetch will use, records `analyzing` so the form can show live
  * status from its own reactive query, and schedules the internal action that
  * is allowed to spend money. No provider is contacted from here, and the URL

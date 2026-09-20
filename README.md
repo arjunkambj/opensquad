@@ -4,9 +4,21 @@ Vite and React frontend on a Convex backend, built for the Convex All Gas
 Hackathon. TanStack Router file routes, TypeScript, pnpm, Oxlint.
 
 The product is an email-only AI outbound agent: website analysis produces an
-ICP, sourced leads land in a Contacts table, one agent per workspace writes
-and sends email within the mode the owner chose, and replies come back into a
+ICP, sourced leads land in a Contacts table, one agent per organization writes
+and sends email within the mode the user chose, and replies come back into a
 unified inbox.
+
+## Tenancy
+
+The tenant is the **Hexclave organization**, and the organization active in
+Hexclave is the source of truth: the signed token's `selected_team_id` claim
+decides whose data a request sees. Convex keeps one `orgs` row per Hexclave
+organization — it is where credits, the inbox connection, the send policy and
+the agent live — created silently on first entry. There is no membership table
+and no roles of our own: Hexclave owns who belongs to an organization, and
+every member of the active one may use the whole product. Nothing in the app
+asks the user to create, name or pick an organization; the sidebar's account
+menu switches between the ones the account already has.
 
 ## Development
 
@@ -69,14 +81,14 @@ it is not hand-edited.
 | `/` | public | marketing |
 | `/sign-in`, `/handler/$` | public | Hexclave |
 | `/onboarding` | signed in, setup unfinished | full-screen stepper, no app shell |
-| `/dashboard` | workspace + setup done | what the agent has done |
+| `/dashboard` | active org + setup done | what the agent has done |
 | `/agent` | 〃 | the one agent: mode, signals, instructions |
 | `/contacts` | 〃 | the lead table; `?lead=` opens one contact |
 | `/inbox`, `/inbox/$conversationId` | 〃 | conversations and one thread |
 | `/settings?tab=…` | 〃 | company · inbox · outreach · blocklist · sending · usage · account |
 | anything else | in shell | 404 with the sidebar intact |
 
-Setup is finished when the workspace's agent reads `onboardingStep: "done"`;
+Setup is finished when the organization's agent reads `onboardingStep: "done"`;
 until then every guarded path forwards to `/onboarding`, which resumes at the
 saved step. `/leads` and `/prospects` redirect to `/contacts`, `/overview` to
 `/dashboard`, `/employees` and `/squads` to `/agent`, `/decisions` to `/inbox`,

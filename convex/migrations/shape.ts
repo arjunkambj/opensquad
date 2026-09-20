@@ -8,7 +8,7 @@
  * re-runnable and supports the component's `dryRun`.
  *
  * NOTE ON THE PRE-PIVOT TABLE. Production's kept rows were written when the
- * tenant was a workspace with its own member list, so they carry no Hexclave
+ * tenant was a local record with its own member list, so they carry no Hexclave
  * organization id and `orgsToFinalShape` cannot invent one: it fails the
  * batch, naming the row. Mapping each kept row to an organization, or
  * clearing it, is an owner decision recorded as an open item in

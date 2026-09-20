@@ -275,7 +275,7 @@ function checkValue(
         // the provider is known to return empty).
         throw invalid(`${key} has no cached allowed values`);
       }
-      // EXACT membership: the catalogue is case-sensitive and a near-miss is
+      // EXACT match: the catalogue is case-sensitive and a near-miss is
       // a silent zero, not an error, on several filters.
       const allowed = new Set(option.values);
       for (const entry of list) {

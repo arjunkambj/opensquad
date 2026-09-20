@@ -10,7 +10,7 @@
  * the source of truth (PLAN §4, owner decision 2026-09-21). The token carries
  * that org in its `selected_team_id` claim; an org row is reachable to a
  * caller when, and only when, its `hexclaveOrgId` equals that claim. There is
- * no membership table and no role vocabulary on our side: the auth provider
+ * no member table and no role vocabulary on our side: the auth provider
  * owns who belongs to an org, and every member of the active org may use the
  * whole product.
  *
