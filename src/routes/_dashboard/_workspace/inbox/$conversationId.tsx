@@ -1,32 +1,26 @@
 import { createFileRoute, useParams } from "@tanstack/react-router"
 import type { Id } from "../../../../../convex/_generated/dataModel"
-import { ConversationDetail } from "@/components/inbox/ConversationDetail"
+import { ConversationPane } from "@/components/inbox/ConversationPane"
 
 export const Route = createFileRoute(
   "/_dashboard/_workspace/inbox/$conversationId",
 )({
-  component: ConversationPage,
+  component: ConversationRoute,
 })
 
 /**
- * One thread, at its own URL — a conversation is a record, and V15/V16 work
- * the same reply from two sessions, which needs a link someone can paste.
+ * One thread at its own URL — a conversation is a record someone pastes to a
+ * colleague, so it is a path segment rather than a pane state.
  *
- * No error boundary here: `_dashboard` already maps NOT_FOUND (a foreign or
- * cross-workspace id) to an in-shell empty state, and a malformed id is
- * rendered the same way — the reviewer keeps the sidebar either way.
+ * No error boundary here: `_dashboard` already renders a foreign or malformed
+ * id as an in-shell empty state, which keeps the sidebar and the list.
  */
-function ConversationPage() {
+function ConversationRoute() {
   const { conversationId } = useParams({
     from: "/_dashboard/_workspace/inbox/$conversationId",
   })
 
-  // Keyed on the id so the pinned contextVersion — the version the operator
-  // actually saw — resets when the route param changes without unmounting.
   return (
-    <ConversationDetail
-      key={conversationId}
-      conversationId={conversationId as Id<"conversations">}
-    />
+    <ConversationPane conversationId={conversationId as Id<"conversations">} />
   )
 }
