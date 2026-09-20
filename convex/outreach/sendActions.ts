@@ -12,9 +12,6 @@ import type { ActionCtx } from "../_generated/server";
 import { ConvexError, v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* Dispatch actions (single-flight, no retries)                          */
-/* ------------------------------------------------------------------ */
 /**
  * The action-level contract — also the return shape `workflows/send.ts`'s
  * journaled step consumes. `preflight_refused` covers every gate failure;

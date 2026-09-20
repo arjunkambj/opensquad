@@ -17,9 +17,6 @@ import { applyReceiptToAttempt } from "./sendReceipts";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* recordSendOutcome — §8 step 7/9                                       */
-/* ------------------------------------------------------------------ */
 const vOutcomeArg = v.union(
   v.object({
     outcome: v.literal("accepted"),

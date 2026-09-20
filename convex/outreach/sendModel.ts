@@ -15,9 +15,6 @@ import {
   sendWindowStatus,
 } from "../lib/validators";
 
-/* ------------------------------------------------------------------ */
-/* Constants + result vocabulary                                        */
-/* ------------------------------------------------------------------ */
 /**
  * Longer than the adapter's 30s provider timeout plus margin — a `requesting`
  * attempt older than this means the action died between dispatch and outcome

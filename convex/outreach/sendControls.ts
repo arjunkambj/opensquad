@@ -14,9 +14,6 @@ import { vSendAttemptDoc } from "./sendAttempts";
 import { RECONCILE_WINDOW_MS } from "./sendModel";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* Public triggers + honest surfacing                                    */
-/* ------------------------------------------------------------------ */
 /**
  * Trigger the send boundary for a draft (owner/operator). Only schedules —
  * every gate still runs inside `sendApprovedDraft`; calling this on an

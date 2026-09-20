@@ -13,9 +13,6 @@ import { recordActivityEvent } from "../activity/model";
 import { REQUEST_STALE_SWEEP_MS } from "./sendModel";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* The delivery-uncertain ask + stale-request sweep                      */
-/* ------------------------------------------------------------------ */
 /** Shared uncertain transition for a stale `requesting` attempt. */
 async function markLostAcknowledgement(
   ctx: MutationCtx,

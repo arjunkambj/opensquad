@@ -1,3 +1,9 @@
+/**
+ * Shared presentational pieces used by more than one component domain:
+ * chips, relative times and the small typed projections around them.
+ *
+ * Data-free — nothing here calls Convex or knows which screen renders it.
+ */
 import type { ReactNode } from "react"
 import type { Doc } from "../../../convex/_generated/dataModel"
 import { cn } from "@/lib/utils"

@@ -19,9 +19,6 @@ import {
 import { effectiveSendLimit, nextWindowStart } from "./sendModel";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* Public preflight preview (minimal honest surfacing)                   */
-/* ------------------------------------------------------------------ */
 /**
  * Dry-run the send preflight for a draft (member-readable). Reports the
  * first blocking gate and the send-window state — the same checks

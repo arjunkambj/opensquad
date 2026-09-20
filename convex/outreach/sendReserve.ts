@@ -25,9 +25,6 @@ import {
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* reserveSendIntent — the serialization point (§8 step 3)               */
-/* ------------------------------------------------------------------ */
 const vReserveResult = v.union(
   v.object({
     action: v.literal("ready"),

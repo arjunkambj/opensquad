@@ -21,9 +21,6 @@ import { loadAttemptContext, RECONCILE_WINDOW_MS } from "./sendModel";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* Reconciliation (§8.7)                                                 */
-/* ------------------------------------------------------------------ */
 const vPrepareResult = v.union(
   v.object({
     action: v.literal("replay"),
