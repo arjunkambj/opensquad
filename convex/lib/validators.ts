@@ -272,31 +272,269 @@ export const vMembershipStatus = v.union(
 );
 
 /* ------------------------------------------------------------------ */
-/* Campaigns                                                           */
+/* Agents (PLAN §7) — the one sales agent a workspace runs              */
 /* ------------------------------------------------------------------ */
 
-export const vCampaignStatus = v.union(
-  v.literal("draft"),
-  v.literal("active"),
+/**
+ * How much the agent may do on its own (PLAN §1, §9.3). `sourcing_only` is
+ * the default until an inbox is connected: it finds and researches leads and
+ * contacts nobody. Autopilot is never entered by a migration or a reconnect —
+ * only by the consent dialog that writes `agents.autopilot`.
+ */
+export const AGENT_MODES = [
+  "sourcing_only",
+  "review",
+  "autopilot",
+  "paused",
+] as const;
+
+export const vAgentMode = v.union(
+  v.literal("sourcing_only"),
+  v.literal("review"),
+  v.literal("autopilot"),
   v.literal("paused"),
-  v.literal("completed"),
 );
 
-export type CampaignStatus = "draft" | "active" | "paused" | "completed";
+export type AgentMode = (typeof AGENT_MODES)[number];
 
-export const CAMPAIGN_LEAD_LIMIT_MIN = 1;
-export const CAMPAIGN_LEAD_LIMIT_MAX = 5;
-export const CAMPAIGN_ENRICHMENT_LIMIT_MIN = 0;
-export const CAMPAIGN_ENRICHMENT_LIMIT_MAX = 10;
+/** Modes in which the agent may put mail on the wire at all (PLAN §9.3). */
+export const SENDING_AGENT_MODES: readonly AgentMode[] = [
+  "review",
+  "autopilot",
+];
+
+/**
+ * `draft` while onboarding is still filling the agent in; `live` from the
+ * moment "Confirm & find leads" is pressed. The run cron selects live agents
+ * whose `nextRunAt` is due — nothing else starts a run (EXECUTION "API
+ * hand-offs": T23 flips the flag, T30 reads it).
+ */
+export const vAgentStatus = v.union(v.literal("draft"), v.literal("live"));
+
+export type AgentStatus = "draft" | "live";
+
+/**
+ * Where the onboarding stepper resumes (PLAN §5 "Progress is saved per step",
+ * §11 M1). One member per dot **and** per sub-step, because the reference
+ * splits dots 2–4 into sub-screens and a refresh must land on the sub-screen
+ * the user left — a bare dot number cannot express that. `done` is the
+ * finished state the `/onboarding` guard redirects away from.
+ */
+export const ONBOARDING_STEPS = [
+  "company",
+  "icp_job_titles",
+  "icp_company_filters",
+  "icp_exclusions",
+  "outreach_inbox",
+  "outreach_goals",
+  "signals_strategies",
+  "signals_keywords",
+  "signals_review",
+  "done",
+] as const;
+
+export const vOnboardingStep = v.union(
+  v.literal("company"),
+  v.literal("icp_job_titles"),
+  v.literal("icp_company_filters"),
+  v.literal("icp_exclusions"),
+  v.literal("outreach_inbox"),
+  v.literal("outreach_goals"),
+  v.literal("signals_strategies"),
+  v.literal("signals_keywords"),
+  v.literal("signals_review"),
+  v.literal("done"),
+);
+
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+
+/** What the outreach is for (PLAN §7, reference 05). */
+export const vAgentGoal = v.union(
+  v.literal("start_conversations"),
+  v.literal("book_calls"),
+);
+
+export type AgentGoal = "start_conversations" | "book_calls";
+
+/** How the outreach reads (PLAN §7, reference 05). */
+export const vAgentTone = v.union(
+  v.literal("professional"),
+  v.literal("conversational"),
+  v.literal("direct"),
+);
+
+export type AgentTone = "professional" | "conversational" | "direct";
+
+/**
+ * The ideal customer profile the strategies are built from (PLAN §7). Every
+ * member is a list so an empty ICP is a valid draft state — onboarding fills
+ * them one sub-step at a time and `onboardingStep` says how far it got.
+ * Values are the provider's own allowed strings, re-checked against the
+ * cached `leadFilterOptions` before any search (PLAN §3 step 2).
+ */
+export const vAgentIcp = v.object({
+  jobTitles: v.array(v.string()),
+  industries: v.array(v.string()),
+  locations: v.array(v.string()),
+  companyTypes: v.array(v.string()),
+  companySizes: v.array(v.string()),
+  excludeProfiles: v.array(v.string()),
+  excludeKeywords: v.array(v.string()),
+});
+
+export type AgentIcp = Infer<typeof vAgentIcp>;
+
+/** An ICP with every list empty — the shape a draft agent starts from. */
+export const EMPTY_AGENT_ICP: AgentIcp = {
+  jobTitles: [],
+  industries: [],
+  locations: [],
+  companyTypes: [],
+  companySizes: [],
+  excludeProfiles: [],
+  excludeKeywords: [],
+};
+
+/**
+ * The single-flight lease a run holds (PLAN §9.1). A second trigger is a
+ * no-op while `leaseUntil` is in the future, and every step re-checks it
+ * still holds `leaseId` before writing.
+ */
+export const vAgentRun = v.object({
+  leaseId: v.string(),
+  leaseUntil: v.number(),
+  startedAt: v.number(),
+});
+
+export type AgentRun = Infer<typeof vAgentRun>;
+
+/**
+ * Recorded Autopilot consent (PLAN §9.3). The `revision` is the agent
+ * revision the user consented under, so a later instruction change is
+ * visible as "consented under an older revision" rather than silently
+ * re-authorised.
+ */
+export const vAgentAutopilot = v.object({
+  authorizedBy: v.string(),
+  authorizedAt: v.number(),
+  revision: v.number(),
+});
+
+export type AgentAutopilot = Infer<typeof vAgentAutopilot>;
+
+export const AGENT_NAME_MAX_LENGTH = 120;
+export const AGENT_INSTRUCTIONS_MAX_LENGTH = 8_000;
+export const AGENT_KEYWORDS_MAX = 25;
+export const AGENT_KEYWORD_MAX_LENGTH = 100;
+export const ICP_LIST_MAX_ITEMS = 50;
+export const ICP_VALUE_MAX_LENGTH = 200;
+export const AGENT_FOLLOW_UP_DAYS_MAX = 4;
+
+/** Defaults from PLAN §9.2/§9.3; retuned in `lib/limits.ts` (T02). */
+export const AGENT_DAILY_LEAD_CAP_DEFAULT = 25;
+export const AGENT_DAILY_RESEARCH_CAP_DEFAULT = 5;
+export const AGENT_AUTO_REVEAL_DAILY_CAP_DEFAULT = 5;
+export const AGENT_AUTO_APPROVE_MIN_SCORE_DEFAULT = 2;
+export const AGENT_FOLLOW_UP_DAYS_DEFAULT: readonly number[] = [3, 7];
+
+/* ------------------------------------------------------------------ */
+/* Search strategies (PLAN §3)                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The signal a strategy is built on. Exactly the catalogue of PLAN §3 —
+ * only signals the lead-data API can actually answer are offered, and
+ * `core_icp` is always present.
+ */
+export const SIGNAL_KINDS = [
+  "core_icp",
+  "funded",
+  "hiring",
+  "growth",
+  "ad_spend",
+  "tech",
+  "team_shape",
+  "keyword",
+] as const;
+
+export const vSignalKind = v.union(
+  v.literal("core_icp"),
+  v.literal("funded"),
+  v.literal("hiring"),
+  v.literal("growth"),
+  v.literal("ad_spend"),
+  v.literal("tech"),
+  v.literal("team_shape"),
+  v.literal("keyword"),
+);
+
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
+
+/** Who put the strategy there (PLAN §7). */
+export const vStrategySource = v.union(
+  v.literal("recommended"),
+  v.literal("user"),
+);
+
+export type StrategySource = "recommended" | "user";
+
+/**
+ * One stored lead-search filter value. The provider's filter set is ~139
+ * fields of scalars and string lists (spikes §3), so the stored shape is a
+ * bounded record rather than 139 columns. It is NOT a free-form bag: the
+ * filter builder (T11) accepts a key only when the cached
+ * `leadFilterOptions` declares it, and an enum value only when that filter's
+ * `values` contains it — a typo silently returns zero rows otherwise.
+ */
+export const vLeadFilterValue = v.union(
+  v.string(),
+  v.number(),
+  v.boolean(),
+  v.array(v.string()),
+);
+
+export const vLeadFilters = v.record(v.string(), vLeadFilterValue);
+
+export type LeadFilters = Infer<typeof vLeadFilters>;
+
+/** One cached allowed-value set, as the provider's filter catalogue states it. */
+export const vLeadFilterOption = v.object({
+  label: v.string(),
+  category: v.union(
+    v.literal("person"),
+    v.literal("organization"),
+    v.literal("insights"),
+  ),
+  /** Empty for the free-text filters (spikes §3) — not a failed fetch. */
+  values: v.array(v.string()),
+  maxSelections: v.number(),
+});
+
+export type LeadFilterOption = Infer<typeof vLeadFilterOption>;
+
+export const STRATEGY_TITLE_MAX_LENGTH = 120;
+export const STRATEGY_RATIONALE_MAX_LENGTH = 400;
+
 /* ------------------------------------------------------------------ */
 /* Providers, digests and reply dispositions                           */
 /* ------------------------------------------------------------------ */
 
-/** Paid or metered backends the app records `providerOperations` against. */
-export const PROVIDER_KINDS = ["firecrawl", "agentmail"] as const;
+/**
+ * Paid or metered backends the app records `providerOperations` and
+ * `platformBudgets` against. These names are SERVER-SIDE ONLY: no query that
+ * feeds the client may return one (PLAN §4 "White-label rule").
+ */
+export const PROVIDER_KINDS = [
+  "firecrawl",
+  "agentmail",
+  "enrich",
+  "ai_gateway",
+] as const;
 export const vProviderKind = v.union(
   v.literal("firecrawl"),
   v.literal("agentmail"),
+  v.literal("enrich"),
+  v.literal("ai_gateway"),
 );
 export type ProviderKind = (typeof PROVIDER_KINDS)[number];
 
@@ -423,6 +661,51 @@ export const vConversationState = v.union(
 );
 
 export type ConversationState = "open" | "closed" | "unassigned";
+
+/**
+ * How a message reached us (PLAN §7, §9.4). Webhooks only deliver new mail,
+ * so connecting an inbox schedules a 30-day thread import marked `backfill`.
+ *
+ * The distinction is a safety gate, not a label: `handleReply` runs only on
+ * `live` mail that arrived after `workspaces.connectedAt` — backfilled
+ * history is readable in the Inbox and nothing more ("Never answer history").
+ * When both paths race on the same provider message, `live` WINS and a later
+ * backfill never downgrades it.
+ */
+export const vMessageSource = v.union(
+  v.literal("backfill"),
+  v.literal("live"),
+);
+
+export type MessageSource = "backfill" | "live";
+
+/**
+ * Which source survives when backfill and the live webhook write the same
+ * provider message (PLAN §9.4). Defined once so the single-writer upsert and
+ * the conversation-level stamp cannot disagree.
+ */
+export function mergeMessageSource(
+  stored: MessageSource | undefined,
+  incoming: MessageSource,
+): MessageSource {
+  return stored === "live" || incoming === "live" ? "live" : "backfill";
+}
+
+/**
+ * Draft lifecycle (PLAN §7 "drafts: agentRevision, state superseded").
+ * A revision is immutable, so `superseded` means "no longer the draft to
+ * send" — written when the agent's revision moves on, the lead is rejected
+ * or a reply lands (PLAN §9.1 "Invalidate on change").
+ *
+ * INVARIANT: `state === "superseded"` exactly when `supersededAt` is set;
+ * both are written in the same patch.
+ */
+export const vDraftState = v.union(
+  v.literal("current"),
+  v.literal("superseded"),
+);
+
+export type DraftState = "current" | "superseded";
 
 /**
  * Why automation is frozen on a conversation (`conversations.takeoverReason`).
@@ -946,13 +1229,37 @@ export async function computePayloadHash(
 
 /* ----- usage accounting ------------------------------------------------ */
 
+/**
+ * The metered quantities (PLAN §6 "Ledger"). `credits` is the one number the
+ * user sees; the rest are the hidden provider caps in the provider's own
+ * units, which is why a call must pass both layers. Period keys are
+ * `USAGE_PERIOD_LIFETIME` or the workspace-local day (`localDayKey`).
+ */
+export const USAGE_METRICS = [
+  "credits",
+  "enrich_credits",
+  "enrich_searches",
+  "ai_calls",
+  "scrapes",
+  "sends",
+] as const;
+
 export const vUsageMetric = v.union(
+  v.literal("credits"),
+  v.literal("enrich_credits"),
+  v.literal("enrich_searches"),
+  v.literal("ai_calls"),
+  v.literal("scrapes"),
   v.literal("sends"),
-  v.literal("research_pages"),
-  v.literal("research_searches"),
 );
 
-export type UsageMetric = "sends" | "research_pages" | "research_searches";
+export type UsageMetric = (typeof USAGE_METRICS)[number];
+
+/** The non-daily period key: a bucket that never rolls over. */
+export const USAGE_PERIOD_LIFETIME = "lifetime";
+
+/** The one scope key a workspace-wide bucket uses. */
+export const USAGE_SCOPE_WORKSPACE = "workspace";
 
 /**
  * §4.4 provider tool-invocation lifecycle. `requested` is recorded BEFORE
@@ -1015,24 +1322,20 @@ export function consumesPageAllowance(row: {
 }
 
 /**
- * §G2 Firecrawl route item 2: homepage plus at most two relevant pages per
- * prospect. Three is the per-prospect cap AND the per-prospect share of the
- * campaign's page allowance.
+ * Lead research reads the lead's company home page and nothing else
+ * (PLAN §4 "Firecrawl change needed": website analysis takes up to four
+ * pages, lead research stays at one). Three is the per-lead ceiling on
+ * BILLED retrievals, so a retried research step cannot buy a fourth page.
  */
 export const RESEARCH_PAGES_PER_PROSPECT = 3;
 
 /**
- * The campaign's lifetime research-page allowance: its accepted-lead ceiling
- * times the per-prospect page cap.
+ * The workspace's lifetime scrape allowance — PLAN §6 layer 2, "Firecrawl
+ * pages: 80 lifetime". Provisional home: it moves to `convex/lib/limits.ts`
+ * with the rest of the price/cap map in T02, which is also what grants the
+ * bucket at workspace creation.
  */
-export function researchPageLimit(leadLimit: number): number {
-  return (
-    boundedInt(leadLimit, "campaign.leadLimit", {
-      min: CAMPAIGN_LEAD_LIMIT_MIN,
-      max: CAMPAIGN_LEAD_LIMIT_MAX,
-    }) * RESEARCH_PAGES_PER_PROSPECT
-  );
-}
+export const TRIAL_SCRAPES_LIFETIME_LIMIT = 80;
 
 /**
  * One page the BACKEND itself retrieved, in the shape the app stores and
@@ -1343,149 +1646,324 @@ export function sendWindowStatus(
 }
 
 /* ------------------------------------------------------------------ */
-/* Leads, bookings and evidence (P20 — §4.3/§4.5/§8 CRM and booking)   */
+/* Leads (PLAN §7) — the person-level lead the agent works              */
 /*                                                                     */
 /* Contract only: these validators and bounds are the single           */
-/* definition P09, P11, P19 and P21 import. Widening a union here is a  */
-/* deliberate edit at one site — none of those cards may re-declare a   */
-/* parallel vocabulary.                                                */
+/* definition the agent run, the contacts surface, the outreach loop    */
+/* and the inbox import. Widening a union here is a deliberate edit at  */
+/* one site — no module may re-declare a parallel vocabulary.          */
 /* ------------------------------------------------------------------ */
 
 /**
- * The ordered sales pipeline (§4.3). Order is load-bearing twice: a later
- * scrape may never move a lead backwards, and cancelling a booking falls back
- * to "the last supported earlier stage". `won`/`lost` close the pipeline and
- * are never inferred from mail acceptance or a booked meeting.
+ * Mapped failure codes. Provider wording NEVER leaves `integrations/` or
+ * `ai/` (PLAN §4 white-label rule, §10 "Errors"), so everything that stores
+ * or shows a failure stores one of these and the client maps it to copy.
  */
-export const SALES_STAGES = [
-  "discovered",
-  "researched",
-  "qualified",
-  "contact_needed",
-  "draft_ready",
-  "contacted",
-  "replied",
-  "booking_proposed",
-  "booked",
-  "won",
-  "lost",
+export const OPERATION_ERROR_CODES = [
+  "rate_limited",
+  "provider_unavailable",
+  "unreadable_source",
+  "not_found",
+  "invalid_response",
+  "insufficient_credits",
+  "platform_paused",
+  "timeout",
+  "unknown",
 ] as const;
 
-export const vSalesStage = v.union(
-  v.literal("discovered"),
+export const vOperationErrorCode = v.union(
+  v.literal("rate_limited"),
+  v.literal("provider_unavailable"),
+  v.literal("unreadable_source"),
+  v.literal("not_found"),
+  v.literal("invalid_response"),
+  v.literal("insufficient_credits"),
+  v.literal("platform_paused"),
+  v.literal("timeout"),
+  v.literal("unknown"),
+);
+
+export type OperationErrorCode = (typeof OPERATION_ERROR_CODES)[number];
+
+/**
+ * The failure a step records on the row it was working (PLAN §9.1 "Retries").
+ * `attempts` is what drives the retry ladder and the hand-off to
+ * `needs_attention`, so it is part of the stored fact, not a log line.
+ */
+export const vOperationError = v.object({
+  code: vOperationErrorCode,
+  at: v.number(),
+  attempts: v.number(),
+});
+
+export type OperationError = Infer<typeof vOperationError>;
+
+/**
+ * The lead pipeline (PLAN §7). `stage` plus `nextActionAt` IS the state
+ * machine — the cron picks up whatever is due, so nothing else encodes
+ * progress.
+ *
+ * Order is load-bearing: an automatic transition may only move a lead
+ * forward (`advancedLeadStage`). The three stages outside the ordered
+ * pipeline are deliberate:
+ *   `rejected`      — the user said no; only a user re-approval leaves it.
+ *   `closed_lost`   — the conversation ended; a human call.
+ *   `needs_attention` — a step failed its retry ladder and parked the lead
+ *                     with a Retry button (PLAN §9.1).
+ */
+export const LEAD_PIPELINE_STAGES = [
+  "found",
+  "researched",
+  "queued",
+  "contacted",
+  "replied",
+  "interested",
+  "meeting_proposed",
+  "meeting_booked",
+] as const;
+
+export const LEAD_STAGES = [
+  ...LEAD_PIPELINE_STAGES,
+  "closed_lost",
+  "rejected",
+  "needs_attention",
+] as const;
+
+export const vLeadStage = v.union(
+  v.literal("found"),
   v.literal("researched"),
-  v.literal("qualified"),
-  v.literal("contact_needed"),
-  v.literal("draft_ready"),
+  v.literal("queued"),
   v.literal("contacted"),
   v.literal("replied"),
-  v.literal("booking_proposed"),
-  v.literal("booked"),
-  v.literal("won"),
-  v.literal("lost"),
-);
-
-export type SalesStage = (typeof SALES_STAGES)[number];
-
-/** Closed outcomes — an automatic transition never leaves or enters these. */
-export const TERMINAL_SALES_STAGES: readonly SalesStage[] = ["won", "lost"];
-
-/** Position in `SALES_STAGES`; the basis for the no-regression comparison. */
-export function salesStageRank(stage: SalesStage): number {
-  return SALES_STAGES.indexOf(stage);
-}
-
-/**
- * The stage an AUTOMATIC transition may land on, or the current one. A later
- * scrape may never move a lead backwards, and an automatic transition never
- * enters or leaves `won`/`lost` — both halves of what `salesStageRank` is
- * load-bearing for. Returning the CURRENT stage rather than throwing is
- * deliberate: a branch that re-runs research on an already-contacted lead
- * should record its finding, not fail. Human corrections do not come through
- * here — `prospects.updateStage` moves to ANY stage with a stated reason.
- */
-export function advancedStage(
-  current: SalesStage,
-  target: SalesStage,
-): SalesStage {
-  if (TERMINAL_SALES_STAGES.includes(current)) return current;
-  if (TERMINAL_SALES_STAGES.includes(target)) return current;
-  return salesStageRank(target) > salesStageRank(current) ? target : current;
-}
-
-/**
- * Qualification is orthogonal to `salesStage` and to contact availability: a
- * missing email must not erase fit evidence, and a qualified lead with no
- * address is `contact_needed`, not `rejected` (§4.3).
- */
-export const vQualification = v.union(
-  v.literal("pending"),
-  v.literal("qualified"),
+  v.literal("interested"),
+  v.literal("meeting_proposed"),
+  v.literal("meeting_booked"),
+  v.literal("closed_lost"),
   v.literal("rejected"),
-  v.literal("needs_review"),
+  v.literal("needs_attention"),
 );
 
-export type Qualification =
-  | "pending"
-  | "qualified"
-  | "rejected"
-  | "needs_review";
+export type LeadStage = (typeof LEAD_STAGES)[number];
+export type LeadPipelineStage = (typeof LEAD_PIPELINE_STAGES)[number];
+
+/** Stages an automatic transition never enters or leaves. */
+export const TERMINAL_LEAD_STAGES: readonly LeadStage[] = [
+  "closed_lost",
+  "rejected",
+];
+
+/** Position in the ordered pipeline, or `-1` for a stage outside it. */
+export function leadStageRank(stage: LeadStage): number {
+  return (LEAD_PIPELINE_STAGES as readonly string[]).indexOf(stage);
+}
 
 /**
- * Provenance origin of a source reference or contact. `manual` is an operator
- * typing a company in; `enrich` is the B2B data API. Widening this union is a
- * deliberate edit at one site.
+ * The stage an AUTOMATIC transition may land on, or the current one.
+ *
+ * Returning the current stage rather than throwing is deliberate: a step that
+ * re-runs on an already-contacted lead should record its finding, not fail.
+ * A lead parked in `needs_attention` is not silently un-parked either — only
+ * an explicit retry moves it, which is what makes the Retry button honest.
+ * Human corrections do not come through here.
  */
-export const vProspectSource = v.union(
-  v.literal("manual"),
-  v.literal("enrich"),
+export function advancedLeadStage(
+  current: LeadStage,
+  target: LeadPipelineStage,
+): LeadStage {
+  if (TERMINAL_LEAD_STAGES.includes(current)) return current;
+  if (current === "needs_attention") return current;
+  return leadStageRank(target) > leadStageRank(current) ? target : current;
+}
+
+/**
+ * Whether we have the lead's address (PLAN §7). `locked` is the honest
+ * starting state: a sourced row carries no address at all until the user
+ * spends the credits to find it, and `not_found` records that we paid and
+ * the provider had none — never an invented address.
+ */
+export const vLeadEmailStatus = v.union(
+  v.literal("locked"),
+  v.literal("revealing"),
+  v.literal("found"),
+  v.literal("not_found"),
 );
 
-export type ProspectSource = Infer<typeof vProspectSource>;
+export type LeadEmailStatus = "locked" | "revealing" | "found" | "not_found";
 
 /**
- * Observed metric metadata carried on a source reference. Always explicit
- * name/currency/period — a bare number would let "$40k" and "40k signups"
- * merge. `currency`/`period` stay optional so a non-revenue metric is not
- * forced to invent them (§4.5: no invented metrics).
+ * Lead approval — "yes, contact this person" (PLAN §9.3). Deliberately NOT
+ * email approval, which is a verdict on one draft and lives in `approvals`.
  */
-export const vObservedMetric = v.object({
-  name: v.string(),
-  value: v.number(),
-  currency: v.optional(v.string()),
-  period: v.optional(v.union(v.literal("monthly"), v.literal("annual"))),
-});
+export const vLeadApproval = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected"),
+);
+
+export type LeadApproval = "pending" | "approved" | "rejected";
 
 /**
- * One source reference: which source, the profile URL it was read from, the
- * provider record ID where the provider exposes one, when it was retrieved
- * and any observed metric. Re-discovery MERGES these; provenance is never
- * overwritten, and companies are never merged by display name alone (§4.3).
+ * Who approved. Autopilot approving is a recorded fact, not an absence of
+ * one: PLAN §9.3 requires the same ledger either way, so the actor is stored
+ * rather than inferred from the agent's mode at read time.
  */
-export const vProspectSourceRef = v.object({
-  source: vProspectSource,
-  profileUrl: v.string(),
-  providerRecordId: v.optional(v.string()),
-  retrievedAt: v.number(),
-  metric: v.optional(vObservedMetric),
+export const vApprovalActor = v.union(
+  v.literal("user"),
+  v.literal("autopilot"),
+);
+
+export type ApprovalActor = "user" | "autopilot";
+
+/**
+ * Where the lead came from (PLAN §7, MIGRATION "Final-schema variants").
+ *
+ * A discriminated union rather than optional columns: a provider id exists
+ * only on a sourced lead, and a folded-in pre-pivot campaign only on a
+ * migrated one, so "found by a strategy" and "inherited from a campaign" are
+ * different documents rather than the same document with different holes.
+ * Dedupe on `sourceLeadId` therefore applies to `kind: "sourced"` alone.
+ */
+export const vLeadOrigin = v.union(
+  v.object({
+    kind: v.literal("sourced"),
+    /** The lead-data provider's own row id. Neutral name by the white-label
+     *  rule — no query that feeds the client returns it. */
+    sourceLeadId: v.string(),
+    /** Every strategy that matched this person; the "+n signals" badge and
+     *  the multi-signal score boost both read it (PLAN §3). */
+    strategyIds: v.array(v.id("strategies")),
+  }),
+  v.object({
+    kind: v.literal("legacy"),
+    legacyCampaignId: v.id("legacyCampaigns"),
+  }),
+  v.object({ kind: v.literal("manual") }),
+);
+
+export type LeadOrigin = Infer<typeof vLeadOrigin>;
+
+/**
+ * What research knows (PLAN §7). A score exists ONLY on a researched lead,
+ * so found-but-unresearched and migrated leads are valid documents rather
+ * than exceptions. UI and queries switch on the variant; nothing reads a
+ * bare `aiScore`.
+ */
+export const vLeadResearch = v.union(
+  v.object({ status: v.literal("not_researched") }),
+  v.object({ status: v.literal("researching"), startedAt: v.number() }),
+  v.object({
+    status: v.literal("researched"),
+    aiScore: v.union(v.literal(1), v.literal(2), v.literal(3)),
+    aiScoreReason: v.string(),
+    summary: v.string(),
+    researchedAt: v.number(),
+  }),
+  v.object({ status: v.literal("failed"), lastError: vOperationError }),
+);
+
+export type LeadResearch = Infer<typeof vLeadResearch>;
+
+/** The 1–3 flame score, defined once so no call site re-derives the range. */
+export const LEAD_SCORE_MIN = 1;
+export const LEAD_SCORE_MAX = 3;
+
+/**
+ * The denormalised value behind `prospects.by_workspaceId_and_scoreKey`.
+ *
+ * Convex indexes a top-level field, and `aiScore` lives inside a union
+ * member, so the sortable score is stored beside `research` as `scoreKey`.
+ * THE INVARIANT: `scoreKey` is written in the SAME patch as `research` and
+ * by nothing else — pass the new `research` value through this function and
+ * store both. It is an index key, never the score: readers switch on
+ * `research.status === "researched"`.
+ */
+export function leadScoreKey(research: LeadResearch): number | undefined {
+  return research.status === "researched" ? research.aiScore : undefined;
+}
+
+/**
+ * The denormalised value behind `prospects.by_agentId_and_sourceLeadKey`,
+ * under the same rule as `leadScoreKey`: written in the same patch as
+ * `origin`, by nothing else, and read only as a dedupe lookup key. The
+ * sourcing upsert reads this index to decide insert-or-merge (PLAN §3 step 5).
+ */
+export function leadSourceKey(origin: LeadOrigin): string | undefined {
+  return origin.kind === "sourced" ? origin.sourceLeadId : undefined;
+}
+
+/**
+ * A lead's company, as the free search preview describes it (spikes §3).
+ * Stored under our own names — never the provider's — and every member is
+ * optional because the preview row nulls all of them.
+ */
+export const vLeadCompany = v.object({
+  linkedinUrl: v.optional(v.string()),
+  logoUrl: v.optional(v.string()),
+  headline: v.optional(v.string()),
+  industry: v.optional(v.string()),
+  employeeCount: v.optional(v.number()),
+  employeeGrowthRate: v.optional(v.number()),
+  revenueBucket: v.optional(v.string()),
+  foundedYear: v.optional(v.string()),
+  monthlyTraffic: v.optional(v.number()),
+  totalFunding: v.optional(v.number()),
+  lastFundingType: v.optional(v.string()),
+  lastFundingDate: v.optional(v.string()),
+  specialties: v.optional(v.string()),
+  headquarters: v.optional(
+    v.object({
+      city: v.optional(v.string()),
+      state: v.optional(v.string()),
+      country: v.optional(v.string()),
+    }),
+  ),
 });
 
-export type ProspectSourceRef = Infer<typeof vProspectSourceRef>;
+export type LeadCompany = Infer<typeof vLeadCompany>;
 
-export const PROSPECT_SOURCE_REFS_MAX = 10;
+/** Where the person is, as the preview row states it. */
+export const vLeadLocation = v.object({
+  city: v.optional(v.string()),
+  state: v.optional(v.string()),
+  country: v.optional(v.string()),
+});
+
+export type LeadLocation = Infer<typeof vLeadLocation>;
+
+/**
+ * What a migration copied off a lead before the final schema dropped it
+ * (MIGRATION §5: a forward step keeps a `legacy` copy until the rollback
+ * window closes). Closed shape — never an open bag of pre-pivot keys — and
+ * absent on every lead this application creates.
+ */
+export const vLeadLegacy = v.object({
+  migratedAt: v.number(),
+  salesStage: v.optional(v.string()),
+  qualification: v.optional(v.string()),
+  fitReason: v.optional(v.string()),
+  ownerIdentityKey: v.optional(v.string()),
+  contactEmail: v.optional(v.string()),
+  sourceRefCount: v.optional(v.number()),
+});
+
+export type LeadLegacy = Infer<typeof vLeadLegacy>;
+
 export const PROSPECT_COMPANY_NAME_MAX_LENGTH = 200;
-export const PROSPECT_FIT_REASON_MAX_LENGTH = 2_000;
 export const PROSPECT_STAGE_REASON_MAX_LENGTH = 500;
 export const PROVIDER_RECORD_ID_MAX_LENGTH = 200;
 export const CANONICAL_DOMAIN_MAX_LENGTH = 253;
+export const LEAD_PERSON_NAME_MAX_LENGTH = 200;
+export const LEAD_HEADLINE_MAX_LENGTH = 500;
+export const LEAD_SUMMARY_MAX_LENGTH = 4_000;
+export const LEAD_SCORE_REASON_MAX_LENGTH = 1_000;
+export const LEAD_SKILLS_MAX = 25;
 
 /**
- * Canonical dedupe domain for `by_workspaceId_and_campaignId_and_canonicalDomain`.
- * Accepts a bare host or an http(s) URL and extracts the host through the URL
- * parser (so a path, query or credentials cannot leak into the key),
- * lowercases, drops a trailing root dot and drops a leading `www.` — the one
- * subdomain that never identifies a different business. Every OTHER subdomain
- * is preserved, per §4.3.
+ * Canonical company domain for research and dedupe. Accepts a bare host or an
+ * http(s) URL and extracts the host through the URL parser (so a path, query
+ * or credentials cannot leak into the key), lowercases, drops a trailing root
+ * dot and drops a leading `www.` — the one subdomain that never identifies a
+ * different business. Every OTHER subdomain is preserved.
  *
  * Plain-host only: the shared dotted-domain floor ends in `[a-z]{2,63}`, so a
  * punycode TLD (`xn--p1ai`) is rejected rather than stored.
@@ -1526,280 +2004,97 @@ export function normalizeCanonicalDomain(
   });
 }
 
-/**
- * Bound and de-duplicate a prospect's source references. Distinctness is by
- * (source, provider record ID) and falls back to the normalized profile URL
- * when the provider exposes no ID, so re-discovering the same provider record
- * merges instead of consuming one of the ten slots. Returns the normalized
- * list to store.
- */
-export function assertSourceRefs(
-  refs: ProspectSourceRef[],
-  field = "sourceRefs",
-): ProspectSourceRef[] {
-  if (refs.length === 0) {
-    throw invalid(`${field} must carry at least one actual source reference`);
-  }
-  // Cheap guard before the normalize/dedupe pass: distinctness can only shrink
-  // the list, so anything past the cap in RAW length can never fit, and paying
-  // a URL parse per element first lets an oversized payload buy unbounded work
-  // inside the caller's transaction.
-  if (refs.length > PROSPECT_SOURCE_REFS_MAX) {
-    throw invalid(
-      `${field} allows at most ${PROSPECT_SOURCE_REFS_MAX} source references`,
-    );
-  }
-  const seen = new Set<string>();
-  const normalized = refs.map((ref, index) => {
-    const at = `${field}[${index}]`;
-    const profileUrl = normalizeHttpUrl(ref.profileUrl, `${at}.profileUrl`);
-    const providerRecordId =
-      ref.providerRecordId === undefined
-        ? undefined
-        : boundedString(ref.providerRecordId, `${at}.providerRecordId`, {
-            min: 1,
-            max: PROVIDER_RECORD_ID_MAX_LENGTH,
-          });
-    const identity = `${ref.source}:${providerRecordId ?? profileUrl}`;
-    if (seen.has(identity)) {
-      return null;
-    }
-    seen.add(identity);
-    return {
-      source: ref.source,
-      profileUrl,
-      ...(providerRecordId === undefined ? {} : { providerRecordId }),
-      retrievedAt: assertEpochMs(ref.retrievedAt, `${at}.retrievedAt`),
-      ...(ref.metric === undefined
-        ? {}
-        : { metric: assertObservedMetric(ref.metric, `${at}.metric`) }),
-    } satisfies ProspectSourceRef;
-  });
-  const distinct = normalized.filter(
-    (ref): ref is ProspectSourceRef => ref !== null,
-  );
-  if (distinct.length > PROSPECT_SOURCE_REFS_MAX) {
-    throw invalid(
-      `${field} allows at most ${PROSPECT_SOURCE_REFS_MAX} distinct source references`,
-    );
-  }
-  return distinct;
-}
-
-/** Bound one observed metric; `name` is always explicit (§4.1). */
-export function assertObservedMetric(
-  metric: Infer<typeof vObservedMetric>,
-  field: string,
-): Infer<typeof vObservedMetric> {
-  if (!Number.isFinite(metric.value)) {
-    throw invalid(`${field}.value must be a finite number`);
-  }
-  return {
-    name: boundedString(metric.name, `${field}.name`, { min: 1, max: 100 }),
-    value: metric.value,
-    ...(metric.currency === undefined
-      ? {}
-      : {
-          currency: boundedString(metric.currency, `${field}.currency`, {
-            min: 3,
-            max: 3,
-          }).toUpperCase(),
-        }),
-    ...(metric.period === undefined ? {} : { period: metric.period }),
-  };
-}
+/* ----- business profile (PLAN §7) --------------------------------------- */
 
 /**
- * The provider's own assessment of the address it returned. Deliberately NOT
- * send eligibility: suppressions and sending policy decide
- * whether OpenSquad may write to an address (§4.3). `unknown` is the honest
- * value when the provider states nothing.
+ * Website analysis state (PLAN §5 "Onboarding edge cases"). The failure
+ * variant carries a MAPPED code, never provider text: the screen says "We
+ * couldn't read that website" and offers Retry / Fill in manually.
+ * `firstRunUsed` is what makes the free first run free only on success.
  */
-export const vProviderEmailStatus = v.union(
-  v.literal("verified"),
-  v.literal("guessed"),
-  v.literal("unavailable"),
-  v.literal("unknown"),
+export const vAnalysisStatus = v.union(
+  v.object({ state: v.literal("idle") }),
+  v.object({ state: v.literal("analyzing"), startedAt: v.number() }),
+  v.object({ state: v.literal("ready"), analyzedAt: v.number() }),
+  v.object({
+    state: v.literal("failed"),
+    code: vOperationErrorCode,
+    at: v.number(),
+  }),
 );
 
-export type ProviderEmailStatus =
-  | "verified"
-  | "guessed"
-  | "unavailable"
-  | "unknown";
+export type AnalysisStatus = Infer<typeof vAnalysisStatus>;
 
-export const CONTACT_SELECTION_REASON_MAX_LENGTH = 500;
+export const COMPANY_NAME_MAX_LENGTH = 200;
+export const COMPANY_DESCRIPTION_MAX_LENGTH = 4_000;
+export const COMPANY_PAIN_POINTS_MAX_LENGTH = 2_000;
+export const COMPANY_LIST_MAX_ITEMS = 12;
+export const COMPANY_LIST_ITEM_MAX_LENGTH = 300;
 
-/**
- * MVP `contact` — exactly one selected business person, not a list (§4.3).
- * `email` is absent unless the provider returned one; an address is never
- * manufactured, so absence plus a preserved `providerEmailStatus` is the
- * correct representation of "we could not get one".
- */
-export const vProspectContact = v.object({
-  source: vProspectSource,
-  providerRef: v.string(),
-  fullName: v.string(),
-  role: v.optional(v.string()),
-  email: v.optional(v.string()),
-  providerEmailStatus: vProviderEmailStatus,
-  retrievedAt: v.number(),
-  selectionReason: v.string(),
-});
-
-export type ProspectContact = Infer<typeof vProspectContact>;
-
-/** Bound and normalize a selected contact before storing it. */
-export function assertProspectContact(
-  contact: ProspectContact,
-  field = "contact",
-): ProspectContact {
-  const email =
-    contact.email === undefined
-      ? undefined
-      : normalizeEmailAddress(contact.email, `${field}.email`);
-  if (email === undefined && contact.providerEmailStatus === "verified") {
-    throw invalid(
-      `${field}.providerEmailStatus cannot be "verified" without a provider-returned address`,
-    );
-  }
-  if (email !== undefined && contact.providerEmailStatus === "unavailable") {
-    throw invalid(
-      `${field}.providerEmailStatus "unavailable" contradicts the supplied address`,
-    );
-  }
-  return {
-    source: contact.source,
-    providerRef: boundedString(contact.providerRef, `${field}.providerRef`, {
-      min: 1,
-      max: PROVIDER_RECORD_ID_MAX_LENGTH,
-    }),
-    fullName: boundedString(contact.fullName, `${field}.fullName`, {
-      min: 1,
-      max: 200,
-    }),
-    ...(contact.role === undefined
-      ? {}
-      : {
-          role: boundedString(contact.role, `${field}.role`, {
-            min: 1,
-            max: 200,
-          }),
-        }),
-    ...(email === undefined ? {} : { email }),
-    providerEmailStatus: contact.providerEmailStatus,
-    retrievedAt: assertEpochMs(contact.retrievedAt, `${field}.retrievedAt`),
-    selectionReason: boundedString(
-      contact.selectionReason,
-      `${field}.selectionReason`,
-      { min: 1, max: CONTACT_SELECTION_REASON_MAX_LENGTH },
-    ),
-  };
-}
+/* ----- workspace plan, inbox connection and secrets (PLAN §4, §6) ------- */
 
 /**
- * Next-action kinds. §4.3 requires "a bounded description plus action kind"
- * but enumerates no members, so this list is derived from the §5 CRM/booking
- * entry points and the §8 "CRM and booking transitions" rules. P19's picker
- * renders exactly these;
- * a new kind is a deliberate widening here, never a free-form string.
+ * One plan, no upgrade path, no billing UI (PLAN §6). It is stored rather
+ * than assumed so the limit lookup can become a real plan map later without
+ * touching a call site.
  */
-export const NEXT_ACTION_KINDS = [
-  "follow_up_email",
-  "call",
-  "await_reply",
-  "research",
-  "enrich_contact",
-  "propose_booking",
-  "confirm_booking",
-  "attend_meeting",
-  "review",
-] as const;
+export const vWorkspacePlan = v.literal("trial");
 
-export const vNextActionKind = v.union(
-  v.literal("follow_up_email"),
-  v.literal("call"),
-  v.literal("await_reply"),
-  v.literal("research"),
-  v.literal("enrich_contact"),
-  v.literal("propose_booking"),
-  v.literal("confirm_booking"),
-  v.literal("attend_meeting"),
-  v.literal("review"),
+export type WorkspacePlan = "trial";
+
+/**
+ * How the workspace's sending inbox is attached (PLAN §4, §9.4).
+ * `legacy_platform_inbox` is a workspace created before the pivot that still
+ * receives on the platform account: readable in the Inbox, never
+ * auto-answered, and unable to send until its owner connects their own key.
+ */
+export const vInboxConnection = v.union(
+  v.literal("none"),
+  v.literal("legacy_platform_inbox"),
+  v.literal("connected"),
+  v.literal("invalid"),
 );
 
-export type NextActionKind = (typeof NEXT_ACTION_KINDS)[number];
+export type InboxConnection =
+  | "none"
+  | "legacy_platform_inbox"
+  | "connected"
+  | "invalid";
 
-export const NEXT_ACTION_DESCRIPTION_MAX_LENGTH = 500;
+/** The two secrets a connected workspace holds (PLAN §4 "Bring-your-own keys"). */
+export const vSecretProvider = v.union(
+  v.literal("agentmail"),
+  v.literal("agentmail_webhook"),
+);
 
-/**
- * `nextAction` is the work itself; `prospects.nextActionDueAt` is a separate
- * optional UTC epoch-ms field. An absent due time is the explicit
- * "unscheduled" state — never a far-future sentinel date (§4.3).
- */
-export const vNextAction = v.object({
-  kind: vNextActionKind,
-  description: v.string(),
-});
+export type SecretProvider = "agentmail" | "agentmail_webhook";
 
-export type NextAction = Infer<typeof vNextAction>;
+/** What the last verification of that secret concluded. */
+export const vSecretStatus = v.union(
+  v.literal("unverified"),
+  v.literal("valid"),
+  v.literal("invalid"),
+);
 
-/** Bound a next action's free text before storing it. */
-export function assertNextAction(
-  action: NextAction,
-  field = "nextAction",
-): NextAction {
-  return {
-    kind: action.kind,
-    description: boundedString(action.description, `${field}.description`, {
-      min: 1,
-      max: NEXT_ACTION_DESCRIPTION_MAX_LENGTH,
-    }),
-  };
-}
+export type SecretStatus = "unverified" | "valid" | "invalid";
 
-/**
- * One candidate company a source produced, in the shape the pipeline importer
- * accepts. Deliberately NOT a prospect row: `canonicalDomain`, `qualification`,
- * `salesStage`, `ownerIdentityKey`, `version` and the timestamps are all
- * backend facts derived at import, so a caller cannot state them.
- *
- * `websiteUrl` rather than a bare domain, because provenance arrives as a URL
- * and `normalizeCanonicalDomain` extracts the host through the URL parser —
- * a path, query or credential can never leak into the dedupe key.
- */
-export const vProspectCandidate = v.object({
-  companyName: v.string(),
-  websiteUrl: v.string(),
-  sourceRefs: v.array(vProspectSourceRef),
-  fitReason: v.optional(v.string()),
-  contact: v.optional(vProspectContact),
-});
-
-export type ProspectCandidate = Infer<typeof vProspectCandidate>;
-
-/** Bound on one import batch, so a single call cannot buy unbounded work
- *  inside the importing transaction. The campaign's own `leadLimit` (1..5) is
- *  what decides how many of them can actually become leads. */
-export const PROSPECT_IMPORT_CANDIDATES_MAX = 50;
+/** Length of the opaque per-workspace webhook path token. */
+export const WEBHOOK_TOKEN_LENGTH = 32;
 
 /* ----- lead events ----------------------------------------------------- */
 
 /**
- * Append-only CRM history kinds (§4.3: status / owner / note / next-action /
- * booking history, plus the §8 research and enrichment updates). Unlike
- * `activityEvents.kind` — a bounded string feeding a receipts timeline — this
- * is a closed union, because a lead event is the audit record a human stage
- * correction and a booking transition are proved by.
+ * Append-only lead history kinds. Unlike `activityEvents.kind` — a bounded
+ * string feeding a workspace receipts timeline — this is a closed union,
+ * because a lead event is the audit record a stage change, an approval and a
+ * booking transition are proved by.
  */
 export const LEAD_EVENT_KINDS = [
   "stage_changed",
-  "owner_assigned",
   "note_added",
-  "next_action_set",
-  "next_action_cleared",
   "research_applied",
-  "contact_enriched",
+  "email_revealed",
+  "approval_changed",
   "send_accepted",
   "reply_received",
   "booking_proposed",
@@ -1811,12 +2106,10 @@ export const LEAD_EVENT_KINDS = [
 
 export const vLeadEventKind = v.union(
   v.literal("stage_changed"),
-  v.literal("owner_assigned"),
   v.literal("note_added"),
-  v.literal("next_action_set"),
-  v.literal("next_action_cleared"),
   v.literal("research_applied"),
-  v.literal("contact_enriched"),
+  v.literal("email_revealed"),
+  v.literal("approval_changed"),
   v.literal("send_accepted"),
   v.literal("reply_received"),
   v.literal("booking_proposed"),
@@ -1830,10 +2123,10 @@ export type LeadEventKind = (typeof LEAD_EVENT_KINDS)[number];
 
 /**
  * Who caused the event. A discriminated union rather than
- * `activityEvents.actor`'s bare string, because §4.3 makes the provenance
+ * `activityEvents.actor`'s bare string, because the provenance is
  * structural: only a `human` actor carries an `identityKey`, and it comes from
  * `ctx.auth` — never from model output or email content. `workflow` is the
- * internal pipeline; `system` is a backend sweep with no human behind it.
+ * agent run; `system` is a backend sweep with no human behind it.
  */
 export const vLeadEventActor = v.union(
   v.object({ source: v.literal("human"), identityKey: v.string() }),
@@ -1848,25 +2141,24 @@ export const LEAD_EVENT_NOTE_MAX_LENGTH = 4_000;
 export const LEAD_EVENT_REASON_MAX_LENGTH = 1_000;
 
 /**
- * Structured previous/new values §8 "CRM and booking transitions" requires
- * an event to preserve. Every
- * member is optional because one event kind uses a few of them, but the shape
- * is closed — a lead event never carries an open bag of model-chosen keys.
+ * Structured previous/new values an event preserves. Every member is
+ * optional because one event kind uses a few of them, but the shape is
+ * closed — a lead event never carries an open bag of model-chosen keys.
  * `fromStage`/`toStage` are top-level columns and are deliberately absent here.
  */
 export const vLeadEventDetails = v.object({
-  fromOwnerIdentityKey: v.optional(v.string()),
-  toOwnerIdentityKey: v.optional(v.string()),
-  fromQualification: v.optional(vQualification),
-  toQualification: v.optional(vQualification),
-  fromNextAction: v.optional(vNextAction),
-  toNextAction: v.optional(vNextAction),
-  fromNextActionDueAt: v.optional(v.number()),
-  toNextActionDueAt: v.optional(v.number()),
+  fromApproval: v.optional(vLeadApproval),
+  toApproval: v.optional(vLeadApproval),
+  /** Who approved — `autopilot` is a recorded actor, not a missing one. */
+  approvalActor: v.optional(vApprovalActor),
+  fromEmailStatus: v.optional(vLeadEmailStatus),
+  toEmailStatus: v.optional(vLeadEmailStatus),
+  /** The 1-3 score a `research_applied` event concluded. */
+  aiScore: v.optional(v.number()),
   previousStartsAt: v.optional(v.number()),
   previousEndsAt: v.optional(v.number()),
   previousTimezone: v.optional(v.string()),
-  /** Stated basis for a human correction, cancellation or won/lost call. */
+  /** Stated basis for a human correction, a cancellation or a rejection. */
   reason: v.optional(v.string()),
   /** Body of a `note_added` event — a note, never a synthesized message. */
   note: v.optional(v.string()),
