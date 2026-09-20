@@ -1,23 +1,32 @@
+import { useUser } from "@hexclave/react"
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
-import { ActivityFeed } from "@/components/overview/ActivityFeed"
 import { LoadingState } from "@/components/states/states"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 
+/** The greeting of reference 20 — the user's own name, or nobody's. */
+function firstName(displayName: string | null): string | null {
+  const first = displayName?.trim().split(/\s+/)[0]
+  return first === undefined || first.length === 0 ? null : first
+}
+
 /**
- * Overview. The page is deliberately thin while the outbound agent is being
- * rebuilt: the dated receipt feed is the one thing it can answer honestly
- * today. The "what needs a person" strip lives on `/leads` — the signed-in
- * home — not here; the date picker belongs to the activity section and to
- * nothing above it.
+ * `/dashboard` — what the agent has done, and what is waiting on a person.
+ *
+ * Thin while the funnel is being rebuilt: the dated receipt feed is the one
+ * thing it can answer honestly today. T42 adds the status chips, range pills,
+ * stat cards, chart and the hot-leads and replies panels of reference 20.
  */
-export function OverviewPage() {
+export function DashboardPage() {
+  const user = useUser()
   const current = useCurrentWorkspace()
+  const name = firstName(user?.displayName ?? null)
 
   return (
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
-        title="Overview"
-        description="What the workspace has done, and everything that is waiting on a person."
+        title={name === null ? "Welcome back" : `Welcome back, ${name}`}
+        description="Your agent works in the background. Here is what it has done."
       />
 
       {/* `null` cannot reach here — the `_workspace` gate redirects a
@@ -25,7 +34,7 @@ export function OverviewPage() {
           render for a case that resolves elsewhere. */}
       {current === undefined || current === null ? (
         <LoadingState
-          title="Loading overview"
+          title="Loading dashboard"
           description="Reading your workspace."
         />
       ) : (

@@ -1,32 +1,29 @@
-import { Link } from "@tanstack/react-router"
 import { LeadList } from "@/components/contacts/LeadList"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
-import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 
 /**
- * `/leads` — the signed-in home and the lead list. Overview is a named
- * action, not a vanished page: the operator arrives at their leads and can
- * still reach the workspace's receipts from the top bar.
+ * `/contacts` — everyone the agent has found, and where each one stands.
+ *
+ * The container owns the workspace read; the table below owns the list query
+ * and the URL filters. T31 rebuilds the body against reference 23.
  */
-export function LeadsPage() {
+export function ContactsPage() {
   const current = useCurrentWorkspace()
 
   return (
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
-        title="Leads"
-        description="Every person the agent has found, and where each one stands. Overview — what has happened in this workspace — stays linked at the top."
-        actions={
-          <Button variant="outline" size="sm" render={<Link to="/overview" />}>
-            Overview
-          </Button>
-        }
+        title="Contacts"
+        description="Everyone your agent found, what it learned about them, and what happens next."
       />
+      {/* `null` cannot reach here — the `_workspace` gate redirects a
+          membership-less user to setup — but loading is the only honest
+          render for a case that resolves elsewhere. */}
       {current === undefined || current === null ? (
         <LoadingState
-          title="Loading leads"
+          title="Loading contacts"
           description="Reading this workspace's pipeline."
         />
       ) : (

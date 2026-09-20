@@ -1,5 +1,5 @@
 /**
- * Overview — the dated receipt feed of what the workspace has done.
+ * Dashboard — the dated receipt feed of what the workspace has done.
  *
  * Read-only: every row is an activity event the backend recorded, never a
  * derived guess, and the date range comes from the route's search contract.
@@ -10,7 +10,7 @@ import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { actorLabel, formatInstant } from "@/components/shared/presentation"
-import { OverviewDateRangePicker } from "@/components/overview/OverviewDateRangePicker"
+import { ActivityRangePicker } from "@/components/dashboard/ActivityRangePicker"
 import {
   EmptyState,
   ErrorState,
@@ -30,9 +30,9 @@ import {
   calendarRangeToSearch,
 } from "@/lib/date-ranges"
 import { withFilters } from "@/lib/search-params"
-import { OVERVIEW_DEFAULTS } from "@/routes/_dashboard/_workspace/overview"
+import { DASHBOARD_DEFAULTS } from "@/routes/_dashboard/_workspace/dashboard"
 
-const OVERVIEW_ROUTE = "/_dashboard/_workspace/overview"
+const DASHBOARD_ROUTE = "/_dashboard/_workspace/dashboard"
 
 /**
  * No `timeZone` option, deliberately. `picker.value` holds **civil days** —
@@ -66,10 +66,10 @@ export function ActivityFeed({
   workspaceId: Id<"workspaces">
   timezone: string
 }) {
-  const search = useSearch({ from: OVERVIEW_ROUTE })
+  const search = useSearch({ from: DASHBOARD_ROUTE })
   const navigate = useNavigate()
 
-  const range = search.range ?? OVERVIEW_DEFAULTS.range
+  const range = search.range ?? DASHBOARD_DEFAULTS.range
   // The window is the WORKSPACE's day, not the browser's. Every row below is
   // stamped with `formatInstant(…, timezone)` and every send allowance in this
   // product is bucketed by the workspace zone, so a window derived from the
@@ -97,7 +97,7 @@ export function ActivityFeed({
           by it.
         </CardDescription>
         <div className="pt-1">
-          <OverviewDateRangePicker
+          <ActivityRangePicker
             value={picker.value}
             preset={picker.preset}
             timezone={timezone}
@@ -108,13 +108,13 @@ export function ActivityFeed({
                 timezone,
               )
               void navigate({
-                to: "/overview",
+                to: "/dashboard",
                 // A range change is a filter change, so the cursor goes with
                 // it — page two of one window must never render as page two
                 // of another.
                 search: withFilters(search, {
                   range:
-                    chosen.range === OVERVIEW_DEFAULTS.range
+                    chosen.range === DASHBOARD_DEFAULTS.range
                       ? undefined
                       : chosen.range,
                   from: chosen.from,
@@ -127,7 +127,7 @@ export function ActivityFeed({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* The `activity.list` query lives inside this boundary so a stale or
-            foreign `?cursor=` throws HERE — never the whole overview — the
+            foreign `?cursor=` throws HERE — never the whole dashboard — the
             same arrangement the leads and inbox lists use. */}
         <CatchBoundary
           getResetKey={() =>
@@ -161,7 +161,7 @@ function ActivityFeedBody({
   label: string
   cursor: string | undefined
 }) {
-  const search = useSearch({ from: OVERVIEW_ROUTE })
+  const search = useSearch({ from: DASHBOARD_ROUTE })
   const navigate = useNavigate()
 
   const page = useQuery(api.activity.queries.list, {
@@ -189,7 +189,7 @@ function ActivityFeedBody({
                   size="sm"
                   onClick={() =>
                     void navigate({
-                      to: "/overview",
+                      to: "/dashboard",
                       search: { ...search, cursor: undefined },
                     })
                   }
@@ -230,7 +230,7 @@ function ActivityFeedBody({
                 size="sm"
                 onClick={() =>
                   void navigate({
-                    to: "/overview",
+                    to: "/dashboard",
                     search: { ...search, cursor: undefined },
                   })
                 }
@@ -244,7 +244,7 @@ function ActivityFeedBody({
                 size="sm"
                 onClick={() =>
                   void navigate({
-                    to: "/overview",
+                    to: "/dashboard",
                     search: { ...search, cursor: page.cursor ?? undefined },
                   })
                 }
@@ -272,7 +272,7 @@ function ActivityFeedBody({
  */
 function ActivityFeedError({ error, reset }: ErrorComponentProps) {
   const navigate = useNavigate()
-  const search = useSearch({ from: OVERVIEW_ROUTE })
+  const search = useSearch({ from: DASHBOARD_ROUTE })
   const cursorProblem = error instanceof Error && /cursor/i.test(error.message)
   return (
     <ErrorState
@@ -290,7 +290,7 @@ function ActivityFeedError({ error, reset }: ErrorComponentProps) {
         cursorProblem
           ? () =>
               void navigate({
-                to: "/overview",
+                to: "/dashboard",
                 search: { ...search, cursor: undefined },
               })
           : reset

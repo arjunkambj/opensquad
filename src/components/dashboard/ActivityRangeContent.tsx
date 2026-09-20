@@ -48,7 +48,7 @@ function rangeSelection(range: CalendarDateRange): DateRange {
   }
 }
 
-export function OverviewDateRangeContent({
+export function ActivityRangeContent({
   value,
   preset,
   timezone,
@@ -170,7 +170,7 @@ export function OverviewDateRangeContent({
         </div>
 
         <Calendar
-          aria-label="Overview date range"
+          aria-label="Activity date range"
           mode="range"
           numberOfMonths={2}
           weekStartsOn={1}

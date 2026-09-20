@@ -7,7 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { OverviewDateRangeContent } from "@/components/overview/OverviewDateRangeContent"
+import { ActivityRangeContent } from "@/components/dashboard/ActivityRangeContent"
 import {
   DATE_RANGE_PRESETS,
   type CalendarDateRange,
@@ -28,7 +28,7 @@ type Props = {
   onChange: (range: CalendarDateRange, preset: DateRangePreset | null) => void
 }
 
-export function OverviewDateRangePicker({
+export function ActivityRangePicker({
   value,
   preset,
   timezone,
@@ -75,7 +75,7 @@ export function OverviewDateRangePicker({
         className="w-auto max-w-[calc(100vw-2rem)] p-0"
       >
         {isOpen ? (
-          <OverviewDateRangeContent
+          <ActivityRangeContent
             value={value}
             preset={preset}
             timezone={timezone}

@@ -30,9 +30,9 @@ import {
 import { errorMessage } from "@/lib/convex-error"
 import { withFilters } from "@/lib/search-params"
 import { useRequestIntents } from "@/lib/use-request-intents"
-import type { LeadsSearch } from "@/routes/_dashboard/_workspace/leads"
+import type { ContactsSearch } from "@/routes/_dashboard/_workspace/contacts"
 
-const LEADS_ROUTE = "/_dashboard/_workspace/leads"
+const CONTACTS_ROUTE = "/_dashboard/_workspace/contacts"
 
 type LeadRow = FunctionReturnType<typeof api.leads.queries.list>["items"][number]
 
@@ -83,7 +83,7 @@ function scoreLabel(lead: LeadRow): string {
 }
 
 /**
- * `/leads` — every person the agent has found, and where each one stands.
+ * `/contacts` — every person the agent has found, and where each one stands.
  *
  * One list mode at a time, each an exact index range: a stage filter, the
  * approval queue, or company-name search. The backend refuses combinations no
@@ -97,7 +97,7 @@ function scoreLabel(lead: LeadRow): string {
  * T31's to build.
  */
 export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
-  const search = useSearch({ from: LEADS_ROUTE })
+  const search = useSearch({ from: CONTACTS_ROUTE })
   const navigate = useNavigate()
   const setApproval = useMutation(api.leads.mutations.setApproval)
   const intentFor = useRequestIntents()
@@ -119,10 +119,10 @@ export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
 
   /** A filter change. `withFilters` drops the cursor, because page two of one
    *  query is not page two of another. */
-  const apply = (patch: Partial<LeadsSearch>) => {
+  const apply = (patch: Partial<ContactsSearch>) => {
     void navigate({
-      to: "/leads",
-      search: (current: LeadsSearch) => withFilters(current, patch),
+      to: "/contacts",
+      search: (current: ContactsSearch) => withFilters(current, patch),
     })
   }
 
@@ -130,8 +130,8 @@ export function LeadList({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
    *  NOT go through `withFilters`, which would clear the cursor it just set. */
   const goToCursor = (cursor: string) => {
     void navigate({
-      to: "/leads",
-      search: (current: LeadsSearch) => ({ ...current, cursor }),
+      to: "/contacts",
+      search: (current: ContactsSearch) => ({ ...current, cursor }),
     })
   }
 
