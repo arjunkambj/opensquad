@@ -18,6 +18,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 const REASON_LABEL: Record<Doc<"suppressions">["reason"], string> = {
   unsubscribe: "Unsubscribed",
@@ -41,7 +42,7 @@ export function SuppressionsSection({
   workspace,
   role,
 }: {
-  workspace: Doc<"workspaces">
+  workspace: WorkspaceView
   role: "owner" | "operator" | "viewer"
 }) {
   const canEdit = role === "owner" || role === "operator"

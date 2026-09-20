@@ -5,7 +5,6 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import type { Doc } from "../../../convex/_generated/dataModel"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -14,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 type IntegrationRow = {
   icon: IconSvgElement
@@ -41,7 +41,7 @@ export function IntegrationsSection({
   workspace,
   isOwner,
 }: {
-  workspace: Doc<"workspaces">
+  workspace: WorkspaceView
   isOwner: boolean
 }) {
   void isOwner

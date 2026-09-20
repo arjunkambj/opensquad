@@ -1,7 +1,6 @@
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
-import type { Doc } from "../../../convex/_generated/dataModel"
 import {
   SendPolicyFields,
   type SendPolicyValues,
@@ -23,6 +22,7 @@ import {
   minutesToTimeString,
   timeStringToMinutes,
 } from "@/lib/workspace-time"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 /**
  * Sending window and daily limit (owner-only), via `setSendingPolicy` guarded
@@ -33,7 +33,7 @@ export function SendingPolicySection({
   workspace,
   isOwner,
 }: {
-  workspace: Doc<"workspaces">
+  workspace: WorkspaceView
   isOwner: boolean
 }) {
   const setSendingPolicy = useMutation(api.workspaces.mutations.setSendingPolicy)

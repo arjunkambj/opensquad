@@ -1,7 +1,6 @@
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
-import type { Doc } from "../../../convex/_generated/dataModel"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 import { timezoneOptions } from "@/lib/workspace-time"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 /**
  * Workspace name and timezone (owner-only). A real timezone change requires
@@ -33,7 +33,7 @@ export function WorkspaceSection({
   workspace,
   isOwner,
 }: {
-  workspace: Doc<"workspaces">
+  workspace: WorkspaceView
   isOwner: boolean
 }) {
   const updateWorkspace = useMutation(api.workspaces.mutations.update)

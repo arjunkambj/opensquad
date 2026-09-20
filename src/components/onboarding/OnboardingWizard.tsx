@@ -11,7 +11,6 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
-import type { Doc } from "../../../convex/_generated/dataModel"
 import {
   EmptyState,
   ErrorState,
@@ -33,6 +32,7 @@ import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
 import { errorMessage } from "@/lib/convex-error"
 import { detectLocalTimezone } from "@/lib/workspace-time"
 import { cn } from "@/lib/utils"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 const STEPS = [
   { id: "business", label: "Company" },
@@ -133,7 +133,7 @@ function ProvisionWorkspace() {
   )
 }
 
-function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
+function WizardSteps({ workspace }: { workspace: WorkspaceView }) {
   const profile = useQuery(api.company.queries.get, {
     workspaceId: workspace._id,
   })

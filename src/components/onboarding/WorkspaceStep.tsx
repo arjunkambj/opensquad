@@ -1,7 +1,6 @@
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
-import type { Doc } from "../../../convex/_generated/dataModel"
 import { FormError } from "@/components/states/states"
 import {
   type WorkspacePolicyForm,
@@ -32,6 +31,7 @@ import {
   timeStringToMinutes,
   timezoneOptions,
 } from "@/lib/workspace-time"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 /**
  * Step 2 — workspace name, timezone and the conservative send policy.
@@ -45,7 +45,7 @@ export function WorkspaceStep({
   workspace,
   onDone,
 }: {
-  workspace: Doc<"workspaces">
+  workspace: WorkspaceView
   onDone: () => void
 }) {
   const updateWorkspace = useMutation(api.workspaces.mutations.update)

@@ -1,5 +1,6 @@
 import type { Doc } from "../../../convex/_generated/dataModel"
 import { minutesToTimeString } from "@/lib/workspace-time"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 /**
  * Form models for the onboarding wizard. Values stay strings until submit so
@@ -46,7 +47,7 @@ export function profileToForm(
 }
 
 export function workspaceToForm(
-  workspace: Doc<"workspaces">,
+  workspace: WorkspaceView,
   detectedTimezone: string,
 ): WorkspacePolicyForm {
   return {

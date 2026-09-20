@@ -31,6 +31,32 @@ export const vWorkspaceDoc = v.object({
   ...workspaceFields,
 });
 
+/**
+ * What a member's browser may see of a workspace. `webhookToken` is the only
+ * thing that resolves an inbound mail request to this workspace (PLAN §9.4),
+ * so it and the provider's webhook id never leave the server.
+ */
+const {
+  webhookToken: _webhookTokenField,
+  agentmailWebhookId: _webhookIdField,
+  ...workspaceViewFields
+} = workspaceFields;
+
+export const vWorkspaceView = v.object({
+  _id: v.id("workspaces"),
+  _creationTime: v.number(),
+  ...workspaceViewFields,
+});
+
+export function toWorkspaceView(workspace: Doc<"workspaces">) {
+  const {
+    webhookToken: _webhookToken,
+    agentmailWebhookId: _webhookId,
+    ...view
+  } = workspace;
+  return view;
+}
+
 export const vMembershipDoc = v.object({
   _id: v.id("memberships"),
   _creationTime: v.number(),

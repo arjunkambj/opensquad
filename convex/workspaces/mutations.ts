@@ -23,7 +23,8 @@ import {
   ensureWorkspaceImpl,
   getMembershipInWorkspace,
   vMembershipDoc,
-  vWorkspaceDoc,
+  toWorkspaceView,
+  vWorkspaceView,
 } from "./model";
 import { v } from "convex/values";
 
@@ -65,7 +66,7 @@ export const update = mutation({
     timezone: v.optional(v.string()),
     expectedPolicyVersion: v.optional(v.number()),
   },
-  returns: vWorkspaceDoc,
+  returns: vWorkspaceView,
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
     // Validate first so bad values still error; skip the write entirely when
@@ -80,7 +81,7 @@ export const update = mutation({
       (name === undefined || name === workspace.name) &&
       (timezone === undefined || timezone === workspace.timezone)
     ) {
-      return workspace;
+      return toWorkspaceView(workspace);
     }
     const patch: {
       name?: string;
@@ -108,7 +109,7 @@ export const update = mutation({
     if (updated === null) {
       throw domainError("NOT_FOUND", "workspace not found");
     }
-    return updated;
+    return toWorkspaceView(updated);
   },
 });
 
@@ -129,7 +130,7 @@ export const setSendingPolicy = mutation({
       }),
     ),
   },
-  returns: vWorkspaceDoc,
+  returns: vWorkspaceView,
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
     if (workspace.policyVersion !== args.expectedPolicyVersion) {
@@ -166,7 +167,7 @@ export const setSendingPolicy = mutation({
         dailySendLimit === workspace.dailySendLimit) &&
       !windowChanged
     ) {
-      return workspace;
+      return toWorkspaceView(workspace);
     }
     const patch: {
       dailySendLimit?: number;
@@ -189,7 +190,7 @@ export const setSendingPolicy = mutation({
     if (updated === null) {
       throw domainError("NOT_FOUND", "workspace not found");
     }
-    return updated;
+    return toWorkspaceView(updated);
   },
 });
 
@@ -203,7 +204,7 @@ export const setAutomationState = mutation({
     state: v.union(v.literal("active"), v.literal("paused")),
     reason: v.optional(v.string()),
   },
-  returns: vWorkspaceDoc,
+  returns: vWorkspaceView,
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
     if (workspace.automationState === args.state) {
@@ -223,10 +224,10 @@ export const setAutomationState = mutation({
           if (updated === null) {
             throw domainError("NOT_FOUND", "workspace not found");
           }
-          return updated;
+          return toWorkspaceView(updated);
         }
       }
-      return workspace;
+      return toWorkspaceView(workspace);
     }
     await ctx.db.patch("workspaces", workspace._id, {
       automationState: args.state,
@@ -242,7 +243,7 @@ export const setAutomationState = mutation({
     if (updated === null) {
       throw domainError("NOT_FOUND", "workspace not found");
     }
-    return updated;
+    return toWorkspaceView(updated);
   },
 });
 

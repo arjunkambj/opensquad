@@ -4,7 +4,6 @@ import { Link } from "@tanstack/react-router"
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
-import type { Doc } from "../../../convex/_generated/dataModel"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +16,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
+import type { WorkspaceView } from "@/lib/workspace-view";
 
 /**
  * Pause/resume workspace automation (owner-only, `setAutomationState`).
@@ -27,7 +27,7 @@ export function AutomationSection({
   workspace,
   isOwner,
 }: {
-  workspace: Doc<"workspaces">
+  workspace: WorkspaceView
   isOwner: boolean
 }) {
   const setAutomationState = useMutation(api.workspaces.mutations.setAutomationState)

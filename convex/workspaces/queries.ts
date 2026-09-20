@@ -6,7 +6,7 @@ import {
   requireWorkspaceMember,
 } from "../lib/auth";
 import { vRole } from "../lib/validators";
-import { vMembershipDoc, vWorkspaceDoc } from "./model";
+import { toWorkspaceView, vMembershipDoc, vWorkspaceView } from "./model";
 import { v } from "convex/values";
 
 /**
@@ -18,7 +18,7 @@ export const getCurrent = query({
   returns: v.union(
     v.null(),
     v.object({
-      workspace: vWorkspaceDoc,
+      workspace: vWorkspaceView,
       role: vRole,
       membershipId: v.id("memberships"),
     }),
@@ -46,7 +46,7 @@ export const getCurrent = query({
       const candidate = await ctx.db.get("workspaces", entry.workspaceId);
       if (candidate !== null) {
         return {
-          workspace: candidate,
+          workspace: toWorkspaceView(candidate),
           role: entry.role,
           membershipId: entry._id,
         };
@@ -58,17 +58,21 @@ export const getCurrent = query({
     if (workspace === null) {
       return null;
     }
-    return { workspace, role: membership.role, membershipId: membership._id };
+    return {
+      workspace: toWorkspaceView(workspace),
+      role: membership.role,
+      membershipId: membership._id,
+    };
   },
 });
 
 /** Workspace read for an active member. */
 export const get = query({
   args: { workspaceId: v.id("workspaces") },
-  returns: vWorkspaceDoc,
+  returns: vWorkspaceView,
   handler: async (ctx, args) => {
     const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
-    return workspace;
+    return toWorkspaceView(workspace);
   },
 });
 
