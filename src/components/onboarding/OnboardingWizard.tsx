@@ -137,7 +137,7 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
   const profile = useQuery(api.company.queries.get, {
     workspaceId: workspace._id,
   })
-  const search = useSearch({ from: "/_dashboard/onboarding" })
+  const search = useSearch({ from: "/onboarding" })
   const navigate = useNavigate()
   // No `?step=` means derive the start from what is already saved — a reload
   // or a fresh arrival resumes instead of restarting at step one. The
@@ -207,7 +207,7 @@ function WizardSteps({ workspace }: { workspace: Doc<"workspaces"> }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button render={<Link to="/leads" />}>
+          <Button render={<Link to="/contacts" />}>
             Go to Leads
             <HugeiconsIcon
               icon={ArrowRight01Icon}

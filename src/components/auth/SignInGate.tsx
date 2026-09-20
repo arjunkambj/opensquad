@@ -22,10 +22,11 @@ export function SignInGate() {
   }, [user, after_auth_return_to, navigate])
 
   if (user) {
-    // No return path means the signed-in home — `/leads`, not Overview,
-    // which is a deliberate step from the CRM's top bar.
+    // No return path means the signed-in home. `_workspace` forwards from
+    // there to setup when onboarding is not finished, so this is one
+    // destination rather than two.
     return after_auth_return_to === undefined ? (
-      <Navigate to="/leads" replace />
+      <Navigate to="/dashboard" replace />
     ) : (
       <Spinner className="mx-auto" />
     )

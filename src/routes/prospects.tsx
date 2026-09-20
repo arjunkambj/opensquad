@@ -1,12 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 
 /**
- * `/prospects` is the declared compatibility URL for `/leads` — one CRM
- * implementation, one address (architecture §10). The redirect keeps old
- * links working without a second surface.
+ * One list of people, one address (PLAN §5): `/prospects` is the pre-pivot
+ * name and `prospects` is still the backend table, but the product word is
+ * Contacts. The redirect keeps old links and bookmarks working without a
+ * second surface.
  */
-export const Route = createFileRoute("/_dashboard/prospects")({
+export const Route = createFileRoute("/prospects")({
   beforeLoad: () => {
-    throw redirect({ to: "/leads" })
+    throw redirect({ to: "/contacts" })
   },
 })

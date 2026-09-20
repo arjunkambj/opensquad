@@ -54,6 +54,19 @@ export function optionalText(value: unknown, max = 200): string | undefined {
   return trimmed.length === 0 || trimmed.length > max ? undefined : trimmed
 }
 
+/**
+ * A record id carried in a search param (`/contacts?lead=…`).
+ *
+ * Shape-checked here rather than passed straight through: the router is the
+ * first thing to see a hand-edited link, and a bounded id keeps a pasted
+ * essay out of a Convex argument validator.
+ */
+export function optionalRecordId(value: unknown): string | undefined {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{10,128}$/.test(value)
+    ? value
+    : undefined
+}
+
 export function optionalCursor(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 && value.length <= 2048
     ? value
