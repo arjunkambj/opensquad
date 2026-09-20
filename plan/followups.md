@@ -32,6 +32,7 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T30: a real run (leads tagged with their signal, ~8 researched, the rest not researched), the ledger for that run, two simultaneous `requestRun` → one run, a killed step recovered by `agents/recovery:sweepStalledRuns` without a second scrape charge, a second run not duplicating, out-of-credits and kill-switch stopping paid steps, pause mid-run — exact commands in the T30 hand-off.
 - [ ] T21: first ICP generation free then Regenerate = 3 credits, chips from a real call, every edit persists, an out-of-catalogue industry sent to `agents/icp:updateIcp` refused.
 - [ ] T43: per-tab click checks in its hand-off (company save + live re-analyze + price, outreach empty state/save/no-op, blocklist add/dup/search/remove/pagination and the blocked address refused by a send preflight, sending save bumps `policyVersion` + 31 refused client- and server-side, pause/resume, usage shows no provider name, account sign-out).
+- [ ] T32: toggling a signal changes the next run; Run now twice → one run + the rate-limit copy on the 4th press in a minute; funnel counts match Contacts; Autopilot only through the consent dialog and never by itself; review/autopilot refused without a connected inbox; Retry un-parks a needs-attention lead.
 - [ ] T20: the eleven click/CLI checks in its hand-off (real site fills the form, refresh resumes, first run free then Regenerate = 3 credits, failure + no-website paths, step gate, finished-user redirect).
 - [ ] T12: 1-page and 4-page real scrapes (sizes/titles only), replay with the same key, and the four refused URLs leaving no operation row — exact commands in the T12 hand-off; needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
@@ -39,6 +40,9 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
+- [ ] Fold the two deal-size writers into one: T42's `api.dashboard.dealSize.set` (written while T32 was in flight) → call T32's `api.agents.settings.setDealSize` and delete the dashboard mutation.
+- [ ] T32 returns the three mode refusals (`inbox_not_connected`, `consent_required`, `consent_stale`) as a typed union because `lib/errors.ts` has no codes for them; add codes or keep the union, but decide once.
+- [ ] T32's `agents/settingsRun:retryLead` is the public un-park for a needs-attention lead; T31 owns lead mutations — make sure Contacts' Retry calls the same function rather than a second writer.
 - [ ] T43: Settings → Company imports five pieces from `src/components/onboarding/steps/company/` (cross-domain import, PLAN §10). Move them to a shared home and repoint both callers.
 - [ ] T43: the Sending tab saves timezone and window as two mutations; a concurrent policy change between them leaves a half-applied save. Put both behind one backend mutation.
 - [ ] T43: confirm `patch({ defaultInstructions: undefined })` removes the field when the instructions are cleared.
