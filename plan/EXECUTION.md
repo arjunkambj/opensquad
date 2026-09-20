@@ -567,7 +567,7 @@ handled on production with real data, and the three audits are clean.
 
 ## 5. Status
 
-- [x] T00 spikes · [x] T01 schema · [ ] T06 migration · [ ] T05 restructure · [ ] T02 credits · [ ] T03 AI · [ ] T04 shell
+- [x] T00 spikes · [x] T01 schema · [ ] T06 migration · [x] T05 restructure · [ ] T02 credits · [ ] T03 AI · [ ] T04 shell
 - [ ] T10 inbox backend · [ ] T11 lead data · [ ] T12 scraper · [ ] T13 UI kit
 - [ ] T20 company · [ ] T21 ICP · [ ] T22 inbox + goals · [ ] T23 signals
 - [ ] T30 sourcing · [ ] T31 contacts · [ ] T32 agent
