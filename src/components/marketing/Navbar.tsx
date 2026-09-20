@@ -24,10 +24,15 @@ const navVariants = {
   initial: { opacity: 0, y: -20 },
 }
 
+/**
+ * The landing page's sections. Root-relative so the same bar keeps working
+ * from a page other than the landing page.
+ */
 export const marketingNavLinks = [
-  { href: "#features", name: "Features" },
-  { href: "#pricing", name: "Pricing" },
-  { href: "#faq", name: "FAQ" },
+  { href: "/#how-it-works", name: "How it works" },
+  { href: "/#features", name: "Controls" },
+  { href: "/#trial", name: "Trial" },
+  { href: "/#faq", name: "FAQ" },
 ] as const
 
 const navLinkClassName =

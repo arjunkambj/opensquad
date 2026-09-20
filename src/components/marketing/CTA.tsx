@@ -2,7 +2,6 @@ import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion } from "motion/react"
-import { CtaPreview } from "@/components/marketing/CtaPreview"
 import {
   revealContainerVariants,
   revealItemVariants,
@@ -10,13 +9,21 @@ import {
 } from "@/components/marketing/motion-variants"
 import { Button } from "@/components/ui/button"
 
+/** Plain facts about what starting actually commits you to. */
+const facts = [
+  "300 credits, once. No card.",
+  "Nothing is sent until you connect your own inbox.",
+  "Review mode is the default: you approve every email.",
+  "Every email carries an opt-out line.",
+] as const
+
 export function CTA() {
   const revealViewport = useRevealViewport()
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
       <motion.section
-        className="grid overflow-hidden rounded-4xl bg-popover text-popover-foreground md:grid-cols-[1.1fr_1fr]"
+        className="grid overflow-hidden rounded-4xl bg-card text-card-foreground md:grid-cols-[1.1fr_1fr]"
         initial="initial"
         variants={revealContainerVariants}
         viewport={revealViewport}
@@ -33,13 +40,14 @@ export function CTA() {
             className="max-w-lg font-bold tracking-tight text-balance display-xs sm:display-sm lg:display-md"
             variants={revealItemVariants}
           >
-            Give it one campaign and see.
+            Give it your website and see who it finds.
           </motion.h2>
           <motion.p
             className="max-w-md text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg"
             variants={revealItemVariants}
           >
-            Five companies per campaign, sent from your inbox.
+            Setup takes one URL. The first leads, with the reason each one
+            matched, cost you nothing but a few of the credits you start with.
           </motion.p>
           <motion.div className="mt-2" variants={revealItemVariants}>
             <Button
@@ -57,20 +65,27 @@ export function CTA() {
           </motion.div>
         </div>
         <motion.div
-          aria-hidden="true"
-          className="relative min-h-80 overflow-hidden md:min-h-[500px]"
+          className="relative isolate flex min-h-80 items-center justify-center overflow-hidden p-6 sm:p-10 md:min-h-[500px]"
           variants={revealItemVariants}
         >
           <img
             alt=""
-            className="absolute inset-0 size-full object-cover object-right-bottom"
+            aria-hidden="true"
+            className="absolute inset-0 -z-10 size-full object-cover object-right-bottom"
             decoding="async"
             loading="lazy"
             src="/marketing/hero-landscape.png"
           />
-          <div className="absolute top-8 left-4 w-[calc(100%-1rem)] rounded-t-marketing-preview bg-background/40 p-3 backdrop-blur-md sm:top-20 sm:left-20 sm:w-[calc(100%+6rem)]">
-            <CtaPreview />
-          </div>
+          <ul className="flex w-full max-w-sm flex-col gap-2.5 rounded-2xl bg-illustration p-6 text-foreground">
+            {facts.map((fact) => (
+              <li
+                className="rounded-xl bg-muted px-3.5 py-2.5 text-sm leading-relaxed"
+                key={fact}
+              >
+                {fact}
+              </li>
+            ))}
+          </ul>
         </motion.div>
       </motion.section>
     </div>

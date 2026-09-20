@@ -213,11 +213,6 @@
     font-weight: 600;
 }
 
-/* Marketing cards, FAQ and CTA sit a step down from white. */
-.marketing-page {
-    --popover: oklch(0.958 0.006 70);
-}
-
 /* Navbar ink. */
 .marketing-ink {
     background-color: var(--foreground);

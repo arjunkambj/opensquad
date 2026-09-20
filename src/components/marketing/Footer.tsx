@@ -3,13 +3,14 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import Logo from "@/components/layout/Logo"
 
-// Every entry points at a route or anchor that exists today.
+// Every entry points at a route or anchor that exists today. The anchors are
+// root-relative so they also work from a page other than the landing page.
 const productLinks = [
-  { href: "#squad", name: "What it does" },
-  { href: "#how-it-works", name: "How it works" },
-  { href: "#features", name: "Features" },
-  { href: "#pricing", name: "Pricing" },
-  { href: "#faq", name: "FAQ" },
+  { href: "/#how-it-works", name: "How it works" },
+  { href: "/#features", name: "Controls" },
+  { href: "/#first-run", name: "Your first run" },
+  { href: "/#trial", name: "Trial" },
+  { href: "/#faq", name: "FAQ" },
 ] as const
 
 const accountLinks = [
@@ -31,8 +32,9 @@ export function Footer() {
               <Logo className="text-background hover:text-background/80" />
             </Link>
             <p className="text-sm leading-relaxed text-background/70">
-              An AI outbound agent for small agencies. It finds the leads,
-              reads up on them and writes the emails you approve.
+              An AI sales agent that finds and researches leads for you,
+              contacts them from your own inbox, and works the replies until
+              there is a meeting to book. Email only.
             </p>
             <a
               aria-label="OpenIntent on X"

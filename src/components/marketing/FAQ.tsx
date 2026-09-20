@@ -15,7 +15,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { faqItems } from "@/constants/landing-page"
+import { faqItems } from "@/components/marketing/faq-items"
 
 export function FAQ() {
   const revealViewport = useRevealViewport()
@@ -29,7 +29,7 @@ export function FAQ() {
         revealViewport={revealViewport}
         title={
           <>
-            Questions agencies ask
+            What people ask
             <br />
             <span className="text-muted-foreground">before signing up.</span>
           </>
@@ -54,7 +54,7 @@ export function FAQ() {
               variants={revealCardVariants}
             >
               <AccordionItem
-                className="overflow-hidden rounded-2xl border-0 bg-popover text-popover-foreground data-open:bg-popover"
+                className="overflow-hidden rounded-2xl border-0 bg-card text-card-foreground data-open:bg-card"
                 value={item.title}
               >
                 <AccordionTrigger className="items-center gap-4 px-5 py-4 hover:no-underline sm:px-6 sm:py-5">
