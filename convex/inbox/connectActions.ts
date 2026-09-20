@@ -19,6 +19,7 @@
  */
 import { internal } from "../_generated/api";
 import { action } from "../_generated/server";
+import type { ActionCtx } from "../_generated/server";
 import {
   agentmailClientId,
   agentmailFailureMessage,
@@ -34,6 +35,7 @@ import {
   isSecretStorageConfigured,
   secretLast4,
 } from "../lib/secrets";
+import { requireRateLimit } from "../lib/rateLimits";
 import { boundedString } from "../lib/validators";
 import { failure, mapProviderFailure, vFailure } from "./connection";
 import type { InboxConnectErrorCode } from "./connection";
@@ -63,6 +65,20 @@ const vVerifyResult = v.union(
 );
 
 /**
+ * Every action here reaches the mail provider and two of them create provider
+ * resources, and a key-paste loop is also a credential-probing surface — so
+ * each call spends from the caller's connect bucket before anything else. A
+ * signed-out caller is left to the owner guard, which refuses them properly.
+ */
+async function limitConnectCalls(ctx: ActionCtx): Promise<void> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) {
+    return;
+  }
+  await requireRateLimit(ctx, "connectInbox", identity.tokenIdentifier);
+}
+
+/**
  * Verify a pasted key with `GET /v0/inboxes`, then store it encrypted and
  * return the account's inboxes so the user can pick one (PLAN §4 steps 1–2).
  *
@@ -73,6 +89,7 @@ export const verifyAndStoreKey = action({
   args: { workspaceId: v.id("workspaces"), apiKey: v.string() },
   returns: vVerifyResult,
   handler: async (ctx, args): Promise<typeof vVerifyResult.type> => {
+    await limitConnectCalls(ctx);
     await ctx.runQuery(internal.inbox.connection.requireConnectionOwner, {
       workspaceId: args.workspaceId,
     });
@@ -142,6 +159,7 @@ export const connectInbox = action({
   },
   returns: vConnectResult,
   handler: async (ctx, args): Promise<typeof vConnectResult.type> => {
+    await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
       internal.inbox.connection.requireConnectionOwner,
       { workspaceId: args.workspaceId },
@@ -323,6 +341,7 @@ export const rotateKey = action({
     ctx,
     args,
   ): Promise<{ ok: true } | { ok: false; code: InboxConnectErrorCode; message: string }> => {
+    await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
       internal.inbox.connection.requireConnectionOwner,
       { workspaceId: args.workspaceId },
@@ -416,6 +435,7 @@ export const disconnectInbox = action({
     ctx,
     args,
   ): Promise<{ ok: true; webhookDeleted: boolean }> => {
+    await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
       internal.inbox.connection.requireConnectionOwner,
       { workspaceId: args.workspaceId },

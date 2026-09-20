@@ -78,4 +78,15 @@ crons.weekly(
   {},
 );
 
+// Belt for the connect-time thread import. Every step schedules the next in
+// its own transaction, so a stalled run means a lost scheduled function.
+// Re-driving is safe: the cursor says what is still to do and the message
+// writer refuses a second row for a message already imported.
+crons.interval(
+  "inbox-backfill-sweep",
+  { minutes: 10 },
+  internal.inbox.backfill.sweepStalledBackfills,
+  {},
+);
+
 export default crons;
