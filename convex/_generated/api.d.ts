@@ -17,7 +17,6 @@ import type * as ai_failures from "../ai/failures.js";
 import type * as ai_health from "../ai/health.js";
 import type * as ai_models from "../ai/models.js";
 import type * as ai_run from "../ai/run.js";
-import type * as ai_schema from "../ai/schema.js";
 import type * as billing_credits from "../billing/credits.js";
 import type * as billing_model from "../billing/model.js";
 import type * as billing_paidCall from "../billing/paidCall.js";
@@ -118,7 +117,6 @@ declare const fullApi: ApiFromModules<{
   "ai/health": typeof ai_health;
   "ai/models": typeof ai_models;
   "ai/run": typeof ai_run;
-  "ai/schema": typeof ai_schema;
   "billing/credits": typeof billing_credits;
   "billing/model": typeof billing_model;
   "billing/paidCall": typeof billing_paidCall;
