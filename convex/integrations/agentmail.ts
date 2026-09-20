@@ -33,11 +33,20 @@ import { AgentMail } from "@agentmail/convex";
 import { v, type Infer } from "convex/values";
 import { components, internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
-import type { MutationCtx } from "../_generated/server";
-import type { Doc } from "../_generated/dataModel";
+import type { ActionCtx, MutationCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { recordQuarantinedEvent } from "../inbox/quarantine";
+import { upsertMessage } from "../inbox/model";
 import { recordReceipt } from "../outreach/sendReceipts";
 import {
+  agentmailBaseUrl,
+  extractEventIds,
+  getMessage,
+  getThread as getThreadRest,
+} from "./agentmailApi";
+import { decryptSecret } from "../lib/secrets";
+import {
+  domainError,
   evaluateOptOutText,
   inboundApplicationKey,
   outboundApplicationKey,
@@ -47,14 +56,10 @@ import {
 import type { QuarantineReason } from "../lib/validators";
 
 /**
- * Shared component client handle. Credentials are read from deployment env
- * vars inside the component's own functions — `AGENTMAIL_API_KEY`,
- * `AGENTMAIL_WEBHOOK_SECRET`, optional `AGENTMAIL_BASE_URL` — and are never
- * passed as function args, so they cannot appear in Convex logs.
- * `retryAttempts`/`initialBackoffMs` stay at component defaults; they tune
- * only the component's own sender, which OpenSquad does not use.
+ * The component's app-side callbacks — the only configuration that is the same
+ * for every workspace.
  */
-export const agentmail = new AgentMail(components.agentmail, {
+const COMPONENT_CALLBACKS = {
   // The cast covers one place where the component contradicts itself: its
   // runtime event validator makes `thread` OPTIONAL
   // (`shared.d.ts`: `thread: VAny<any, "optional", string>`) while this
@@ -68,13 +73,85 @@ export const agentmail = new AgentMail(components.agentmail, {
       ConstructorParameters<typeof AgentMail>[1]
     >["onMessageReceived"],
   onEvent: internal.integrations.agentmail.onEvent,
-});
+} as const;
+
+/**
+ * Shared component client handle, for the LEGACY platform-inbox route only
+ * (`/agentmail/webhook`, PLAN §9.4 "Legacy inboxes"). It reads
+ * `AGENTMAIL_WEBHOOK_SECRET` from deployment env; that variable is no longer
+ * set on dev, and `convex/http.ts` answers 401 rather than 500 when it is
+ * absent. Per-workspace inbound goes through `agentmailForWebhookSecret`.
+ */
+export const agentmail = new AgentMail(components.agentmail, COMPONENT_CALLBACKS);
+
+/**
+ * A per-request component handle bound to ONE workspace's webhook secret
+ * (PLAN §4 step 4). Constructed per inbound request so the component's Svix
+ * verification, `event_id` dedupe and message storage are reused unchanged
+ * without any shared credential.
+ */
+export function agentmailForWebhookSecret(webhookSecret: string): AgentMail {
+  return new AgentMail(components.agentmail, {
+    ...COMPONENT_CALLBACKS,
+    webhookSecret,
+  });
+}
+
+/**
+ * The workspace's own AgentMail key, decrypted inside this action.
+ *
+ * There is no platform key any more: every outbound request is made with the
+ * key its workspace pasted. A workspace with no usable key is a configuration
+ * refusal, not a provider verdict — it throws, so no send attempt records an
+ * outcome for a request that was never made.
+ */
+async function workspaceApiKey(
+  ctx: ActionCtx,
+  workspaceId: Id<"workspaces">,
+): Promise<string> {
+  const envelope = await ctx.runQuery(internal.workspaces.secrets.getEnvelope, {
+    workspaceId,
+    provider: "agentmail" as const,
+  });
+  if (envelope === null) {
+    throw domainError(
+      "FORBIDDEN",
+      "this workspace has no connected mail key",
+    );
+  }
+  if (envelope.status === "invalid") {
+    throw domainError(
+      "FORBIDDEN",
+      "this workspace's mail key was refused by the provider — reconnect the inbox",
+    );
+  }
+  return await decryptSecret(envelope);
+}
+
+/**
+ * A 401 at send time is a connection fact, not a send fact (PLAN §4 step 7):
+ * the key flips to `invalid` and the workspace's automation pauses with the
+ * reconnect reason. Recorded before the attempt's own outcome is returned, so
+ * the banner is up by the time the failure is shown.
+ */
+async function noteUnauthorized(
+  ctx: ActionCtx,
+  workspaceId: Id<"workspaces">,
+  result: SendAttemptResult,
+): Promise<void> {
+  if (result.outcome !== "rejected" || result.httpStatus !== 401) {
+    return;
+  }
+  await ctx.runMutation(internal.inbox.connectionState.markInboxKeyInvalid, {
+    workspaceId,
+    reason: "provider_rejected_key_at_send",
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Outbound: the narrow send adapter
 // ---------------------------------------------------------------------------
 
-const AGENTMAIL_DEFAULT_BASE_URL = "https://api.agentmail.to/v0";
 const SEND_REQUEST_TIMEOUT_MS = 30_000;
 const PROVIDER_ERROR_BODY_LIMIT = 1024;
 const SEND_TIMEOUT_MARKER = "opensquad.agentmail.send_timeout";
@@ -161,6 +238,8 @@ type SendAttemptResult = Infer<typeof vSendAttemptResult>;
  *   another request or mint a fresh key.
  */
 async function performSingleSendRequest(args: {
+  /** The workspace's own decrypted key — never `process.env`. */
+  apiKey: string;
   inboxId: string;
   idempotencyKey: string;
   payload: SendRequestBody;
@@ -175,18 +254,8 @@ async function performSingleSendRequest(args: {
    *  "reply". URL-encoded into the path. */
   parentMessageId?: string;
 }): Promise<SendAttemptResult> {
-  const apiKey = process.env.AGENTMAIL_API_KEY;
-  if (!apiKey) {
-    // Misconfiguration, not a provider verdict: no request was ever made.
-    // Throw so operators see a loud configuration error rather than a
-    // recorded provider outcome.
-    throw new Error(
-      "AGENTMAIL_API_KEY is not set on this Convex deployment.",
-    );
-  }
-  const baseUrl = (
-    process.env.AGENTMAIL_BASE_URL ?? AGENTMAIL_DEFAULT_BASE_URL
-  ).replace(/\/+$/, "");
+  const apiKey = args.apiKey;
+  const baseUrl = agentmailBaseUrl();
   // Provider IDs are opaque path segments, including email-address inbox
   // IDs and RFC 5322 message IDs — always URL-encode them.
   const path =
@@ -384,13 +453,21 @@ function numberField(
  */
 export const executeSendAttempt = internalAction({
   args: {
+    workspaceId: v.id("workspaces"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     payload: vSendRequestBody,
   },
   returns: vSendAttemptResult,
-  handler: async (_ctx, args) =>
-    performSingleSendRequest({ ...args, endpointOperation: "send" }),
+  handler: async (ctx, args): Promise<SendAttemptResult> => {
+    const result = await performSingleSendRequest({
+      ...args,
+      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      endpointOperation: "send",
+    });
+    await noteUnauthorized(ctx, args.workspaceId, result);
+    return result;
+  },
 });
 
 /**
@@ -418,13 +495,21 @@ export const executeSendAttempt = internalAction({
  */
 export const reconcileSendAttempt = internalAction({
   args: {
+    workspaceId: v.id("workspaces"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     payload: vSendRequestBody,
   },
   returns: vSendAttemptResult,
-  handler: async (_ctx, args) =>
-    performSingleSendRequest({ ...args, endpointOperation: "send" }),
+  handler: async (ctx, args): Promise<SendAttemptResult> => {
+    const result = await performSingleSendRequest({
+      ...args,
+      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      endpointOperation: "send",
+    });
+    await noteUnauthorized(ctx, args.workspaceId, result);
+    return result;
+  },
 });
 
 /**
@@ -436,39 +521,57 @@ export const reconcileSendAttempt = internalAction({
  */
 export const executeReplyAttempt = internalAction({
   args: {
+    workspaceId: v.id("workspaces"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     parentMessageId: v.string(),
     payload: vSendRequestBody,
   },
   returns: vSendAttemptResult,
-  handler: async (_ctx, args) =>
-    performSingleSendRequest({ ...args, endpointOperation: "reply" }),
+  handler: async (ctx, args): Promise<SendAttemptResult> => {
+    const result = await performSingleSendRequest({
+      ...args,
+      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      endpointOperation: "reply",
+    });
+    await noteUnauthorized(ctx, args.workspaceId, result);
+    return result;
+  },
 });
 
 /** P10: reconciliation replay for an `uncertain` reply attempt — same
  *  key, same payload, same parent, audit-distinct name. */
 export const reconcileReplyAttempt = internalAction({
   args: {
+    workspaceId: v.id("workspaces"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     parentMessageId: v.string(),
     payload: vSendRequestBody,
   },
   returns: vSendAttemptResult,
-  handler: async (_ctx, args) =>
-    performSingleSendRequest({ ...args, endpointOperation: "reply" }),
+  handler: async (ctx, args): Promise<SendAttemptResult> => {
+    const result = await performSingleSendRequest({
+      ...args,
+      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      endpointOperation: "reply",
+    });
+    await noteUnauthorized(ctx, args.workspaceId, result);
+    return result;
+  },
 });
 
 /**
  * P10: read-only provider evidence lookup for uncertain-attempt
  * reconciliation (G3 step 8 — "use provider read APIs and webhook
- * evidence"). Calls the component's own `getMessage`/`getThread` reads —
- * never mutates provider state. Returns a bounded, sanitized projection:
+ * evidence"). Direct REST reads with the WORKSPACE's own key — the component's
+ * equivalents read `AGENTMAIL_API_KEY` from env, which no longer exists.
+ * Never mutates provider state. Returns a bounded, sanitized projection:
  * provider IDs and existence only, no addresses or bodies.
  */
 export const lookupProviderMessage = internalAction({
   args: {
+    workspaceId: v.id("workspaces"),
     inboxId: v.string(),
     messageId: v.optional(v.string()),
     threadId: v.optional(v.string()),
@@ -496,44 +599,30 @@ export const lookupProviderMessage = internalAction({
       thread: { threadId: string; messageCount?: number } | null;
       error?: string;
     } = { message: null, thread: null };
+    const apiKey = await workspaceApiKey(ctx, args.workspaceId);
     if (args.messageId !== undefined) {
-      try {
-        const message = (await agentmail.getMessage(
-          ctx,
-          args.inboxId,
-          args.messageId,
-        )) as Record<string, unknown> | null;
-        if (message !== null && typeof message.message_id === "string") {
-          result.message = {
-            messageId: message.message_id,
-            threadId:
-              typeof message.thread_id === "string" ? message.thread_id : "",
-          };
-        }
-      } catch (error) {
+      const message = await getMessage(apiKey, args.inboxId, args.messageId);
+      if (message.ok) {
+        result.message = {
+          messageId: message.value.messageId,
+          threadId: message.value.threadId,
+        };
+      } else if (message.code !== "not_found") {
         // A 404 means the provider holds no such message — meaningful
-        // evidence, not a crash.
-        result.error =
-          error instanceof Error ? `getMessage: ${error.message}` : "getMessage failed";
+        // evidence, not an error. Anything else is a failed read, and the
+        // mapped code is what travels (never provider wording).
+        result.error = `getMessage: ${message.code}`;
       }
     }
     if (args.threadId !== undefined) {
-      try {
-        const thread = (await agentmail.getThread(
-          ctx,
-          args.inboxId,
-          args.threadId,
-        )) as Record<string, unknown> | null;
-        if (thread !== null && typeof thread.thread_id === "string") {
-          const messages = thread.messages;
-          result.thread = {
-            threadId: thread.thread_id,
-            messageCount: Array.isArray(messages) ? messages.length : undefined,
-          };
-        }
-      } catch (error) {
-        result.error =
-          error instanceof Error ? `getThread: ${error.message}` : "getThread failed";
+      const thread = await getThreadRest(apiKey, args.inboxId, args.threadId);
+      if (thread.ok) {
+        result.thread = {
+          threadId: args.threadId,
+          messageCount: thread.value.messages.length,
+        };
+      } else if (thread.code !== "not_found") {
+        result.error = `getThread: ${thread.code}`;
       }
     }
     return result;
@@ -602,20 +691,10 @@ function extractEventIndexFields(event: unknown): {
   threadId?: string;
   messageId?: string;
 } {
-  const record = asRecord(event);
-  const payload =
-    asRecord(record?.message) ??
-    asRecord(record?.send) ??
-    asRecord(record?.delivery) ??
-    asRecord(record?.bounce) ??
-    asRecord(record?.complaint) ??
-    asRecord(record?.reject) ??
-    null;
-  return {
-    inboxId: stringField(payload, "inbox_id"),
-    threadId: stringField(payload, "thread_id"),
-    messageId: stringField(payload, "message_id"),
-  };
+  // ONE definition of the per-event-type id mapping, shared with the inbound
+  // route's workspace binding: the route must not accept an event this
+  // callback would then file under a different inbox.
+  return extractEventIds(event);
 }
 
 /* ------------------------------------------------------------------ */
@@ -897,30 +976,30 @@ export const onMessageReceived = internalMutation({
       text: message?.text,
       extractedText: message?.extracted_text,
     });
-    const { receipt, duplicate, duplicateApplicationKey } = await recordReceipt(
-      ctx,
-      {
-        workspaceId: workspace._id,
-        inboxRef,
-        providerEventId: eventId,
-        applicationKey,
-        providerMessageRef: messageRef,
-        eventType: "message.received",
-        ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
-        providerFacts: {
-          ...(fromAddress !== undefined ? { fromAddress } : {}),
-          optOutSignal: optOut.signal,
-          ...(optOut.rule !== undefined ? { optOutRule: optOut.rule } : {}),
-        },
+    // THE single writer (PLAN §9.4). It looks the message up on
+    // `(workspaceId, inboxRef, providerMessageRef)` first, so a backfilled row
+    // for this very message is MERGED and promoted to `live` instead of
+    // becoming a second row — and so this callback can never insert one
+    // directly.
+    const { receipt, startsHandling } = await upsertMessage(ctx, {
+      workspaceId: workspace._id,
+      inboxRef,
+      providerMessageRef: messageRef,
+      ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
+      providerEventId: eventId,
+      source: "live" as const,
+      providerFacts: {
+        ...(fromAddress !== undefined ? { fromAddress } : {}),
+        optOutSignal: optOut.signal,
+        ...(optOut.rule !== undefined ? { optOutRule: optOut.rule } : {}),
       },
-    );
-    // `duplicate` — the same provider event id, already recorded; nothing was
-    // written. `duplicateApplicationKey` — the same MESSAGE under a second
-    // event id, recorded as `handled` so it stays auditable. Either way the
-    // business path has already run at most once and must not run again: this
-    // is the application-effect dedupe, and it sits above every write P11
-    // makes to a conversation.
-    if (duplicate || duplicateApplicationKey) {
+    });
+    // `startsHandling` is false for every duplicate — the same provider event
+    // id, the same MESSAGE under a second event id, and the promotion of a
+    // backfilled row. The business path has already run at most once and must
+    // not run again: this is the application-effect dedupe, and it sits above
+    // every write P11 makes to a conversation.
+    if (!startsHandling) {
       return null;
     }
     // Scheduled, not inlined. The schedule commits with the receipt insert, so

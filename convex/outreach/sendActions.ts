@@ -133,6 +133,7 @@ async function executeAttemptDispatch(
       const call = await ctx.runAction(
         internal.integrations.agentmail.executeReplyAttempt,
         {
+          workspaceId: begin.workspaceId,
           inboxId: begin.inboxRef,
           idempotencyKey: begin.providerIdempotencyKey,
           parentMessageId: begin.parentMessageId ?? "",
@@ -144,6 +145,7 @@ async function executeAttemptDispatch(
       const call = await ctx.runAction(
         internal.integrations.agentmail.executeSendAttempt,
         {
+          workspaceId: begin.workspaceId,
           inboxId: begin.inboxRef,
           idempotencyKey: begin.providerIdempotencyKey,
           payload: begin.payload,
