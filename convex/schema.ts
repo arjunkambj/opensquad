@@ -1,10 +1,10 @@
 /**
- * OpenSquad schema — §4.1 workspace/configuration tables (P02), the §4.2
- * work/supervision tables (P06), the §4.4 runtime transport and usage tables
- * (P07/P10), the §4.3 correspondence tables (P10) and the §4.3 lead, booking
- * and evidence tables (P20). Component-owned mail/crawl tables never enter
- * this schema. Every table is declared exactly once: a task that writes rows
- * imports the `*Fields` map, it does not re-declare the table.
+ * OpenSquad schema — §4.1 workspace/configuration tables, the workspace
+ * activity feed, the §4.3 correspondence tables, the §4.3 lead, booking and
+ * evidence tables and the §4.4 usage/provider-accounting tables.
+ * Component-owned mail/crawl tables never enter this schema. Every table is
+ * declared exactly once: a module that writes rows imports the `*Fields` map,
+ * it does not re-declare the table.
  *
  * Notation: `ms` timestamps are integer UTC epoch milliseconds. Indexes use
  * application timestamp fields; uniqueness invariants are enforced inside the
@@ -17,66 +17,39 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
   vApprovalVerdict,
-  vBoardColumn,
-  vCampaignStatus,
-  vCapabilityId,
-  vControlCommand,
-  vControlRequestState,
-  vConversationNoteKind,
-  vConversationState,
-  vDecisionAnswer,
-  vDecisionKind,
-  vDecisionState,
-  vEmailEventDirection,
-  vEmailEventHandlingState,
-  vQuarantineReason,
-  vQuarantineState,
-  vEmployeeTemplate,
-  vEndpointOperation,
-  vInputSnapshot,
-  vLifecycleOperation,
-  vLifecycleOperationState,
-  vMembershipStatus,
-  vMissionKind,
-  vMissionOutcome,
-  vMissionPriority,
-  vMissionProspectOutcome,
-  vMissionState,
-  vMissionVisibility,
-  vProviderConnectionState,
-  vProviderKind,
-  vRole,
-  vRunState,
-  vRuntimeConnectionState,
-  vSendAttemptState,
-  vSlotState,
-  vSourcePlan,
-  vSuppressionKind,
-  vSuppressionReason,
-  vProviderOperationSettlement,
-  vProviderOperationState,
-  vUsageMetric,
-  vUsageReservationState,
-  vWorkerDataRef,
-  vWorkerOperation,
-  vWorkerPhase,
-  vWorkerRequestState,
-  vWorkerScope,
-  vArtifactKind,
   vBookingProposal,
   vBookingState,
+  vCampaignStatus,
   vConfirmationSource,
+  vConversationNoteKind,
+  vConversationState,
+  vEmailEventDirection,
+  vEmailEventHandlingState,
+  vEndpointOperation,
   vEvidenceConfidence,
   vLeadEventActor,
   vLeadEventDetails,
   vLeadEventKind,
+  vMembershipStatus,
   vNextAction,
   vProspectContact,
   vProspectSourceRef,
+  vProviderDataRef,
+  vProviderKind,
+  vProviderOperationSettlement,
+  vProviderOperationState,
   vQualification,
+  vQuarantineReason,
+  vQuarantineState,
   vReplyDisposition,
+  vRole,
   vSalesStage,
+  vSendAttemptState,
+  vSuppressionKind,
+  vSuppressionReason,
   vTakeoverReason,
+  vUsageMetric,
+  vUsageReservationState,
 } from "./lib/validators";
 
 export const workspaceFields = {
@@ -130,24 +103,12 @@ export const businessProfileFields = {
   updatedBy: v.string(),
 };
 
-export const employeeFields = {
-  workspaceId: v.id("workspaces"),
-  template: vEmployeeTemplate,
-  name: v.string(),
-  instructions: v.string(),
-  instructionVersion: v.number(),
-  enabled: v.boolean(),
-  /** Subset of the host capability policy for this template. */
-  allowedCapabilities: v.array(vCapabilityId),
-  updatedAt: v.number(),
-};
 
 export const campaignFields = {
   workspaceId: v.id("workspaces"),
   title: v.string(),
   brief: v.string(),
   briefVersion: v.number(),
-  sourcePlan: vSourcePlan,
   /** 1–5 accepted prospects for MVP. */
   leadLimit: v.number(),
   /** Paid contact-enrichment ceiling for the campaign lifetime. */
@@ -163,452 +124,25 @@ export const campaignFields = {
 };
 
 /* ------------------------------------------------------------------ */
-/* §4.2 Work and supervision tables (P06)                              */
+/* §4.2 Workspace activity feed                                        */
 /* ------------------------------------------------------------------ */
 
-export const missionFields = {
-  workspaceId: v.id("workspaces"),
-  campaignId: v.id("campaigns"),
-  kind: vMissionKind,
-  title: v.string(),
-  state: vMissionState,
-  /** Derived from state + requiredDecisionCount; only validated transitions
-   *  update it (see `boardColumnForMission` in lib/validators.ts). */
-  boardColumn: vBoardColumn,
-  /** Optimistic-concurrency version, bumped by every transition. */
-  version: v.number(),
-  /** Frozen confirmed inputs at dispatch, bound to 64 KiB (§4.2). */
-  inputSnapshot: vInputSnapshot,
-  /** Version of the frozen input snapshot — the value runs record as
-   *  `inputVersion`. Bumps only when inputs are legitimately re-frozen
-   *  (a future revise path); never on state transitions. */
-  inputVersion: v.number(),
-  priority: vMissionPriority,
-  assignedEmployeeId: v.id("employees"),
-  progressSummary: v.string(),
-  /** Open required decisions; >0 pulls the card into Needs you (§6). */
-  requiredDecisionCount: v.number(),
-  visibility: vMissionVisibility,
-  /** identityKey of the creator. */
-  createdBy: v.string(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  /** Serializable Workflow component ID, assigned once at dispatch. */
-  workflowId: v.optional(v.string()),
-  /** Generation of the workflow that currently owns this mission; events or
-   *  callbacks stamped with an older generation never advance it (§6.2). */
-  workflowGeneration: v.number(),
-  /** Set on reply/follow-up missions spawned from another mission. */
-  parentMissionId: v.optional(v.id("missions")),
-  completedAt: v.optional(v.number()),
-  /** Terminal technical failure detail (state `failed`). */
-  failure: v.optional(
-    v.object({
-      message: v.string(),
-      at: v.number(),
-    }),
-  ),
-  /** Terminal aggregate of explicit child outcomes (§6.1 step 9). */
-  outcome: v.optional(
-    v.object({
-      kind: vMissionOutcome,
-      summary: v.string(),
-    }),
-  ),
-  /** Client retry key — `create` dedupes on (workspaceId, requestId)
-   *  transactionally instead of double-creating. */
-  requestId: v.optional(v.string()),
-};
-
-export const missionProspectFields = {
-  workspaceId: v.id("workspaces"),
-  missionId: v.id("missions"),
-  /**
-   * Still a bounded string key after P20 declared `prospects`: the ONLY
-   * producer today is the dev fixture's synthetic `dev-prospect-*` keys,
-   * which are not document IDs, so `v.id("prospects")` would fail both
-   * statically and at insert validation. It also flows into the durable
-   * `vBranchCompletion` workflow event, which cannot change validator under
-   * an in-flight journal. P21 retypes it in the commit that replaces the
-   * fixture scan with real `prospects` rows.
-   */
-  prospectId: v.string(),
-  /** Branch generation; bumped when a branch is legitimately re-dispatched. */
-  generation: v.number(),
-  createdAt: v.number(),
-  /** Serializable Workflow ID of the branch's child workflow, once started. */
-  childWorkflowId: v.optional(v.string()),
-  /** Parent-workflow event ID the child signals with its terminal outcome. */
-  completionEventId: v.optional(v.string()),
-  outcome: v.optional(vMissionProspectOutcome),
-  outcomeReason: v.optional(v.string()),
-  completedAt: v.optional(v.number()),
-};
-
-export const runFields = {
-  workspaceId: v.id("workspaces"),
-  missionId: v.id("missions"),
-  employeeId: v.id("employees"),
-  /** Stage name owned by the pipeline (P09); bounded free-form for now. */
-  stage: v.string(),
-  /** Attempt generation of this stage's execution. */
-  generation: v.number(),
-  state: vRunState,
-  /** Version of the mission input snapshot this run consumed. */
-  inputVersion: v.number(),
-  inputSummary: v.string(),
-  createdAt: v.number(),
-  startedAt: v.optional(v.number()),
-  endedAt: v.optional(v.number()),
-  sessionId: v.optional(v.string()),
-  outputRefs: v.optional(v.array(v.string())),
-  /** Reported usage only — unknown stays absent (§9). */
-  usage: v.optional(
-    v.object({
-      toolCalls: v.optional(v.number()),
-      modelCalls: v.optional(v.number()),
-      tokens: v.optional(v.number()),
-    }),
-  ),
-  error: v.optional(
-    v.object({
-      message: v.string(),
-      retryable: v.optional(v.boolean()),
-    }),
-  ),
-};
-
-export const decisionFields = {
-  workspaceId: v.id("workspaces"),
-  missionId: v.id("missions"),
-  kind: vDecisionKind,
-  state: vDecisionState,
-  /** Optimistic-concurrency version; resolve takes `expectedVersion`. */
-  version: v.number(),
-  /** Required asks hold the mission in Needs you until resolved/superseded. */
-  required: v.boolean(),
-  /** What a human must answer and why. */
-  reason: v.string(),
-  /** Semantic-ask identity — at most one OPEN decision per (missionId,
-   *  askKey), enforced transactionally in `openRequiredDecision`. */
-  askKey: v.string(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  /* Continuation binding — assigned by the backend when dispatching, never
-   * trusted from a callback payload (§4.2 note). Serializable component ID
-   * types, so plain strings. */
-  targetWorkflowId: v.string(),
-  continuationEventId: v.string(),
-  workflowGeneration: v.number(),
-  /** Set once the resolution's durable continuation signal was delivered. */
-  continuationSentAt: v.optional(v.number()),
-  /** requestId that produced this resolution — replayed resolves return the
-   *  recorded outcome instead of applying twice. */
-  resolutionRequestId: v.optional(v.string()),
-  /* §4.3 forward references — become v.id(...) when P10/P11 land their
-   * tables (drafts, sendAttempts, approvals). */
-  draftId: v.optional(v.string()),
-  sendAttemptId: v.optional(v.string()),
-  approvalId: v.optional(v.string()),
-  /** Field names a `missing_information` ask requests. */
-  requestedFields: v.optional(v.array(v.string())),
-  answer: v.optional(vDecisionAnswer),
-  /** identityKey of the resolver. */
-  resolvedBy: v.optional(v.string()),
-  resolvedAt: v.optional(v.number()),
-};
-
-export const missionCommentFields = {
-  workspaceId: v.id("workspaces"),
-  missionId: v.id("missions"),
-  /** identityKey of the commenting member. */
-  authorIdentityKey: v.string(),
-  body: v.string(),
-  createdAt: v.number(),
-  /** Run that consumed this comment as guidance — never an approval. */
-  acknowledgedByRunId: v.optional(v.id("runs")),
-};
-
+/**
+ * Activity events — the workspace-wide append-only feed. Rows are deduped per
+ * workspace by `dedupeKey`, which is what makes a replayed mutation record one
+ * logical event instead of two.
+ */
 export const activityEventFields = {
   workspaceId: v.id("workspaces"),
-  missionId: v.id("missions"),
   kind: v.string(),
   summary: v.string(),
-  /** identityKey for human actions; `workflow`/`system` otherwise. */
+  /** identityKey for human actions; `system` otherwise. */
   actor: v.string(),
   createdAt: v.number(),
   /** Unique per workspace; duplicates are dropped transactionally. */
   dedupeKey: v.string(),
-  runId: v.optional(v.id("runs")),
-  /** Mirrors `missionProspects.prospectId`, so it carries the same synthetic
-   *  fixture keys and is retyped with it in P21 — not here. */
   prospectId: v.optional(v.string()),
-  /* `conversations` and `artifacts` have landed, but retyping these two is
-   * P11's and P09's call at the modules that write them (`activity.ts`
-   * `ActivityInput` moves with them); `artifactId` has no writer at all yet.
-   * P20 touches only the four tables it declares. */
   conversationId: v.optional(v.string()),
-  artifactId: v.optional(v.string()),
-};
-
-/* ------------------------------------------------------------------ */
-/* §4.4 runtime transport (P07)                                        */
-/*                                                                     */
-/* External-execution transport state only: Workflow owns stage         */
-/* ordering/retries and human waits. These rows carry leases, the       */
-/* one-model-run slot, scoped worker credentials, the runtime lifecycle */
-/* ledger, owner-control commands and artifact receipts.                */
-/* ------------------------------------------------------------------ */
-
-export const runtimeConnectionFields = {
-  workspaceId: v.id("workspaces"),
-  /** Rotated on every replacement/reconnect — credentials, leases and
-   *  callbacks stamped with an older generation stay invalid (§7.7). */
-  generation: v.number(),
-  state: vRuntimeConnectionState,
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  /** ASCII Box reference — the provider's opaque box ID. */
-  boxRef: v.optional(v.string()),
-  /** Owner-safe Codex account summary — never email/tokens/files. */
-  codexAccountSummary: v.optional(
-    v.object({
-      state: v.union(
-        v.literal("none"),
-        v.literal("chatgpt"),
-        v.literal("apiKey"),
-        v.literal("other"),
-      ),
-      planType: v.optional(v.string()),
-      verifiedAt: v.number(),
-    }),
-  ),
-  lastHeartbeatAt: v.optional(v.number()),
-  /** Last reported worker phase (liveness hint; never lease evidence). */
-  workerPhase: v.optional(vWorkerPhase),
-  workerVersion: v.optional(v.string()),
-  protocolVersion: v.optional(v.string()),
-  currentCodexTurnRef: v.optional(v.string()),
-  currentRunId: v.optional(v.id("runs")),
-  error: v.optional(v.string()),
-};
-
-export const runtimeLifecycleOperationFields = {
-  workspaceId: v.id("workspaces"),
-  runtimeConnectionId: v.id("runtimeConnections"),
-  runtimeGeneration: v.number(),
-  operation: vLifecycleOperation,
-  /** Stable dedupe key persisted before the provider call. */
-  operationKey: v.string(),
-  /** SHA-256 hex of the canonical request — replay compares bodies without
-   *  retaining credential-bearing payloads. */
-  requestFingerprint: v.string(),
-  /** Neutral settings + secure injection references only — no raw
-   *  credentials. Validated by `assertLifecycleRequestConfig`. */
-  requestConfig: v.any(),
-  state: vLifecycleOperationState,
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  boxRef: v.optional(v.string()),
-  providerOperationRef: v.optional(v.string()),
-  error: v.optional(v.string()),
-};
-
-export const providerConnectionFields = {
-  workspaceId: v.id("workspaces"),
-  provider: vProviderKind,
-  state: vProviderConnectionState,
-  /** Verified capability IDs only — never assumed. */
-  capabilities: v.array(v.string()),
-  updatedAt: v.number(),
-  runtimeConnectionId: v.optional(v.id("runtimeConnections")),
-  remoteReference: v.optional(v.string()),
-  verifiedAt: v.optional(v.number()),
-  error: v.optional(v.string()),
-};
-
-export const workerCredentialFields = {
-  workspaceId: v.id("workspaces"),
-  runtimeConnectionId: v.id("runtimeConnections"),
-  runtimeGeneration: v.number(),
-  /** SHA-256 hex of the bearer token; plaintext is never persisted. */
-  credentialHash: v.string(),
-  scopes: v.array(vWorkerScope),
-  expiresAt: v.number(),
-  state: v.union(v.literal("active"), v.literal("revoked")),
-  createdAt: v.number(),
-  /** AES-256-GCM envelope (base64) sealing the plaintext token so a
-   *  generation-scoped Box env injection or a reconciled create replay can
-   *  recover it server-side; opened only inside provisioning actions under
-   *  `OPENSQUAD_WORKER_SEAL_KEY` and never returned by any function. */
-  sealedCredential: v.optional(v.string()),
-  /** Last authenticated bridge call — diagnostics only. */
-  lastUsedAt: v.optional(v.number()),
-  /** Last claim-class poll — enforces the minimum poll interval. */
-  lastPollAt: v.optional(v.number()),
-};
-
-export const runtimeControlRequestFields = {
-  workspaceId: v.id("workspaces"),
-  runtimeConnectionId: v.id("runtimeConnections"),
-  runtimeGeneration: v.number(),
-  /** Backend-minted request identity; also the claim dedupe key. */
-  requestId: v.string(),
-  command: vControlCommand,
-  state: vControlRequestState,
-  /** identityKey of the generating owner, or `system` for lease-expiry
-   *  interrupts issued by the bridge. */
-  requestedBy: v.string(),
-  expiresAt: v.number(),
-  createdAt: v.number(),
-  claimedAt: v.optional(v.number()),
-  /** Login challenge reference for start_login/cancel_login. */
-  loginId: v.optional(v.string()),
-  /** Codex turn/thread references for interrupt_turn. */
-  turnId: v.optional(v.string()),
-  threadId: v.optional(v.string()),
-  /** Sanitized result summary — never challenge material or credentials. */
-  safeResult: v.optional(v.any()),
-  /** First accepted result identity + digest — repeated identical results
-   *  are acknowledged no-ops; a reused resultId with a different digest is
-   *  rejected and recorded. */
-  resultId: v.optional(v.string()),
-  resultDigest: v.optional(v.string()),
-  completedAt: v.optional(v.number()),
-};
-
-export const runtimeLoginChallengeFields = {
-  workspaceId: v.id("workspaces"),
-  runtimeConnectionId: v.id("runtimeConnections"),
-  runtimeGeneration: v.number(),
-  controlRequestId: v.id("runtimeControlRequests"),
-  /** Provider-allowlisted verification URL — owner-only, never in feeds. */
-  verificationUrl: v.string(),
-  userCode: v.string(),
-  expiresAt: v.number(),
-  createdAt: v.number(),
-};
-
-export const agentSessionFields = {
-  workspaceId: v.id("workspaces"),
-  employeeId: v.id("employees"),
-  /** Campaign- or prospect-scoped session discriminator (bounded string). */
-  scopeKey: v.string(),
-  runtimeConnectionId: v.id("runtimeConnections"),
-  runtimeGeneration: v.number(),
-  /** Saved Codex thread reference; resumed only after ownership checks. */
-  codexThreadRef: v.string(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-};
-
-export const workerRequestFields = {
-  workspaceId: v.id("workspaces"),
-  runtimeConnectionId: v.id("runtimeConnections"),
-  runtimeGeneration: v.number(),
-  missionId: v.id("missions"),
-  runId: v.id("runs"),
-  /** Semantic step identity — unique per (missionId, stepKey, generation). */
-  stepKey: v.string(),
-  /** Attempt generation of this stage execution (mirrors run.generation). */
-  generation: v.number(),
-  /** §4.5 operation discriminator — selects the accepted result contract. */
-  operation: vWorkerOperation,
-  state: vWorkerRequestState,
-  /** Validated worker input: small inline document or private storage
-   *  reference (256 KiB cap, §4.4 note). */
-  inputRef: vWorkerDataRef,
-  /** The capability set Convex ISSUED for this request, derived at dispatch
-   *  from the run's employee ∩ `HOST_CAPABILITY_POLICY`. This column — not
-   *  the mirror inside `inputRef.value` and never anything the worker sends
-   *  — is the authority every tool route re-checks. Optional only because
-   *  rows predating P21 exist on the dev deployment; ABSENT MEANS NONE, and
-   *  every read site treats `undefined` as `[]` and denies. */
-  capabilities: v.optional(v.array(vCapabilityId)),
-  /** Tool calls this request has been authorized for, compared against
-   *  `inputRef.value.constraints.maxToolCalls` inside the authorizing
-   *  transaction. Absent means zero. */
-  toolCallsUsed: v.optional(v.number()),
-  outputSchemaVersion: v.number(),
-  /* Continuation binding — assigned by the dispatching backend, never
-   * trusted from a callback payload (§4.2 note covers worker requests). */
-  targetWorkflowId: v.string(),
-  continuationEventId: v.string(),
-  workflowGeneration: v.number(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  /** SHA-256 hex of the issued lease token — plaintext goes only to the
-   *  claiming worker inside the claim response. */
-  leaseHash: v.optional(v.string()),
-  leaseExpiresAt: v.optional(v.number()),
-  lastHeartbeatAt: v.optional(v.number()),
-  /** Last accepted worker-activity time — the 5 s routine-update throttle. */
-  lastActivityAt: v.optional(v.number()),
-  /** Dedupe of the accepted result: repeated identical results acknowledge;
-   *  a reused resultId with a different digest is rejected and recorded. */
-  resultId: v.optional(v.string()),
-  resultDigest: v.optional(v.string()),
-  resultRef: v.optional(vWorkerDataRef),
-  /** Forwarded usage — present only when the runtime reported it (§9). */
-  usage: v.optional(
-    v.object({
-      toolCalls: v.optional(v.number()),
-      modelCalls: v.optional(v.number()),
-      tokens: v.optional(v.number()),
-    }),
-  ),
-  error: v.optional(
-    v.object({
-      code: v.string(),
-      message: v.string(),
-      retrySafety: v.optional(
-        v.union(
-          v.literal("safe"),
-          v.literal("unsafe"),
-          v.literal("unknown"),
-        ),
-      ),
-    }),
-  ),
-};
-
-export const workspaceExecutionSlotFields = {
-  workspaceId: v.id("workspaces"),
-  /** Bumped on every acquisition — a stale slot generation cannot renew. */
-  generation: v.number(),
-  state: vSlotState,
-  updatedAt: v.number(),
-  workerRequestId: v.optional(v.id("workerRequests")),
-  runId: v.optional(v.id("runs")),
-  leaseExpiresAt: v.optional(v.number()),
-};
-
-/**
- * §4.3 `artifacts` — defined in THIS block because the P07
- * `POST /worker/artifact` route needs it now. The field map follows the
- * §4.3 contract exactly (plus the transport-provenance `workerRequestId?`);
- * P09 must NOT re-add this table — merge keeps this definition.
- */
-export const artifactFields = {
-  workspaceId: v.id("workspaces"),
-  missionId: v.id("missions"),
-  kind: vArtifactKind,
-  /** Server-assigned storage ID — the worker never supplies it. */
-  storageId: v.id("_storage"),
-  mimeType: v.string(),
-  byteSize: v.number(),
-  /** Server-computed `sha256:<hex>` of the stored bytes. */
-  contentDigest: v.string(),
-  operationKey: v.string(),
-  createdAt: v.number(),
-  /** Externally supplied: the worker's `x-prospect-id` upload header, bounded
-   *  and validated at `workerBridge.uploadArtifact`. A value crossing the trust
-   *  boundary stays a validated string; the internally produced prospect
-   *  references on `evidence` and `leadEvents` are real `v.id`s. */
-  prospectId: v.optional(v.string()),
-  runId: v.optional(v.id("runs")),
-  /** The worker request whose lease authorized this upload. */
-  workerRequestId: v.optional(v.id("workerRequests")),
 };
 
 /* ------------------------------------------------------------------ */
@@ -692,8 +226,6 @@ export const leadEventFields = {
   fromStage: v.optional(vSalesStage),
   toStage: v.optional(vSalesStage),
   bookingId: v.optional(v.id("bookings")),
-  missionId: v.optional(v.id("missions")),
-  runId: v.optional(v.id("runs")),
   /** Closed previous/new payload §8 "CRM and booking transitions" requires
    *  an event to preserve. */
   details: v.optional(vLeadEventDetails),
@@ -725,7 +257,6 @@ export const bookingFields = {
   createdAt: v.number(),
   updatedAt: v.number(),
   conversationId: v.optional(v.id("conversations")),
-  missionId: v.optional(v.id("missions")),
   /** The exact proposal draft whose acceptance may advance the lead. */
   draftId: v.optional(v.id("drafts")),
   startsAt: v.optional(v.number()),
@@ -745,17 +276,14 @@ export const bookingFields = {
 
 /**
  * Evidence — one observation with the source it came from (§4.3/§4.5).
- * Excerpts are bounded to 2,000 characters and at most 12 observations are
- * accepted per research result; the full output lives in storage behind
- * `artifactId`. `retrievedAt` is the worker's source-retrieval timestamp —
- * evidence metadata, never a permission or accounting timestamp (§4.5).
- * Drafts may link only evidence from the same workspace AND prospect.
+ * Excerpts are bounded to 2,000 characters. `retrievedAt` is the
+ * source-retrieval timestamp — evidence metadata, never a permission or
+ * accounting timestamp (§4.5). Drafts may link only evidence from the same
+ * workspace AND prospect.
  */
 export const evidenceFields = {
   workspaceId: v.id("workspaces"),
   prospectId: v.id("prospects"),
-  /** The run that produced this observation — always an execution receipt. */
-  runId: v.id("runs"),
   /** Validated public http/https source. */
   sourceUrl: v.string(),
   retrievedAt: v.number(),
@@ -763,13 +291,11 @@ export const evidenceFields = {
   observation: v.string(),
   confidence: vEvidenceConfidence,
   createdAt: v.number(),
-  artifactId: v.optional(v.id("artifacts")),
 };
 
 /* ------------------------------------------------------------------ */
 /* §4.3 correspondence (P10) — conversations, immutable drafts,         */
 /* approvals, send attempts, suppressions and provider-event receipts.  */
-/* `artifacts` is declared in the §4.4 block above (P07 needs it);      */
 /* `prospects`/`leadEvents`/`bookings`/`evidence` in the block above.   */
 /* ------------------------------------------------------------------ */
 
@@ -784,7 +310,6 @@ export const conversationFields = {
   workspaceId: v.id("workspaces"),
   /** AgentMail inbox reference this conversation lives on. */
   inboxRef: v.string(),
-  employeeId: v.id("employees"),
   state: vConversationState,
   /** When true, automation is frozen: no sends, drafts or reply workflows. */
   humanTakeover: v.boolean(),
@@ -803,8 +328,7 @@ export const conversationFields = {
   prospectId: v.optional(v.id("prospects")),
   /**
    * The campaign this thread's reply work runs under, FROZEN at association.
-   * `missionFields.campaignId` is required, so a reply mission needs one; and
-   * recording what was agreed when the lead was linked means a later
+   * Recording what was agreed when the lead was linked means a later
    * re-campaigning of that lead cannot silently retarget in-flight reply
    * work. Written only by `conversations.associateProspect`, which refuses a
    * campaign the prospect does not belong to.
@@ -813,7 +337,7 @@ export const conversationFields = {
   /**
    * Human owner of this thread (identityKey). Must resolve to an ACTIVE
    * membership before it is stored — the same rule `prospects.ownerIdentityKey`
-   * carries. Distinct from `employeeId`, which assigns the MACHINE.
+   * carries.
    */
   assigneeIdentityKey: v.optional(v.string()),
   /** Why automation is frozen. Present whenever `humanTakeover` is true. */
@@ -824,8 +348,8 @@ export const conversationFields = {
   takeoverAt: v.optional(v.number()),
   /**
    * Product-level meaning of the most recent inbound reply, so the inbox row
-   * can show its classification tag (`plan/ux.md` §165) without reading a
-   * `workerRequests` transport row per listed conversation.
+   * can show its classification tag without a second read per listed
+   * conversation.
    */
   lastDisposition: v.optional(vReplyDisposition),
   lastDispositionAt: v.optional(v.number()),
@@ -846,17 +370,12 @@ export const conversationFields = {
 };
 
 /**
- * Internal notes on a conversation (P11) — the audit trail a thread with no
- * mission is otherwise denied. `activityEventFields.missionId`,
- * `decisionFields.missionId` and `missionCommentFields.missionId` are all
- * required `v.id("missions")`, and an unassigned conversation has no mission
- * (a mission needs a campaign, which needs an associated lead), so none of
- * those three can record its intake, takeover, association or closure.
+ * Internal notes on a conversation (P11) — the per-thread audit trail.
  *
- * `kind: "system"` rows are those lifecycle records; `kind: "note"` rows are
- * human annotations. Rows are append-only, and — keeping `activity.ts`'s
- * invariant for `missionComments` verbatim — a note can NEVER resolve a
- * business approval: this table has no path to decision state.
+ * `kind: "system"` rows are lifecycle records (intake, takeover, association,
+ * closure); `kind: "note"` rows are human annotations. Rows are append-only,
+ * and a note can NEVER resolve a business approval: this table has no path to
+ * approval state.
  *
  * Notes do not bump `conversations.contextVersion`. Architecture §8 limits
  * bumps to inbound replies, takeover/assignment/closure and explicit context
@@ -885,7 +404,6 @@ export const draftFields = {
   conversationId: v.id("conversations"),
   /** Sender inbox the payload will go out through (provider inbox id). */
   inboxRef: v.string(),
-  missionId: v.id("missions"),
   /** 1-based revision number within the conversation; rows are immutable. */
   revision: v.number(),
   /** Address as supplied; `normalizedRecipient` is the canonical form. */
@@ -899,13 +417,11 @@ export const draftFields = {
   campaignBriefVersion: v.number(),
   policyVersion: v.number(),
   /**
-   * §4.3 evidence links. Still `v.string()` after P20 declared `evidence`:
-   * the values arrive as `vDraftResult.evidenceRefs` label/artifact/storage
-   * strings from the worker, so they are externally supplied until a backend
-   * step resolves them to rows. P21 owns that resolution and the retype.
+   * §4.3 evidence links. Bounded label strings until a backend step resolves
+   * them to `evidence` rows.
    */
   evidenceIds: v.array(v.string()),
-  /** identityKey for human edits; `workflow` for pipeline-proposed drafts. */
+  /** identityKey for human edits; `system` for pipeline-proposed drafts. */
   createdBy: v.string(),
   createdAt: v.number(),
   /** Parent provider message id — makes the attempt a `reply` operation. */
@@ -924,9 +440,9 @@ export const draftFields = {
 };
 
 /**
- * Approvals — one immutable verdict per resolution of a `draft_approval`
- * decision, bound to the exact payloadHash + normalizedRecipient +
- * contextVersion. A later edit supersedes applicability, not the record.
+ * Approvals — one immutable verdict per draft approval, bound to the exact
+ * payloadHash + normalizedRecipient + contextVersion. A later edit supersedes
+ * applicability, not the record.
  */
 export const approvalFields = {
   workspaceId: v.id("workspaces"),
@@ -981,18 +497,13 @@ export const sendAttemptFields = {
       eventIds: v.optional(v.array(v.string())),
     }),
   ),
-  /** The resolved delivery_uncertain decision authorizing THIS attempt as
-   *  the single recorded replacement for a prior uncertain attempt (§8.7). */
-  replacementDecisionId: v.optional(v.id("decisions")),
   requestStartedAt: v.optional(v.number()),
   /** When a `reserved` (parked) attempt may dispatch — recorded so the row
    *  self-describes its wake condition and the stale-attempt sweep can
    *  re-drive one whose scheduled wake was lost. */
   nextPermittedAt: v.optional(v.number()),
-  /** The replacement attempt that covers THIS uncertain attempt — set when
-   *  a `delivery_uncertain` decision authorized the replacement (§8.7).
-   *  Coverage is transitive down the chain, so a re-uncertain replacement
-   *  only needs a fresh decision for the latest open uncertainty. */
+  /** The replacement attempt that covers THIS uncertain attempt (§8.7).
+   *  Coverage is transitive down the chain. */
   coveredByAttemptId: v.optional(v.id("sendAttempts")),
   error: v.optional(
     v.object({
@@ -1148,10 +659,9 @@ export const providerOperationFields = {
   /** Stable semantic invocation id. A repeat returns the recorded result or
    *  status instead of forwarding a second paid request. */
   operationKey: v.string(),
-  missionId: v.id("missions"),
   /** sha256 of the canonical {provider, tool, arguments}. A reused
    *  operationKey carrying different arguments is a CONFLICT, never a
-   *  replay — the same rule `checkArtifactGrant` applies to content. */
+   *  replay. */
   requestDigest: v.string(),
   /** The usage reservations this operation took, settled together. */
   reservationIds: v.array(v.id("usageReservations")),
@@ -1159,32 +669,14 @@ export const providerOperationFields = {
   /** How the reservation this row owns was settled. Absent while the
    *  operation is still in flight. `state` does not imply it: a post-fetch
    *  redirect refusal is `failed` and `commit`-settled, because the fetch
-   *  happened and was billed even though its page is refused. The
-   *  per-prospect page cap counts by this, not by `state`. */
+   *  happened and was billed even though its page is refused. */
   settlement: v.optional(vProviderOperationSettlement),
   createdAt: v.number(),
   updatedAt: v.number(),
   prospectId: v.optional(v.id("prospects")),
-  /** The run whose retrieval created this receipt — stamped once, at insert,
-   *  and never rewritten. It is what `supported` confidence is measured
-   *  against: a retrieval taken in the run that cites it. */
-  runId: v.optional(v.id("runs")),
-  /** The later runs that READ this receipt back instead of paying for the
-   *  page again. `operationKey` is campaign-scoped, so a second mission on
-   *  the same campaign replays every page it plans; without this column
-   *  those pages named no run the second mission could recognise, and the
-   *  campaign could never be researched twice. Bounded and append-only. */
-  replayedForRunIds: v.optional(v.array(v.id("runs"))),
-  /* Continuation binding — present ONLY for a callback-correlated operation
-   * (a durable crawl). The bounded synchronous scrape and the lease-bound
-   * tool route complete inside their own action and have no continuation to
-   * correlate, so they leave these absent rather than inventing one. */
-  targetWorkflowId: v.optional(v.string()),
-  continuationEventId: v.optional(v.string()),
-  workflowGeneration: v.optional(v.number()),
   /** The provider's own reference for the request — the backend receipt. */
   componentRequestRef: v.optional(v.string()),
-  resultRef: v.optional(vWorkerDataRef),
+  resultRef: v.optional(vProviderDataRef),
   resultDigest: v.optional(v.string()),
   error: v.optional(v.object({ code: v.string(), message: v.string() })),
 };
@@ -1203,145 +695,16 @@ export default defineSchema({
     // One current profile per workspace, enforced transactionally.
     .index("by_workspaceId", ["workspaceId"]),
 
-  employees: defineTable(employeeFields)
-    // Exactly one employee per (workspaceId, template), enforced transactionally.
-    .index("by_workspaceId_and_template", ["workspaceId", "template"]),
-
   campaigns: defineTable(campaignFields)
     .index("by_workspaceId_and_status", ["workspaceId", "status"])
     // At most one campaign per (workspaceId, requestId), enforced in `create`.
     .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
 
-  /* §4.2 — work and supervision (P06) */
-
-  missions: defineTable(missionFields)
-    // Board pagination: one column at a time, most recently updated first.
-    .index("by_workspaceId_and_visibility_and_boardColumn_and_updatedAt", [
-      "workspaceId",
-      "visibility",
-      "boardColumn",
-      "updatedAt",
-    ])
-    // Spec name
-    // `by_workspaceId_and_campaignId_and_visibility_and_boardColumn_and_updatedAt`
-    // is 73 chars — over Convex's 64-char index-name limit. The field tuple is
-    // unchanged; only the name is shortened.
-    .index("by_workspaceId_and_campaignId_and_boardColumn_and_updatedAt", [
-      "workspaceId",
-      "campaignId",
-      "visibility",
-      "boardColumn",
-      "updatedAt",
-    ])
-    // At most one mission per (workspaceId, requestId), enforced in `create`.
-    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
-
-  missionProspects: defineTable(missionProspectFields)
-    // Unique (missionId, prospectId) pair — the stable child start key,
-    // enforced transactionally in `registerProspectBranch`.
-    .index("by_missionId_and_prospectId", ["missionId", "prospectId"])
-    .index("by_prospectId", ["prospectId"])
-    .index("by_childWorkflowId", ["childWorkflowId"]),
-
-  runs: defineTable(runFields)
-    .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
-    .index("by_workspaceId_and_state", ["workspaceId", "state"])
-    .index("by_employeeId_and_state", ["employeeId", "state"]),
-
-  decisions: defineTable(decisionFields)
-    .index("by_workspaceId_and_state_and_createdAt", [
-      "workspaceId",
-      "state",
-      "createdAt",
-    ])
-    .index("by_missionId_and_state", ["missionId", "state"])
-    // Chronological ask history for one mission (`listForMission`).
-    .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
-    // §4.3 forward reference — becomes useful when `drafts` lands (P10).
-    .index("by_draftId", ["draftId"]),
-
-  missionComments: defineTable(missionCommentFields).index(
-    "by_missionId_and_createdAt",
-    ["missionId", "createdAt"],
-  ),
+  /* §4.2 — workspace activity feed */
 
   activityEvents: defineTable(activityEventFields)
     .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"])
-    .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
     .index("by_workspaceId_and_dedupeKey", ["workspaceId", "dedupeKey"]),
-
-  /* §4.4 — runtime transport (P07) */
-
-  runtimeConnections: defineTable(runtimeConnectionFields)
-    // One active runtime record per workspace, enforced transactionally.
-    .index("by_workspaceId", ["workspaceId"]),
-
-  runtimeLifecycleOperations: defineTable(runtimeLifecycleOperationFields)
-    .index("by_runtimeConnectionId_and_createdAt", [
-      "runtimeConnectionId",
-      "createdAt",
-    ])
-    // Stuck-op sweep: `uncertain`, stale `accepted` and stale `pending` rows.
-    .index("by_state_and_updatedAt", ["state", "updatedAt"])
-    .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
-
-  providerConnections: defineTable(providerConnectionFields).index(
-    "by_workspaceId_and_provider",
-    ["workspaceId", "provider"],
-  ),
-
-  workerCredentials: defineTable(workerCredentialFields)
-    // Unique credential hash, enforced transactionally at issuance.
-    .index("by_credentialHash", ["credentialHash"])
-    .index("by_runtimeConnectionId_and_state", [
-      "runtimeConnectionId",
-      "state",
-    ]),
-
-  runtimeControlRequests: defineTable(runtimeControlRequestFields)
-    .index("by_runtimeConnectionId_and_state", [
-      "runtimeConnectionId",
-      "state",
-    ])
-    // At most one control request per (workspaceId, requestId).
-    .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"]),
-
-  runtimeLoginChallenges: defineTable(runtimeLoginChallengeFields)
-    .index("by_runtimeConnectionId", ["runtimeConnectionId"])
-    .index("by_expiresAt", ["expiresAt"]),
-
-  agentSessions: defineTable(agentSessionFields)
-    // One Codex session per (workspace, employee, scope).
-    .index("by_workspaceId_and_employeeId_and_scopeKey", [
-      "workspaceId",
-      "employeeId",
-      "scopeKey",
-    ]),
-
-  workerRequests: defineTable(workerRequestFields)
-    .index("by_workspaceId_and_state_and_createdAt", [
-      "workspaceId",
-      "state",
-      "createdAt",
-    ])
-    .index("by_state_and_leaseExpiresAt", ["state", "leaseExpiresAt"])
-    .index("by_runId", ["runId"])
-    // One transport request per (mission, step, generation).
-    .index("by_missionId_and_stepKey_and_generation", [
-      "missionId",
-      "stepKey",
-      "generation",
-    ]),
-
-  workspaceExecutionSlots: defineTable(workspaceExecutionSlotFields)
-    // The single transactional model-run slot per workspace.
-    .index("by_workspaceId", ["workspaceId"]),
-
-  artifacts: defineTable(artifactFields)
-    .index("by_missionId_and_createdAt", ["missionId", "createdAt"])
-    .index("by_prospectId", ["prospectId"])
-    // One artifact per (workspace, operationKey) — deduplicated uploads.
-    .index("by_workspaceId_and_operationKey", ["workspaceId", "operationKey"]),
 
   /* §4.3 — leads, bookings and evidence (P20) */
 
@@ -1412,17 +775,10 @@ export default defineSchema({
       "startsAt",
     ]),
 
-  evidence: defineTable(evidenceFields)
-    .index("by_prospectId_and_createdAt", ["prospectId", "createdAt"])
-    // The run receipt's own evidence trace (V12-3), and the idempotency read
-    // `recordResearchEvidence` performs before it writes: one research result
-    // per run, so a replayed synthesis returns the rows it already wrote
-    // instead of doubling them.
-    .index("by_workspaceId_and_runId_and_createdAt", [
-      "workspaceId",
-      "runId",
-      "createdAt",
-    ]),
+  evidence: defineTable(evidenceFields).index("by_prospectId_and_createdAt", [
+    "prospectId",
+    "createdAt",
+  ]),
 
   /* §4.3 — correspondence (P10) */
 
@@ -1463,7 +819,6 @@ export default defineSchema({
   drafts: defineTable(draftFields)
     // Unique (conversationId, revision) pair, enforced transactionally.
     .index("by_conversationId_and_revision", ["conversationId", "revision"])
-    .index("by_missionId", ["missionId"])
     // requestId dedupe for revise/createRevision retries.
     .index("by_workspaceId_and_requestId", ["workspaceId", "requestId"])
     // Booking-linked drafts (P19): the invalidation path needs every draft
@@ -1484,7 +839,6 @@ export default defineSchema({
     // Chronological audit listing — the unfiltered conversation view is
     // newest-first, not state-bucketed.
     .index("by_conversationId_and_createdAt", ["conversationId", "createdAt"])
-    .index("by_replacementDecisionId", ["replacementDecisionId"])
     .index("by_workspaceId_and_state_and_updatedAt", [
       "workspaceId",
       "state",
@@ -1569,7 +923,7 @@ export default defineSchema({
       "provider",
       "componentRequestRef",
     ])
-    // The per-prospect page cap: this prospect's non-failed operations.
+    // The per-prospect operation range.
     .index("by_workspaceId_and_prospectId_and_state", [
       "workspaceId",
       "prospectId",

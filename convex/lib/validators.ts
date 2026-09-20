@@ -39,7 +39,7 @@ export function invalid(message: string): ConvexError<{
  * Returns the trimmed value. All free-text fields pass through this so stored
  * records and public args stay bounded.
  *
- * Fields carved out of `v.any()` payloads (worker result/input/config
+ * Fields carved out of `v.any()` payloads (provider result/config
  * envelopes) are `unknown` at runtime — a non-string must be an INVALID
  * rejection, not an uncaught TypeError.
  */
@@ -272,71 +272,7 @@ export const vMembershipStatus = v.union(
 );
 
 /* ------------------------------------------------------------------ */
-/* Employee capability policy                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Host-enforced capability IDs. A workspace prompt can only ever narrow this
- * set; capability IDs outside this union are rejected, not silently dropped.
- * Apollo send/sequence enrollment, direct Firecrawl MCP access and arbitrary
- * shell/network tools are intentionally absent (architecture §9).
- */
-export const CAPABILITY_IDS = [
-  "apollo.company_search",
-  "apollo.contact_enrichment",
-  "opensquad.web_research",
-  "opensquad.draft_compose",
-  "opensquad.reply_classify",
-] as const;
-
-export type CapabilityId = (typeof CAPABILITY_IDS)[number];
-
-export const vCapabilityId = v.union(
-  v.literal("apollo.company_search"),
-  v.literal("apollo.contact_enrichment"),
-  v.literal("opensquad.web_research"),
-  v.literal("opensquad.draft_compose"),
-  v.literal("opensquad.reply_classify"),
-);
-
-export const vEmployeeTemplate = v.union(
-  v.literal("scout"),
-  v.literal("researcher"),
-  v.literal("outreach"),
-);
-
-export type EmployeeTemplate = "scout" | "researcher" | "outreach";
-
-/** Maximum capability set each employee template may ever hold. */
-export const HOST_CAPABILITY_POLICY: Readonly<
-  Record<EmployeeTemplate, readonly CapabilityId[]>
-> = {
-  scout: ["apollo.company_search", "apollo.contact_enrichment"],
-  researcher: ["opensquad.web_research"],
-  outreach: ["opensquad.draft_compose", "opensquad.reply_classify"],
-};
-
-/**
- * Intersect a requested capability preference with the enforced host policy
- * for the template. Unknown IDs are already excluded by `vCapabilityId`;
- * valid-but-not-permitted IDs fail loudly rather than being dropped.
- */
-export function intersectCapabilities(
-  template: EmployeeTemplate,
-  requested: CapabilityId[],
-): CapabilityId[] {
-  const allowed = new Set<CapabilityId>(HOST_CAPABILITY_POLICY[template]);
-  const denied = requested.filter((cap) => !allowed.has(cap));
-  if (denied.length > 0) {
-    throw invalid(
-      `capabilities ${denied.join(", ")} are not permitted for ${template}`,
-    );
-  }
-  return [...new Set(requested)];
-}
-
-/* ------------------------------------------------------------------ */
-/* Campaign source plans                                               */
+/* Campaigns                                                           */
 /* ------------------------------------------------------------------ */
 
 export const vCampaignStatus = v.union(
@@ -352,962 +288,20 @@ export const CAMPAIGN_LEAD_LIMIT_MIN = 1;
 export const CAMPAIGN_LEAD_LIMIT_MAX = 5;
 export const CAMPAIGN_ENRICHMENT_LIMIT_MIN = 0;
 export const CAMPAIGN_ENRICHMENT_LIMIT_MAX = 10;
-export const SOURCE_PLAN_MAX_SOURCES = 3;
-export const SOURCE_MAX_RESULTS_MAX = 25;
-
-const vEmployeeCountRange = v.object({
-  min: v.number(),
-  max: v.number(),
-});
-
-/**
- * Apollo company discovery filters: location/category filters plus a bounded
- * employee-count range (architecture §4.1).
- */
-export const vApolloSource = v.object({
-  source: v.literal("apollo"),
-  filters: v.object({
-    locations: v.optional(v.array(v.string())),
-    categories: v.optional(v.array(v.string())),
-    employeeCount: v.optional(vEmployeeCountRange),
-  }),
-  maxResults: v.optional(v.number()),
-});
-
-/** YC directory filters; the selected batch is recorded where applicable. */
-export const vYcSource = v.object({
-  source: v.literal("yc"),
-  filters: v.object({
-    batch: v.optional(v.string()),
-    categories: v.optional(v.array(v.string())),
-    locations: v.optional(v.array(v.string())),
-  }),
-  maxResults: v.optional(v.number()),
-});
-
-/**
- * TrustMRR revenue bounds always carry an explicit metric name, ISO 4217
- * currency and reporting period.
- */
-export const vTrustmrrSource = v.object({
-  source: v.literal("trustmrr"),
-  filters: v.object({
-    metric: v.string(),
-    currency: v.string(),
-    period: v.union(v.literal("monthly"), v.literal("annual")),
-    min: v.optional(v.number()),
-    max: v.optional(v.number()),
-  }),
-  maxResults: v.optional(v.number()),
-});
-
-export const vSourceConfig = v.union(vApolloSource, vYcSource, vTrustmrrSource);
-
-/**
- * The interpreted source plan stored on a campaign. `instruction` preserves
- * the original operator text separately from the typed interpretation.
- * `confirmed*` fields are stamped once by `campaigns.confirmSourcePlan` and
- * are immutable afterwards.
- */
-export const vSourcePlan = v.object({
-  instruction: v.string(),
-  sources: v.array(vSourceConfig),
-  confirmedBy: v.optional(v.string()),
-  confirmedAt: v.optional(v.number()),
-  confirmedBriefVersion: v.optional(v.number()),
-});
-
-/** Domain type derived from the wire validator — never a hand-copied shape. */
-export type SourceConfig = Infer<typeof vSourceConfig>;
-
-/**
- * Source routes currently enabled for execution. YC and TrustMRR keep typed
- * contracts but stay disabled until their extraction gates pass (plan §1);
- * confirming a plan containing one fails with an explicit reason.
- */
-export const ENABLED_SOURCES = ["apollo"] as const;
-
-/** Runtime checks shared by campaign create/confirm paths. */
-export function assertValidSourceConfigs(sources: SourceConfig[]): void {
-  if (sources.length === 0) {
-    throw invalid("sourcePlan.sources must name at least one source");
-  }
-  if (sources.length > SOURCE_PLAN_MAX_SOURCES) {
-    throw invalid(
-      `sourcePlan.sources allows at most ${SOURCE_PLAN_MAX_SOURCES} sources`,
-    );
-  }
-  const seen = new Set<string>();
-  for (const config of sources) {
-    if (seen.has(config.source)) {
-      throw invalid(`source ${config.source} is listed more than once`);
-    }
-    seen.add(config.source);
-    if (config.maxResults !== undefined) {
-      boundedInt(config.maxResults, "maxResults", {
-        min: 1,
-        max: SOURCE_MAX_RESULTS_MAX,
-      });
-    }
-    switch (config.source) {
-      case "apollo": {
-        const filters = config.filters;
-        if (filters.locations !== undefined) {
-          boundedStringList(filters.locations, "apollo.locations", {
-            maxItems: 10,
-            itemMax: 100,
-          });
-        }
-        if (filters.categories !== undefined) {
-          boundedStringList(filters.categories, "apollo.categories", {
-            maxItems: 10,
-            itemMax: 100,
-          });
-        }
-        if (filters.employeeCount !== undefined) {
-          const { min, max } = filters.employeeCount;
-          boundedInt(min, "apollo.employeeCount.min", { min: 1, max: 100000 });
-          boundedInt(max, "apollo.employeeCount.max", { min: 1, max: 100000 });
-          if (min > max) {
-            throw invalid("apollo.employeeCount.min must not exceed max");
-          }
-        }
-        break;
-      }
-      case "yc": {
-        const filters = config.filters;
-        if (filters.batch !== undefined) {
-          boundedString(filters.batch, "yc.batch", { min: 1, max: 32 });
-        }
-        if (filters.categories !== undefined) {
-          boundedStringList(filters.categories, "yc.categories", {
-            maxItems: 10,
-            itemMax: 100,
-          });
-        }
-        if (filters.locations !== undefined) {
-          boundedStringList(filters.locations, "yc.locations", {
-            maxItems: 10,
-            itemMax: 100,
-          });
-        }
-        break;
-      }
-      case "trustmrr": {
-        const filters = config.filters;
-        boundedString(filters.metric, "trustmrr.metric", {
-          min: 1,
-          max: 32,
-        });
-        if (!/^[A-Z]{3}$/.test(filters.currency)) {
-          throw invalid(
-            "trustmrr.currency must be a three-letter ISO 4217 code",
-          );
-        }
-        if (filters.min !== undefined && filters.min < 0) {
-          throw invalid("trustmrr.min must be nonnegative");
-        }
-        if (filters.max !== undefined && filters.max < 0) {
-          throw invalid("trustmrr.max must be nonnegative");
-        }
-        if (
-          filters.min !== undefined &&
-          filters.max !== undefined &&
-          filters.min > filters.max
-        ) {
-          throw invalid("trustmrr.min must not exceed trustmrr.max");
-        }
-        break;
-      }
-    }
-  }
-}
-
-/** Reject sources whose extraction gate has not passed yet. */
-export function assertSourcesEnabled(sources: SourceConfig[]): void {
-  const enabled = new Set<string>(ENABLED_SOURCES);
-  const disabled = [
-    ...new Set(
-      sources.map((config) => config.source).filter((s) => !enabled.has(s)),
-    ),
-  ];
-  if (disabled.length > 0) {
-    throw invalid(
-      `source ${disabled.join(", ")} is not enabled yet; its extraction gate is still pending`,
-    );
-  }
-}
-
 /* ------------------------------------------------------------------ */
-/* Missions, runs, decisions and activity (P06 — architecture §4.2/§6)  */
+/* Providers, digests and reply dispositions                           */
 /* ------------------------------------------------------------------ */
 
-export const vMissionKind = v.union(
-  v.literal("sales_campaign"),
-  v.literal("reply"),
-  v.literal("follow_up"),
-);
-
-export type MissionKind = "sales_campaign" | "reply" | "follow_up";
-
-/**
- * Mission states (§4.2/§6). `waiting_for_user` means a required open decision
- * blocks the workflow; `waiting_for_runtime` means reconnect/capacity
- * uncertainty needs attention — both render in Needs you but never pose as
- * each other.
- */
-export const vMissionState = v.union(
-  v.literal("queued"),
-  v.literal("active"),
-  v.literal("waiting_for_user"),
-  v.literal("waiting_for_runtime"),
-  v.literal("paused"),
-  v.literal("failed"),
-  v.literal("completed"),
-  v.literal("cancelled"),
-);
-
-export type MissionState =
-  | "queued"
-  | "active"
-  | "waiting_for_user"
-  | "waiting_for_runtime"
-  | "paused"
-  | "failed"
-  | "completed"
-  | "cancelled";
-
-/**
- * Mission Control board columns (§6 table). Order is Backlog, Needs you,
- * In flight, Done.
- */
-export const vBoardColumn = v.union(
-  v.literal("backlog"),
-  v.literal("needs_you"),
-  v.literal("in_flight"),
-  v.literal("done"),
-);
-
-export type BoardColumn = "backlog" | "needs_you" | "in_flight" | "done";
-
-export const BOARD_COLUMN_ORDER: readonly BoardColumn[] = [
-  "backlog",
-  "needs_you",
-  "in_flight",
-  "done",
-];
-
-/** Direct state → column mapping from the architecture §6 table. */
-export const MISSION_STATE_BOARD: Readonly<Record<MissionState, BoardColumn>> = {
-  queued: "backlog",
-  active: "in_flight",
-  waiting_for_user: "needs_you",
-  waiting_for_runtime: "needs_you",
-  paused: "backlog",
-  failed: "needs_you",
-  completed: "done",
-  cancelled: "backlog",
-};
-
-/**
- * The effective board column for a mission row (§6): `requiredDecisionCount`
- * above zero places actionable work in Needs you even while the workflow
- * still owns execution — except for paused/cancelled/completed missions,
- * whose explicit badges win.
- */
-export function boardColumnForMission(
-  state: MissionState,
-  requiredDecisionCount: number,
-): BoardColumn {
-  if (state === "paused" || state === "cancelled" || state === "completed") {
-    return MISSION_STATE_BOARD[state];
-  }
-  if (requiredDecisionCount > 0) {
-    return "needs_you";
-  }
-  return MISSION_STATE_BOARD[state];
-}
-
-/**
- * Legal state transitions (§6). `paused` resumes through `missions.resume`,
- * which picks the concrete target state by re-reading open asks; `failed`
- * may only be cancelled (archive path) until an explicit retry flow lands.
- * The workflow's internal transitions use the same table.
- *
- * `queued → failed`, `paused → failed` and `paused → completed` exist for
- * the terminal reconcile paths (`failMission`/`completeMissionTx` via
- * `onMissionWorkflowComplete`): the owning workflow can die before the
- * dispatch gate runs (still `queued`) or land its terminal callback after a
- * `pause` committed (`paused`). An onComplete error is swallowed by the
- * workpool, so an illegal-transition throw here would wedge the mission in
- * a non-terminal state with a dead workflow.
- */
-export const MISSION_TRANSITIONS: Readonly<
-  Record<MissionState, readonly MissionState[]>
-> = {
-  queued: ["active", "paused", "cancelled", "failed"],
-  active: [
-    "waiting_for_user",
-    "waiting_for_runtime",
-    "paused",
-    "failed",
-    "completed",
-    "cancelled",
-  ],
-  waiting_for_user: ["active", "paused", "failed", "completed", "cancelled"],
-  waiting_for_runtime: [
-    "active",
-    "paused",
-    "failed",
-    "completed",
-    "cancelled",
-  ],
-  paused: [
-    "queued",
-    "active",
-    "waiting_for_user",
-    "failed",
-    "completed",
-    "cancelled",
-  ],
-  failed: ["cancelled"],
-  completed: [],
-  cancelled: [],
-};
-
-export function assertMissionTransition(
-  from: MissionState,
-  to: MissionState,
-): void {
-  if (!MISSION_TRANSITIONS[from].includes(to)) {
-    throw domainError(
-      "CONFLICT",
-      `mission cannot move from ${from} to ${to}`,
-    );
-  }
-}
-
-export const vMissionPriority = v.union(
-  v.literal("normal"),
-  v.literal("high"),
-);
-
-export const vMissionVisibility = v.union(
-  v.literal("visible"),
-  v.literal("archived"),
-);
-
-export type MissionVisibility = "visible" | "archived";
-
-/**
- * Frozen inputs recorded at dispatch (§4.2): confirmed brief/source plan,
- * business-profile version + relevant text, employee instruction versions,
- * policy version and the requested outcome. Bound to 64 KiB serialized.
- */
-export const INPUT_SNAPSHOT_MAX_BYTES = 64 * 1024;
-
-export const vInputSnapshot = v.object({
-  campaignTitle: v.string(),
-  campaignBrief: v.string(),
-  briefVersion: v.number(),
-  sourcePlan: vSourcePlan,
-  businessProfile: v.optional(
-    v.object({
-      version: v.number(),
-      websiteUrl: v.string(),
-      offer: v.string(),
-      idealCustomer: v.string(),
-      tone: v.string(),
-      exclusions: v.array(v.string()),
-    }),
-  ),
-  employeeInstructions: v.array(
-    v.object({
-      employeeId: v.id("employees"),
-      template: vEmployeeTemplate,
-      name: v.string(),
-      instructionVersion: v.number(),
-    }),
-  ),
-  policyVersion: v.number(),
-  requestedOutcome: v.string(),
-});
-
-export type InputSnapshot = Infer<typeof vInputSnapshot>;
-
-/** Enforce the §4.2 64 KiB serialized bound on a stored input snapshot. */
-export function assertInputSnapshotSize(snapshot: InputSnapshot): void {
-  const bytes = new TextEncoder().encode(JSON.stringify(snapshot)).length;
-  if (bytes > INPUT_SNAPSHOT_MAX_BYTES) {
-    throw invalid(
-      `inputSnapshot is ${bytes} bytes; the bound is ${INPUT_SNAPSHOT_MAX_BYTES}`,
-    );
-  }
-}
-
-export const vRunState = v.union(
-  v.literal("pending"),
-  v.literal("running"),
-  v.literal("succeeded"),
-  v.literal("failed"),
-  v.literal("cancelled"),
-  v.literal("uncertain"),
-);
-
-export type RunState =
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "cancelled"
-  | "uncertain";
-
-export const vDecisionKind = v.union(
-  v.literal("draft_approval"),
-  v.literal("missing_information"),
-  v.literal("connection_required"),
-  v.literal("delivery_uncertain"),
-);
-
-export type DecisionKind =
-  | "draft_approval"
-  | "missing_information"
-  | "connection_required"
-  | "delivery_uncertain";
-
-export const vDecisionState = v.union(
-  v.literal("open"),
-  v.literal("resolved"),
-  v.literal("superseded"),
-  v.literal("cancelled"),
-);
-
-export type DecisionState = "open" | "resolved" | "superseded" | "cancelled";
-
-/**
- * The human answer recorded on a decision. `fields` carries the values for a
- * `missing_information` ask, `approved`+`body` carry approve/reject/reason for
- * approval-flavored asks. Exact draft-approval binding (revision, payload
- * hash, approvals table) is P10; P06 stores the honest answer generically.
- */
-export const vDecisionAnswer = v.object({
-  body: v.optional(v.string()),
-  approved: v.optional(v.boolean()),
-  fields: v.optional(v.record(v.string(), v.string())),
-});
-
-export type DecisionAnswer = Infer<typeof vDecisionAnswer>;
-
-export function assertDecisionAnswer(answer: DecisionAnswer): void {
-  if (
-    answer.body === undefined &&
-    answer.approved === undefined &&
-    (answer.fields === undefined || Object.keys(answer.fields).length === 0)
-  ) {
-    throw invalid("answer must carry a body, an approved flag or fields");
-  }
-  if (answer.body !== undefined) {
-    boundedString(answer.body, "answer.body", { min: 1, max: 4000 });
-  }
-  if (answer.fields !== undefined) {
-    const entries = Object.entries(answer.fields);
-    if (entries.length > 20) {
-      throw invalid("answer.fields allows at most 20 entries");
-    }
-    for (const [key, value] of entries) {
-      boundedString(key, "answer.fields key", { min: 1, max: 100 });
-      boundedString(value, `answer.fields[${key}]`, { max: 2000 });
-    }
-  }
-}
-
-/**
- * Per-prospect branch outcomes (§4.2 `missionProspects.outcome`, §6.1):
- * the explicit terminal results a parent aggregates — approved/delivered
- * work completed, contact still needed, intentionally rejected, deliberately
- * skipped, technical failure or cancellation.
- */
-export const vMissionProspectOutcome = v.union(
-  v.literal("completed"),
-  v.literal("contact_needed"),
-  v.literal("rejected"),
-  v.literal("skipped"),
-  v.literal("failed"),
-  v.literal("cancelled"),
-);
-
-export type MissionProspectOutcome =
-  | "completed"
-  | "contact_needed"
-  | "rejected"
-  | "skipped"
-  | "failed"
-  | "cancelled";
-
-/**
- * Terminal parent outcomes (§6.1 step 9 / P06 card): `completed` when every
- * promised deliverable exists, `partial` when some branches completed and
- * others ended rejected/contact-needed/skipped, `contact_needed` when work
- * is done but contacts are still owed, `skipped` when everything was
- * deliberately skipped, `failed`/`cancelled` for the technical paths.
- */
-export const vMissionOutcome = v.union(
-  v.literal("completed"),
-  v.literal("partial"),
-  v.literal("contact_needed"),
-  v.literal("skipped"),
-  v.literal("failed"),
-  v.literal("cancelled"),
-);
-
-export type MissionOutcome =
-  | "completed"
-  | "partial"
-  | "contact_needed"
-  | "skipped"
-  | "failed"
-  | "cancelled";
-
-/** Aggregate explicit child outcomes into the terminal parent outcome. */
-export function aggregateMissionOutcome(
-  outcomes: readonly MissionProspectOutcome[],
-): MissionOutcome {
-  if (outcomes.length === 0) {
-    return "completed";
-  }
-  const count = (kind: MissionProspectOutcome) =>
-    outcomes.filter((outcome) => outcome === kind).length;
-  const failed = count("failed");
-  const cancelled = count("cancelled");
-  if (failed === outcomes.length) {
-    return "failed";
-  }
-  if (cancelled === outcomes.length) {
-    return "cancelled";
-  }
-  if (count("completed") === outcomes.length) {
-    return "completed";
-  }
-  if (count("skipped") === outcomes.length) {
-    return "skipped";
-  }
-  if (count("contact_needed") + count("rejected") === outcomes.length) {
-    return "contact_needed";
-  }
-  return "partial";
-}
-
-/**
- * Activity event kinds written by the mission machinery. `kind` stays a
- * bounded string in storage so later tasks can add kinds; producers here
- * keep to this list.
- */
-export const ACTIVITY_KINDS = [
-  "mission_created",
-  "mission_state_changed",
-  "mission_archived",
-  "mission_restored",
-  "mission_completed",
-  "mission_failed",
-  "run_started",
-  "run_completed",
-  "run_failed",
-  "decision_opened",
-  "decision_resolved",
-  "decision_superseded",
-  "decision_cancelled",
-  "prospect_branch_started",
-  "prospect_branch_completed",
-  "comment_added",
-  "continuation_delivered",
-] as const;
-
-export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
-
-export const vActivityKind = v.union(
-  v.literal("mission_created"),
-  v.literal("mission_state_changed"),
-  v.literal("mission_archived"),
-  v.literal("mission_restored"),
-  v.literal("mission_completed"),
-  v.literal("mission_failed"),
-  v.literal("run_started"),
-  v.literal("run_completed"),
-  v.literal("run_failed"),
-  v.literal("decision_opened"),
-  v.literal("decision_resolved"),
-  v.literal("decision_superseded"),
-  v.literal("decision_cancelled"),
-  v.literal("prospect_branch_started"),
-  v.literal("prospect_branch_completed"),
-  v.literal("comment_added"),
-  v.literal("continuation_delivered"),
-);
-
-/* ------------------------------------------------------------------ */
-/* P07 — scoped worker bridge and runtime lifecycle (§4.4/§4.5)         */
-/* ------------------------------------------------------------------ */
-
-/**
- * Bridge error codes. `DomainErrorCode` covers the shared meanings; the
- * bridge additionally needs `PAYLOAD_TOO_LARGE` (413), `THROTTLED` (429) and
- * `UNAVAILABLE` (503) for the documented status table. NOT_FOUND is mapped
- * to the same wire shape as INVALID (400) — a foreign or unknown ID must not
- * leak existence across scopes.
- */
-export type BridgeErrorCode =
-  | DomainErrorCode
-  | "PAYLOAD_TOO_LARGE"
-  | "THROTTLED"
-  | "UNAVAILABLE";
-
-export function bridgeError(
-  code: BridgeErrorCode,
-  message: string,
-): ConvexError<{ code: BridgeErrorCode; message: string }> {
-  return new ConvexError({ code, message });
-}
-
-export function bridgeInvalid(
-  message: string,
-): ConvexError<{ code: BridgeErrorCode; message: string }> {
-  return bridgeError("INVALID", message);
-}
-
-/* ---- structural helpers for untrusted worker payloads ---------------- */
-
-export function asRecord(
-  value: unknown,
-  field: string,
-): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw bridgeInvalid(`${field} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-export function asArray(value: unknown, field: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw bridgeInvalid(`${field} must be an array`);
-  }
-  return value;
-}
-
-/** Serialized-UTF-8 size check; returns the byte count. */
-export function jsonBytes(
-  value: unknown,
-  field: string,
-  max: number,
-): number {
-  const bytes = new TextEncoder().encode(JSON.stringify(value)).length;
-  if (bytes > max) {
-    throw bridgeInvalid(`${field} is ${bytes} bytes; the bound is ${max}`);
-  }
-  return bytes;
-}
-
-/* ---- state machines --------------------------------------------------- */
-
-export const RUNTIME_CONNECTION_STATES = [
-  "disconnected",
-  "provisioning",
-  "connecting",
-  "ready",
-  "stopping",
-  "stopped",
-  "error",
-] as const;
-export const vRuntimeConnectionState = v.union(
-  v.literal("disconnected"),
-  v.literal("provisioning"),
-  v.literal("connecting"),
-  v.literal("ready"),
-  v.literal("stopping"),
-  v.literal("stopped"),
-  v.literal("error"),
-);
-export type RuntimeConnectionState =
-  (typeof RUNTIME_CONNECTION_STATES)[number];
-
-export const LIFECYCLE_OPERATIONS = [
-  "create",
-  "resume",
-  "extend_ttl",
-  "stop",
-  "delete",
-] as const;
-export const vLifecycleOperation = v.union(
-  v.literal("create"),
-  v.literal("resume"),
-  v.literal("extend_ttl"),
-  v.literal("stop"),
-  v.literal("delete"),
-);
-export type LifecycleOperation = (typeof LIFECYCLE_OPERATIONS)[number];
-
-export const LIFECYCLE_OPERATION_STATES = [
-  "pending",
-  "accepted",
-  "uncertain",
-  "completed",
-  "failed",
-] as const;
-export const vLifecycleOperationState = v.union(
-  v.literal("pending"),
-  v.literal("accepted"),
-  v.literal("uncertain"),
-  v.literal("completed"),
-  v.literal("failed"),
-);
-export type LifecycleOperationState =
-  (typeof LIFECYCLE_OPERATION_STATES)[number];
-
-export const PROVIDER_KINDS = [
-  "codex",
-  "apollo",
-  "firecrawl",
-  "agentmail",
-] as const;
+/** Paid or metered backends the app records `providerOperations` against. */
+export const PROVIDER_KINDS = ["firecrawl", "agentmail"] as const;
 export const vProviderKind = v.union(
-  v.literal("codex"),
-  v.literal("apollo"),
   v.literal("firecrawl"),
   v.literal("agentmail"),
 );
 export type ProviderKind = (typeof PROVIDER_KINDS)[number];
 
-export const PROVIDER_CONNECTION_STATES = [
-  "disconnected",
-  "connecting",
-  "ready",
-  "expired",
-  "error",
-] as const;
-export const vProviderConnectionState = v.union(
-  v.literal("disconnected"),
-  v.literal("connecting"),
-  v.literal("ready"),
-  v.literal("expired"),
-  v.literal("error"),
-);
-export type ProviderConnectionState =
-  (typeof PROVIDER_CONNECTION_STATES)[number];
-
-/** Bearer-token capability names — checked per bridge route. */
-export const WORKER_SCOPES = [
-  "claim",
-  "control",
-  "heartbeat",
-  "activity",
-  "result",
-  "artifact",
-] as const;
-export const vWorkerScope = v.union(
-  v.literal("claim"),
-  v.literal("control"),
-  v.literal("heartbeat"),
-  v.literal("activity"),
-  v.literal("result"),
-  v.literal("artifact"),
-);
-export type WorkerScope = (typeof WORKER_SCOPES)[number];
-
-export const CONTROL_COMMANDS = [
-  "inspect_account",
-  "start_login",
-  "cancel_login",
-  "logout",
-  "interrupt_turn",
-] as const;
-export const vControlCommand = v.union(
-  v.literal("inspect_account"),
-  v.literal("start_login"),
-  v.literal("cancel_login"),
-  v.literal("logout"),
-  v.literal("interrupt_turn"),
-);
-export type ControlCommand = (typeof CONTROL_COMMANDS)[number];
-
-export const CONTROL_REQUEST_STATES = [
-  "pending",
-  "claimed",
-  "completed",
-  "failed",
-  "expired",
-] as const;
-export const vControlRequestState = v.union(
-  v.literal("pending"),
-  v.literal("claimed"),
-  v.literal("completed"),
-  v.literal("failed"),
-  v.literal("expired"),
-);
-export type ControlRequestState = (typeof CONTROL_REQUEST_STATES)[number];
-
-export const WORKER_REQUEST_STATES = [
-  "pending",
-  "leased",
-  "running",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "uncertain",
-] as const;
-export const vWorkerRequestState = v.union(
-  v.literal("pending"),
-  v.literal("leased"),
-  v.literal("running"),
-  v.literal("succeeded"),
-  v.literal("failed"),
-  v.literal("cancelled"),
-  v.literal("uncertain"),
-);
-export type WorkerRequestState = (typeof WORKER_REQUEST_STATES)[number];
-
-export const SLOT_STATES = ["idle", "held", "uncertain"] as const;
-export const vSlotState = v.union(
-  v.literal("idle"),
-  v.literal("held"),
-  v.literal("uncertain"),
-);
-export type SlotState = (typeof SLOT_STATES)[number];
-
-export const WORKER_PHASES = [
-  "boot",
-  "ready",
-  "running",
-  "degraded",
-  "stopping",
-] as const;
-export const vWorkerPhase = v.union(
-  v.literal("boot"),
-  v.literal("ready"),
-  v.literal("running"),
-  v.literal("degraded"),
-  v.literal("stopping"),
-);
-export type WorkerPhase = (typeof WORKER_PHASES)[number];
-
-/** §4.5 operation discriminators — one per bounded model-work step. */
-export const WORKER_OPERATIONS = [
-  "discover",
-  "research",
-  "contact",
-  "draft",
-  "classify_reply",
-] as const;
-export const vWorkerOperation = v.union(
-  v.literal("discover"),
-  v.literal("research"),
-  v.literal("contact"),
-  v.literal("draft"),
-  v.literal("classify_reply"),
-);
-export type WorkerOperation = (typeof WORKER_OPERATIONS)[number];
-
-/**
- * The one capability each bounded operation cannot run without. A dispatch
- * whose employee does not hold the named capability is refused at dispatch,
- * so a request that exists on the row is always a request the host policy
- * already permitted.
- */
-export const OPERATION_CAPABILITY_REQUIREMENT: Readonly<
-  Record<WorkerOperation, CapabilityId>
-> = {
-  discover: "apollo.company_search",
-  contact: "apollo.contact_enrichment",
-  research: "opensquad.web_research",
-  draft: "opensquad.draft_compose",
-  classify_reply: "opensquad.reply_classify",
-};
-
-/**
- * The capability set Convex issues for ONE request: the employee's own
- * `allowedCapabilities` narrowed by the host policy for its template.
- *
- * This is deliberately NOT `intersectCapabilities`, which THROWS for any
- * capability outside `HOST_CAPABILITY_POLICY` — the right behaviour for the
- * operator WRITE it guards (`employees.update`), and the wrong behaviour for
- * this READ path. Here a stored capability the host policy no longer grants
- * must be dropped, never raised, because dispatch may only ever narrow.
- *
- * Refuses when the operation's required capability survives neither side:
- * a disabled capability must stop the work, not silently produce a request
- * the worker can never act on.
- */
-export function deriveRequestCapabilities(
-  template: EmployeeTemplate,
-  allowed: readonly CapabilityId[],
-  operation: WorkerOperation,
-): CapabilityId[] {
-  const granted = tryDeriveRequestCapabilities(template, allowed, operation);
-  if (granted === null) {
-    throw domainError(
-      "FORBIDDEN",
-      `employee ${template} lacks ${OPERATION_CAPABILITY_REQUIREMENT[operation]} for operation ${operation}`,
-    );
-  }
-  return granted;
-}
-
-/**
- * The same derivation, answering instead of throwing.
- *
- * A caller that wants to PARK rather than fail needs to ask before it
- * dispatches: `dispatchWorkerRequest` runs inside the caller's transaction,
- * and a nested mutation's throw cannot be caught. Both forms share this one
- * body so a pre-check and the dispatch it precedes can never disagree.
- */
-export function tryDeriveRequestCapabilities(
-  template: EmployeeTemplate,
-  allowed: readonly CapabilityId[],
-  operation: WorkerOperation,
-): CapabilityId[] | null {
-  const policy = new Set<CapabilityId>(HOST_CAPABILITY_POLICY[template]);
-  const granted = [...new Set(allowed)]
-    .filter((capability) => policy.has(capability))
-    .sort();
-  const required = OPERATION_CAPABILITY_REQUIREMENT[operation];
-  return granted.includes(required) ? granted : null;
-}
-
-export const ARTIFACT_KINDS = [
-  "research_brief",
-  "crawl",
-  "audit",
-  "attachment",
-] as const;
-export const vArtifactKind = v.union(
-  v.literal("research_brief"),
-  v.literal("crawl"),
-  v.literal("audit"),
-  v.literal("attachment"),
-);
-export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
-
-/* ---- bounded worker payload transport --------------------------------- */
-
-/** Worker input cap — 256 KiB serialized (§4.4 note). */
-export const WORKER_INPUT_MAX_BYTES = 256 * 1024;
-/** Structured output cap — 128 KiB serialized (§4.4 note). */
-export const WORKER_RESULT_MAX_BYTES = 128 * 1024;
-/** Artifact upload cap — 5 MiB raw bytes. */
-export const ARTIFACT_MAX_BYTES = 5 * 1024 * 1024;
-/** Generic bridge JSON body cap — results fit comfortably inside it. */
-export const BRIDGE_BODY_MAX_BYTES = 320 * 1024;
-
-export const ARTIFACT_MIME_TYPES = [
-  "text/plain",
-  "text/markdown",
-  "application/json",
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-] as const;
-export type ArtifactMimeType = (typeof ARTIFACT_MIME_TYPES)[number];
-
 /** Small inline document or a private storage reference. */
-export const vWorkerDataRef = v.union(
+export const vProviderDataRef = v.union(
   v.object({ kind: v.literal("inline"), value: v.any() }),
   v.object({
     kind: v.literal("storage"),
@@ -1316,647 +310,9 @@ export const vWorkerDataRef = v.union(
     digest: v.string(),
   }),
 );
-export type WorkerDataRef = Infer<typeof vWorkerDataRef>;
+export type ProviderDataRef = Infer<typeof vProviderDataRef>;
 
-/* ---- §4.5 worker input envelope (claim response → worker) -------------- */
-
-export const WORKER_INPUT_SCHEMA_VERSION = 1;
-
-export const vWorkerRequestInput = v.object({
-  schemaVersion: v.literal(WORKER_INPUT_SCHEMA_VERSION),
-  operation: vWorkerOperation,
-  /** Fully-rendered bounded instructions for this turn. */
-  prompt: v.string(),
-  /** Optional bounded context blocks the model may cite. */
-  context: v.optional(
-    v.array(v.object({ label: v.string(), text: v.string() })),
-  ),
-  constraints: v.object({
-    /** Wall-clock budget for the bounded turn (ms). */
-    deadlineMs: v.number(),
-    maxToolCalls: v.optional(v.number()),
-    model: v.optional(v.string()),
-  }),
-  session: v.optional(
-    v.object({
-      scopeKey: v.string(),
-      /** Resume this saved Codex thread when present. */
-      codexThreadRef: v.optional(v.string()),
-    }),
-  ),
-  /** The structured-output JSON Schema handed to Codex verbatim. */
-  outputSchema: v.any(),
-  /**
-   * Mirror of the `workerRequests.capabilities` column, so the worker's
-   * host-side tool router can refuse without a second round trip. The COLUMN
-   * is the authority: this copy is never read back as one, and it stays
-   * optional permanently because rows predating P21 carry no capability set.
-   */
-  capabilities: v.optional(v.array(vCapabilityId)),
-});
-export type WorkerRequestInput = Infer<typeof vWorkerRequestInput>;
-
-/** Closed key sets — an envelope field this build does not know is refused
- *  rather than carried unvalidated into `workerRequests.inputRef.value`. */
-const WORKER_INPUT_KEYS: ReadonlySet<string> = new Set([
-  "schemaVersion",
-  "operation",
-  "prompt",
-  "context",
-  "constraints",
-  "session",
-  "outputSchema",
-  "capabilities",
-]);
-const WORKER_CONSTRAINT_KEYS: ReadonlySet<string> = new Set([
-  "deadlineMs",
-  "maxToolCalls",
-  "model",
-]);
-
-/** Structural + size validation for an input envelope (untrusted at rest). */
-export function assertWorkerRequestInput(
-  value: unknown,
-): asserts value is WorkerRequestInput {
-  const input = asRecord(value, "input");
-  for (const key of Object.keys(input)) {
-    if (!WORKER_INPUT_KEYS.has(key)) {
-      throw invalid(`input.${key} is not an accepted envelope field`);
-    }
-  }
-  if (input.schemaVersion !== WORKER_INPUT_SCHEMA_VERSION) {
-    throw invalid("input.schemaVersion must be 1");
-  }
-  if (!WORKER_OPERATIONS.includes(input.operation as WorkerOperation)) {
-    throw invalid("input.operation is not a known operation");
-  }
-  boundedString(input.prompt as string, "input.prompt", {
-    min: 1,
-    max: 16000,
-  });
-  if (input.context !== undefined) {
-    const context = asArray(input.context, "input.context");
-    if (context.length > 16) {
-      throw invalid("input.context must be an array of at most 16 blocks");
-    }
-    context.forEach((block, index) => {
-      const b = asRecord(block, `input.context[${index}]`);
-      boundedString(b.label as string, `input.context[${index}].label`, {
-        min: 1,
-        max: 100,
-      });
-      boundedString(b.text as string, `input.context[${index}].text`, {
-        min: 0,
-        max: 8000,
-      });
-    });
-  }
-  if (input.capabilities !== undefined) {
-    const capabilities = asArray(input.capabilities, "input.capabilities");
-    if (capabilities.length > CAPABILITY_IDS.length) {
-      throw invalid("input.capabilities has too many entries");
-    }
-    const seen = new Set<string>();
-    capabilities.forEach((entry, index) => {
-      if (
-        typeof entry !== "string" ||
-        !(CAPABILITY_IDS as readonly string[]).includes(entry)
-      ) {
-        throw invalid(`input.capabilities[${index}] is not a known capability`);
-      }
-      if (seen.has(entry)) {
-        throw invalid(`input.capabilities[${index}] is a duplicate`);
-      }
-      seen.add(entry);
-    });
-  }
-  const constraints = asRecord(input.constraints, "input.constraints");
-  for (const key of Object.keys(constraints)) {
-    if (!WORKER_CONSTRAINT_KEYS.has(key)) {
-      throw invalid(`input.constraints.${key} is not an accepted constraint`);
-    }
-  }
-  const deadlineMs = constraints.deadlineMs;
-  if (
-    typeof deadlineMs !== "number" ||
-    !Number.isFinite(deadlineMs) ||
-    deadlineMs < 1000 ||
-    deadlineMs > 30 * 60 * 1000
-  ) {
-    throw invalid("input.constraints.deadlineMs must be 1s..30m");
-  }
-  if (
-    constraints.maxToolCalls !== undefined &&
-    (typeof constraints.maxToolCalls !== "number" ||
-      !Number.isSafeInteger(constraints.maxToolCalls) ||
-      constraints.maxToolCalls < 0 ||
-      constraints.maxToolCalls > 200)
-  ) {
-    throw invalid("input.constraints.maxToolCalls must be an integer 0..200");
-  }
-  if (constraints.model !== undefined) {
-    boundedString(constraints.model as string, "input.constraints.model", {
-      min: 1,
-      max: 100,
-    });
-  }
-  if (input.session !== undefined) {
-    const session = asRecord(input.session, "input.session");
-    boundedString(session.scopeKey as string, "input.session.scopeKey", {
-      min: 1,
-      max: 200,
-    });
-    if (session.codexThreadRef !== undefined) {
-      boundedString(
-        session.codexThreadRef as string,
-        "input.session.codexThreadRef",
-        { min: 1, max: 200 },
-      );
-    }
-  }
-  jsonBytes(input.outputSchema, "input.outputSchema", 64 * 1024);
-  jsonBytes(input, "input", WORKER_INPUT_MAX_BYTES);
-}
-
-/* ---- §4.5 worker result envelopes (schemaVersion 1) -------------------- */
-
-const vWorkerUsage = v.object({
-  toolCalls: v.optional(v.number()),
-  modelCalls: v.optional(v.number()),
-  tokens: v.optional(v.number()),
-});
-export type WorkerUsage = Infer<typeof vWorkerUsage>;
-
-const vEvidenceRef = v.object({
-  label: v.string(),
-  artifactId: v.optional(v.string()),
-  storageId: v.optional(v.string()),
-});
-
-export const vDiscoverResult = v.object({
-  schemaVersion: v.literal(1),
-  operation: v.literal("discover"),
-  summary: v.string(),
-  candidates: v.array(
-    v.object({
-      companyName: v.string(),
-      domain: v.optional(v.string()),
-      industry: v.optional(v.string()),
-      size: v.optional(v.string()),
-      reason: v.string(),
-      source: v.optional(v.string()),
-    }),
-  ),
-  evidenceRefs: v.optional(v.array(vEvidenceRef)),
-  usage: v.optional(vWorkerUsage),
-});
-
-export const vResearchResult = v.object({
-  schemaVersion: v.literal(1),
-  operation: v.literal("research"),
-  /** `pending` when no durable backend crawl exists (never fabricated). */
-  status: v.union(v.literal("complete"), v.literal("pending")),
-  summary: v.string(),
-  observations: v.array(
-    v.object({
-      topic: v.string(),
-      finding: v.string(),
-      sourceUrl: v.optional(v.string()),
-    }),
-  ),
-  artifactIds: v.optional(v.array(v.string())),
-  evidenceRefs: v.optional(v.array(vEvidenceRef)),
-  usage: v.optional(vWorkerUsage),
-});
-
-export const vContactResult = v.object({
-  schemaVersion: v.literal(1),
-  operation: v.literal("contact"),
-  status: v.union(
-    v.literal("found"),
-    v.literal("not_found"),
-    v.literal("ambiguous"),
-  ),
-  contacts: v.array(
-    v.object({
-      fullName: v.string(),
-      role: v.optional(v.string()),
-      email: v.optional(v.string()),
-      emailConfidence: v.optional(
-        v.union(
-          v.literal("high"),
-          v.literal("medium"),
-          v.literal("low"),
-        ),
-      ),
-      source: v.optional(v.string()),
-    }),
-  ),
-  summary: v.string(),
-  evidenceRefs: v.optional(v.array(vEvidenceRef)),
-  usage: v.optional(vWorkerUsage),
-});
-
-export const vDraftResult = v.object({
-  schemaVersion: v.literal(1),
-  operation: v.literal("draft"),
-  subject: v.string(),
-  body: v.string(),
-  tone: v.optional(v.string()),
-  callToAction: v.optional(v.string()),
-  evidenceRefs: v.optional(v.array(vEvidenceRef)),
-  usage: v.optional(vWorkerUsage),
-});
-
-/**
- * What the worker may answer for a `classify_reply` request. This const is the
- * single definition site: `vClassifyReplyResult.classification` and
- * `parseWorkerResult`'s runtime guard both read it, so the two can never
- * drift apart.
- *
- * `not_now` is a purely ADDITIVE widening (P11 / integrator decision D2). A
- * worker that only ever produces the older subset is unaffected, and the enum
- * handed to the model is built by the backend as the request's `outputSchema`
- * — so the value already has a producer path without touching `worker/src`.
- * The role template that makes the model choose it well is P21's.
- */
-export const CLASSIFY_REPLY_CLASSIFICATIONS = [
-  "interested",
-  "not_interested",
-  "not_now",
-  "out_of_office",
-  "unsubscribe",
-  "bounce",
-  "question",
-  "other",
-] as const;
-
-export type ClassifyReplyClassification =
-  (typeof CLASSIFY_REPLY_CLASSIFICATIONS)[number];
-
-export const vClassifyReplyResult = v.object({
-  schemaVersion: v.literal(1),
-  operation: v.literal("classify_reply"),
-  classification: v.union(
-    v.literal("interested"),
-    v.literal("not_interested"),
-    v.literal("not_now"),
-    v.literal("out_of_office"),
-    v.literal("unsubscribe"),
-    v.literal("bounce"),
-    v.literal("question"),
-    v.literal("other"),
-  ),
-  confidence: v.number(),
-  rationale: v.string(),
-  suggestedNextStep: v.optional(v.string()),
-  evidenceRefs: v.optional(v.array(vEvidenceRef)),
-  usage: v.optional(vWorkerUsage),
-});
-
-/**
- * The PRODUCT-level meaning of a reply, which is what the inbox row, the
- * reply workflow's branch and `plan/tasks.md` P11 §3 all speak in. It is
- * deliberately not the worker's vocabulary: `out_of_office` and `bounce` both
- * mean *machine-generated*, and the product owes them the same treatment —
- * no draft, no takeover, no inference about interest.
- *
- * A model classification is a signal, never an authority: a `unsubscribe`
- * disposition holds the thread for a human, it does not write a suppression
- * row. The deterministic opt-out rule stops a clear unsubscribe without the
- * model (architecture §8 step 6).
- */
-export const REPLY_DISPOSITIONS = [
-  "interested",
-  "question",
-  "not_now",
-  "not_interested",
-  "unsubscribe",
-  "automated",
-  "needs_review",
-] as const;
-
-export const vReplyDisposition = v.union(
-  v.literal("interested"),
-  v.literal("question"),
-  v.literal("not_now"),
-  v.literal("not_interested"),
-  v.literal("unsubscribe"),
-  v.literal("automated"),
-  v.literal("needs_review"),
-);
-
-export type ReplyDisposition = (typeof REPLY_DISPOSITIONS)[number];
-
-/**
- * The one total mapping from the worker's answer to the product disposition.
- * The switch is exhaustive with no `default`, so adding a ninth
- * classification is a compile error until its row is written here.
- */
-export function replyDispositionFromClassification(
-  classification: ClassifyReplyClassification,
-): ReplyDisposition {
-  switch (classification) {
-    case "interested":
-      return "interested";
-    case "question":
-      return "question";
-    case "not_now":
-      return "not_now";
-    case "not_interested":
-      return "not_interested";
-    case "unsubscribe":
-      return "unsubscribe";
-    case "out_of_office":
-    case "bounce":
-      return "automated";
-    case "other":
-      return "needs_review";
-  }
-}
-
-export const vWorkerResult = v.union(
-  vDiscoverResult,
-  vResearchResult,
-  vContactResult,
-  vDraftResult,
-  vClassifyReplyResult,
-);
-export type WorkerResult = Infer<typeof vWorkerResult>;
-
-/**
- * Worker bearer (`osw_`) and lease (`osl_`) tokens must never ride inside
- * model output — a hostile prompt could instruct the model to echo the
- * worker env or `/proc` environ into a result field. Reject the whole
- * result instead of persisting a live credential.
- */
-const CREDENTIAL_PATTERN = /\b(?:osw|osl)_[A-Za-z0-9]{24}\b/;
-
-function assertNoCredentialLeak(value: unknown, depth = 0): void {
-  if (depth > 16) {
-    return;
-  }
-  if (typeof value === "string") {
-    if (CREDENTIAL_PATTERN.test(value)) {
-      throw bridgeInvalid("result contains a worker credential pattern");
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertNoCredentialLeak(item, depth + 1);
-    }
-    return;
-  }
-  if (value !== null && typeof value === "object") {
-    for (const item of Object.values(value)) {
-      assertNoCredentialLeak(item, depth + 1);
-    }
-  }
-}
-
-/**
- * Runtime-check a result envelope AND enforce the documented bounds. The
- * `v.*` validators above pin the shape for schema/`returns`; this parser is
- * what the bridge trusts — worker output is untrusted JSON.
- */
-export function parseWorkerResult(
-  value: unknown,
-  expectedOperation: WorkerOperation,
-): WorkerResult {
-  const result = asRecord(value, "result");
-  assertNoCredentialLeak(result);
-  if (result.schemaVersion !== 1) {
-    throw bridgeInvalid("result.schemaVersion must be 1");
-  }
-  if (result.operation !== expectedOperation) {
-    throw bridgeInvalid(
-      `result.operation ${String(result.operation)} does not match request operation ${expectedOperation}`,
-    );
-  }
-  // `summary` is contract-required for discover/research/contact; the
-  // draft/classify_reply contracts don't declare it — requiring it here
-  // would reject every conformant result of those operations. When present
-  // it's still bounded.
-  if (
-    expectedOperation === "discover" ||
-    expectedOperation === "research" ||
-    expectedOperation === "contact"
-  ) {
-    boundedString(result.summary as string, "result.summary", {
-      min: 0,
-      max: 1000,
-    });
-  } else if (result.summary !== undefined) {
-    boundedString(result.summary as string, "result.summary", {
-      min: 0,
-      max: 1000,
-    });
-  }
-  if (result.evidenceRefs !== undefined) {
-    const refs = asArray(result.evidenceRefs, "result.evidenceRefs");
-    if (refs.length > 10) {
-      throw bridgeInvalid("result.evidenceRefs must be at most 10 entries");
-    }
-    refs.forEach((ref, index) => {
-      const r = asRecord(ref, `result.evidenceRefs[${index}]`);
-      boundedString(r.label as string, `result.evidenceRefs[${index}].label`, {
-        min: 1,
-        max: 200,
-      });
-      for (const key of ["artifactId", "storageId"] as const) {
-        if (r[key] !== undefined) {
-          boundedString(
-            r[key] as string,
-            `result.evidenceRefs[${index}].${key}`,
-            { min: 1, max: 100 },
-          );
-        }
-      }
-    });
-  }
-  if (result.usage !== undefined) {
-    const usage = asRecord(result.usage, "result.usage");
-    for (const key of ["toolCalls", "modelCalls", "tokens"] as const) {
-      const n = usage[key];
-      if (
-        n !== undefined &&
-        (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0)
-      ) {
-        throw bridgeInvalid(
-          `result.usage.${key} must be a non-negative integer`,
-        );
-      }
-    }
-  }
-  switch (result.operation) {
-    case "discover": {
-      const candidates = asArray(result.candidates, "result.candidates");
-      if (candidates.length > 5) {
-        throw bridgeInvalid("discover result allows at most 5 candidates");
-      }
-      candidates.forEach((candidate, index) => {
-        const c = asRecord(candidate, `result.candidates[${index}]`);
-        boundedString(c.companyName as string, `candidates[${index}].companyName`, {
-          min: 1,
-          max: 200,
-        });
-        boundedString(c.reason as string, `candidates[${index}].reason`, {
-          min: 1,
-          max: 500,
-        });
-        for (const key of ["domain", "industry", "size", "source"] as const) {
-          if (c[key] !== undefined) {
-            boundedString(c[key] as string, `candidates[${index}].${key}`, {
-              min: 1,
-              max: 200,
-            });
-          }
-        }
-      });
-      break;
-    }
-    case "research": {
-      if (result.status !== "complete" && result.status !== "pending") {
-        throw bridgeInvalid("research.status must be complete|pending");
-      }
-      const observations = asArray(result.observations, "result.observations");
-      if (observations.length > 12) {
-        throw bridgeInvalid("research result allows at most 12 observations");
-      }
-      observations.forEach((observation, index) => {
-        const o = asRecord(observation, `result.observations[${index}]`);
-        boundedString(o.topic as string, `observations[${index}].topic`, {
-          min: 1,
-          max: 200,
-        });
-        boundedString(o.finding as string, `observations[${index}].finding`, {
-          min: 1,
-          max: 1000,
-        });
-        if (o.sourceUrl !== undefined) {
-          boundedString(o.sourceUrl as string, `observations[${index}].sourceUrl`, {
-            min: 1,
-            max: 500,
-          });
-        }
-      });
-      if (result.artifactIds !== undefined) {
-        const ids = asArray(result.artifactIds, "result.artifactIds");
-        if (ids.length > 10) {
-          throw bridgeInvalid("research result allows at most 10 artifactIds");
-        }
-        ids.forEach((id, index) =>
-          boundedString(id as string, `result.artifactIds[${index}]`, {
-            min: 1,
-            max: 100,
-          }),
-        );
-      }
-      break;
-    }
-    case "contact": {
-      if (
-        result.status !== "found" &&
-        result.status !== "not_found" &&
-        result.status !== "ambiguous"
-      ) {
-        throw bridgeInvalid("contact.status must be found|not_found|ambiguous");
-      }
-      const contacts = asArray(result.contacts, "result.contacts");
-      if (contacts.length > 5) {
-        throw bridgeInvalid("contact result allows at most 5 contacts");
-      }
-      contacts.forEach((contact, index) => {
-        const c = asRecord(contact, `result.contacts[${index}]`);
-        boundedString(c.fullName as string, `contacts[${index}].fullName`, {
-          min: 1,
-          max: 200,
-        });
-        for (const key of ["role", "email", "source"] as const) {
-          if (c[key] !== undefined) {
-            boundedString(c[key] as string, `contacts[${index}].${key}`, {
-              min: 1,
-              max: 200,
-            });
-          }
-        }
-        if (
-          c.emailConfidence !== undefined &&
-          !["high", "medium", "low"].includes(c.emailConfidence as string)
-        ) {
-          throw bridgeInvalid(
-            `contacts[${index}].emailConfidence must be high|medium|low`,
-          );
-        }
-      });
-      break;
-    }
-    case "draft": {
-      boundedString(result.subject as string, "result.subject", {
-        min: 1,
-        max: 200,
-      });
-      boundedString(result.body as string, "result.body", {
-        min: 1,
-        max: 12000,
-      });
-      if (result.tone !== undefined) {
-        boundedString(result.tone as string, "result.tone", {
-          min: 1,
-          max: 100,
-        });
-      }
-      if (result.callToAction !== undefined) {
-        boundedString(result.callToAction as string, "result.callToAction", {
-          min: 1,
-          max: 500,
-        });
-      }
-      break;
-    }
-    case "classify_reply": {
-      if (
-        !(CLASSIFY_REPLY_CLASSIFICATIONS as readonly string[]).includes(
-          result.classification as string,
-        )
-      ) {
-        throw bridgeInvalid("classify_reply.classification is not recognized");
-      }
-      if (
-        typeof result.confidence !== "number" ||
-        !Number.isFinite(result.confidence) ||
-        result.confidence < 0 ||
-        result.confidence > 1
-      ) {
-        throw bridgeInvalid("classify_reply.confidence must be 0..1");
-      }
-      boundedString(result.rationale as string, "result.rationale", {
-        min: 1,
-        max: 1000,
-      });
-      if (result.suggestedNextStep !== undefined) {
-        boundedString(
-          result.suggestedNextStep as string,
-          "result.suggestedNextStep",
-          { min: 1, max: 500 },
-        );
-      }
-      break;
-    }
-    default:
-      throw bridgeInvalid("result.operation is not a known operation");
-  }
-  jsonBytes(result, "result", WORKER_RESULT_MAX_BYTES);
-  return result as unknown as WorkerResult;
-}
-
-/* ---- deterministic digests + token minting ----------------------------- */
-
-/**
- * Deterministic JSON serialization (sorted keys, undefined-elided) shared
- * with the worker — keep `worker/src/contracts.ts`'s copy byte-identical.
- */
+/** Deterministic JSON serialization (sorted keys, undefined-elided). */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -1982,209 +338,43 @@ export async function sha256Hex(data: string): Promise<string> {
     .join("");
 }
 
-/** Same digest over raw bytes (artifact uploads). */
-export async function sha256HexBytes(
-  data: Uint8Array,
-): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new Uint8Array(data),
-  );
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 /** `sha256:<hex>` over the canonical result serialization. */
 export async function computeResultDigest(result: unknown): Promise<string> {
   return `sha256:${await sha256Hex(canonicalJson(result))}`;
 }
 
-function randomToken(prefix: string): string {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  const alphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  // Fixed alphabet keeps tokens URL/header-safe (no +/= edge cases).
-  let body = "";
-  for (const byte of bytes) {
-    body += alphabet[byte % alphabet.length];
-  }
-  return `${prefix}${body}`;
-}
-
-/** `osw_…` — scoped worker bearer token (hashed at rest). */
-export function mintWorkerToken(): string {
-  return randomToken("osw_");
-}
-
-/** `osl_…` — per-claim lease token (hashed at rest). */
-export function mintLeaseToken(): string {
-  return randomToken("osl_");
-}
-
-/** `wrq_…` — bridge poll/result correlation IDs. */
-export function mintBridgeRequestId(): string {
-  return randomToken("wrq_");
-}
-
-/* ---- runtime timing constants ------------------------------------------ */
-
-export const WORKER_LEASE_TTL_MS = 60_000;
-export const CONTROL_REQUEST_TTL_MS = 10 * 60_000;
-export const LOGIN_CHALLENGE_TTL_MS = 15 * 60_000;
-export const WORKER_CREDENTIAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-/** §4.4: at most one routine activity update per request per 5 s. */
-export const WORKER_ACTIVITY_MIN_INTERVAL_MS = 5_000;
-/** Minimum interval between bridge polls on one credential (anti-hammer). */
-export const BRIDGE_MIN_POLL_INTERVAL_MS = 250;
-/** Minimum interval between lease heartbeats for one request. */
-export const HEARTBEAT_MIN_INTERVAL_MS = 2_000;
-/** A runtime is "live" only with a fresh heartbeat (§6.1 live indicators). */
-export const RUNTIME_LIVE_WINDOW_MS = 90_000;
-
-/* ---- lifecycle requestConfig validation --------------------------------- */
-
 /**
- * `requestConfig` holds neutral provisioning settings and secure injection
- * REFERENCES only — a raw credential value here is a contract violation.
+ * The PRODUCT-level meaning of an inbound reply, which is what the inbox row
+ * speaks in. `automated` covers out-of-office and bounce alike — the product
+ * owes them the same treatment: no draft, no takeover, no inference about
+ * interest.
+ *
+ * A classification is a signal, never an authority: an `unsubscribe`
+ * disposition holds the thread for a human, it does not write a suppression
+ * row. The deterministic opt-out rule stops a clear unsubscribe on its own
+ * (architecture §8 step 6).
  */
-export type LifecycleRequestConfig = {
-  ttlSeconds: number;
-  image?: string;
-  /** Env names the provisioning action injects; values come from sealed
-   *  credential rows, never from this config. */
-  envNames: string[];
-  setup?: string;
-};
+export const REPLY_DISPOSITIONS = [
+  "interested",
+  "question",
+  "not_now",
+  "not_interested",
+  "unsubscribe",
+  "automated",
+  "needs_review",
+] as const;
 
-const ALLOWED_CONFIG_KEYS = new Set([
-  "ttlSeconds",
-  "image",
-  "envNames",
-  "setup",
-]);
+export const vReplyDisposition = v.union(
+  v.literal("interested"),
+  v.literal("question"),
+  v.literal("not_now"),
+  v.literal("not_interested"),
+  v.literal("unsubscribe"),
+  v.literal("automated"),
+  v.literal("needs_review"),
+);
 
-export function assertLifecycleRequestConfig(
-  value: unknown,
-): asserts value is LifecycleRequestConfig {
-  const config = asRecord(value, "requestConfig");
-  for (const key of Object.keys(config)) {
-    if (!ALLOWED_CONFIG_KEYS.has(key)) {
-      throw invalid(`requestConfig.${key} is not an allowed neutral setting`);
-    }
-  }
-  const ttlSeconds = config.ttlSeconds;
-  if (
-    typeof ttlSeconds !== "number" ||
-    !Number.isSafeInteger(ttlSeconds) ||
-    ttlSeconds < 60 ||
-    ttlSeconds > 30 * 24 * 60 * 60
-  ) {
-    throw invalid("requestConfig.ttlSeconds must be an integer 60s..30d");
-  }
-  if (config.image !== undefined) {
-    boundedString(config.image as string, "requestConfig.image", {
-      min: 1,
-      max: 200,
-    });
-  }
-  const envNames = asArray(config.envNames, "requestConfig.envNames");
-  if (envNames.length > 16) {
-    throw invalid("requestConfig.envNames must be at most 16 names");
-  }
-  envNames.forEach((name, index) => {
-    const envName = boundedString(
-      name as string,
-      `requestConfig.envNames[${index}]`,
-      { min: 1, max: 100 },
-    );
-    if (!/^[A-Z][A-Z0-9_]*$/.test(envName)) {
-      throw invalid(`requestConfig.envNames[${index}] is not an env name`);
-    }
-  });
-  if (config.setup !== undefined) {
-    boundedString(config.setup as string, "requestConfig.setup", {
-      min: 1,
-      max: 500,
-    });
-  }
-  jsonBytes(config, "requestConfig", 8 * 1024);
-}
-
-/* ---- login challenge admission ------------------------------------------ */
-
-/** Provider-allowlisted hosts for Codex device-code verification URLs. */
-const LOGIN_VERIFICATION_HOSTS = new Set([
-  "auth.openai.com",
-  "chatgpt.com",
-  "openai.com",
-]);
-
-/** The only user-code shapes Codex device auth emits (e.g. `XXXX-XXXX`). */
-const USER_CODE_PATTERN = /^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12}){0,2}$/;
-
-export function assertLoginVerificationUrl(raw: string): string {
-  const url = boundedString(raw, "verificationUrl", { min: 8, max: 500 });
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw bridgeInvalid("verificationUrl is not a valid URL");
-  }
-  if (parsed.protocol !== "https:") {
-    throw bridgeInvalid("verificationUrl must be https");
-  }
-  const host = parsed.hostname.toLowerCase();
-  if (
-    !LOGIN_VERIFICATION_HOSTS.has(host) &&
-    ![...LOGIN_VERIFICATION_HOSTS].some((allowed) =>
-      host.endsWith(`.${allowed}`),
-    )
-  ) {
-    throw bridgeInvalid(
-      `verificationUrl host ${host} is not on the provider allowlist`,
-    );
-  }
-  return parsed.toString();
-}
-
-export function assertLoginUserCode(raw: string): string {
-  const code = boundedString(raw, "userCode", { min: 4, max: 32 });
-  if (!USER_CODE_PATTERN.test(code)) {
-    throw bridgeInvalid("userCode has an unexpected shape");
-  }
-  return code;
-}
-
-/** Allowlisted worker→activity event kinds (runtime-origin only). */
-export const WORKER_ACTIVITY_KINDS = ["worker_progress"] as const;
-export type WorkerActivityKind = (typeof WORKER_ACTIVITY_KINDS)[number];
-
-/**
- * Durable completion payload delivered to the awaiting workflow when a
- * worker request reaches a terminal/uncertain state. Like
- * `vDecisionContinuation`, the workflow treats it as a hint — the
- * continuation step re-reads the workerRequest row before applying.
- */
-export const vWorkerRequestCompletion = v.object({
-  workerRequestId: v.id("workerRequests"),
-  missionId: v.id("missions"),
-  runId: v.id("runs"),
-  /** Attempt generation of the completed request. */
-  generation: v.number(),
-  /** Mission workflowGeneration the request was dispatched under. */
-  workflowGeneration: v.number(),
-  outcome: v.union(
-    v.literal("succeeded"),
-    v.literal("failed"),
-    v.literal("cancelled"),
-    v.literal("uncertain"),
-  ),
-  /** Bounded failure/reason detail for non-success outcomes. */
-  detail: v.optional(v.string()),
-});
-export type WorkerRequestCompletion = Infer<typeof vWorkerRequestCompletion>;
+export type ReplyDisposition = (typeof REPLY_DISPOSITIONS)[number];
 
 /* ------------------------------------------------------------------ */
 /* Correspondence, sending and usage (P10 — architecture §4.3/§4.4/§8)  */
@@ -2219,18 +409,8 @@ export type ActivityKindP10 = (typeof ACTIVITY_KINDS_P10)[number];
  * Activity kinds produced by the P11 inbound/reply modules. Same rule as the
  * P10 list: `kind` is a bounded string in storage and producers keep to this
  * list, which is the single definition site.
- *
- * A conversation with no mission can hold NO activity row at all
- * (`activityEventFields.missionId` is a required `v.id("missions")`), so these
- * kinds appear only once a reply mission exists. Conversation lifecycle facts
- * that happen without a mission — unassigned intake, takeover, association,
- * closure — are recorded on the conversation row and in `conversationNotes`
- * instead.
  */
 export const ACTIVITY_KINDS_P11 = ["reply_classified"] as const;
-/** P21 — one receipt per accepted capability tool call, written by the
- *  BACKEND (the worker names neither the kind nor the summary). */
-export const ACTIVITY_KINDS_P21 = ["worker_tool_call"] as const;
 
 export type ActivityKindP11 = (typeof ACTIVITY_KINDS_P11)[number];
 
@@ -2248,10 +428,8 @@ export type ConversationState = "open" | "closed" | "unassigned";
  * Why automation is frozen on a conversation (`conversations.takeoverReason`).
  *
  * `humanTakeover` alone cannot tell an operator's deliberate hold from one the
- * system placed, and V16/V17 need that distinction *before* offering Resume —
- * an unassigned thread has no mission, so it can carry no activity row to
- * explain itself (see `ACTIVITY_KINDS_P11`). The reason therefore lives on the
- * conversation row.
+ * system placed, and the inbox needs that distinction *before* offering
+ * Resume. The reason therefore lives on the conversation row.
  *
  * - `unassigned_inbound` — verified mail on a known inbox matched no thread.
  * - `operator` — a human pressed Take over.
@@ -2281,7 +459,7 @@ export type TakeoverReason = (typeof TAKEOVER_REASONS)[number];
 /**
  * `conversationNotes.kind`. `note` is a human annotation; `system` is a
  * lifecycle record the backend wrote. Neither can ever resolve a business
- * approval — the same invariant `activity.ts` states for `missionComments`.
+ * approval.
  */
 export const CONVERSATION_NOTE_KINDS = ["note", "system"] as const;
 
@@ -2324,7 +502,7 @@ export const CONVERSATION_NOTE_BODY_MAX_LENGTH = 4_000;
 export const INBOUND_BODY_SCAN_MAX_LENGTH = 4_000;
 
 /**
- * How much inbound text may ride into a worker request as labelled untrusted
+ * How much inbound text may ride into a model request as labelled untrusted
  * context. Email bodies are the prompt-injection vector: they are data, never
  * instruction, and they are never concatenated into the instruction itself.
  */
@@ -2369,9 +547,7 @@ export type SendAttemptState =
 
 /**
  * Attempt states that block ANY new send on the conversation across all
- * draft revisions (§8.3). `reserved`/`requesting` can never be covered by a
- * replacement decision; `uncertain` is coverable only through the recorded
- * delivery_uncertain decision exception (§8.7).
+ * draft revisions (§8.3).
  */
 export const UNRESOLVED_ATTEMPT_STATES: readonly SendAttemptState[] = [
   "reserved",
@@ -2388,10 +564,9 @@ export const vApprovalVerdict = v.union(
 export type ApprovalVerdict = "approved" | "rejected";
 
 /**
- * How a `draft_approval` decision was resolved — carried on the decision
- * answer's `fields.draftResolution` so the waiting workflow can tell a
- * redraft request from a deliberate rejection. `approved` is the only value
- * that produces an `approved` approvals row.
+ * How a draft approval was resolved, so a caller can tell a redraft request
+ * from a deliberate rejection. `approved` is the only value that produces an
+ * `approved` approvals row.
  */
 export const DRAFT_RESOLUTIONS = [
   "approved",
@@ -2428,7 +603,7 @@ export const EMAIL_DOMAIN =
 
 /**
  * Canonical recipient identity for approvals, suppressions and payload
- * hashing: trimmed, ASCII-lowercased `local@domain`, one `@`, a dot-ful
+ * hashing: trimmed, lowercased `local@domain`, one `@`, a dot-ful
  * domain. Normalization is deliberately small and deterministic — no plus
  * stripping or provider-specific rewriting, so the address sent is the
  * address approved.
@@ -2773,18 +948,11 @@ export async function computePayloadHash(
 
 export const vUsageMetric = v.union(
   v.literal("sends"),
-  v.literal("apollo_enrichments"),
-  v.literal("model_runs"),
   v.literal("research_pages"),
   v.literal("research_searches"),
 );
 
-export type UsageMetric =
-  | "sends"
-  | "apollo_enrichments"
-  | "model_runs"
-  | "research_pages"
-  | "research_searches";
+export type UsageMetric = "sends" | "research_pages" | "research_searches";
 
 /**
  * §4.4 provider tool-invocation lifecycle. `requested` is recorded BEFORE
@@ -2833,47 +1001,6 @@ export type ProviderOperationSettlement = Infer<
 >;
 
 /**
- * How many runs one page receipt remembers having served. A campaign may be
- * researched more than once and every later mission replays the same pages;
- * the window keeps the newest, so a receipt stays attributable to the runs
- * still working with it without growing without bound.
- */
-export const PROVIDER_OPERATION_RUN_HISTORY_MAX = 16;
-
-/**
- * Does this receipt name the given run — that is, did THIS run either pay
- * for the retrieval or read the receipt back in place of paying again?
- *
- * This is the admissibility half of the §4.5 rule. It is deliberately not
- * `row.runId === runId`: `operationKey` is campaign-scoped, so a second
- * mission on the same campaign replays every page it plans and pays for
- * none of them. Strict equality would have made those pages invisible to
- * the run that read them, so a campaign could be researched exactly once.
- */
-export function receiptNamesRun<T extends string>(
-  receipt: { runId?: T; replayedForRunIds?: readonly T[] },
-  runId: T,
-): boolean {
-  if (receipt.runId === runId) return true;
-  return receipt.replayedForRunIds?.includes(runId) === true;
-}
-
-/**
- * Was the retrieval on this receipt taken BY the given run?
- *
- * This is the `supported` half of the same rule, and it stays strict. A
- * replayed receipt is a real backend retrieval of the right page, but it
- * was taken before this run existed and nothing here re-checked the page,
- * so it can support an observation only as far as `unknown`.
- */
-export function receiptRetrievedInRun<T extends string>(
-  receipt: { runId?: T },
-  runId: T,
-): boolean {
-  return receipt.runId === runId;
-}
-
-/**
  * Does this operation's receipt consume the prospect's page allowance?
  *
  * Everything except a released reservation does. A row with no recorded
@@ -2896,9 +1023,7 @@ export const RESEARCH_PAGES_PER_PROSPECT = 3;
 
 /**
  * The campaign's lifetime research-page allowance: its accepted-lead ceiling
- * times the per-prospect page cap. This is the first code in the repo that
- * reads `campaigns.leadLimit` to gate anything — it has been validated at
- * write time since P06 and never consulted since.
+ * times the per-prospect page cap.
  */
 export function researchPageLimit(leadLimit: number): number {
   return (
@@ -2910,29 +1035,8 @@ export function researchPageLimit(leadLimit: number): number {
 }
 
 /**
- * Default daily model-run ceiling for a workspace that has not set one.
- * A workspace field overrides it (`workspaces.modelRunDailyLimit`), so the
- * owner-facing ceiling §9 asks for has a home before anything can write it.
- */
-export const MODEL_RUN_DAILY_LIMIT_DEFAULT = 200;
-
-/**
- * The stable debit identity of ONE model run. Derived entirely from columns
- * the request row already carries, so the dispatch that takes the debit and
- * every terminal transition that settles it compute the same key without
- * storing a second copy of it.
- */
-export function modelRunOperationKey(request: {
-  missionId: string;
-  stepKey: string;
-  generation: number;
-}): string {
-  return `model:${request.missionId}:${request.stepKey}:${request.generation}`;
-}
-
-/**
- * One page the BACKEND itself retrieved, in the shape the pipeline stores
- * and cites. `retrievedAt` is epoch ms — `scrapePage` reports an ISO 8601
+ * One page the BACKEND itself retrieved, in the shape the app stores and
+ * cites. `retrievedAt` is epoch ms — `scrapePage` reports an ISO 8601
  * string, and the conversion happens once, here at the boundary, rather
  * than being repeated (and eventually mis-repeated) at each read site.
  */
@@ -3009,7 +1113,7 @@ export function directionForApplicationKey(
 /**
  * Application handling key for inbound messages
  * (`incoming:<inbox>:<message>`) — a second provider event ID for the same
- * message can never start a second reply mission (§4.3 note). Outbound
+ * message can never advance the conversation twice (§4.3 note). Outbound
  * delivery events use `outbound:<messageRef>:<eventType>` instead.
  */
 export function inboundApplicationKey(inboxRef: string, messageRef: string) {
@@ -3055,216 +1159,6 @@ export const vQuarantineState = v.union(
 );
 
 export type QuarantineState = "quarantined" | "released" | "discarded";
-
-/** `missions.create` bounds `requestId` to 100; reply missions match it. */
-export const MISSION_REQUEST_ID_MAX_LENGTH = 100;
-
-/**
- * The reply mission's dedupe key for ONE inbound message — the second gate
- * on the same stable identity the receipt's `applicationKey` already uses.
- *
- * The receipt key stops a second event ID for one message from advancing the
- * conversation twice; this one stops a second *caller* — ingest and an
- * operator's `conversations.resume` both reach the same message — from
- * starting a second reply mission for it.
- *
- * `missions.requestId` is a 100-character key and a provider inbox plus a
- * Message-ID can exceed that, so an over-long natural key degrades to a
- * digest of the SAME string. Both forms are deterministic per message and
- * their prefixes differ, so one message always maps to exactly one key.
- */
-export async function replyMissionRequestId(
-  inboxRef: string,
-  messageRef: string,
-): Promise<string> {
-  const natural = inboundApplicationKey(inboxRef, messageRef);
-  if (natural.length <= MISSION_REQUEST_ID_MAX_LENGTH) {
-    return natural;
-  }
-  return `incoming#${(await sha256Hex(natural)).slice(0, 48)}`;
-}
-
-/* ----- structured-output schemas handed to the model -------------------- */
-
-/**
- * The JSON Schema for a `classify_reply` turn, built from
- * `CLASSIFY_REPLY_CLASSIFICATIONS` so the enum the model is given and the
- * enum `parseWorkerResult` accepts can never disagree. This is the producer
- * path integrator decision D2 relies on: widening the const widens the
- * schema handed to Codex with no `worker/src` change, because the worker
- * relays `input.outputSchema` verbatim.
- *
- * P21 owns the role template that makes the model *choose well*; this owns
- * only what it is allowed to say.
- */
-export function classifyReplyOutputSchema(): Record<string, unknown> {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: [
-      "schemaVersion",
-      "operation",
-      "classification",
-      "confidence",
-      "rationale",
-    ],
-    properties: {
-      schemaVersion: { type: "integer", enum: [1] },
-      operation: { type: "string", enum: ["classify_reply"] },
-      classification: {
-        type: "string",
-        enum: [...CLASSIFY_REPLY_CLASSIFICATIONS],
-      },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
-      rationale: { type: "string", maxLength: 1000 },
-      suggestedNextStep: { type: "string", maxLength: 500 },
-    },
-  };
-}
-
-/**
- * The JSON Schema for a `draft` turn. It deliberately has NO recipient
- * field: the address a draft is written to is resolved by the application
- * (`conversations.resolveOutboundRecipient`) and never by the model, so
- * there is nothing for a hostile inbound body to redirect.
- */
-export function draftOutputSchema(): Record<string, unknown> {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["schemaVersion", "operation", "subject", "body"],
-    properties: {
-      schemaVersion: { type: "integer", enum: [1] },
-      operation: { type: "string", enum: ["draft"] },
-      subject: { type: "string", maxLength: DRAFT_SUBJECT_MAX_LENGTH },
-      body: { type: "string", maxLength: DRAFT_BODY_MAX_LENGTH },
-      tone: { type: "string", maxLength: 100 },
-      callToAction: { type: "string", maxLength: 500 },
-    },
-  };
-}
-
-/**
- * The JSON Schema for a `research` turn, mirroring `vResearchResult` and the
- * runtime bounds `parseWorkerResult` enforces (12 observations, topic 200,
- * finding 1000, sourceUrl 500). It carries no `retrievedAt`, `excerpt` or
- * `confidence` field DELIBERATELY: those three columns are synthesized by the
- * backend from its own retrieval receipts (§4.5 synthesis rule), and a field
- * here would put them back under model control, which is the exact failure
- * `vEvidenceConfidence` exists to prevent.
- */
-export function researchOutputSchema(): Record<string, unknown> {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["schemaVersion", "operation", "status", "summary", "observations"],
-    properties: {
-      schemaVersion: { type: "integer", enum: [1] },
-      operation: { type: "string", enum: ["research"] },
-      status: { type: "string", enum: ["complete", "pending"] },
-      summary: { type: "string", maxLength: 1000 },
-      observations: {
-        type: "array",
-        maxItems: RESEARCH_OBSERVATIONS_MAX,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["topic", "finding"],
-          properties: {
-            topic: { type: "string", maxLength: EVIDENCE_TOPIC_MAX_LENGTH },
-            finding: {
-              type: "string",
-              maxLength: EVIDENCE_OBSERVATION_MAX_LENGTH,
-            },
-            sourceUrl: { type: "string", maxLength: 500 },
-          },
-        },
-      },
-    },
-  };
-}
-
-/**
- * The JSON Schema for a `discover` turn — the Apollo company-search seam P09
- * owns. Declared here so the contract exists and is bounded before its caller
- * does; P21 ships no Apollo call.
- *
- * `sources` is the campaign's OWN confirmed source list, so the enum the model
- * is handed can never name a source this campaign did not confirm. The
- * importer refuses one anyway (`importCampaignProspects`); this stops the
- * model producing a candidate that was always going to be discarded.
- */
-export function discoverOutputSchema(
-  sources: readonly ProspectSource[],
-): Record<string, unknown> {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["schemaVersion", "operation", "summary", "candidates"],
-    properties: {
-      schemaVersion: { type: "integer", enum: [1] },
-      operation: { type: "string", enum: ["discover"] },
-      summary: { type: "string", maxLength: 1000 },
-      candidates: {
-        type: "array",
-        maxItems: CAMPAIGN_LEAD_LIMIT_MAX,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["companyName", "reason"],
-          properties: {
-            companyName: {
-              type: "string",
-              maxLength: PROSPECT_COMPANY_NAME_MAX_LENGTH,
-            },
-            domain: { type: "string", maxLength: 200 },
-            industry: { type: "string", maxLength: 200 },
-            size: { type: "string", maxLength: 200 },
-            reason: { type: "string", maxLength: 500 },
-            source: { type: "string", enum: [...new Set(sources)] },
-          },
-        },
-      },
-    },
-  };
-}
-
-/**
- * The JSON Schema for a `contact` turn — the Apollo enrichment seam P09 owns.
- * `emailConfidence` is the model's own hedge and is NEVER stored as
- * `providerEmailStatus`: only a provider-returned address may be described as
- * verified (`assertProspectContact`), which is what stops a guessed address
- * being presented as a confirmed one.
- */
-export function contactOutputSchema(): Record<string, unknown> {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: ["schemaVersion", "operation", "status", "contacts", "summary"],
-    properties: {
-      schemaVersion: { type: "integer", enum: [1] },
-      operation: { type: "string", enum: ["contact"] },
-      status: { type: "string", enum: ["found", "not_found", "ambiguous"] },
-      summary: { type: "string", maxLength: 1000 },
-      contacts: {
-        type: "array",
-        maxItems: 5,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["fullName"],
-          properties: {
-            fullName: { type: "string", maxLength: 200 },
-            role: { type: "string", maxLength: 200 },
-            email: { type: "string", maxLength: EMAIL_ADDRESS_MAX_LENGTH },
-            emailConfidence: { type: "string", enum: ["high", "medium", "low"] },
-            source: { type: "string", maxLength: 200 },
-          },
-        },
-      },
-    },
-  };
-}
 
 /* ----- send window / local-day helpers (IANA timezone) ------------------ */
 
@@ -3448,91 +1342,6 @@ export function sendWindowStatus(
   };
 }
 
-/* ----- delivery-uncertain replacement answer (§8.7) --------------------- */
-
-/**
- * Field keys a resolved `delivery_uncertain` decision's `answer.fields` must
- * carry to authorize ONE replacement attempt covering a still-`uncertain`
- * send. `body` holds the human-readable reason; `resolvedBy`/`resolvedAt` on
- * the decision supply actor/time.
- */
-export const REPLACEMENT_ANSWER_FIELDS = {
-  unresolvedAttemptId: "unresolvedAttemptId",
-  replacementDraftId: "replacementDraftId",
-  replacementPayloadHash: "replacementPayloadHash",
-  contextVersion: "contextVersion",
-  acknowledgement: "acknowledgement",
-  reason: "reason",
-} as const;
-
-/** The only acknowledgement string that satisfies §8.7. */
-export const REPLACEMENT_ACKNOWLEDGEMENT = "duplicate_delivery_accepted";
-
-export type ReplacementAnswer = {
-  unresolvedAttemptId: string;
-  replacementDraftId: string;
-  replacementPayloadHash: string;
-  contextVersion: number;
-  reason: string;
-};
-
-/**
- * Extract and validate the §8.7 replacement binding from a resolved
- * `delivery_uncertain` decision's answer. Throws `INVALID` naming the exact
- * missing/wrong field — a generic or stale approval can never stand in for
- * this record.
- */
-export function readReplacementAnswer(
-  answer: DecisionAnswer | undefined,
-): ReplacementAnswer {
-  const fields = answer?.fields;
-  if (fields === undefined) {
-    throw invalid(
-      "replacement decision answer must carry fields binding the uncertain attempt and the replacement draft",
-    );
-  }
-  const F = REPLACEMENT_ANSWER_FIELDS;
-  const unresolvedAttemptId = boundedString(
-    fields[F.unresolvedAttemptId] ?? "",
-    `answer.fields.${F.unresolvedAttemptId}`,
-    { min: 1, max: 100 },
-  );
-  const replacementDraftId = boundedString(
-    fields[F.replacementDraftId] ?? "",
-    `answer.fields.${F.replacementDraftId}`,
-    { min: 1, max: 100 },
-  );
-  const replacementPayloadHash = boundedString(
-    fields[F.replacementPayloadHash] ?? "",
-    `answer.fields.${F.replacementPayloadHash}`,
-    { min: 1, max: 128 },
-  );
-  const contextVersionRaw = fields[F.contextVersion] ?? "";
-  const contextVersion = Number(contextVersionRaw);
-  if (!Number.isInteger(contextVersion) || contextVersion < 0) {
-    throw invalid(
-      `answer.fields.${F.contextVersion} must be the recorded context version`,
-    );
-  }
-  const acknowledgement = fields[F.acknowledgement] ?? "";
-  if (acknowledgement !== REPLACEMENT_ACKNOWLEDGEMENT) {
-    throw invalid(
-      `answer.fields.${F.acknowledgement} must be "${REPLACEMENT_ACKNOWLEDGEMENT}" — the reviewer must acknowledge possible duplicate delivery`,
-    );
-  }
-  const reason = boundedString(fields[F.reason] ?? "", `answer.fields.${F.reason}`, {
-    min: 1,
-    max: 500,
-  });
-  return {
-    unresolvedAttemptId,
-    replacementDraftId,
-    replacementPayloadHash,
-    contextVersion,
-    reason,
-  };
-}
-
 /* ------------------------------------------------------------------ */
 /* Leads, bookings and evidence (P20 — §4.3/§4.5/§8 CRM and booking)   */
 /*                                                                     */
@@ -3623,32 +1432,22 @@ export type Qualification =
   | "needs_review";
 
 /**
- * Provenance origin of a source reference or contact — the §4.1 source-plan
- * vocabulary, because a prospect exists only because a confirmed source
- * produced it (§4.5 `discover`: selected/confirmed sources only). Manual
- * operator entry would be a deliberate widening here.
+ * Provenance origin of a source reference or contact. `manual` is an operator
+ * typing a company in; `enrich` is the B2B data API. Widening this union is a
+ * deliberate edit at one site.
  */
 export const vProspectSource = v.union(
-  v.literal("apollo"),
-  v.literal("yc"),
-  v.literal("trustmrr"),
+  v.literal("manual"),
+  v.literal("enrich"),
 );
 
-/** Derived, never restated: a source a campaign can confirm is a source a
- *  prospect can cite. Widening `vSourceConfig` without widening
- *  `vProspectSource` is then a compile error here rather than a runtime
- *  INVALID on a valid discover result. */
-export type ProspectSource = SourceConfig["source"];
-
-const _prospectSourceCoversSourcePlan: ProspectSource =
-  null as unknown as Infer<typeof vProspectSource>;
-void _prospectSourceCoversSourcePlan;
+export type ProspectSource = Infer<typeof vProspectSource>;
 
 /**
  * Observed metric metadata carried on a source reference. Always explicit
- * name/currency/period like the §4.1 TrustMRR bounds — a bare number would
- * let "$40k" and "40k signups" merge. `currency`/`period` stay optional so a
- * non-revenue metric is not forced to invent them (§4.5: no invented metrics).
+ * name/currency/period — a bare number would let "$40k" and "40k signups"
+ * merge. `currency`/`period` stay optional so a non-revenue metric is not
+ * forced to invent them (§4.5: no invented metrics).
  */
 export const vObservedMetric = v.object({
   name: v.string(),
@@ -3688,14 +1487,13 @@ export const CANONICAL_DOMAIN_MAX_LENGTH = 253;
  * subdomain that never identifies a different business. Every OTHER subdomain
  * is preserved, per §4.3.
  *
- * ASCII hosts only: the shared dotted-domain floor ends in `[a-z]{2,63}`, so a
- * punycode TLD (`xn--p1ai`) is rejected rather than stored. IDN support is part
- * of the same P09 deepening as the public-suffix work below.
+ * Plain-host only: the shared dotted-domain floor ends in `[a-z]{2,63}`, so a
+ * punycode TLD (`xn--p1ai`) is rejected rather than stored.
  *
  * This is a syntax-and-host floor, NOT public-suffix awareness: no suffix list
- * is bundled, so `a.co.uk` and `b.co.uk` stay distinct (correct) but a registrable
- * base cannot be computed. P09 owns deepening this when it implements Apollo
- * dedupe; deepen it HERE so both writers share one key.
+ * is bundled, so `a.co.uk` and `b.co.uk` stay distinct (correct) but a
+ * registrable base cannot be computed. Deepen it HERE so every writer shares
+ * one key.
  */
 export function normalizeCanonicalDomain(
   value: string,
@@ -3731,7 +1529,7 @@ export function normalizeCanonicalDomain(
 /**
  * Bound and de-duplicate a prospect's source references. Distinctness is by
  * (source, provider record ID) and falls back to the normalized profile URL
- * when the provider exposes no ID, so re-discovering the same Apollo record
+ * when the provider exposes no ID, so re-discovering the same provider record
  * merges instead of consuming one of the ten slots. Returns the normalized
  * list to store.
  */
@@ -3813,8 +1611,7 @@ export function assertObservedMetric(
 
 /**
  * The provider's own assessment of the address it returned. Deliberately NOT
- * the worker wire vocabulary (`vContactResult.emailConfidence`) and
- * deliberately NOT send eligibility: suppressions and sending policy decide
+ * send eligibility: suppressions and sending policy decide
  * whether OpenSquad may write to an address (§4.3). `unknown` is the honest
  * value when the provider states nothing.
  */
@@ -4036,8 +1833,7 @@ export type LeadEventKind = (typeof LEAD_EVENT_KINDS)[number];
  * `activityEvents.actor`'s bare string, because §4.3 makes the provenance
  * structural: only a `human` actor carries an `identityKey`, and it comes from
  * `ctx.auth` — never from model output or email content. `workflow` is the
- * internal pipeline; `system` is a backend sweep with no human behind it. The
- * originating run stays in `leadEvents.runId`.
+ * internal pipeline; `system` is a backend sweep with no human behind it.
  */
 export const vLeadEventActor = v.union(
   v.object({ source: v.literal("human"), identityKey: v.string() }),
@@ -4276,16 +2072,16 @@ export const vEvidenceConfidence = v.union(
 
 export type EvidenceConfidence = "supported" | "hypothesis" | "unknown";
 
-/** §4.5 research caps. The full output lives in storage behind `artifactId`. */
+/** §4.5 research caps. */
 export const EVIDENCE_EXCERPT_MAX_LENGTH = 2_000;
 export const EVIDENCE_OBSERVATION_MAX_LENGTH = 1_000;
 export const RESEARCH_OBSERVATIONS_MAX = 12;
 
 /**
- * The reserved host marker a role template instructs the Researcher to put in
- * front of a topic when the finding is a guess rather than something the page
- * states. §4.5 requires "hypotheses labeled"; this is the label, and it is the
- * ONLY way an observation can be stored as `hypothesis`.
+ * The reserved marker put in front of a topic when the finding is a guess
+ * rather than something the page states. §4.5 requires "hypotheses labeled";
+ * this is the label, and it is the ONLY way an observation can be stored as
+ * `hypothesis`.
  *
  * Matched case-insensitively on the trimmed topic. Nothing else about the
  * model's wording contributes to `confidence` — see `evidence.ts`.
@@ -4303,12 +2099,9 @@ export const EVIDENCE_HYPOTHESIS_MARKER = "hypothesis:";
 export const RESEARCH_OBSERVATION_INPUT_MAX = 50;
 
 /**
- * One observation as the worker reports it — exactly
- * `vResearchResult.observations[]`, restated here so the synthesis site's
- * argument validator and the worker result contract cannot drift apart.
- * `sourceUrl` stays optional because the worker's shape has it optional; an
- * observation without one is not evidence (§4.5), which is a rule about what
- * gets STORED, not about what may be reported.
+ * One reported observation. `sourceUrl` stays optional: an observation
+ * without one is not evidence (§4.5), which is a rule about what gets STORED,
+ * not about what may be reported.
  */
 export const vResearchObservation = v.object({
   topic: v.string(),
@@ -4379,9 +2172,8 @@ export function assertEvidenceExcerpt(
 }
 
 /**
- * Optimistic-concurrency check for a versioned row. `missions.ts` keeps its
- * own mission-shaped copy; this one is the shared form the lead/CRM mutations
- * use, which is why it takes the numbers rather than a document.
+ * Optimistic-concurrency check for a versioned row. Takes the numbers rather
+ * than a document, so every versioned table shares one form.
  */
 export function assertExpectedVersion(
   current: number,
