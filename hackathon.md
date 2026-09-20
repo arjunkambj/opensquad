@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://proficient-porcupine-63.convex.cloud
-- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/workflow, @convex-dev/static-hosting
-- **Convex features:** schema, indexes, queries, mutations, HTTP actions, internal mutations/actions, crons, scheduled functions, durable workflows
+- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/migrations, @convex-dev/rate-limiter, @convex-dev/static-hosting
+- **Convex features:** schema, indexes, search index, queries, mutations, HTTP actions, internal mutations/actions, crons, scheduled functions, components, AI gateway
 - **Auth:** Other
-- **AI models:** gpt-6-astra
+- **AI models:** openai/gpt-5.6-sol (Convex AI Gateway)
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-18T10:15:00Z
+- **Last updated:** 2026-09-20T19:45:00Z
 
 ## Log
 
@@ -629,3 +629,41 @@ flexible-grasshopper development host is still up as staging. Hexclave
 allowed origins and the AgentMail webhook URL still need the production
 site origin. Components: @convex-dev/static-hosting.
 Evidence: `plan/evidence/P16.md`.
+
+### 2026-09-20 - cb89124
+
+**Wave 0 of the OpenIntent rebuild: foundation.** Verification spikes first
+(`plan/spikes.md`): the Convex AI Gateway answered from a dev action once the
+team plan allowed it, 35 OpenAI model ids are served, and schema-constrained
+output works through `@convex-dev/ai-sdk-provider` only from `0.2.0-alpha.1`
+(the stable `0.1.0` downgrades to JSON mode and is rejected upstream). Real
+lead-data counts came back for every signal kind the plan relies on, and the
+provider turned out to validate filters inconsistently (one bad enum is a 400,
+another silently counts zero), so every filter value is re-checked against a
+cached allow-list server-side.
+
+Then the code: the final data model in one pass — `agents` replaces
+`campaigns`, leads become person-level with `origin` and `research` unions so
+a score exists only on a researched lead (`convex/schema.ts`,
+`convex/lib/validators/`); the backend regrouped by domain with thin functions
+over a model layer (`convex/{workspaces,billing,company,agents,leads,outreach,inbox,bookings,activity}/`);
+clean-slate migration tooling on `@convex-dev/migrations` with a truthful log
+of what happened on dev (`convex/migrations/`, `plan/migration-log.md`);
+credits and spend safety — one `withCredits` wrapper that reserves credits,
+per-workspace provider caps and a platform-wide budget in a single
+transaction and settles to one of three outcomes (billed, refunded,
+uncertain), a kill switch, trial grant with the workspace, verified-email and
+trial-capacity gates, per-user token buckets on `@convex-dev/rate-limiter`
+(`convex/billing/`, `convex/lib/limits.ts`, `convex/lib/rateLimits.ts`); the AI
+foundation — `runStructured` derives a strict JSON Schema from a Convex
+validator, calls the gateway model, re-validates the object with the same
+validator and bills exactly what was attempted (`convex/ai/`); and the new app
+shell, route map, guards, theme tokens and a data-free UI kit
+(`src/routes/`, `src/components/layout/`, `src/components/kit/`, `src/index.css`).
+
+Verified: lint, both typechecks and the production build pass on `main`; the
+dev deployment runs this code; the read-only migration checks ran on dev. Not
+yet verified: the ledger's scripted run, the AI health check and the shell
+click-through all need a signed-in workspace on dev, and are listed in
+`plan/followups.md`. Components: @convex-dev/migrations,
+@convex-dev/rate-limiter.
