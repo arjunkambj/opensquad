@@ -1,0 +1,299 @@
+/**
+ * Proposing a meeting — the auditable proposal record and the booking-linked
+ * draft that offers it.
+ *
+ * A proposal NEVER confirms a meeting: a booking link, a suggested slot list,
+ * an ambiguous reply and a model classification all stay `proposed`.
+ * Proposals go out through the mail path — `draftProposal` creates a draft
+ * revision, approval and dispatch happen in outreach, and only the send's
+ * acceptance advances the lead to `booking_proposed`.
+ */
+import { internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
+import { mutation } from "../_generated/server";
+import { resolveOutboundRecipient } from "../inbox/conversationsModel";
+import { appendLeadEvent, findLeadEventByOperationKey } from "../leads/events";
+import { requireWorkspaceEditor } from "../lib/auth";
+import {
+  assertBookingProposal,
+  assertExpectedVersion,
+  boundedString,
+  domainError,
+  TERMINAL_LEAD_STAGES,
+  vBookingProposal,
+} from "../lib/validators";
+import { vDraftDoc } from "../outreach/draftsModel";
+import {
+  leadLabel,
+  loadBookingForWrite,
+  loadProspect,
+  vBookingDoc,
+} from "./model";
+import { v } from "convex/values";
+
+/**
+ * Record a booking proposal for a lead: a public booking link, or up to three
+ * FUTURE intervals under one IANA timezone (`assertBookingProposal` enforces
+ * all of it — a suggested slot can never be a confirmed time). One active
+ * proposal per lead, enforced inside this transaction.
+ *
+ * The proposal is NOT the send: `draftProposal` wraps it in an exact draft,
+ * `approvals.approve` is the human gate and the send boundary mails it. This
+ * mutation creates the record and appends the `booking_proposed` history —
+ * without moving `stage`, which only the provider's send acceptance may
+ * advance to `meeting_proposed`.
+ */
+export const propose = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    prospectId: v.id("prospects"),
+    /** OCC on the LEAD the caller saw — the proposal changes its row too. */
+    proposal: vBookingProposal,
+    /** The thread the proposal will go out on, when already known. */
+    conversationId: v.optional(v.id("conversations")),
+    requestId: v.string(),
+  },
+  returns: vBookingDoc,
+  handler: async (ctx, args) => {
+    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const requestId = boundedString(args.requestId, "requestId", {
+      min: 1,
+      max: 100,
+    });
+    const now = Date.now();
+    const proposal = assertBookingProposal(args.proposal, { now });
+    const prospect = await loadProspect(
+      ctx,
+      args.workspaceId,
+      args.prospectId,
+    );
+    const operationKey = `crm:${args.prospectId}:booking-propose:${requestId}`;
+    const prior = await findLeadEventByOperationKey(
+      ctx,
+      args.workspaceId,
+      operationKey,
+    );
+    if (prior !== null) {
+      const recorded =
+        prior.bookingId === undefined
+          ? null
+          : await ctx.db.get("bookings", prior.bookingId);
+      if (
+        recorded === null ||
+        JSON.stringify(recorded.proposal) !== JSON.stringify(proposal)
+      ) {
+        throw domainError(
+          "CONFLICT",
+          `requestId ${requestId} already recorded a different proposal`,
+        );
+      }
+      return recorded;
+    }
+    if (TERMINAL_LEAD_STAGES.includes(prospect.stage)) {
+      throw domainError(
+        "CONFLICT",
+        `lead is ${prospect.stage} — it must be reopened before a booking is proposed`,
+      );
+    }
+    // At most one ACTIVE booking per lead — read through the state index in
+    // this same transaction so a concurrent propose/confirm conflicts under
+    // OCC rather than both inserting.
+    for (const state of ["proposed", "confirmed"] as const) {
+      const active = await ctx.db
+        .query("bookings")
+        .withIndex("by_prospectId_and_state", (q) =>
+          q.eq("prospectId", prospect._id).eq("state", state),
+        )
+        .first();
+      if (active !== null) {
+        throw domainError(
+          "CONFLICT",
+          `lead already has a ${state} booking — cancel or complete it before proposing another`,
+        );
+      }
+    }
+    if (args.conversationId !== undefined) {
+      const conversation = await ctx.db.get(
+        "conversations",
+        args.conversationId,
+      );
+      if (
+        conversation === null ||
+        conversation.workspaceId !== args.workspaceId
+      ) {
+        throw domainError("NOT_FOUND", "conversation not found");
+      }
+      if (conversation.prospectId !== prospect._id) {
+        throw domainError(
+          "CONFLICT",
+          "the conversation is bound to a different lead",
+        );
+      }
+    }
+    // The acting member owns the booking: leads no longer carry an owner
+    // (one agent, one trial workspace), and a booking must always name
+    // someone who can act on it.
+    const ownerIdentityKey = identityKey;
+    const bookingId = await ctx.db.insert("bookings", {
+      workspaceId: args.workspaceId,
+      prospectId: prospect._id,
+      ownerIdentityKey,
+      state: "proposed",
+      version: 1,
+      proposal,
+      createdAt: now,
+      updatedAt: now,
+      ...(args.conversationId !== undefined
+        ? { conversationId: args.conversationId }
+        : {}),
+    });
+    await ctx.db.patch("prospects", prospect._id, { updatedAt: now });
+    await appendLeadEvent(ctx, {
+      workspaceId: args.workspaceId,
+      prospectId: prospect._id,
+      kind: "booking_proposed",
+      summary:
+        proposal.kind === "booking_link"
+          ? `Booking link proposal recorded for ${leadLabel(prospect)}`
+          : `Booking proposal recorded for ${leadLabel(prospect)} (${proposal.slots.length} slot option(s))`,
+      operationKey,
+      bookingId,
+      actor: { source: "human", identityKey },
+    });
+    const booking = await ctx.db.get("bookings", bookingId);
+    if (booking === null) {
+      throw domainError("NOT_FOUND", "booking not found after insert");
+    }
+    return booking;
+  },
+});
+
+/**
+ * Create the EXACT draft that carries this proposal out — the ordinary draft
+ * path, not a booking-specific send. `internal.outreach.draftRevisions.createRevision` does
+ * the revision numbering, payload hash, context-version bump and
+ * parked-attempt retirement; this mutation only proves the booking belongs
+ * on the draft (`proposed`, this version, this lead's thread) and links the
+ * result back.
+ *
+ * Sending is NEVER implied: the draft waits for a recorded approval, and the
+ * dispatch preflight re-validates the booking link one last time.
+ */
+export const draftProposal = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    bookingId: v.id("bookings"),
+    expectedVersion: v.number(),
+    conversationId: v.id("conversations"),
+    subject: v.string(),
+    body: v.string(),
+    requestId: v.string(),
+  },
+  returns: v.object({
+    booking: vBookingDoc,
+    draft: vDraftDoc,
+  }),
+  // Explicit return annotation: the inferred cycle draftProposal →
+  // internal.outreach.draftRevisions.createRevision → back here would otherwise make the
+  // handler `any`.
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    booking: Doc<"bookings">;
+    draft: Doc<"drafts">;
+  }> => {
+    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const requestId = boundedString(args.requestId, "requestId", {
+      min: 1,
+      max: 100,
+    });
+    const booking = await loadBookingForWrite(
+      ctx,
+      args.workspaceId,
+      args.bookingId,
+    );
+    // Draft-requestId replay runs BEFORE the booking state gate: the draft a
+    // retried request already created is its result even if the booking has
+    // since moved on.
+    const priorDraft = await ctx.db
+      .query("drafts")
+      .withIndex("by_workspaceId_and_requestId", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("requestId", requestId),
+      )
+      .unique();
+    if (priorDraft !== null) {
+      if (
+        priorDraft.bookingId !== booking._id ||
+        priorDraft.conversationId !== args.conversationId
+      ) {
+        throw domainError(
+          "CONFLICT",
+          `requestId ${requestId} already created a different draft`,
+        );
+      }
+      return { booking, draft: priorDraft };
+    }
+    if (booking.state !== "proposed") {
+      throw domainError(
+        "CONFLICT",
+        `booking is ${booking.state}; only a live proposal can be drafted`,
+      );
+    }
+    assertExpectedVersion(booking.version, args.expectedVersion, "booking");
+    const prospect = await loadProspect(
+      ctx,
+      args.workspaceId,
+      booking.prospectId,
+    );
+    const conversation = await ctx.db.get("conversations", args.conversationId);
+    if (
+      conversation === null ||
+      conversation.workspaceId !== args.workspaceId
+    ) {
+      throw domainError("NOT_FOUND", "conversation not found");
+    }
+    if (conversation.prospectId !== prospect._id) {
+      throw domainError(
+        "CONFLICT",
+        "the proposal must be drafted on the lead's own thread",
+      );
+    }
+    if (conversation.state !== "open") {
+      throw domainError(
+        "CONFLICT",
+        `conversation is ${conversation.state}; drafts can only be proposed on an open thread`,
+      );
+    }
+    const { recipient } = await resolveOutboundRecipient(ctx, conversation);
+    if (recipient === null) {
+      throw domainError(
+        "CONFLICT",
+        "no outbound recipient — the lead needs a contact address or the thread a prior revision",
+      );
+    }
+    const draft: Doc<"drafts"> = await ctx.runMutation(
+      internal.outreach.draftRevisions.createRevision,
+      {
+        conversationId: conversation._id,
+        recipient,
+        subject: args.subject,
+        body: args.body,
+        bookingId: booking._id,
+        bookingVersion: booking.version,
+        createdBy: identityKey,
+        requestId,
+      },
+    );
+    await ctx.db.patch("bookings", booking._id, {
+      conversationId: conversation._id,
+      draftId: draft._id,
+      updatedAt: Date.now(),
+    });
+    const updated = await ctx.db.get("bookings", booking._id);
+    if (updated === null) {
+      throw domainError("NOT_FOUND", "booking not found after patch");
+    }
+    return { booking: updated, draft };
+  },
+});

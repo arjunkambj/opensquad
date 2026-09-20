@@ -3,7 +3,7 @@
  * lead drawer. Member-guarded, indexed and cursor-paginated.
  */
 import { query } from "../_generated/server";
-import { vBookingDoc } from "../bookings";
+import { vBookingDoc } from "../bookings/model";
 import { requireWorkspaceMember } from "../lib/auth";
 import {
   boundedLimit,
