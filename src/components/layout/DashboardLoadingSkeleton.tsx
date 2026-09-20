@@ -4,10 +4,9 @@ import { Skeleton } from "@/components/ui/skeleton"
  * Stand-in for the dashboard shell while the session resolves.
  *
  * It must be STRUCTURALLY identical to the loaded shell at every width, or the
- * hand-off reads as a layout jump. The previous version rendered a desktop-only
- * rail (`hidden md:flex`) and a bare header, so at phone width the whole screen
- * was two floating blocks with no header row and no sidebar trigger — which is
- * indistinguishable from a page that failed to load.
+ * hand-off reads as a layout jump: a sidebar from `md` up, a header row only
+ * below it — which is exactly where the real shell puts its sidebar trigger,
+ * and at phone width that trigger is the only proof a sidebar exists at all.
  */
 export function DashboardLoadingSkeleton() {
   return (
@@ -17,25 +16,28 @@ export function DashboardLoadingSkeleton() {
       aria-label="Loading your workspace"
       className="flex min-h-dvh bg-background"
     >
-      <div className="hidden w-64 shrink-0 flex-col gap-3 border-r border-border p-3 md:flex">
-        <Skeleton className="size-9" />
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-8 w-full" />
-        <div className="mt-auto flex flex-col gap-2">
-          <Skeleton className="h-8 w-full" />
+      <div className="hidden w-64 shrink-0 flex-col gap-3 border-r border-sidebar-border bg-sidebar p-3 md:flex">
+        <Skeleton className="h-9 w-32" />
+        <div className="mt-3 flex flex-col gap-1.5">
+          <Skeleton className="h-9 w-full rounded-2xl" />
+          <Skeleton className="h-9 w-full rounded-2xl" />
+          <Skeleton className="h-9 w-full rounded-2xl" />
+          <Skeleton className="h-9 w-full rounded-2xl" />
+          <Skeleton className="h-9 w-full rounded-2xl" />
+        </div>
+        <div className="mt-auto flex flex-col gap-3">
+          <Skeleton className="h-14 w-full rounded-2xl" />
+          <Skeleton className="h-11 w-full rounded-2xl" />
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-14 items-center justify-between border-b border-border px-4 sm:px-6">
-          {/* The trigger occupies its real position at every width — at phone
-              width it is the only proof that a sidebar exists at all. */}
+        <div className="flex h-14 items-center gap-2 border-b border-border px-4 md:hidden">
           <Skeleton className="size-8" />
-          <Skeleton className="size-8 rounded-full" />
+          <Skeleton className="h-7 w-28" />
         </div>
-        <div className="flex flex-1 flex-col gap-6 px-4 py-3 sm:px-6 sm:py-3">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-28 w-full" />
+        <div className="flex flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-28 w-full rounded-3xl" />
         </div>
       </div>
     </div>
