@@ -71,7 +71,7 @@ import {
   appendLeadEvent,
   findLeadEventByOperationKey,
 } from "./leads/events";
-import { resolveOutboundRecipient } from "./conversations";
+import { resolveOutboundRecipient } from "./inbox/conversationsModel";
 import { vDraftDoc } from "./outreach/draftsModel";
 import { bookingFields } from "./schema";
 

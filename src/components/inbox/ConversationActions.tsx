@@ -157,10 +157,10 @@ function TakeoverControls({
   conversation: Doc<"conversations">
   expectedContextVersion: number
 }) {
-  const setTakeover = useMutation(api.conversations.setTakeover)
-  const resume = useMutation(api.conversations.resume)
-  const close = useMutation(api.conversations.close)
-  const reopen = useMutation(api.conversations.reopen)
+  const setTakeover = useMutation(api.inbox.conversationLifecycle.setTakeover)
+  const resume = useMutation(api.inbox.conversationResume.resume)
+  const close = useMutation(api.inbox.conversationLifecycle.close)
+  const reopen = useMutation(api.inbox.conversationLifecycle.reopen)
   const intentId = useRequestIntents()
 
   const [pending, setPending] = useState<string | null>(null)
@@ -405,7 +405,7 @@ function AssociateCard({
     workspaceId,
     limit: 50,
   })
-  const associate = useMutation(api.conversations.associateProspect)
+  const associate = useMutation(api.inbox.conversationResume.associateProspect)
   const intentId = useRequestIntents()
 
   const [prospectId, setProspectId] = useState("")
@@ -548,7 +548,7 @@ function AssignmentCard({
   expectedContextVersion: number
 }) {
   const members = useQuery(api.workspaces.queries.listMembers, { workspaceId })
-  const assignOwner = useMutation(api.conversations.assignOwner)
+  const assignOwner = useMutation(api.inbox.conversationLifecycle.assignOwner)
 
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

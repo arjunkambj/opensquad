@@ -72,7 +72,7 @@ export function DispositionChip({
 
 /** One merged thread entry, as `conversations.thread` returns it. */
 export type ThreadEntry = FunctionReturnType<
-  typeof api.conversations.thread
+  typeof api.inbox.conversationThread.thread
 >["items"][number]
 
 /**

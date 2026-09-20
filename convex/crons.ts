@@ -30,7 +30,7 @@ crons.interval(
 crons.interval(
   "inbound-receipt-drain",
   { minutes: 5 },
-  internal.inbox.drainPendingInboundReceipts,
+  internal.inbox.receiptDrain.drainPendingInboundReceipts,
   {},
 );
 

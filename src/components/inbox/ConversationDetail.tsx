@@ -47,14 +47,14 @@ export function ConversationDetail({
     current !== undefined && current !== null ? current.workspace._id : undefined
 
   const detail = useQuery(
-    api.conversations.get,
+    api.inbox.conversations.get,
     workspaceId === undefined ? "skip" : { workspaceId, conversationId },
   )
   const thread = useQuery(
-    api.conversations.thread,
+    api.inbox.conversationThread.thread,
     workspaceId === undefined ? "skip" : { workspaceId, conversationId },
   )
-  const markRead = useMutation(api.conversations.markRead)
+  const markRead = useMutation(api.inbox.conversationLifecycle.markRead)
 
   // Focus lands on the heading when a thread opens — once per thread, not on
   // every live update, or a refresh would steal focus from whatever the
@@ -110,8 +110,8 @@ function LoadedConversation({
 }: {
   workspaceId: Id<"workspaces">
   role: "owner" | "operator" | "viewer"
-  detail: FunctionReturnType<typeof api.conversations.get>
-  thread: FunctionReturnType<typeof api.conversations.thread> | undefined
+  detail: FunctionReturnType<typeof api.inbox.conversations.get>
+  thread: FunctionReturnType<typeof api.inbox.conversationThread.thread> | undefined
   headingRef: RefObject<HTMLHeadingElement | null>
 }) {
   const { conversation, prospect, agent } = detail

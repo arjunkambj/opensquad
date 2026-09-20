@@ -34,15 +34,15 @@
  * for the inbox it just assigned, so the onboarding window closes itself.
  * An operator can also drive it by hand for an inbox whose ambiguity they have
  * resolved. Replay goes through `sendAttempts.recordReceipt` and the ordinary
- * `internal.inbox.applyInboundMessage` path — this module has no second
+ * `internal.inbox.inbound.applyInboundMessage` path — this module has no second
  * ingest of its own — so the application-key dedupe, the ordering guard and
  * every gate apply to a replayed message exactly as they would have at the
  * time.
  */
-import { internalMutation } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import { components, internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import { internalMutation } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
+import { components, internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 import { v } from "convex/values";
 import {
   directionForApplicationKey,
@@ -50,9 +50,9 @@ import {
   parseInboundSender,
   PROVIDER_REF_MAX_LENGTH,
   vQuarantineReason,
-} from "./lib/validators";
-import type { QuarantineReason } from "./lib/validators";
-import { recordReceipt } from "./outreach/sendReceipts";
+} from "../lib/validators";
+import type { QuarantineReason } from "../lib/validators";
+import { recordReceipt } from "../outreach/sendReceipts";
 
 /** Longest application key `recordReceipt` accepts. */
 const APPLICATION_KEY_MAX_LENGTH = 500;
@@ -305,7 +305,7 @@ async function replayOne(
   if (!duplicate && !duplicateApplicationKey) {
     // Scheduled, not inlined: a throw in the business path must not roll back
     // the receipt that makes the event replayable a second time.
-    await ctx.scheduler.runAfter(0, internal.inbox.applyInboundMessage, {
+    await ctx.scheduler.runAfter(0, internal.inbox.inbound.applyInboundMessage, {
       receiptId: receipt._id,
     });
   }

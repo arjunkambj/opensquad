@@ -35,7 +35,7 @@ import { components, internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
-import { recordQuarantinedEvent } from "../quarantine";
+import { recordQuarantinedEvent } from "../inbox/quarantine";
 import { recordReceipt } from "../outreach/sendReceipts";
 import {
   evaluateOptOutText,
@@ -715,7 +715,7 @@ async function resolveWorkspaceByInbox(
  *
  * An event whose inbox no workspace claims — or which two claim — has no
  * workspace to file a receipt under, so it is held in
- * `quarantinedEmailEvents` and replayed by `internal.quarantine.replayForInbox`
+ * `quarantinedEmailEvents` and replayed by `internal.inbox.quarantine.replayForInbox`
  * once the assignment exists (§G3 "Unknown inboxes are quarantined").
  */
 export const onEvent = internalMutation({
@@ -926,7 +926,7 @@ export const onMessageReceived = internalMutation({
     // Scheduled, not inlined. The schedule commits with the receipt insert, so
     // a throw in the business path cannot roll back the row that makes the
     // event replayable, and the `pending` row is the drain's input.
-    await ctx.scheduler.runAfter(0, internal.inbox.applyInboundMessage, {
+    await ctx.scheduler.runAfter(0, internal.inbox.inbound.applyInboundMessage, {
       receiptId: receipt._id,
     });
     return null;

@@ -39,12 +39,12 @@ export function ConversationNotes({
   conversation: Doc<"conversations">
 }) {
   const [cursor, setCursor] = useState<string | undefined>(undefined)
-  const page = useQuery(api.conversations.listNotes, {
+  const page = useQuery(api.inbox.conversationNotes.listNotes, {
     workspaceId,
     conversationId: conversation._id,
     ...(cursor === undefined ? {} : { cursor }),
   })
-  const addNote = useMutation(api.conversations.addNote)
+  const addNote = useMutation(api.inbox.conversationNotes.addNote)
 
   const [body, setBody] = useState("")
   const [pending, setPending] = useState(false)

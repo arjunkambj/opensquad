@@ -260,7 +260,7 @@ export const assignWorkspaceInbox = internalMutation({
     // becomes replayable. Scheduled, not inlined: the replay reads the mail
     // component and re-drives ingest, and none of that may roll back an
     // assignment an operator asked for.
-    await ctx.scheduler.runAfter(0, internal.quarantine.replayForInbox, {
+    await ctx.scheduler.runAfter(0, internal.inbox.quarantine.replayForInbox, {
       inboxRef,
     });
     return null;
