@@ -575,4 +575,4 @@ handled on production with real data, and the three audits are clean.
 - [ ] T50 ship
 
 Merged with all four verify commands passing, **live half still owed** (see
-[followups.md](followups.md)) — ticked only when that passes: T06, T02, T03, T04, T13.
+[followups.md](followups.md)) — ticked only when that passes: T06, T02, T03, T04, T10, T11 (free checks passed on dev; search + reveal owed), T12, T13.
