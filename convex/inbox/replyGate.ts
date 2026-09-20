@@ -156,3 +156,25 @@ export async function evaluateReplyAutomation(
   }
   return { start: true };
 }
+
+/**
+ * Blockers worth a note on the thread.
+ *
+ * The rest are already visible without one: an unassigned thread carries its
+ * intake note and its takeover reason, a hold wrote its own note as it was
+ * placed, and a closed thread is closed. Writing a note for those on every
+ * inbound message would bury the ones that say something new under repetition.
+ */
+export const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<ReplyGateBlockCode> = new Set<
+  ReplyGateBlockCode
+>([
+  "association_missing",
+  "agent_mismatch",
+  "agent_not_sending",
+  "workspace_paused",
+  "inbox_unassigned",
+  "inbox_mismatch",
+  "recipient_unknown",
+  "suppressed_email",
+  "suppressed_domain",
+]);

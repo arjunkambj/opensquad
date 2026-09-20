@@ -13,9 +13,11 @@ import { domainError } from "../lib/validators";
 import type { TakeoverReason } from "../lib/validators";
 import { recordConversationNote } from "./conversationNotes";
 import { resolveOutboundRecipient } from "./conversationsModel";
-import { NOTED_REPLY_GATE_BLOCKS } from "./inbound";
 import type { InboundFacts } from "./inboundModel";
-import { evaluateReplyAutomation } from "./replyGate";
+import {
+  evaluateReplyAutomation,
+  NOTED_REPLY_GATE_BLOCKS,
+} from "./replyGate";
 import type { ReplyGateVerdict } from "./replyGate";
 
 /**
