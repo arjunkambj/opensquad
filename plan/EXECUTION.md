@@ -573,3 +573,6 @@ handled on production with real data, and the three audits are clean.
 - [ ] T30 sourcing · [ ] T31 contacts · [ ] T32 agent
 - [ ] T40 outreach · [ ] T41 close + inbox · [ ] T42 dashboard · [ ] T43 settings
 - [ ] T50 ship
+
+Merged with all four verify commands passing, **live half still owed** (see
+[followups.md](followups.md)) — ticked only when that passes: T06, T02, T03, T04, T13.
