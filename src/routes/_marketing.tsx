@@ -1,6 +1,6 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router"
-import { Navbar } from "@/components/Marketing/Navbar"
-import { SmoothScroll } from "@/components/Marketing/SmoothScroll"
+import { Navbar } from "@/components/marketing/Navbar"
+import { SmoothScroll } from "@/components/marketing/SmoothScroll"
 
 export const Route = createFileRoute("/_marketing")({
   component: MarketingLayout,

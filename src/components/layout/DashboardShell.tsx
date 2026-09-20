@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
-import { AppSidebar } from "@/components/Layout/AppSidebar"
-import { DashboardHeader } from "@/components/Layout/DashboardHeader"
-import type { ProfileUser } from "@/components/Layout/UserProfileMenu"
+import { AppSidebar } from "@/components/layout/AppSidebar"
+import { DashboardHeader } from "@/components/layout/DashboardHeader"
+import type { ProfileUser } from "@/components/layout/UserProfileMenu"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 

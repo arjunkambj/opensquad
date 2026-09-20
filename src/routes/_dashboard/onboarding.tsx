@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard"
 import { STEP_IDS } from "@/components/onboarding/OnboardingWizard"
 import type { StepId } from "@/components/onboarding/OnboardingWizard"

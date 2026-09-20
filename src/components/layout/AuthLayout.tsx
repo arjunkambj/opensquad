@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import Logo from "@/components/Layout/Logo"
+import Logo from "@/components/layout/Logo"
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (

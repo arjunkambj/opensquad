@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-router"
 import { Suspense, useEffect } from "react"
 import { SignInForm } from "@/components/auth/SignInForm"
-import { AuthLayout } from "@/components/Layout/AuthLayout"
+import { AuthLayout } from "@/components/layout/AuthLayout"
 import { Spinner } from "@/components/ui/spinner"
 
 /**

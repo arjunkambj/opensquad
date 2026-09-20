@@ -1,7 +1,7 @@
 import {
   UserProfileMenu,
   type ProfileUser,
-} from "@/components/Layout/UserProfileMenu"
+} from "@/components/layout/UserProfileMenu"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 export function DashboardHeader({ user }: { user: ProfileUser }) {

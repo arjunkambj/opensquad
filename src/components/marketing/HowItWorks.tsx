@@ -5,15 +5,15 @@ import {
   BookIllustration,
   DiscoverIllustration,
   ResearchIllustration,
-} from "@/components/Marketing/HowItWorksIllustrations"
+} from "@/components/marketing/HowItWorksIllustrations"
 import {
   MarketingSection,
   MarketingSectionIntro,
-} from "@/components/Marketing/MarketingSection"
+} from "@/components/marketing/MarketingSection"
 import {
   revealCardVariants,
   useRevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 import {
   Card,
   CardContent,

@@ -1,15 +1,15 @@
 import { Calendar03Icon } from "@hugeicons/core-free-icons"
-import { CompanyMark } from "@/components/Marketing/CompanyMark"
+import { CompanyMark } from "@/components/marketing/CompanyMark"
 import { motion } from "motion/react"
 import {
   MarketingSection,
   MarketingSectionIntro,
-} from "@/components/Marketing/MarketingSection"
+} from "@/components/marketing/MarketingSection"
 import {
   revealContainerVariants,
   revealItemVariants,
   useRevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 
 // All names in this timeline are fictional demo data.
 

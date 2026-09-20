@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion } from "motion/react"
 import { Suspense, useState } from "react"
-import Logo from "@/components/Layout/Logo"
+import Logo from "@/components/layout/Logo"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,

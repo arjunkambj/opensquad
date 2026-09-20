@@ -2,8 +2,8 @@ import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion, useReducedMotion } from "motion/react"
-import { HeroApprovalPreview } from "@/components/Marketing/HeroApprovalPreview"
-import { MarketingChip } from "@/components/Marketing/MarketingChip"
+import { HeroApprovalPreview } from "@/components/marketing/HeroApprovalPreview"
+import { MarketingChip } from "@/components/marketing/MarketingChip"
 import { Button } from "@/components/ui/button"
 
 /** The model provider the agent's writing runs on. */

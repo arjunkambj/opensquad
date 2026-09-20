@@ -8,8 +8,8 @@ import {
 } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { Suspense } from "react"
-import { DashboardLoadingSkeleton } from "@/components/Layout/DashboardLoadingSkeleton"
-import { DashboardShell } from "@/components/Layout/DashboardShell"
+import { DashboardLoadingSkeleton } from "@/components/layout/DashboardLoadingSkeleton"
+import { DashboardShell } from "@/components/layout/DashboardShell"
 import { EmptyState, ErrorState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {

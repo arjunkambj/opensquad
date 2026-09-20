@@ -5,7 +5,7 @@ import {
   UserCheck01Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { CompanyMark } from "@/components/Marketing/CompanyMark"
+import { CompanyMark } from "@/components/marketing/CompanyMark"
 
 const badgeClassName =
   "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-lg bg-secondary px-2 py-0.5 text-xs font-medium whitespace-nowrap text-secondary-foreground"

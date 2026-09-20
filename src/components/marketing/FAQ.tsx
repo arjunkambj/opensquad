@@ -3,12 +3,12 @@ import { motion } from "motion/react"
 import {
   MarketingSection,
   MarketingSectionIntro,
-} from "@/components/Marketing/MarketingSection"
+} from "@/components/marketing/MarketingSection"
 import {
   revealCardVariants,
   revealContainerVariants,
   useRevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 import {
   Accordion,
   AccordionContent,

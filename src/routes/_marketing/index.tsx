@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { CTA } from "@/components/Marketing/CTA"
-import { FAQ } from "@/components/Marketing/FAQ"
-import { Features } from "@/components/Marketing/Features"
-import { FirstWeek } from "@/components/Marketing/FirstWeek"
-import { Footer } from "@/components/Marketing/Footer"
-import { Hero } from "@/components/Marketing/Hero"
-import { HowItWorks } from "@/components/Marketing/HowItWorks"
-import { Pricing } from "@/components/Marketing/Pricing"
-import { Squad } from "@/components/Marketing/Squad"
+import { CTA } from "@/components/marketing/CTA"
+import { FAQ } from "@/components/marketing/FAQ"
+import { Features } from "@/components/marketing/Features"
+import { FirstWeek } from "@/components/marketing/FirstWeek"
+import { Footer } from "@/components/marketing/Footer"
+import { Hero } from "@/components/marketing/Hero"
+import { HowItWorks } from "@/components/marketing/HowItWorks"
+import { Pricing } from "@/components/marketing/Pricing"
+import { Squad } from "@/components/marketing/Squad"
 
 export const Route = createFileRoute("/_marketing/")({
   component: HomePage,

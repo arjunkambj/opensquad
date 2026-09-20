@@ -2,12 +2,12 @@ import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion } from "motion/react"
-import { CtaPreview } from "@/components/Marketing/CtaPreview"
+import { CtaPreview } from "@/components/marketing/CtaPreview"
 import {
   revealContainerVariants,
   revealItemVariants,
   useRevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 import { Button } from "@/components/ui/button"
 
 export function CTA() {

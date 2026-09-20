@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { LeadList } from "@/components/leads/LeadList"
-import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { LeadList } from "@/components/contacts/LeadList"
+import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"

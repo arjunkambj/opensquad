@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useParams } from "@tanstack/react-router"
 import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 
 /**
  * In-shell not-found. `_dashboard` is a pathless layout, so this splat matches

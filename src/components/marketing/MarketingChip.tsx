@@ -1,7 +1,7 @@
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
-import { LogoMark } from "@/components/Layout/Logo"
+import { LogoMark } from "@/components/layout/Logo"
 import { cn } from "@/lib/utils"
 
 /**

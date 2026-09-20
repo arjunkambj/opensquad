@@ -1,6 +1,6 @@
 import { Outlet, createFileRoute, useParams } from "@tanstack/react-router"
 import { InboxList } from "@/components/inbox/InboxList"
-import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import {
   oneOf,
   optionalCursor,

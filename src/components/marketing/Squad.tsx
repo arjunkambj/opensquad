@@ -4,12 +4,12 @@ import { motion } from "motion/react"
 import {
   MarketingSection,
   MarketingSectionIntro,
-} from "@/components/Marketing/MarketingSection"
+} from "@/components/marketing/MarketingSection"
 import {
   revealCardVariants,
   revealContainerVariants,
   useRevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 // All names and domains in these mockups are fictional demo data.

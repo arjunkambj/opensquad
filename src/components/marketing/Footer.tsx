@@ -1,7 +1,7 @@
 import { NewTwitterIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
-import Logo from "@/components/Layout/Logo"
+import Logo from "@/components/layout/Logo"
 
 // Every entry points at a route or anchor that exists today.
 const productLinks = [

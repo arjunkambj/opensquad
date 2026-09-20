@@ -1,12 +1,12 @@
 import type { IconSvgElement } from "@hugeicons/react"
 import { motion } from "motion/react"
 import type { ReactNode } from "react"
-import { MarketingChip } from "@/components/Marketing/MarketingChip"
+import { MarketingChip } from "@/components/marketing/MarketingChip"
 import {
   revealContainerVariants,
   revealItemVariants,
   type RevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 
 export function MarketingSection({
   children,

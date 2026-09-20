@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { ActivityFeed } from "@/components/overview/ActivityFeed"
 import { LoadingState } from "@/components/states/states"
 import { useCurrentWorkspace } from "@/hooks/use-current-workspace"

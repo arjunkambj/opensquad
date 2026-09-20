@@ -1,7 +1,7 @@
 import { useUser } from "@hexclave/react"
 import { Link, createFileRoute, useSearch } from "@tanstack/react-router"
 import { optionalOneOf } from "@/lib/search-params"
-import { DashboardPageTitle } from "@/components/Layout/DashboardPageTitle"
+import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { AccountSection } from "@/components/settings/AccountSection"
 import { SettingsSections } from "@/components/settings/SettingsSections"
 import { LoadingState } from "@/components/states/states"

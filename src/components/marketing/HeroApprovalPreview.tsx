@@ -8,8 +8,8 @@ import {
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
-import Logo from "@/components/Layout/Logo"
-import { CompanyMark } from "@/components/Marketing/CompanyMark"
+import Logo from "@/components/layout/Logo"
+import { CompanyMark } from "@/components/marketing/CompanyMark"
 import { cn } from "@/lib/utils"
 
 const navItems: {

@@ -13,11 +13,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   MarketingSection,
   MarketingSectionIntro,
-} from "@/components/Marketing/MarketingSection"
+} from "@/components/marketing/MarketingSection"
 import {
   revealCardVariants,
   useRevealViewport,
-} from "@/components/Marketing/motion-variants"
+} from "@/components/marketing/motion-variants"
 
 // All names and domains in these illustrations are fictional demo data.
 
