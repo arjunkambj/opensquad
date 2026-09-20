@@ -33,6 +33,7 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T21: first ICP generation free then Regenerate = 3 credits, chips from a real call, every edit persists, an out-of-catalogue industry sent to `agents/icp:updateIcp` refused.
 - [ ] T43: per-tab click checks in its hand-off (company save + live re-analyze + price, outreach empty state/save/no-op, blocklist add/dup/search/remove/pagination and the blocked address refused by a send preflight, sending save bumps `policyVersion` + 31 refused client- and server-side, pause/resume, usage shows no provider name, account sign-out).
 - [ ] T32: toggling a signal changes the next run; Run now twice → one run + the rate-limit copy on the 4th press in a minute; funnel counts match Contacts; Autopilot only through the consent dialog and never by itself; review/autopilot refused without a connected inbox; Retry un-parks a needs-attention lead.
+- [ ] T42: fresh-workspace empty states, range pills + reload, reconcile Hot leads / Contacted / Conversations / Meetings / Pipeline against Contacts and Inbox for the same window (row definitions in its hand-off), deal-size edit, status chips, the next-step CTA ladder, workspace-timezone day axis, non-member gets NOT_FOUND, >120-day range refused.
 - [ ] T20: the eleven click/CLI checks in its hand-off (real site fills the form, refresh resumes, first run free then Regenerate = 3 credits, failure + no-website paths, step gate, finished-user redirect).
 - [ ] T12: 1-page and 4-page real scrapes (sizes/titles only), replay with the same key, and the four refused URLs leaving no operation row — exact commands in the T12 hand-off; needs a real workspace.
 - [ ] T06: a suppressed address is refused by a real send preflight (fresh workspace); owner signs in and lands in onboarding.
@@ -40,7 +41,9 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] T13: visual sign-off of every kit component when T20–T23 mount them; keyboard pass; dark mode.
 
 ## Code follow-ups
-- [ ] Fold the two deal-size writers into one: T42's `api.dashboard.dealSize.set` (written while T32 was in flight) → call T32's `api.agents.settings.setDealSize` and delete the dashboard mutation.
+- [ ] T42: the indexes `prospects.by_workspaceId_and_createdAt` and `conversations.by_workspaceId_and_lastInboundAt` now exist — switch `dashboard/leadReads.ts#loadLeadsCreated` and `dashboard/outcomeReads.ts#loadRepliedConversations` to one exact range each (they currently walk three bounded ranges).
+- [ ] T42: "View more" on Latest hot leads links to plain `/contacts`; carry `score: 3` once T31's route declares a score param. `sendAttempts.updatedAt` is used as the acceptance time — re-check when T40 lands. Deal size prints without a currency symbol (the schema records none). `convex/README.md` lacks a `dashboard/` row.
+- [x] Deal size has one writer: the dashboard calls `api.agents.settings.setDealSize` (repointed at the T42 merge; T42 never added its own mutation).
 - [ ] T32 returns the three mode refusals (`inbox_not_connected`, `consent_required`, `consent_stale`) as a typed union because `lib/errors.ts` has no codes for them; add codes or keep the union, but decide once.
 - [ ] T32's `agents/settingsRun:retryLead` is the public un-park for a needs-attention lead; T31 owns lead mutations — make sure Contacts' Retry calls the same function rather than a second writer.
 - [ ] T43: Settings → Company imports five pieces from `src/components/onboarding/steps/company/` (cross-domain import, PLAN §10). Move them to a shared home and repoint both callers.
