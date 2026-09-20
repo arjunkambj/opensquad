@@ -10,6 +10,7 @@
 
 import type * as activity_model from "../activity/model.js";
 import type * as activity_queries from "../activity/queries.js";
+import type * as agents_filterOptions from "../agents/filterOptions.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_mutations from "../agents/mutations.js";
 import type * as agents_queries from "../agents/queries.js";
@@ -111,6 +112,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "activity/model": typeof activity_model;
   "activity/queries": typeof activity_queries;
+  "agents/filterOptions": typeof agents_filterOptions;
   "agents/model": typeof agents_model;
   "agents/mutations": typeof agents_mutations;
   "agents/queries": typeof agents_queries;
