@@ -6,7 +6,7 @@
 import type { Doc } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   boundedString,
@@ -14,7 +14,7 @@ import {
   domainError,
 } from "../lib/validators";
 import type { ConversationNoteKind } from "../lib/validators";
-import { getConversationInWorkspace } from "../outreach/draftsModel";
+import { getConversationInOrg } from "../outreach/draftsModel";
 import { conversationNoteFields } from "../schema";
 import { v } from "convex/values";
 
@@ -48,7 +48,7 @@ export async function recordConversationNote(
     max: CONVERSATION_NOTE_BODY_MAX_LENGTH,
   });
   const noteId = await ctx.db.insert("conversationNotes", {
-    workspaceId: args.conversation.workspaceId,
+    orgId: args.conversation.orgId,
     conversationId: args.conversation._id,
     kind: args.kind,
     actor: boundedString(args.actor, "actor", { min: 1, max: 300 }),
@@ -65,7 +65,7 @@ export async function recordConversationNote(
 /** Internal notes on one thread, newest first, cursor-paginated. */
 export const listNotes = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
@@ -76,10 +76,10 @@ export const listNotes = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    await getConversationInWorkspace(
+    await requireOrgMember(ctx, args.orgId);
+    await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     const limit = boundedLimit(args.limit);
@@ -101,19 +101,19 @@ export const listNotes = query({
 /** Add a human note to a thread. Never advances the conversation version. */
 export const addNote = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     body: v.string(),
   },
   returns: vConversationNoteDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     return await recordConversationNote(ctx, {

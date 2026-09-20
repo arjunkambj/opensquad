@@ -6,9 +6,9 @@
  *
  * Three layers live side by side because a paid call must pass all of them:
  *   1. the visible credit price of an action (what the user sees spend),
- *   2. the hidden per-workspace provider caps in the provider's own units,
+ *   2. the hidden per-org provider caps in the provider's own units,
  *   3. the platform-wide budgets and the kill switch, which bound OUR bill
- *      whatever any one workspace does.
+ *      whatever any one org does.
  *
  * There is one plan, `trial`. When a real plan map arrives it replaces the
  * lookups below, not their call sites.
@@ -50,7 +50,7 @@ export type ActionPrice = {
   /** Credits the action costs once it is no longer free. */
   credits: number;
   /**
-   * The first successful run of this action in a workspace is free (PLAN §6:
+   * The first successful run of this action in an org is free (PLAN §6:
    * "First-run onboarding … 0 (once each)"). Every later run costs `credits`,
    * which is what the reference's "Re-run" and "Generate more" buttons spend.
    */
@@ -75,16 +75,16 @@ export const ACTION_PRICES: Record<PaidAction, ActionPrice> = {
   score_lead: { credits: 0, firstRunFree: false, provider: "ai_gateway" },
 };
 
-/** The lifetime grant, made with the workspace and never refilled (PLAN §6). */
+/** The lifetime grant, made with the org and never refilled (PLAN §6). */
 export const TRIAL_CREDIT_GRANT = 300;
 
 /* ------------------------------------------------------------------ */
-/* Layer 2 · hidden provider caps per workspace                        */
+/* Layer 2 · hidden provider caps per org                        */
 /* ------------------------------------------------------------------ */
 
 /**
  * The metrics a paid call reserves in the provider's own units. `credits` is
- * layer 1 and `sends` is bounded by the workspace's own daily send limit
+ * layer 1 and `sends` is bounded by the org's own daily send limit
  * against the user's own mail key, so neither is capped here.
  */
 export const TRIAL_METERED_METRICS = [
@@ -102,7 +102,7 @@ export type ProviderUnits = Partial<Record<TrialMeteredMetric, number>>;
 /**
  * PLAN §6 layer-2 table — the real guarantee. The hidden lifetime cap is why
  * "trial limit for emails reached" is a different message from "out of
- * credits": a workspace can hold credits it is no longer allowed to spend.
+ * credits": an org can hold credits it is no longer allowed to spend.
  */
 export const TRIAL_METRIC_CAPS: Record<
   TrialMeteredMetric,
@@ -115,7 +115,7 @@ export const TRIAL_METRIC_CAPS: Record<
 };
 
 /**
- * The workspace's lifetime page allowance, named for the one caller that
+ * The org's lifetime page allowance, named for the one caller that
  * reserves it directly (`integrations/firecrawl.ts`) rather than through the
  * credit wrapper, because its per-prospect cap is its own rule.
  */
@@ -137,7 +137,7 @@ export const PLATFORM_PAUSED_ENV = "PLATFORM_PAUSED";
 export type PlatformBudgetPolicy = {
   provider: ProviderKind;
   /** Which calendar the budget resets on. UTC, deliberately: a platform
-   *  budget is our bill, not any one workspace's local day. */
+   *  budget is our bill, not any one org's local day. */
   periodKind: "utc_day" | "utc_month";
   /** Distinguishes two budgets of the SAME provider in the period key, since
    *  `platformBudgets` is unique per (provider, periodKey). */
@@ -183,10 +183,10 @@ export const PLATFORM_BUDGETS: Record<TrialMeteredMetric, PlatformBudgetPolicy> 
     },
   };
 
-/** How many trial workspaces exist before new signups see the waitlist. */
-export const MAX_TRIAL_WORKSPACES_ENV = "MAX_TRIAL_WORKSPACES";
+/** How many trial orgs exist before new signups see the waitlist. */
+export const MAX_TRIAL_ORGS_ENV = "MAX_TRIAL_ORGS";
 
-export const MAX_TRIAL_WORKSPACES_DEFAULT = 50;
+export const MAX_TRIAL_ORGS_DEFAULT = 50;
 
 /* ------------------------------------------------------------------ */
 /* Recovery timing                                                     */
@@ -262,7 +262,7 @@ export type RateLimitName = keyof typeof RATE_LIMITS;
 /* Agent defaults (PLAN §7)                                            */
 /* ------------------------------------------------------------------ */
 
-/** Leads a live agent may source in one workspace-local day. */
+/** Leads a live agent may source in one org-local day. */
 export const AGENT_DAILY_LEAD_CAP_DEFAULT = 25;
 
 /** Leads it may research — deliberately small, research is 3 credits each. */

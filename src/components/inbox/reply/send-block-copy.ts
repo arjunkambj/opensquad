@@ -10,8 +10,8 @@ import type { SendBlockCode } from "../../../../convex/outreach/sendGates"
  * an old client, not for a code we forgot.
  */
 export const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
-  workspace_paused:
-    "Sending is paused for this workspace. Resume it in Settings and this can go out.",
+  org_paused:
+    "Sending is paused for this organization. Resume it in Settings and this can go out.",
   agent_not_sending:
     "Your agent is not in a sending mode. Switch it to Review or Autopilot on the Agent page.",
   conversation_not_open:

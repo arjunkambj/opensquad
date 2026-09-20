@@ -58,23 +58,23 @@ const STALE_STAGE_SCAN = 25;
 
 /**
  * The liveness gate, re-read on every tick: a paused agent, a paused
- * workspace, a disconnected inbox and the platform kill switch all mean
+ * org, a disconnected inbox and the platform kill switch all mean
  * NOTHING NEW STARTS (PLAN §9.1). Work already in flight finishes and writes
  * its result; unsent drafts stay drafts.
  *
- * The inbox check is here as well as in the send gates because a workspace
+ * The inbox check is here as well as in the send gates because an org
  * that cannot send has no business paying to write.
  */
 export function agentRunsOutreach(
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   agent: Doc<"agents">,
 ): boolean {
   return (
     agent.status === "live" &&
     SENDING_AGENT_MODES.includes(agent.mode) &&
-    workspace.automationState === "active" &&
-    workspace.inboxConnection === "connected" &&
-    workspace.inboxRef !== undefined &&
+    org.automationState === "active" &&
+    org.inboxConnection === "connected" &&
+    org.inboxRef !== undefined &&
     !paidCallsPaused()
   );
 }
@@ -134,9 +134,9 @@ export async function selectWriteTargets(
 
   const due = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_nextActionAt", (q) =>
+    .withIndex("by_orgId_and_nextActionAt", (q) =>
       q
-        .eq("workspaceId", agent.workspaceId)
+        .eq("orgId", agent.orgId)
         .gte("nextActionAt", 0)
         .lte("nextActionAt", now),
     )
@@ -151,8 +151,8 @@ export async function selectWriteTargets(
   if (targets.length < limit) {
     const approved = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_approval", (q) =>
-        q.eq("workspaceId", agent.workspaceId).eq("approval", "approved"),
+      .withIndex("by_orgId_and_approval", (q) =>
+        q.eq("orgId", agent.orgId).eq("approval", "approved"),
       )
       .order("desc")
       .take(CANDIDATE_SCAN_MAX);

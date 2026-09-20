@@ -11,7 +11,7 @@
  */
 import { query } from "../_generated/server";
 import { v } from "convex/values";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedLimit, domainError } from "../lib/validators";
 import { evidenceFields } from "../schema";
 
@@ -28,22 +28,22 @@ const vEvidenceListPage = v.object({
 });
 
 /**
- * One prospect's evidence, newest first. A prospect in another workspace is
- * NOT_FOUND, never FORBIDDEN — existence never leaks across a workspace
+ * One prospect's evidence, newest first. A prospect in another org is
+ * NOT_FOUND, never FORBIDDEN — existence never leaks across an org
  * boundary (house rule, and the isolation V02/V06 assert).
  */
 export const listForProspect = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
   },
   returns: vEvidenceListPage,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const prospect = await ctx.db.get("prospects", args.prospectId);
-    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+    if (prospect === null || prospect.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "prospect not found");
     }
     const limit = boundedLimit(args.limit);

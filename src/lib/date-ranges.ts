@@ -26,7 +26,7 @@ export type CalendarDateRange = {
 }
 
 /* ------------------------------------------------------------------ */
-/* Civil days in the workspace's zone                                  */
+/* Civil days in the org's zone                                  */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -39,10 +39,10 @@ export type CalendarDateRange = {
  *
  * An **instant** is an epoch millisecond, and it is what `activity.list`
  * filters on. Turning a civil day into instants requires a zone, and the zone
- * that matters is the **workspace's**, not the browser's — every timestamp in
- * the feed is printed with `formatInstant(…, workspace.timezone)`, and every
+ * that matters is the **org's**, not the browser's — every timestamp in
+ * the feed is printed with `formatInstant(…, org.timezone)`, and every
  * send allowance in this product is bucketed by `localDayKey(now,
- * workspace.timezone)`. Deriving the window from the browser instead meant an
+ * org.timezone)`. Deriving the window from the browser instead meant an
  * operator in a different zone read a heading naming one day above rows
  * stamped with another, and missed a whole evening of receipts they would
  * swear had happened.
@@ -247,7 +247,7 @@ export function civilTimeToUtcMs(
 
 /**
  * The inverse of `civilTimeToUtcMs`: an instant as the `input[type=date]` and
- * `input[type=time]` values a form should prefill with, on the workspace's
+ * `input[type=time]` values a form should prefill with, on the org's
  * wall clock. `null` when the zone cannot be read — the form then starts
  * empty rather than prefilling in the wrong zone.
  */
@@ -266,7 +266,7 @@ export function civilInputsInZone(
   }
 }
 
-/** Today on the workspace's wall calendar — not necessarily the browser's. */
+/** Today on the org's wall calendar — not necessarily the browser's. */
 export function todayInZone(timezone: string, now = new Date()): Date {
   return zonedCalendarDay(now.getTime(), timezone)
 }
@@ -336,7 +336,7 @@ const ACTIVITY_RANGE_PRESET = {
  * The bounds to hand `activity.list`, which treats `from`/`to` as inclusive
  * epoch-millisecond range bounds on `createdAt`.
  *
- * `timezone` is the **workspace's** IANA zone, and the day boundaries are its
+ * `timezone` is the **org's** IANA zone, and the day boundaries are its
  * boundaries: the feed prints every row in that zone, so a window derived from
  * the browser's would name one day and list another's events.
  *
@@ -377,7 +377,7 @@ export function activityRangeToCalendar(
     if (from === undefined || to === undefined) {
       return { value: getPresetRange("today", timezone, now), preset: "today" }
     }
-    // The stored instants are read back on the workspace's calendar, so a
+    // The stored instants are read back on the org's calendar, so a
     // range someone pasted names the same two days for both of them.
     return {
       value: {

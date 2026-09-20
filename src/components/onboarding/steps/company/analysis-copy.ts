@@ -97,7 +97,7 @@ const START_REFUSALS: Record<string, AnalysisMessage> = {
   FORBIDDEN: {
     title: "You can't change this company profile",
     description:
-      "Analysing the website edits the workspace's profile, which needs an owner or operator role.",
+      "This account can't edit this organization's profile, so the website can't be analysed here.",
   },
   UNAUTHENTICATED: {
     title: "Your session expired",

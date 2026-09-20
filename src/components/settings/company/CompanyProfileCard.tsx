@@ -8,7 +8,7 @@
  */
 import type { CompanyForm } from "@/components/onboarding/steps/company/company-form"
 import { CompanyProfileForm } from "@/components/onboarding/steps/company/CompanyProfileForm"
-import { FormError, PermissionNote } from "@/components/states/states"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,14 +18,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 export type CompanyProfileCardProps = {
   value: CompanyForm
   onChange: (patch: Partial<CompanyForm>) => void
   onSave: () => void
-  role: WorkspaceRole
-  canEdit: boolean
   /** Fields are frozen while an analysis is rewriting them. */
   analyzing: boolean
   complete: boolean
@@ -38,8 +35,6 @@ export function CompanyProfileCard({
   value,
   onChange,
   onSave,
-  role,
-  canEdit,
   analyzing,
   complete,
   dirty,
@@ -57,13 +52,12 @@ export function CompanyProfileCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <CompanyProfileForm
-          disabled={analyzing || !canEdit}
+          disabled={analyzing}
           onChange={onChange}
           value={value}
         />
         <FormError message={error} />
-        {canEdit ? (
-          <div className="flex flex-wrap items-center justify-end gap-3">
+                  <div className="flex flex-wrap items-center justify-end gap-3">
             {complete ? null : (
               <p className="mr-auto text-sm text-muted-foreground">
                 A company name, an industry, a description and at least one key
@@ -79,9 +73,6 @@ export function CompanyProfileCard({
               Save profile
             </Button>
           </div>
-        ) : (
-          <PermissionNote role={role} action="edit the company profile" />
-        )}
       </CardContent>
     </Card>
   )

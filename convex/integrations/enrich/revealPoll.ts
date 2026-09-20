@@ -84,7 +84,7 @@ type PollResponse = {
  */
 export const pollLeadReveal = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** The key `revealLeadEmails` returned — already namespaced by action. */
     operationKey: v.string(),
     jobId: v.string(),
@@ -174,7 +174,7 @@ export const pollLeadReveal = internalAction({
  */
 export const driveRevealPoll = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
     jobId: v.string(),
     attempt: v.number(),
@@ -184,7 +184,7 @@ export const driveRevealPoll = internalAction({
     const polled: RevealPollResult = await ctx.runAction(
       internal.integrations.enrich.revealPoll.pollLeadReveal,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationKey: args.operationKey,
         jobId: args.jobId,
       },
@@ -213,14 +213,14 @@ export const driveRevealPoll = internalAction({
  */
 export const reconcileRevealOperation = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
   },
   returns: v.object({ resolved: v.boolean(), status: v.string() }),
   handler: async (ctx, args): Promise<{ resolved: boolean; status: string }> => {
     const recorded = await ctx.runQuery(
       internal.integrations.enrich.revealPoll.revealJobOf,
-      { workspaceId: args.workspaceId, operationKey: args.operationKey },
+      { orgId: args.orgId, operationKey: args.operationKey },
     );
     if (recorded === null || recorded.jobId === null) {
       // No job reference was ever recorded, so there is nothing to look up
@@ -230,7 +230,7 @@ export const reconcileRevealOperation = internalAction({
     const polled: RevealPollResult = await ctx.runAction(
       internal.integrations.enrich.revealPoll.pollLeadReveal,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationKey: args.operationKey,
         jobId: recorded.jobId,
       },
@@ -248,7 +248,7 @@ export const reconcileRevealOperation = internalAction({
 /** The reveal job a recorded operation is waiting on, if it has one. */
 export const revealJobOf = internalQuery({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
   },
   returns: v.union(
@@ -261,9 +261,9 @@ export const revealJobOf = internalQuery({
   ): Promise<{ jobId: string | null; state: string } | null> => {
     const operation = await ctx.db
       .query("providerOperations")
-      .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+      .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("provider", "enrich")
           .eq("operationKey", args.operationKey),
       )
@@ -282,7 +282,7 @@ export const revealJobOf = internalQuery({
 async function settle(
   ctx: ActionCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     operationKey: string;
     jobId: string;
   },
@@ -291,7 +291,7 @@ async function settle(
     | { outcome: "refunded"; reason: RefundReason },
 ): Promise<void> {
   await ctx.runMutation(internal.billing.settlement.reconcilePaidCall, {
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     provider: "enrich",
     operationKey: args.operationKey,
     outcome: settlement.outcome,

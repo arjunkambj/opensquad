@@ -9,14 +9,14 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { computeResultDigest } from "../lib/validators";
 
-/** The workspace's current profile, or `null` before one is written. */
-export async function getWorkspaceProfile(
+/** The org's current profile, or `null` before one is written. */
+export async function getOrgProfile(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Doc<"businessProfiles"> | null> {
   return await ctx.db
     .query("businessProfiles")
-    .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId))
+    .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
     .unique();
 }
 
@@ -59,7 +59,7 @@ export type AnalysisOperationKeys = {
 /**
  * The two keys one run spends under.
  *
- * The scrape's key is `workspace:urlToken` — deliberately STABLE. A user who
+ * The scrape's key is `org:urlToken` — deliberately STABLE. A user who
  * presses Analyze twice, or Retry after the model half failed, replays pages
  * that are already bought instead of buying them again, which is what makes
  * "the free first run is only consumed on success" true in money as well as
@@ -74,15 +74,15 @@ export type AnalysisOperationKeys = {
  * retry fail identically and for free.
  */
 export async function analysisOperationKeys(args: {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   websiteUrl: string;
   startedAt: number;
   fresh: boolean;
 }): Promise<AnalysisOperationKeys> {
   const digest = await computeResultDigest({ url: args.websiteUrl });
   const urlToken = digest.slice("sha256:".length, "sha256:".length + URL_TOKEN_LENGTH);
-  const scrape = `${args.workspaceId}:${urlToken}${args.fresh ? `:${args.startedAt}` : ""}`;
-  return { scrape, ai: `${args.workspaceId}:${args.startedAt}` };
+  const scrape = `${args.orgId}:${urlToken}${args.fresh ? `:${args.startedAt}` : ""}`;
+  return { scrape, ai: `${args.orgId}:${args.startedAt}` };
 }
 
 /**

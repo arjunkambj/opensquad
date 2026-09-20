@@ -1,6 +1,7 @@
 import { useUser } from "@hexclave/react"
 import { CatchBoundary, Outlet, useRouterState } from "@tanstack/react-router"
 import { Suspense } from "react"
+import { OrgBoundary } from "@/components/auth/OrgBoundary"
 import { DashboardLoadingSkeleton } from "@/components/layout/DashboardLoadingSkeleton"
 import { DashboardRouteError } from "@/components/layout/DashboardRouteError"
 import { DashboardShell } from "@/components/layout/DashboardShell"
@@ -35,7 +36,13 @@ function AuthedDashboard() {
         getResetKey={() => href}
         errorComponent={DashboardRouteError}
       >
-        <Outlet />
+        {/* Nothing inside reads anything until an organization is active:
+            every query is answered for the token's organization, so rendering
+            a screen before one is selected would show another organization's
+            data for a frame. */}
+        <OrgBoundary user={user} fallback={<DashboardLoadingSkeleton />}>
+          <Outlet />
+        </OrgBoundary>
       </CatchBoundary>
     </DashboardShell>
   )

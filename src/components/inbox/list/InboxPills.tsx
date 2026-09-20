@@ -19,7 +19,7 @@ import {
 } from "@/components/inbox/inbox-presentation"
 import { withFilters } from "@/lib/search-params"
 import { cn } from "@/lib/utils"
-import type { InboxSearch } from "@/routes/_dashboard/_workspace/inbox"
+import type { InboxSearch } from "@/routes/_dashboard/_org/inbox"
 
 const PILL_ICON: Record<InboxPill, IconSvgElement | undefined> = {
   received: InboxIcon,

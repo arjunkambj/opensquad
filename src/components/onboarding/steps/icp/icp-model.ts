@@ -64,7 +64,7 @@ export function icpGenerationView(agent: Doc<"agents">): IcpGenerationView {
 export function icpGenerationPrice(view: IcpGenerationView): number {
   switch (view.state) {
     case "never":
-      // Nothing has been bought for this workspace yet: the first run is free.
+      // Nothing has been bought for this org yet: the first run is free.
       return 0
     case "generating":
     case "stalled":

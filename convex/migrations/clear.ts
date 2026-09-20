@@ -1,8 +1,7 @@
 /**
  * The clear step of the clean-slate cutover — MIGRATION.md §6.3.
  *
- * Empties every application table except `workspaces`, `memberships` and
- * `suppressions`, in bounded batches, resumably, and only when the caller
+ * Empties every application table except `orgs` and `suppressions`, in bounded batches, resumably, and only when the caller
  * spells out the confirmation literal.
  *
  * Batching, not `collect()`: a production table can hold more rows than one

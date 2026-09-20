@@ -1,5 +1,5 @@
 /**
- * The workspace's default outreach instructions — Settings → Outreach
+ * The org's default outreach instructions — Settings → Outreach
  * (PLAN §1: "templates as one instructions field").
  *
  * ONE field, not a template library. The writer reads it only when the agent
@@ -12,7 +12,7 @@
  * on, and churning it would reset a form nobody edited.
  */
 import { mutation, query } from "../_generated/server";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedString, domainError } from "../lib/validators";
 import { v } from "convex/values";
 
@@ -29,26 +29,26 @@ export const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 2000;
 const vDefaultInstructions = v.object({
   /** `null` — no default set; the agent's own instructions decide alone. */
   instructions: v.union(v.string(), v.null()),
-  /** The workspace record's `updatedAt`, so the editor can resync on it. */
+  /** The org record's `updatedAt`, so the editor can resync on it. */
   updatedAt: v.number(),
 });
 
 /** The current default instructions. Readable by any active member. */
 export const get = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vDefaultInstructions,
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const { org } = await requireOrgMember(ctx, args.orgId);
     return {
-      instructions: workspace.defaultInstructions ?? null,
-      updatedAt: workspace.updatedAt,
+      instructions: org.defaultInstructions ?? null,
+      updatedAt: org.updatedAt,
     };
   },
 });
 
 /**
- * Save (or clear) the default instructions. Owner or operator, like every
- * other write that changes what the agent will say.
+ * Save (or clear) the default instructions, guarded by the active
+ * organization like every other write that changes what the agent will say.
  *
  * Unguarded by `policyVersion` on purpose: instructions do not change WHEN or
  * WHETHER a queued draft may go out, so invalidating pending approvals here
@@ -57,33 +57,33 @@ export const get = query({
  */
 export const save = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** Blank or whitespace-only clears the default. */
     instructions: v.string(),
   },
   returns: vDefaultInstructions,
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { org } = await requireOrgMember(ctx, args.orgId);
     const trimmed = boundedString(args.instructions, "instructions", {
       max: DEFAULT_INSTRUCTIONS_MAX_LENGTH,
     });
     const next = trimmed.length === 0 ? undefined : trimmed;
 
-    if (next === workspace.defaultInstructions) {
+    if (next === org.defaultInstructions) {
       return {
-        instructions: workspace.defaultInstructions ?? null,
-        updatedAt: workspace.updatedAt,
+        instructions: org.defaultInstructions ?? null,
+        updatedAt: org.updatedAt,
       };
     }
 
-    await ctx.db.patch("workspaces", workspace._id, {
+    await ctx.db.patch("orgs", org._id, {
       // `undefined` removes the field — absent is the canonical "no default".
       defaultInstructions: next,
       updatedAt: Date.now(),
     });
-    const updated = await ctx.db.get("workspaces", workspace._id);
+    const updated = await ctx.db.get("orgs", org._id);
     if (updated === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+      throw domainError("NOT_FOUND", "organization not found");
     }
     return {
       instructions: updated.defaultInstructions ?? null,

@@ -32,7 +32,7 @@ export type InboxSearch = {
   limit?: PageSize
 }
 
-export const Route = createFileRoute("/_dashboard/_workspace/inbox")({
+export const Route = createFileRoute("/_dashboard/_org/inbox")({
   validateSearch: (search): InboxSearch => {
     const pill = oneOf(INBOX_PILLS, search.pill, "received")
     const q = optionalText(search.q, 200)

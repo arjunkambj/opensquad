@@ -20,7 +20,7 @@ export type DashboardSummary = FunctionReturnType<
 
 /**
  * No currency symbol, deliberately: `agents.dealSize` is a bare number and
- * the workspace never told us which currency it is in. Printing one would be
+ * the org never told us which currency it is in. Printing one would be
  * the screen inventing a fact about the user's business.
  */
 const amountFormatter = new Intl.NumberFormat("en", {

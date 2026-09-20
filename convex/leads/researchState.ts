@@ -142,7 +142,7 @@ export const applyResearch = internalMutation({
     const operationKey = `lead:${args.prospectId}:research:r${args.revision}:a${args.attempt}`;
     const prior = await findLeadEventByOperationKey(
       ctx,
-      lead.workspaceId,
+      lead.orgId,
       operationKey,
     );
     if (prior !== null) {
@@ -189,7 +189,7 @@ export const applyResearch = internalMutation({
     if (args.sourceUrl !== undefined && args.excerpt !== undefined) {
       for (const hook of args.hooks.slice(0, RESEARCH_OBSERVATIONS_MAX)) {
         await ctx.db.insert("evidence", {
-          workspaceId: lead.workspaceId,
+          orgId: lead.orgId,
           prospectId: lead._id,
           sourceUrl: args.sourceUrl,
           retrievedAt: now,
@@ -202,7 +202,7 @@ export const applyResearch = internalMutation({
     }
 
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "research_applied",
       summary: `Researched and scored ${aiScore} of ${LEAD_SCORE_MAX}`,
@@ -325,7 +325,7 @@ async function recordStepFailure(
   });
   if (parked) {
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "stage_changed",
       summary: PARK_REASONS[code],

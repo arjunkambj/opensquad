@@ -2,7 +2,7 @@
  * Settings → Sending, the window card: when the agent may send, and how much.
  *
  * It owns its own two mutations because the record has two owners: the
- * timezone belongs to the workspace record and the window and limit to the
+ * timezone belongs to the org record and the window and limit to the
  * sending policy, and both bump `policyVersion`. So a save that changes both
  * writes the timezone FIRST and then uses the version that write returned —
  * sending the version the form started from to the second call would be a
@@ -20,7 +20,7 @@ import { api } from "../../../../convex/_generated/api"
 import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/limits"
 import { SendWindowFields } from "@/components/settings/sending/SendWindowFields"
 import type { SendWindowValues } from "@/components/settings/sending/SendWindowFields"
-import { FormError, PermissionNote } from "@/components/states/states"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -35,47 +35,37 @@ import { errorMessage, isConflictError } from "@/lib/convex-error"
 import {
   minutesToTimeString,
   timeStringToMinutes,
-} from "@/lib/workspace-time"
-import type { WorkspaceRole } from "@/lib/workspace-role"
-import type { WorkspaceView } from "@/lib/workspace-view"
+} from "@/lib/org-time"
+import type { OrgView } from "@/lib/org-view"
 
-function valuesOf(workspace: WorkspaceView): SendWindowValues {
+function valuesOf(org: OrgView): SendWindowValues {
   return {
-    timezone: workspace.timezone,
-    weekdays: [...workspace.sendWindow.weekdays],
-    startTime: minutesToTimeString(workspace.sendWindow.startMinute),
-    endTime: minutesToTimeString(workspace.sendWindow.endMinute),
-    dailySendLimit: String(workspace.dailySendLimit),
+    timezone: org.timezone,
+    weekdays: [...org.sendWindow.weekdays],
+    startTime: minutesToTimeString(org.sendWindow.startMinute),
+    endTime: minutesToTimeString(org.sendWindow.endMinute),
+    dailySendLimit: String(org.dailySendLimit),
   }
 }
 
-export function SendWindowCard({
-  workspace,
-  role,
-}: {
-  workspace: WorkspaceView
-  role: WorkspaceRole
-}) {
-  const updateWorkspace = useMutation(api.workspaces.mutations.update)
-  const setSendingPolicy = useMutation(api.workspaces.mutations.setSendingPolicy)
+export function SendWindowCard({ org }: { org: OrgView }) {
+  const updateOrg = useMutation(api.orgs.mutations.update)
+  const setSendingPolicy = useMutation(api.orgs.mutations.setSendingPolicy)
 
-  const [form, setForm] = useState<SendWindowValues>(valuesOf(workspace))
-  const [syncedAt, setSyncedAt] = useState(workspace.updatedAt)
-  const [baseVersion, setBaseVersion] = useState(workspace.policyVersion)
+  const [form, setForm] = useState<SendWindowValues>(valuesOf(org))
+  const [syncedAt, setSyncedAt] = useState(org.updatedAt)
+  const [baseVersion, setBaseVersion] = useState(org.policyVersion)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Resync on `updatedAt` rather than `policyVersion`: a change elsewhere on
   // the record moves one and not always the other.
-  if (workspace.updatedAt !== syncedAt && !dirty) {
-    setSyncedAt(workspace.updatedAt)
-    setBaseVersion(workspace.policyVersion)
-    setForm(valuesOf(workspace))
+  if (org.updatedAt !== syncedAt && !dirty) {
+    setSyncedAt(org.updatedAt)
+    setBaseVersion(org.policyVersion)
+    setForm(valuesOf(org))
   }
-
-  // Only the owner may change the policy; `setSendingPolicy` is owner-guarded.
-  const editable = role === "owner"
 
   const validate = (): string | null => {
     if (form.weekdays.length === 0) {
@@ -110,16 +100,16 @@ export function SendWindowCard({
     setError(null)
     try {
       let version = baseVersion
-      if (form.timezone !== workspace.timezone) {
-        const updated = await updateWorkspace({
-          workspaceId: workspace._id,
+      if (form.timezone !== org.timezone) {
+        const updated = await updateOrg({
+          orgId: org._id,
           timezone: form.timezone,
           expectedPolicyVersion: version,
         })
         version = updated.policyVersion
       }
       await setSendingPolicy({
-        workspaceId: workspace._id,
+        orgId: org._id,
         expectedPolicyVersion: version,
         dailySendLimit: Number(form.dailySendLimit),
         sendWindow: {
@@ -160,7 +150,7 @@ export function SendWindowCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <SendWindowFields
-          disabled={!editable || saving}
+          disabled={saving}
           values={form}
           onChange={(next) => {
             setDirty(true)
@@ -168,20 +158,16 @@ export function SendWindowCard({
           }}
         />
         <FormError message={error} />
-        {editable ? (
-          <div className="flex justify-end">
-            <Button
-              disabled={!dirty || saving}
-              onClick={() => void save()}
-              type="button"
-            >
-              {saving ? <Spinner data-icon="inline-start" /> : null}
-              Save sending policy
-            </Button>
-          </div>
-        ) : (
-          <PermissionNote role={role} action="change the sending policy" />
-        )}
+        <div className="flex justify-end">
+          <Button
+            disabled={!dirty || saving}
+            onClick={() => void save()}
+            type="button"
+          >
+            {saving ? <Spinner data-icon="inline-start" /> : null}
+            Save sending policy
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

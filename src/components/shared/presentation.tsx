@@ -33,7 +33,7 @@ export function formatWaited(since: number, now: number = Date.now()): string {
 }
 
 /**
- * An absolute instant. `timezone` is the workspace's IANA zone, because a send
+ * An absolute instant. `timezone` is the org's IANA zone, because a send
  * window and a daily allowance are evaluated there — showing the reader's own
  * zone for a policy boundary would be a different number from the one the
  * backend will use.

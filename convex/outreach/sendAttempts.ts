@@ -6,7 +6,7 @@
  * in the send* modules beside this one; attempts here are only ever read.
  */
 import { internalQuery, query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   domainError,
@@ -27,17 +27,17 @@ export const vEmailEventReceiptDoc = v.object({
   ...emailEventReceiptFields,
 });
 
-/** One send attempt; foreign or cross-workspace IDs return `NOT_FOUND`. */
+/** One send attempt; foreign or cross-org IDs return `NOT_FOUND`. */
 export const get = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     sendAttemptId: v.id("sendAttempts"),
   },
   returns: vSendAttemptDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const attempt = await ctx.db.get("sendAttempts", args.sendAttemptId);
-    if (attempt === null || attempt.workspaceId !== args.workspaceId) {
+    if (attempt === null || attempt.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "send attempt not found");
     }
     return attempt;
@@ -47,15 +47,15 @@ export const get = query({
 /** Attempts recorded for one draft revision (one logical send, bounded). */
 export const listForDraft = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     limit: v.optional(v.number()),
   },
   returns: v.array(vSendAttemptDoc),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const draft = await ctx.db.get("drafts", args.draftId);
-    if (draft === null || draft.workspaceId !== args.workspaceId) {
+    if (draft === null || draft.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "draft not found");
     }
     return await ctx.db
@@ -69,18 +69,18 @@ export const listForDraft = query({
 /** Attempts across all revisions of a conversation (audit surface). */
 export const listForConversation = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     state: v.optional(vSendAttemptState),
     limit: v.optional(v.number()),
   },
   returns: v.array(vSendAttemptDoc),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const conversation = await ctx.db.get("conversations", args.conversationId);
     if (
       conversation === null ||
-      conversation.workspaceId !== args.workspaceId
+      conversation.orgId !== args.orgId
     ) {
       throw domainError("NOT_FOUND", "conversation not found");
     }
@@ -109,35 +109,35 @@ export const listForConversation = query({
   },
 });
 
-/** Recent provider event receipts for the workspace (member read). */
+/** Recent provider event receipts for the org (member read). */
 export const listReceipts = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     providerMessageRef: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
   returns: v.array(vEmailEventReceiptDoc),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const limit = boundedLimit(args.limit);
     const providerMessageRef = args.providerMessageRef;
     if (providerMessageRef !== undefined) {
-      // by_providerMessageRef is a global index — the workspace filter is
+      // by_providerMessageRef is a global index — the org filter is
       // applied in the query so a known ref can never read across tenants.
       return await ctx.db
         .query("emailEventReceipts")
         .withIndex("by_providerMessageRef", (q) =>
           q.eq("providerMessageRef", providerMessageRef),
         )
-        .filter((q) => q.eq(q.field("workspaceId"), args.workspaceId))
+        .filter((q) => q.eq(q.field("orgId"), args.orgId))
         .order("desc")
         .take(limit);
     }
-    // Workspace scan via the application-key index prefix.
+    // Org scan via the application-key index prefix.
     return await ctx.db
       .query("emailEventReceipts")
-      .withIndex("by_workspaceId_and_applicationKey", (q) =>
-        q.eq("workspaceId", args.workspaceId),
+      .withIndex("by_orgId_and_applicationKey", (q) =>
+        q.eq("orgId", args.orgId),
       )
       .order("desc")
       .take(limit);

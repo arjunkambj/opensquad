@@ -2,7 +2,7 @@
  * The "Ready to outreach?" card of reference 20, made state-aware.
  *
  * The reference offers one fixed call to action. Ours offers the step the
- * workspace is actually on — finish setup, connect the inbox, choose how the
+ * org is actually on — finish setup, connect the inbox, choose how the
  * agent sends, approve what is waiting, hand it the wheel, or nothing at all
  * — decided on the server from real rows (`dashboard.queries.nextStep`) and
  * only put into words here.
@@ -56,7 +56,7 @@ function NextStepBody({ next }: { next: NextStep }) {
             next.inboxConnection === "invalid"
               ? "Your inbox key stopped working, so nothing can go out. Reconnect it to resume sending."
               : next.inboxConnection === "legacy_platform_inbox"
-                ? "This workspace can receive mail but not send it. Connect your own inbox to start outreach."
+                ? "This organization can receive mail but not send it. Connect your own inbox to start outreach."
                 : "Connect the inbox your agent will send from. Until then it finds and researches leads and contacts nobody."
           }
           action={

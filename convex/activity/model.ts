@@ -1,8 +1,8 @@
 /**
- * Workspace activity feed — architecture §4.2/§5.
+ * Org activity feed — architecture §4.2/§5.
  *
  * This domain owns the deduped receipt trail: `recordActivityEvent` is THE
- * write path, and every meaningful step lands here with a workspace-unique
+ * write path, and every meaningful step lands here with an org-unique
  * `dedupeKey` so a replayed callback inserts nothing twice. It owns no
  * business rule of its own — callers decide what is worth recording.
  */
@@ -14,7 +14,7 @@ import type { GenericDatabaseWriter } from "convex/server";
 export type WriteCtx = { db: GenericDatabaseWriter<DataModel> };
 
 export type ActivityInput = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   /** One of the ACTIVITY_KINDS lists (lib/validators/activity.ts); stored as a
    *  bounded string. */
   kind: string;
@@ -28,7 +28,7 @@ export type ActivityInput = {
 
 /**
  * Insert one activity event unless its `dedupeKey` already exists in the
- * workspace. Returns the existing row on a duplicate so callers can stay
+ * org. Returns the existing row on a duplicate so callers can stay
  * idempotent without pre-checking.
  */
 export async function recordActivityEvent(
@@ -37,15 +37,15 @@ export async function recordActivityEvent(
 ): Promise<Doc<"activityEvents">> {
   const existing = await ctx.db
     .query("activityEvents")
-    .withIndex("by_workspaceId_and_dedupeKey", (q) =>
-      q.eq("workspaceId", event.workspaceId).eq("dedupeKey", event.dedupeKey),
+    .withIndex("by_orgId_and_dedupeKey", (q) =>
+      q.eq("orgId", event.orgId).eq("dedupeKey", event.dedupeKey),
     )
     .unique();
   if (existing !== null) {
     return existing;
   }
   const id = await ctx.db.insert("activityEvents", {
-    workspaceId: event.workspaceId,
+    orgId: event.orgId,
     kind: boundedString(event.kind, "kind", { min: 1, max: 64 }),
     summary: boundedString(event.summary, "summary", { min: 1, max: 500 }),
     actor: boundedString(event.actor, "actor", { min: 1, max: 300 }),

@@ -15,4 +15,4 @@ export * from "./company";
 export * from "./inbox";
 export * from "./leads";
 export * from "./outreach";
-export * from "./workspaces";
+export * from "./orgs";

@@ -8,7 +8,7 @@
  * slices the same rows the way the product screen speaks: by what happened on
  * the thread, not by who owns it.
  *
- * EVERY PILL IS ONE RANGE ON `by_workspaceId_and_lastInboundAt`:
+ * EVERY PILL IS ONE RANGE ON `by_orgId_and_lastInboundAt`:
  *
  * - `received` — `lastInboundAt > 0`, newest reply first. A pure range, no
  *   predicate: a thread is "received" exactly when a reply has landed on it.
@@ -22,12 +22,12 @@
  * - `unread` — the same range, narrowed to `unreadCount > 0`. The counter is
  *   only ever raised by `applyInboundContext`, so every unread thread has an
  *   inbound message and the range can never hide one.
- * - `all` — the same index at `workspaceId` alone, which covers every thread
- *   in the workspace. Ordering is by latest reply, so threads that have not
+ * - `all` — the same index at `orgId` alone, which covers every thread
+ *   in the org. Ordering is by latest reply, so threads that have not
  *   been replied to yet (a staged first-touch waiting for approval) sort
  *   after the answered ones rather than by their own last send. That is the
  *   honest best the declared indexes allow; the hand-off asks for
- *   `by_workspaceId_and_lastMessageAt` to order `all` by last activity.
+ *   `by_orgId_and_lastMessageAt` to order `all` by last activity.
  *
  * SEARCH is bounded and index-backed, and it is deliberately narrow: the only
  * search index that reaches a conversation is `prospects.search_company_name`,
@@ -42,7 +42,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import { query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   boundedString,
@@ -133,7 +133,7 @@ async function isAwaitingApproval(
   const draft = await ctx.db.get("drafts", conversation.currentDraftId);
   if (
     draft === null ||
-    draft.workspaceId !== conversation.workspaceId ||
+    draft.orgId !== conversation.orgId ||
     draft.state !== "current"
   ) {
     return false;
@@ -154,10 +154,10 @@ async function toInboxRow(
     conversation.prospectId === undefined
       ? null
       : await ctx.db.get("prospects", conversation.prospectId);
-  // A dangling or cross-workspace lead renders as "no lead linked" rather
-  // than quoting another workspace's row into this list.
+  // A dangling or cross-org lead renders as "no lead linked" rather
+  // than quoting another org's row into this list.
   const lead =
-    prospect === null || prospect.workspaceId !== conversation.workspaceId
+    prospect === null || prospect.orgId !== conversation.orgId
       ? null
       : {
           prospectId: prospect._id,
@@ -202,15 +202,15 @@ async function toInboxRow(
 /** The pill's range, ordered newest reply first. */
 function pillRange(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   pill: InboxPill,
 ) {
   const ranged = ctx.db
     .query("conversations")
-    .withIndex("by_workspaceId_and_lastInboundAt", (q) =>
+    .withIndex("by_orgId_and_lastInboundAt", (q) =>
       pill === "all"
-        ? q.eq("workspaceId", workspaceId)
-        : q.eq("workspaceId", workspaceId).gt("lastInboundAt", 0),
+        ? q.eq("orgId", orgId)
+        : q.eq("orgId", orgId).gt("lastInboundAt", 0),
     )
     .order("desc");
   if (pill === "interested") {
@@ -270,7 +270,7 @@ function recencyOf(conversation: Doc<"conversations">): number {
  */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     pill: v.optional(vInboxPill),
     /** Company-name search; empty text is the ordinary list. */
     q: v.optional(v.string()),
@@ -289,7 +289,7 @@ export const list = query({
     searched: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const pill = args.pill ?? "received";
     const limit = boundedLimit(args.limit);
     const text =
@@ -303,7 +303,7 @@ export const list = query({
       const matches = await ctx.db
         .query("prospects")
         .withSearchIndex("search_company_name", (search) =>
-          search.search("companyName", text).eq("workspaceId", args.workspaceId),
+          search.search("companyName", text).eq("orgId", args.orgId),
         )
         .take(SEARCH_LEAD_BOUND);
       const found: Doc<"conversations">[] = [];
@@ -314,7 +314,7 @@ export const list = query({
           .take(SEARCH_THREADS_PER_LEAD);
         for (const thread of threads) {
           if (
-            thread.workspaceId === args.workspaceId &&
+            thread.orgId === args.orgId &&
             matchesPill(thread, pill)
           ) {
             found.push(thread);
@@ -341,11 +341,11 @@ export const list = query({
       };
     }
 
-    const page = await pillRange(ctx, args.workspaceId, pill).paginate({
+    const page = await pillRange(ctx, args.orgId, pill).paginate({
       numItems: limit,
       cursor: args.cursor ?? null,
     });
-    const counted = await pillRange(ctx, args.workspaceId, pill).take(
+    const counted = await pillRange(ctx, args.orgId, pill).take(
       MAX_LIST_LIMIT + 1,
     );
     const items: InboxRow[] = [];

@@ -133,7 +133,7 @@ async function executeAttemptDispatch(
       const call = await ctx.runAction(
         internal.integrations.agentmail.executeReplyAttempt,
         {
-          workspaceId: begin.workspaceId,
+          orgId: begin.orgId,
           inboxId: begin.inboxRef,
           idempotencyKey: begin.providerIdempotencyKey,
           parentMessageId: begin.parentMessageId ?? "",
@@ -145,7 +145,7 @@ async function executeAttemptDispatch(
       const call = await ctx.runAction(
         internal.integrations.agentmail.executeSendAttempt,
         {
-          workspaceId: begin.workspaceId,
+          orgId: begin.orgId,
           inboxId: begin.inboxRef,
           idempotencyKey: begin.providerIdempotencyKey,
           payload: begin.payload,
@@ -317,7 +317,7 @@ export const sendApprovedDraft = internalAction({
 /**
  * Durable re-entry for a parked/scheduled attempt — the reschedule target
  * for send-window waits. Re-runs every gate via `beginDispatch`; if the
- * window is still closed it reschedules itself, so a workspace restart never
+ * window is still closed it reschedules itself, so an org restart never
  * loses the wait.
  */
 export const dispatchAttempt = internalAction({

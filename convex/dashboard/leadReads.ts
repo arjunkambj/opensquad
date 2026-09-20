@@ -21,7 +21,7 @@ import {
 /**
  * Researched leads that scored 3, newest first.
  *
- * Exact range on `by_workspaceId_and_scoreKey`: `scoreKey` is the
+ * Exact range on `by_orgId_and_scoreKey`: `scoreKey` is the
  * denormalised mirror of `research.aiScore`, so "score 3" implies
  * "researched" and no post-filter is needed. The index does not carry
  * `createdAt`, so the window is applied to the newest-first page — which is
@@ -32,13 +32,13 @@ import {
  */
 export async function loadHotLeads(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   range: Range,
 ): Promise<{ rows: Doc<"prospects">[]; bounded: Bounded }> {
   const page = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_scoreKey", (q) =>
-      q.eq("workspaceId", workspaceId).eq("scoreKey", HOT_LEAD_SCORE),
+    .withIndex("by_orgId_and_scoreKey", (q) =>
+      q.eq("orgId", orgId).eq("scoreKey", HOT_LEAD_SCORE),
     )
     .order("desc")
     .take(DASHBOARD_SCAN_BOUND + 1);
@@ -68,18 +68,18 @@ const LEAD_APPROVALS = Object.keys(APPROVAL_PARTITION) as LeadApproval[];
 /**
  * Leads created in the window, for the activity chart's daily series.
  *
- * `prospects` has no `(workspaceId, createdAt)` index, so this reads the
- * three `by_workspaceId_and_approval` ranges newest-first instead — three
+ * `prospects` has no `(orgId, createdAt)` index, so this reads the
+ * three `by_orgId_and_approval` ranges newest-first instead — three
  * exact index ranges rather than one table scan, and together they partition
- * the table, so no lead is missed. Each is bounded separately, so a workspace
+ * the table, so no lead is missed. Each is bounded separately, so an org
  * past the bound reports `hasMore` and the chart says so under the plot.
  *
- * The integrator should add `prospects.by_workspaceId_and_createdAt`; this
+ * The integrator should add `prospects.by_orgId_and_createdAt`; this
  * becomes one exact range and the bound stops mattering.
  */
 export async function loadLeadsCreated(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   range: Range,
 ): Promise<{ createdAt: number[]; bounded: Bounded }> {
   const createdAt: number[] = [];
@@ -87,8 +87,8 @@ export async function loadLeadsCreated(
   for (const approval of LEAD_APPROVALS) {
     const page = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_approval", (q) =>
-        q.eq("workspaceId", workspaceId).eq("approval", approval),
+      .withIndex("by_orgId_and_approval", (q) =>
+        q.eq("orgId", orgId).eq("approval", approval),
       )
       .order("desc")
       .take(DASHBOARD_SCAN_BOUND + 1);
@@ -108,19 +108,19 @@ export async function loadLeadsCreated(
 
 /**
  * Leads sitting at stage `interested` whose stage last moved inside the
- * window. Exact range on `by_workspaceId_and_stage_and_updatedAt` — the same
+ * window. Exact range on `by_orgId_and_stage_and_updatedAt` — the same
  * index and the same rows as the Contacts "Interested" filter.
  */
 export async function countInterested(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   range: Range,
 ): Promise<Bounded> {
   const page = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_stage_and_updatedAt", (q) =>
+    .withIndex("by_orgId_and_stage_and_updatedAt", (q) =>
       q
-        .eq("workspaceId", workspaceId)
+        .eq("orgId", orgId)
         .eq("stage", "interested")
         .gte("updatedAt", range.from)
         .lte("updatedAt", range.to),
@@ -132,16 +132,16 @@ export async function countInterested(
 /**
  * Leads waiting for a yes or a no, right now. Not window-scoped: an approval
  * queue is a state, and hiding the ones that arrived last month would hide
- * work. Exact range on `by_workspaceId_and_approval`.
+ * work. Exact range on `by_orgId_and_approval`.
  */
 export async function countPendingApprovals(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Bounded> {
   const page = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_approval", (q) =>
-      q.eq("workspaceId", workspaceId).eq("approval", "pending"),
+    .withIndex("by_orgId_and_approval", (q) =>
+      q.eq("orgId", orgId).eq("approval", "pending"),
     )
     .take(DASHBOARD_SCAN_BOUND + 1);
   return filled(page, DASHBOARD_SCAN_BOUND);

@@ -50,14 +50,14 @@ const OUTCOME_CLASS: Record<UsageOutcome, string> = {
 }
 
 export function UsageHistory({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
 }) {
   const [trail, setTrail] = useState<number[]>([])
   const before = trail.at(-1)
   const result = useQuery(api.billing.queries.history, {
-    workspaceId,
+    orgId,
     ...(before === undefined ? {} : { before }),
   })
 
@@ -66,7 +66,7 @@ export function UsageHistory({
       <CardHeader>
         <CardTitle>History</CardTitle>
         <CardDescription>
-          Every paid step this workspace has taken, newest first. Browsing,
+          Every paid step this organization has taken, newest first. Browsing,
           approving, sending and handling unsubscribes are free and never
           appear here.
         </CardDescription>
@@ -83,7 +83,7 @@ export function UsageHistory({
             description={
               trail.length === 0
                 ? "Your first website analysis, lead search or researched company will show up here the moment it runs."
-                : "You have reached the end of this workspace's history."
+                : "You have reached the end of this organization's history."
             }
           />
         ) : (

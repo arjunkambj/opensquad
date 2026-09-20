@@ -11,16 +11,16 @@
 import { Message01Icon } from "@hugeicons/core-free-icons"
 import { InboxConnection } from "@/components/inbox-connection/InboxConnection"
 import { EmptyState, LoadingState } from "@/components/states/states"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useCurrentOrg } from "@/hooks/use-current-org"
 
 export function InboxStartPane() {
-  const current = useCurrentWorkspace()
+  const current = useCurrentOrg()
 
-  if (current === undefined || current === null) {
+  if (current.status !== "ready") {
     return <LoadingState title="Loading your inbox" />
   }
 
-  const connection = current.workspace.inboxConnection
+  const connection = current.org.inboxConnection
   if (connection === "none" || connection === "invalid") {
     return (
       <div className="flex flex-col gap-4">
@@ -36,7 +36,7 @@ export function InboxStartPane() {
               : "The stored key was refused, so sending and replies are paused. Reconnect to start them again."}
           </p>
         </div>
-        <InboxConnection workspaceId={current.workspace._id} />
+        <InboxConnection orgId={current.org._id} />
       </div>
     )
   }

@@ -170,7 +170,7 @@ export async function applyToConversation(
  * AND THE SENDER MUST BE THE PERSON WE MAILED. An explicit opt-out from some
  * other address — a colleague on cc, an assistant, an unparseable header — is
  * a claim made on someone else's behalf. Honouring it would let a third party
- * suppress an address in a workspace they have nothing to do with, so it is
+ * suppress an address in an org they have nothing to do with, so it is
  * downgraded to the ambiguous hold: automation still stops, but a human
  * decides whether to add the suppression through `suppressions.add`.
  *
@@ -241,7 +241,7 @@ async function enforceOptOut(
       }
       for (const value of targets) {
         await ctx.runMutation(internal.outreach.suppressions.recordSuppression, {
-          workspaceId: conversation.workspaceId,
+          orgId: conversation.orgId,
           kind: "email",
           value,
           reason: "unsubscribe",
@@ -255,8 +255,8 @@ async function enforceOptOut(
         body:
           `Opt-out honoured: the verified sender asked to be removed (rule ${rule}). ` +
           (targets.size === 1
-            ? "This address is suppressed for the workspace"
-            : "The address that asked and this thread's outbound contact address are both suppressed for the workspace") +
+            ? "This address is suppressed for the organization"
+            : "The address that asked and this thread's outbound contact address are both suppressed for the organization") +
           "; remove the suppression to contact them again.",
       });
       return;

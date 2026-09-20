@@ -2,16 +2,16 @@
  * Manage inbox — the provider half (PLAN §4 "Manage inbox" steps 1–3, 6–7).
  *
  * THE RACE, AND WHERE IT IS CLOSED. Convex has no unique indexes, so "one
- * inbox, one workspace" is enforced transactionally: every provider call —
+ * inbox, one org" is enforced transactionally: every provider call —
  * verify the key, find or create the inbox, register the webhook — happens in
  * the ACTION first, and the claim is a single read-then-write mutation over
- * `workspaces.by_inboxRef` (`connectionState.claimInbox`). Convex mutations
+ * `orgs.by_inboxRef` (`connectionState.claimInbox`). Convex mutations
  * are serializable, so two concurrent connects cannot both pass the read; the
  * action that loses deletes the webhook it just registered, leaving exactly
  * one behind.
  *
  * IDEMPOTENT BY CONSTRUCTION. Both creates carry a deterministic `client_id`
- * derived from the workspace id, so connecting twice returns the inbox and the
+ * derived from the org id, so connecting twice returns the inbox and the
  * webhook that already exist instead of making duplicates.
  *
  * Every action here is owner-guarded through `connection.requireConnectionOwner`
@@ -86,12 +86,12 @@ async function limitConnectCalls(ctx: ActionCtx): Promise<void> {
  * overwrite a working connection.
  */
 export const verifyAndStoreKey = action({
-  args: { workspaceId: v.id("workspaces"), apiKey: v.string() },
+  args: { orgId: v.id("orgs"), apiKey: v.string() },
   returns: vVerifyResult,
   handler: async (ctx, args): Promise<typeof vVerifyResult.type> => {
     await limitConnectCalls(ctx);
     await ctx.runQuery(internal.inbox.connection.requireConnectionOwner, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
     });
     if (!isSecretStorageConfigured()) {
       return failure(
@@ -105,8 +105,8 @@ export const verifyAndStoreKey = action({
       return mapProviderFailure(listed.code);
     }
     const envelope = await encryptSecret(apiKey);
-    await ctx.runMutation(internal.workspaces.secrets.putSecret, {
-      workspaceId: args.workspaceId,
+    await ctx.runMutation(internal.orgs.secrets.putSecret, {
+      orgId: args.orgId,
       provider: "agentmail" as const,
       ciphertext: envelope.ciphertext,
       iv: envelope.iv,
@@ -143,7 +143,7 @@ const vConnectResult = v.union(
 
 /**
  * Connect the sending inbox: find or create it on the user's own account,
- * register the per-workspace webhook, then claim the inbox transactionally.
+ * register the per-org webhook, then claim the inbox transactionally.
  *
  * The claim is LAST. If it loses the race, the webhook this action registered
  * is deleted before returning, so a losing connect leaves the winner's
@@ -151,7 +151,7 @@ const vConnectResult = v.union(
  */
 export const connectInbox = action({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** An inbox already on the account. Omit to create one. */
     inboxId: v.optional(v.string()),
     username: v.optional(v.string()),
@@ -162,7 +162,7 @@ export const connectInbox = action({
     await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
       internal.inbox.connection.requireConnectionOwner,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     const siteUrl = process.env.CONVEX_SITE_URL;
     if (siteUrl === undefined || siteUrl.length === 0) {
@@ -172,8 +172,8 @@ export const connectInbox = action({
       );
     }
     const envelope = await ctx.runQuery(
-      internal.workspaces.secrets.getEnvelope,
-      { workspaceId: args.workspaceId, provider: "agentmail" as const },
+      internal.orgs.secrets.getEnvelope,
+      { orgId: args.orgId, provider: "agentmail" as const },
     );
     if (envelope === null) {
       return failure("no_stored_key", "Add your AgentMail key first.");
@@ -208,7 +208,7 @@ export const connectInbox = action({
       inboxAddress = found.address;
     } else {
       const created = await createInbox(apiKey, {
-        clientId: agentmailClientId("inbox", args.workspaceId),
+        clientId: agentmailClientId("inbox", args.orgId),
         ...(args.username !== undefined
           ? { username: boundedString(args.username, "username", { min: 1, max: 64 }) }
           : {}),
@@ -230,7 +230,7 @@ export const connectInbox = action({
 
     // --- the webhook ------------------------------------------------------
     const webhookUrl = `${siteUrl.replace(/\/+$/, "")}/agentmail/webhook/${owner.webhookToken}`;
-    const clientId = agentmailClientId("webhook", args.workspaceId);
+    const clientId = agentmailClientId("webhook", args.orgId);
     let registered = await createWebhook(apiKey, {
       url: webhookUrl,
       inboxIds: [inboxRef],
@@ -241,7 +241,7 @@ export const connectInbox = action({
       (registered.value.url !== webhookUrl ||
         !registered.value.inboxIds.includes(inboxRef))
     ) {
-      // `client_id` returned the workspace's PREVIOUS registration, pointing
+      // `client_id` returned the org's PREVIOUS registration, pointing
       // at a different inbox or a stale URL. Replace it rather than leave mail
       // going to the wrong route; the id is free again once it is deleted.
       await deleteWebhook(apiKey, registered.value.webhookId);
@@ -271,7 +271,7 @@ export const connectInbox = action({
     // --- the claim, last --------------------------------------------------
     const secret = await encryptSecret(registered.value.secret);
     const claim = await ctx.runMutation(internal.inbox.connectionState.claimInbox, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       inboxRef,
       webhookId: registered.value.webhookId,
       webhookSecret: {
@@ -286,7 +286,7 @@ export const connectInbox = action({
       await deleteWebhook(apiKey, registered.value.webhookId);
       return failure(
         "inbox_claimed_elsewhere",
-        "That inbox is connected to another workspace.",
+        "That inbox is connected to another organization.",
       );
     }
     return { ok: true as const, inboxRef, inboxAddress };
@@ -332,10 +332,10 @@ async function findInbox(
  *
  * The new key must be able to see the CURRENT inbox. A key that cannot is a
  * different connection, not a rotation, and is refused so nothing silently
- * re-points the workspace at another mailbox.
+ * re-points the org at another mailbox.
  */
 export const rotateKey = action({
-  args: { workspaceId: v.id("workspaces"), apiKey: v.string() },
+  args: { orgId: v.id("orgs"), apiKey: v.string() },
   returns: v.union(v.object({ ok: v.literal(true) }), vFailure),
   handler: async (
     ctx,
@@ -344,7 +344,7 @@ export const rotateKey = action({
     await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
       internal.inbox.connection.requireConnectionOwner,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     if (owner.inboxRef === undefined) {
       return failure("not_connected", "Connect an inbox before rotating a key.");
@@ -367,14 +367,14 @@ export const rotateKey = action({
     if (found === null) {
       return failure(
         "inbox_not_visible_to_key",
-        "That key cannot see this workspace's inbox. Disconnect first if you are moving to a different mailbox.",
+        "That key cannot see this organization's inbox. Disconnect first if you are moving to a different mailbox.",
       );
     }
     const webhookUrl = `${siteUrl.replace(/\/+$/, "")}/agentmail/webhook/${owner.webhookToken}`;
     const registered = await createWebhook(apiKey, {
       url: webhookUrl,
       inboxIds: [owner.inboxRef],
-      clientId: agentmailClientId("webhook", args.workspaceId),
+      clientId: agentmailClientId("webhook", args.orgId),
     });
     if (!registered.ok) {
       return failure(
@@ -386,13 +386,13 @@ export const rotateKey = action({
     // Read the OLD key before it is replaced — the old webhook has to be
     // deleted with the credentials that created it.
     const previous = await ctx.runQuery(
-      internal.workspaces.secrets.getEnvelope,
-      { workspaceId: args.workspaceId, provider: "agentmail" as const },
+      internal.orgs.secrets.getEnvelope,
+      { orgId: args.orgId, provider: "agentmail" as const },
     );
     const key = await encryptSecret(apiKey);
     const secret = await encryptSecret(registered.value.secret);
     await ctx.runMutation(internal.inbox.connectionState.applyRotation, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       webhookId: registered.value.webhookId,
       apiKeyEnvelope: {
         ciphertext: key.ciphertext,
@@ -429,7 +429,7 @@ export const rotateKey = action({
  * wipe both secrets and pause automation with a reason the banner reads.
  */
 export const disconnectInbox = action({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({ ok: v.literal(true), webhookDeleted: v.boolean() }),
   handler: async (
     ctx,
@@ -438,13 +438,13 @@ export const disconnectInbox = action({
     await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
       internal.inbox.connection.requireConnectionOwner,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     let webhookDeleted = false;
     if (owner.agentmailWebhookId !== undefined) {
       const envelope = await ctx.runQuery(
-        internal.workspaces.secrets.getEnvelope,
-        { workspaceId: args.workspaceId, provider: "agentmail" as const },
+        internal.orgs.secrets.getEnvelope,
+        { orgId: args.orgId, provider: "agentmail" as const },
       );
       if (envelope !== null) {
         const removed = await deleteWebhook(
@@ -458,7 +458,7 @@ export const disconnectInbox = action({
     // user asked to disconnect, and a stale webhook can only deliver events
     // this deployment will refuse.
     await ctx.runMutation(internal.inbox.connectionState.releaseInbox, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
     });
     return { ok: true as const, webhookDeleted };
   },

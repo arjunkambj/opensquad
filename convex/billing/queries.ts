@@ -9,7 +9,7 @@
  * old raw-bucket `summary` is gone: it returned `enrich_credits` to a client.
  */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedInt, boundedLimit } from "../lib/validators";
 import { usageBucketFields, usageReservationFields } from "../schema";
 import { findCreditsBucket } from "./model";
@@ -51,16 +51,16 @@ export const vUsageEntry = v.object({
 const USAGE_PAGE_MAX = 50;
 
 /**
- * The workspace's credit history, newest first.
+ * The org's credit history, newest first.
  *
  * Paginated by a keyset on the entry's own timestamp: pass the last `at` of a
  * page back as `before` to get the next one. It reads only the reservations
  * of the lifetime `credits` bucket, which the trial grant itself bounds — the
- * entire history of a 300-credit workspace is a few hundred rows.
+ * entire history of a 300-credit org is a few hundred rows.
  */
 export const history = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     limit: v.optional(v.number()),
     before: v.optional(v.number()),
   },
@@ -70,7 +70,7 @@ export const history = query({
     nextBefore: v.union(v.number(), v.null()),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const limit = Math.min(boundedLimit(args.limit), USAGE_PAGE_MAX);
     const before =
       args.before === undefined
@@ -80,7 +80,7 @@ export const history = query({
             max: Number.MAX_SAFE_INTEGER,
           });
 
-    const bucket = await findCreditsBucket(ctx, args.workspaceId);
+    const bucket = await findCreditsBucket(ctx, args.orgId);
     if (bucket === null) {
       return { entries: [], nextBefore: null };
     }

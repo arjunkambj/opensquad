@@ -25,21 +25,21 @@ import { Button } from "@/components/ui/button"
 import { useQueueNavigation } from "@/hooks/use-queue-navigation"
 import { boundedCount } from "@/lib/bounded-count"
 import { withFilters } from "@/lib/search-params"
-import type { InboxSearch } from "@/routes/_dashboard/_workspace/inbox"
+import type { InboxSearch } from "@/routes/_dashboard/_org/inbox"
 
-const INBOX_ROUTE = "/_dashboard/_workspace/inbox"
+const INBOX_ROUTE = "/_dashboard/_org/inbox"
 
 export function ConversationsPanel({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
 }) {
   const search = useSearch({ from: INBOX_ROUTE })
   const navigate = useNavigate()
   const pill = search.pill ?? "received"
 
   const page = useQuery(api.inbox.inboxList.list, {
-    workspaceId,
+    orgId,
     pill,
     ...(search.q === undefined ? {} : { q: search.q }),
     ...(search.cursor === undefined ? {} : { cursor: search.cursor }),

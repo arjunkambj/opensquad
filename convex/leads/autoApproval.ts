@@ -76,8 +76,8 @@ export const autoApproveForAgent = internalMutation({
 
     const pending = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_approval", (q) =>
-        q.eq("workspaceId", agent.workspaceId).eq("approval", "pending"),
+      .withIndex("by_orgId_and_approval", (q) =>
+        q.eq("orgId", agent.orgId).eq("approval", "pending"),
       )
       .order("desc")
       .take(PENDING_SCAN_MAX);
@@ -97,7 +97,7 @@ export const autoApproveForAgent = internalMutation({
         updatedAt: now,
       });
       await appendLeadEvent(ctx, {
-        workspaceId: lead.workspaceId,
+        orgId: lead.orgId,
         prospectId: lead._id,
         kind: "approval_changed",
         summary: `Autopilot approved this lead for outreach (score at or above ${minScore})`,

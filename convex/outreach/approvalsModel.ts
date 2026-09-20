@@ -1,7 +1,7 @@
 /**
  * The shared draft-resolution core behind approve / requestChanges / reject.
  *
- * Every resolution (a) dedupes on (workspaceId, requestId) through the
+ * Every resolution (a) dedupes on (orgId, requestId) through the
  * approvals table, (b) binds the exact draft revision — payload hash,
  * normalized recipient, current-draft pointer and conversation context
  * version — then (c) writes one immutable `approvals` row. Stale approvals
@@ -10,12 +10,12 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedString, domainError } from "../lib/validators";
 import type { ApprovalVerdict, DraftResolution } from "../lib/validators";
 
 type ResolveInput = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   draftId: Id<"drafts">;
   requestId: string;
   verdict: ApprovalVerdict;
@@ -35,14 +35,14 @@ export async function resolveDraft(
   ctx: MutationCtx,
   args: ResolveInput,
 ): Promise<{ approval: Doc<"approvals">; replayed: boolean }> {
-  const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+  const { identityKey } = await requireOrgMember(ctx, args.orgId);
   const requestId = boundedString(args.requestId, "requestId", {
     min: 1,
     max: 100,
   });
 
   const draft = await ctx.db.get("drafts", args.draftId);
-  if (draft === null || draft.workspaceId !== args.workspaceId) {
+  if (draft === null || draft.orgId !== args.orgId) {
     throw domainError("NOT_FOUND", "draft not found");
   }
 
@@ -52,8 +52,8 @@ export async function resolveDraft(
   // not silently return a verdict recorded for unrelated content.
   const prior = await ctx.db
     .query("approvals")
-    .withIndex("by_workspaceId_and_requestId", (q) =>
-      q.eq("workspaceId", args.workspaceId).eq("requestId", requestId),
+    .withIndex("by_orgId_and_requestId", (q) =>
+      q.eq("orgId", args.orgId).eq("requestId", requestId),
     )
     .unique();
   if (prior !== null) {
@@ -102,7 +102,7 @@ export async function resolveDraft(
   // preflight runs the same check a second time before any wire call.
   if (draft.bookingId !== undefined) {
     const booking = await ctx.db.get("bookings", draft.bookingId);
-    if (booking === null || booking.workspaceId !== args.workspaceId) {
+    if (booking === null || booking.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "booking not found");
     }
     if (
@@ -119,7 +119,7 @@ export async function resolveDraft(
 
   const now = Date.now();
   const approvalId = await ctx.db.insert("approvals", {
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     // This module is the HUMAN approval path; Autopilot writes its own row
     // with `actor: "autopilot"` through the outreach loop (PLAN §9.3).
     actor: "user",
@@ -145,7 +145,7 @@ export async function resolveDraft(
         ? "requested changes on"
         : "rejected";
   await recordActivityEvent(ctx, {
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     kind: "approval_recorded",
     summary:
       `Draft revision ${draft.revision} ${verb} by an authorized ` +

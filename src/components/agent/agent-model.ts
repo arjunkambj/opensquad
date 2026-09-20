@@ -97,7 +97,7 @@ export const RUN_NOW_COPY: Record<RunNowReason, string> = {
   started: "Run started.",
   already_running: "Already running — this run will finish on its own.",
   not_live: "Finish setup before running the agent.",
-  not_found: "This workspace has no agent yet.",
+  not_found: "This organization has no agent yet.",
 }
 
 /**
@@ -120,7 +120,7 @@ export function agentErrorCopy(error: unknown, fallback: string): string {
     case "RATE_LIMITED":
       return "That was a lot of requests in a row. Wait a moment and try again."
     case "FORBIDDEN":
-      return "Your role cannot change the agent. An owner or operator can."
+      return "This account can't change the agent."
     case "UNAUTHENTICATED":
       return "Your session expired. Sign in again to change the agent."
     case "NOT_FOUND":
@@ -199,8 +199,8 @@ export function ratePercent(part: number, whole: number): number | null {
 }
 
 /**
- * A calendar day in the WORKSPACE's timezone — the card's "Created on …".
- * The workspace zone, not the reader's, because every date this product
+ * A calendar day in the ORG's timezone — the card's "Created on …".
+ * The org zone, not the reader's, because every date this product
  * states is evaluated there.
  */
 export function formatDay(at: number, timezone: string): string {

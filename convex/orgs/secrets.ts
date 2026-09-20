@@ -1,5 +1,5 @@
 /**
- * The `workspaceSecrets` store — one encrypted row per (workspace, provider)
+ * The `orgSecrets` store — one encrypted row per (org, provider)
  * (PLAN §4 "Bring-your-own keys", §9.4 "Rotation").
  *
  * WHAT THIS FILE IS ALLOWED TO RETURN. Every function here is internal. The
@@ -37,21 +37,21 @@ export const SECRET_ROTATION_OVERLAP_MS = 10 * 60 * 1000;
 /** Longest ciphertext/iv this store accepts — a bound, not a shape check. */
 const SECRET_FIELD_MAX_LENGTH = 2_000;
 
-/** The two providers a connected workspace holds keys for. */
+/** The two providers a connected org holds keys for. */
 export const AGENTMAIL_SECRET_PROVIDERS: readonly SecretProvider[] = [
   "agentmail",
   "agentmail_webhook",
 ];
 
-export async function readWorkspaceSecret(
+export async function readOrgSecret(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   provider: SecretProvider,
-): Promise<Doc<"workspaceSecrets"> | null> {
+): Promise<Doc<"orgSecrets"> | null> {
   return await ctx.db
-    .query("workspaceSecrets")
-    .withIndex("by_workspaceId_and_provider", (q) =>
-      q.eq("workspaceId", workspaceId).eq("provider", provider),
+    .query("orgSecrets")
+    .withIndex("by_orgId_and_provider", (q) =>
+      q.eq("orgId", orgId).eq("provider", provider),
     )
     .unique();
 }
@@ -66,7 +66,7 @@ export const vSecretSummary = v.object({
 export type SecretSummary = typeof vSecretSummary.type;
 
 export function summariseSecret(
-  row: Doc<"workspaceSecrets"> | null,
+  row: Doc<"orgSecrets"> | null,
 ): SecretSummary {
   if (row === null) {
     return { status: "missing" as const };
@@ -95,7 +95,7 @@ export const vSecretEnvelopeRow = v.object({
 export type SecretEnvelopeRow = typeof vSecretEnvelopeRow.type;
 
 export function envelopeOf(
-  row: Doc<"workspaceSecrets">,
+  row: Doc<"orgSecrets">,
   at: number,
 ): SecretEnvelopeRow {
   const overlapOpen =
@@ -123,28 +123,28 @@ export function envelopeOf(
 /** Read one stored envelope. Callers are internal actions only. */
 export const getEnvelope = internalQuery({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     provider: vSecretProvider,
   },
   returns: v.union(vSecretEnvelopeRow, v.null()),
   handler: async (ctx, args) => {
-    const row = await readWorkspaceSecret(ctx, args.workspaceId, args.provider);
+    const row = await readOrgSecret(ctx, args.orgId, args.provider);
     return row === null ? null : envelopeOf(row, Date.now());
   },
 });
 
 /**
- * Insert or replace one workspace secret.
+ * Insert or replace one org secret.
  *
  * `keepPreviousFor` opens the rotation overlap: the secret being replaced
  * stays acceptable for that many milliseconds. Storing a secret with no
  * overlap CLEARS any open one — a fresh connect must not inherit the previous
  * owner's window.
  */
-export async function putWorkspaceSecret(
+export async function putOrgSecret(
   ctx: MutationCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     provider: SecretProvider;
     ciphertext: string;
     iv: string;
@@ -152,7 +152,7 @@ export async function putWorkspaceSecret(
     status: SecretStatus;
     keepPreviousFor?: number;
   },
-): Promise<Doc<"workspaceSecrets">> {
+): Promise<Doc<"orgSecrets">> {
   const ciphertext = boundedString(args.ciphertext, "ciphertext", {
     min: 1,
     max: SECRET_FIELD_MAX_LENGTH,
@@ -160,9 +160,9 @@ export async function putWorkspaceSecret(
   const iv = boundedString(args.iv, "iv", { min: 1, max: 128 });
   const last4 = boundedString(args.last4, "last4", { min: 1, max: 8 });
   const now = Date.now();
-  const existing = await readWorkspaceSecret(
+  const existing = await readOrgSecret(
     ctx,
-    args.workspaceId,
+    args.orgId,
     args.provider,
   );
   const overlap =
@@ -178,7 +178,7 @@ export async function putWorkspaceSecret(
           previousValidUntil: undefined,
         };
   if (existing !== null) {
-    await ctx.db.patch("workspaceSecrets", existing._id, {
+    await ctx.db.patch("orgSecrets", existing._id, {
       ciphertext,
       iv,
       last4,
@@ -187,14 +187,14 @@ export async function putWorkspaceSecret(
       checkedAt: now,
       ...overlap,
     });
-    const patched = await ctx.db.get("workspaceSecrets", existing._id);
+    const patched = await ctx.db.get("orgSecrets", existing._id);
     if (patched === null) {
-      throw domainError("NOT_FOUND", "workspace secret not found after write");
+      throw domainError("NOT_FOUND", "organization secret not found after write");
     }
     return patched;
   }
-  const id = await ctx.db.insert("workspaceSecrets", {
-    workspaceId: args.workspaceId,
+  const id = await ctx.db.insert("orgSecrets", {
+    orgId: args.orgId,
     provider: args.provider,
     ciphertext,
     iv,
@@ -204,9 +204,9 @@ export async function putWorkspaceSecret(
     updatedAt: now,
     checkedAt: now,
   });
-  const inserted = await ctx.db.get("workspaceSecrets", id);
+  const inserted = await ctx.db.get("orgSecrets", id);
   if (inserted === null) {
-    throw domainError("NOT_FOUND", "workspace secret not found after insert");
+    throw domainError("NOT_FOUND", "organization secret not found after insert");
   }
   return inserted;
 }
@@ -214,7 +214,7 @@ export async function putWorkspaceSecret(
 /** Store one secret. Internal: the plaintext was encrypted by the caller. */
 export const putSecret = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     provider: vSecretProvider,
     ciphertext: v.string(),
     iv: v.string(),
@@ -224,23 +224,23 @@ export const putSecret = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await putWorkspaceSecret(ctx, args);
+    await putOrgSecret(ctx, args);
     return null;
   },
 });
 
-export async function setWorkspaceSecretStatus(
+export async function setOrgSecretStatus(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   provider: SecretProvider,
   status: SecretStatus,
 ): Promise<void> {
-  const row = await readWorkspaceSecret(ctx, workspaceId, provider);
+  const row = await readOrgSecret(ctx, orgId, provider);
   if (row === null || row.status === status) {
     return;
   }
   const now = Date.now();
-  await ctx.db.patch("workspaceSecrets", row._id, {
+  await ctx.db.patch("orgSecrets", row._id, {
     status,
     updatedAt: now,
     checkedAt: now,
@@ -250,15 +250,15 @@ export async function setWorkspaceSecretStatus(
 /** Record what the last verification of a stored key concluded. */
 export const setStatus = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     provider: vSecretProvider,
     status: vSecretStatus,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await setWorkspaceSecretStatus(
+    await setOrgSecretStatus(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.provider,
       args.status,
     );
@@ -267,27 +267,27 @@ export const setStatus = internalMutation({
 });
 
 /**
- * Wipe every AgentMail secret a workspace holds — the disconnect path
+ * Wipe every AgentMail secret an org holds — the disconnect path
  * (PLAN §4 step 7). Deleting the rows rather than blanking them means a
  * later read cannot mistake an empty envelope for a usable one.
  */
-export async function clearWorkspaceSecrets(
+export async function clearOrgSecrets(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<void> {
   for (const provider of AGENTMAIL_SECRET_PROVIDERS) {
-    const row = await readWorkspaceSecret(ctx, workspaceId, provider);
+    const row = await readOrgSecret(ctx, orgId, provider);
     if (row !== null) {
-      await ctx.db.delete("workspaceSecrets", row._id);
+      await ctx.db.delete("orgSecrets", row._id);
     }
   }
 }
 
 export const clearSecrets = internalMutation({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await clearWorkspaceSecrets(ctx, args.workspaceId);
+    await clearOrgSecrets(ctx, args.orgId);
     return null;
   },
 });
@@ -299,16 +299,16 @@ export const clearSecrets = internalMutation({
  */
 export const closeRotationOverlap = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     provider: vSecretProvider,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await readWorkspaceSecret(ctx, args.workspaceId, args.provider);
+    const row = await readOrgSecret(ctx, args.orgId, args.provider);
     if (row === null || row.previousCiphertext === undefined) {
       return null;
     }
-    await ctx.db.patch("workspaceSecrets", row._id, {
+    await ctx.db.patch("orgSecrets", row._id, {
       previousCiphertext: undefined,
       previousIv: undefined,
       previousValidUntil: undefined,

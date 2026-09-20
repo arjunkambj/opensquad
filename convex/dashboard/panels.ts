@@ -8,7 +8,7 @@
  */
 import { query } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   vInboxConnection,
@@ -47,10 +47,10 @@ export const latestHotLeads = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const range = assertRange(args.from, args.to);
     const limit = boundedLimit(args.limit);
-    const { rows } = await loadHotLeads(ctx, args.workspaceId, range);
+    const { rows } = await loadHotLeads(ctx, args.orgId, range);
     return {
       items: rows.slice(0, limit).map((lead) => {
         const name = leadDisplayName(lead);
@@ -111,10 +111,10 @@ export const latestReplies = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const { org } = await requireOrgMember(ctx, args.orgId);
     const range = assertRange(args.from, args.to);
     const limit = boundedLimit(args.limit);
-    const { rows } = await loadRepliedConversations(ctx, args.workspaceId, range);
+    const { rows } = await loadRepliedConversations(ctx, args.orgId, range);
 
     const items: ReplyItem[] = [];
     for (const conversation of rows.slice(0, limit)) {
@@ -139,7 +139,7 @@ export const latestReplies = query({
       });
     }
     return {
-      inboxConnection: workspace.inboxConnection,
+      inboxConnection: org.inboxConnection,
       items,
       hasMore: rows.length > limit,
     };

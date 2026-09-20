@@ -21,7 +21,7 @@ import {
 } from "../ai/generateIcp";
 import { runStructured } from "../ai/run";
 import type { RefundReason } from "../billing/paidCall";
-import { getWorkspaceProfile } from "../company/model";
+import { getOrgProfile } from "../company/model";
 import type { OperationErrorCode } from "../lib/validators";
 import { EMPTY_ICP_OPTION_LISTS, readIcpOptionLists } from "./icpVocabulary";
 import { v } from "convex/values";
@@ -69,15 +69,15 @@ type GenerationInput = Infer<typeof vGenerationInput>;
 /**
  * The profile to read and the vocabularies to pick from, already shortlisted.
  *
- * `null` when the profile has gone — the workspace was cleared under a
+ * `null` when the profile has gone — the org was cleared under a
  * scheduled run — which the action reports as a failure rather than asking
  * the model to invent a customer.
  */
 export const generationInput = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vGenerationInput,
   handler: async (ctx, args) => {
-    const profile = await getWorkspaceProfile(ctx, args.workspaceId);
+    const profile = await getOrgProfile(ctx, args.orgId);
     if (profile === null) {
       return null;
     }
@@ -163,7 +163,7 @@ const CODE_FOR_UNCERTAIN: OperationErrorCode = "provider_unavailable";
 
 export const generate = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     startedAt: v.number(),
     operationKey: v.string(),
@@ -181,7 +181,7 @@ export const generate = internalAction({
 
     const input: GenerationInput = await ctx.runQuery(
       internal.agents.icpGeneration.generationInput,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     if (input === null) {
       return await fail("not_found");
@@ -190,7 +190,7 @@ export const generate = internalAction({
     let ai;
     try {
       ai = await runStructured(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         action: "generate_icp",
         tier: "smart",
         system: ICP_GENERATION_SYSTEM,

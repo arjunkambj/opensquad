@@ -36,11 +36,9 @@ import {
 export function AgentModeMenu({
   agent,
   dailySendLimit,
-  canEdit,
 }: {
   agent: AgentDoc
   dailySendLimit: number
-  canEdit: boolean
 }) {
   const setMode = useMutation(api.agents.settingsMode.setMode)
   const [consentOpen, setConsentOpen] = useState(false)
@@ -54,7 +52,7 @@ export function AgentModeMenu({
     setConsentError(null)
     try {
       const result = await setMode({
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: agent._id,
         mode,
         // The revision the dialog quoted the caps under: the backend refuses
@@ -101,17 +99,15 @@ export function AgentModeMenu({
     <div className="flex flex-col items-start gap-1">
       <DropdownMenu>
         <DropdownMenuTrigger
-          disabled={!canEdit || saving}
+          disabled={saving}
           render={<Button variant="outline" size="sm" />}
         >
           {MODE_LABEL[agent.mode]}
-          {canEdit ? (
-            <HugeiconsIcon
-              icon={ArrowDown01Icon}
-              strokeWidth={2}
-              data-icon="inline-end"
-            />
-          ) : null}
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            strokeWidth={2}
+            data-icon="inline-end"
+          />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-80">
           {AGENT_MODES.map((mode) => (

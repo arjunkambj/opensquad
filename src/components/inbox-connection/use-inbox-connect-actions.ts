@@ -51,7 +51,7 @@ export type InboxConnectActions = {
 }
 
 export function useInboxConnectActions(
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): InboxConnectActions {
   const verifyAndStoreKey = useAction(
     api.inbox.connectActions.verifyAndStoreKey,
@@ -99,7 +99,7 @@ export function useInboxConnectActions(
       void run(
         "verifying",
         async () => {
-          const result = await verifyAndStoreKey({ workspaceId, apiKey })
+          const result = await verifyAndStoreKey({ orgId, apiKey })
           if (!result.ok) {
             setError(connectErrorCopy(result.code))
             return
@@ -119,7 +119,7 @@ export function useInboxConnectActions(
         "connecting",
         async () => {
           const result = await connectInbox({
-            workspaceId,
+            orgId,
             ...(choice.kind === "existing"
               ? { inboxId: choice.inboxId }
               : {
@@ -148,7 +148,7 @@ export function useInboxConnectActions(
       void run(
         "rotating",
         async () => {
-          const result = await rotateKey({ workspaceId, apiKey })
+          const result = await rotateKey({ orgId, apiKey })
           if (!result.ok) {
             setError(connectErrorCopy(result.code))
             return
@@ -164,7 +164,7 @@ export function useInboxConnectActions(
       void run(
         "disconnecting",
         async () => {
-          await disconnectInbox({ workspaceId })
+          await disconnectInbox({ orgId })
           setFlow({ kind: "idle" })
           onDone()
           toast.add({ title: "Inbox disconnected", type: "success" })
@@ -183,7 +183,7 @@ export function useInboxConnectActions(
       setError(null)
       void (async () => {
         try {
-          const result = await connectInbox({ workspaceId, inboxId })
+          const result = await connectInbox({ orgId, inboxId })
           if (!result.ok) {
             setError(connectErrorCopy(result.code))
           }

@@ -31,10 +31,10 @@ import { EmptyState } from "@/components/states/states"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function ReviewStep(props: OnboardingStepProps) {
-  const { workspaceId, agent, progress, goBack, moving, moveError } = props
+  const { orgId, agent, progress, goBack, moving, moveError } = props
   const navigate = useNavigate()
-  const profile = useQuery(api.company.queries.get, { workspaceId })
-  const overview = useQuery(api.agents.strategies.overview, { workspaceId })
+  const profile = useQuery(api.company.queries.get, { orgId })
+  const overview = useQuery(api.agents.strategies.overview, { orgId })
   const setStep = useMutation(api.agents.onboarding.setStep)
   const confirm = useAction(api.agents.strategies.confirm)
 
@@ -59,7 +59,7 @@ export function ReviewStep(props: OnboardingStepProps) {
     setLastStep(step)
     void (async () => {
       try {
-        await setStep({ workspaceId, step })
+        await setStep({ orgId, step })
       } catch {
         setFailure({
           from: "step",
@@ -77,7 +77,7 @@ export function ReviewStep(props: OnboardingStepProps) {
     setFailure(null)
     void (async () => {
       try {
-        const result = await confirm({ workspaceId })
+        const result = await confirm({ orgId })
         if (result.status === "blocked") {
           setFailure({ from: "confirm", message: confirmBlockCopy(result.reason) })
           return

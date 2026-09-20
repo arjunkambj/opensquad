@@ -93,7 +93,7 @@ function asComponentCtx(ctx: ActionCtx): ComponentActionCtx {
 export type ScrapeAction = "analyze_website" | "research_lead";
 
 export type ScrapeSiteArgs = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   /** The site to read. A bare domain is read as `https://`. */
   url: string;
   /** 1 = the home page only; 4 = the home page plus up to three supporting
@@ -294,7 +294,7 @@ function classifyProviderFailure(error: unknown): ProviderFailure {
  * Keep the bounded markdown where the operation row can point at it.
  *
  * Convex file storage, not a new table and not the operation document: the
- * `evidence` table belongs to leads, the workspace's own website has no home
+ * `evidence` table belongs to leads, the org's own website has no home
  * of its own until T20 writes the profile it produces, and `resultRef` is
  * documented as a short pointer — which is exactly what a storage id is. The
  * blob holds only what this function already returns to the caller.
@@ -365,7 +365,7 @@ export async function scrapeSite(
   const outcome = await withCredits<ScrapedSite | null>(
     ctx,
     {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       action: args.action,
       operationKey: args.operationKey,
       worstCaseProviderUnits: { scrapes: args.pages },
@@ -482,7 +482,7 @@ export async function scrapeSite(
  */
 export const diagnosticScrapeSite = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     url: v.string(),
     pages: v.union(v.literal(1), v.literal(4)),
     action: v.union(v.literal("analyze_website"), v.literal("research_lead")),
@@ -504,7 +504,7 @@ export const diagnosticScrapeSite = internalAction({
   }),
   handler: async (ctx, args) => {
     const outcome = await scrapeSite(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       url: args.url,
       pages: args.pages,
       action: args.action,

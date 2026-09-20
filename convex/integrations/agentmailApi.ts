@@ -1,9 +1,9 @@
 /**
- * The per-workspace AgentMail REST surface (PLAN §4 "Manage inbox", §9.4).
+ * The per-org AgentMail REST surface (PLAN §4 "Manage inbox", §9.4).
  *
  * WHY NOT THE COMPONENT. `@agentmail/convex@0.1.0` reads `AGENTMAIL_API_KEY`
  * from `process.env` inside its own functions (dist/component/utils.js), so it
- * has no seam for a per-workspace key. Every call keyed to a workspace —
+ * has no seam for a per-org key. Every call keyed to an org —
  * verify, list/create inbox, register/list/delete webhook, list threads, read
  * a thread — therefore goes through this file, which takes the DECRYPTED key
  * as an argument. The component is kept for exactly one job: verifying,
@@ -44,7 +44,7 @@ export const THREAD_MESSAGE_PAGE_LIMIT = 100;
  * validates inserts, so a `message.opened` or any `message.received.*` variant
  * makes `handleEvent` throw, the HTTP action 500s, and the provider retries the
  * event forever. Open tracking is out of this build for that reason, and
- * nothing sets `workspaces.opensObserved`.
+ * nothing sets `orgs.opensObserved`.
  */
 export const AGENTMAIL_WEBHOOK_EVENT_TYPES = [
   "message.received",
@@ -89,12 +89,12 @@ export function agentmailBaseUrl(): string {
 /**
  * A deterministic `client_id` for a create call, so re-connecting returns the
  * resource that already exists instead of making a second one (PLAN §9.4
- * "webhook `client_id` = workspace id so re-connect is idempotent"). The
+ * "webhook `client_id` = org id so re-connect is idempotent"). The
  * provider forbids `@` in a client id; a Convex document id contains none,
  * and the prefix keeps inbox and webhook ids from colliding.
  */
-export function agentmailClientId(kind: "inbox" | "webhook", workspaceId: string): string {
-  return `${kind}-${workspaceId.replace(/[^A-Za-z0-9_-]/g, "")}`;
+export function agentmailClientId(kind: "inbox" | "webhook", orgId: string): string {
+  return `${kind}-${orgId.replace(/[^A-Za-z0-9_-]/g, "")}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -358,7 +358,7 @@ function parseWebhook(value: unknown): AgentMailWebhook | null {
 
 /**
  * `POST /v0/webhooks` on the USER's account. `client_id` is deterministic per
- * workspace, so connecting twice returns the webhook that already exists
+ * org, so connecting twice returns the webhook that already exists
  * rather than registering a second one.
  */
 export async function createWebhook(
@@ -676,7 +676,7 @@ export function providerId(value: string, field: string): string {
  * whichever sub-object carries them. The provider puts them under a different
  * key per event type (`message`, `send`, `delivery`, `bounce`, `complaint`,
  * `reject`), and the ONE definition of that mapping lives here — the inbound
- * route's workspace binding and the receipt writer must not disagree about
+ * route's org binding and the receipt writer must not disagree about
  * which inbox an event names.
  *
  * `open` is deliberately absent: open events are not subscribed to

@@ -144,7 +144,7 @@ async function applyMarker(
  *
  * A balance we could not read never trips anything. An unreadable wallet is
  * not evidence of an empty one, and stopping the product on a transport
- * hiccup would be the wrong failure — the platform budgets and the workspace
+ * hiccup would be the wrong failure — the platform budgets and the org
  * caps still bound the spend in the meantime.
  */
 export const checkPlatformBalance = internalAction({

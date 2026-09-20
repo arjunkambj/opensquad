@@ -1,6 +1,6 @@
 /**
  * The usage ledger's buckets, and how a debit is TAKEN from one (PLAN §10
- * model layer). A `usageBuckets` row is one (workspaceId, scopeKey, metric,
+ * model layer). A `usageBuckets` row is one (orgId, scopeKey, metric,
  * periodKey) counter; a `usageReservations` row is one logical debit against
  * it. How a debit is then settled is `billing/transitions.ts`.
  *
@@ -21,28 +21,28 @@ import {
   invalid,
   localDayKey,
   USAGE_PERIOD_LIFETIME,
-  USAGE_SCOPE_WORKSPACE,
+  USAGE_SCOPE_ORG,
 } from "../lib/validators";
 import type { UsageMetric } from "../lib/validators";
 
-/** The workspace-local day a daily bucket is keyed by (PLAN §6 "Ledger"). */
-export function dailyPeriodKey(workspace: Doc<"workspaces">, at: number): string {
-  return localDayKey(at, workspace.timezone);
+/** The org-local day a daily bucket is keyed by (PLAN §6 "Ledger"). */
+export function dailyPeriodKey(org: Doc<"orgs">, at: number): string {
+  return localDayKey(at, org.timezone);
 }
 
-/** The bucket for one (metric, period) of a workspace, or `null`. */
+/** The bucket for one (metric, period) of an org, or `null`. */
 export async function findBucket(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   metric: UsageMetric,
   periodKey: string,
 ): Promise<Doc<"usageBuckets"> | null> {
   return await ctx.db
     .query("usageBuckets")
-    .withIndex("by_workspaceId_and_scopeKey_and_metric_and_periodKey", (q) =>
+    .withIndex("by_orgId_and_scopeKey_and_metric_and_periodKey", (q) =>
       q
-        .eq("workspaceId", workspaceId)
-        .eq("scopeKey", USAGE_SCOPE_WORKSPACE)
+        .eq("orgId", orgId)
+        .eq("scopeKey", USAGE_SCOPE_ORG)
         .eq("metric", metric)
         .eq("periodKey", periodKey),
     )
@@ -57,7 +57,7 @@ export function bucketRemaining(bucket: Doc<"usageBuckets">): number {
 }
 
 export type ReserveArgs = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   scopeKey: string;
   metric: UsageMetric;
   periodKey: string;
@@ -69,7 +69,7 @@ export type ReserveArgs = {
 export type ReserveResult = {
   bucketId: Id<"usageBuckets">;
   reservationId: Id<"usageReservations">;
-  /** `true` when this (workspaceId, operationKey, bucket) already held a live
+  /** `true` when this (orgId, operationKey, bucket) already held a live
    *  reservation — the recorded row is returned instead of double-debiting. */
   replayed: boolean;
 };
@@ -105,9 +105,9 @@ export async function reserveInBucket(
 
   const bucket = await ctx.db
     .query("usageBuckets")
-    .withIndex("by_workspaceId_and_scopeKey_and_metric_and_periodKey", (q) =>
+    .withIndex("by_orgId_and_scopeKey_and_metric_and_periodKey", (q) =>
       q
-        .eq("workspaceId", args.workspaceId)
+        .eq("orgId", args.orgId)
         .eq("scopeKey", scopeKey)
         .eq("metric", args.metric)
         .eq("periodKey", periodKey),
@@ -118,7 +118,7 @@ export async function reserveInBucket(
   let bucketId: Id<"usageBuckets">;
   if (bucket === null) {
     bucketId = await ctx.db.insert("usageBuckets", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       scopeKey,
       metric: args.metric,
       periodKey,
@@ -134,9 +134,9 @@ export async function reserveInBucket(
 
   const prior = await ctx.db
     .query("usageReservations")
-    .withIndex("by_workspaceId_and_operationKey_and_bucketId", (q) =>
+    .withIndex("by_orgId_and_operationKey_and_bucketId", (q) =>
       q
-        .eq("workspaceId", args.workspaceId)
+        .eq("orgId", args.orgId)
         .eq("operationKey", operationKey)
         .eq("bucketId", bucketId),
     )
@@ -177,7 +177,7 @@ export async function reserveInBucket(
     updatedAt: now,
   });
   const reservationId = await ctx.db.insert("usageReservations", {
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     bucketId,
     operationKey,
     quantity,
@@ -191,7 +191,7 @@ export async function reserveInBucket(
 /** The lifetime `credits` bucket — the one number the member sees. */
 export async function findCreditsBucket(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Doc<"usageBuckets"> | null> {
-  return await findBucket(ctx, workspaceId, "credits", USAGE_PERIOD_LIFETIME);
+  return await findBucket(ctx, orgId, "credits", USAGE_PERIOD_LIFETIME);
 }

@@ -33,20 +33,12 @@ import { CompanyWebsiteCard } from "@/components/settings/company/CompanyWebsite
 import { LoadingState } from "@/components/states/states"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
-import { canEdit } from "@/lib/workspace-role"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 const ANALYSIS_CREDITS = ACTION_PRICES.analyze_website.credits
 
-export function CompanyTab({
-  workspaceId,
-  role,
-}: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
-}) {
-  const profile = useQuery(api.company.queries.get, { workspaceId })
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+export function CompanyTab({ orgId }: { orgId: Id<"orgs"> }) {
+  const profile = useQuery(api.company.queries.get, { orgId })
+  const balance = useQuery(api.billing.credits.balance, { orgId })
   const startAnalysis = useMutation(api.company.mutations.startAnalysis)
   const updateProfile = useMutation(api.company.mutations.update)
 
@@ -87,19 +79,17 @@ export function CompanyTab({
     )
   }
 
-  const editable = canEdit(role)
   const status = profile?.analysisStatus ?? { state: "idle" as const }
   const analyzing = status.state === "analyzing"
 
   // Only a SUCCESSFUL analysis spends the free run, so the price the button
   // shows is read from that fact and not from how often it was pressed.
   const price = profile?.firstRunUsed === true ? ANALYSIS_CREDITS : 0
-  const blockedReason = !editable
-    ? "Re-analysing the website rewrites the company profile, which needs an owner or operator role."
-    : balance === undefined || price === 0
+  const blockedReason =
+    balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so website analysis can't run. You can still edit the profile below."
+        ? "This organization has no credit allowance, so website analysis can't run. You can still edit the profile below."
         : balance.remaining < price
           ? `Another analysis costs ${price} credits and you have ${balance.remaining} left. You can still edit the profile below.`
           : null
@@ -107,7 +97,7 @@ export function CompanyTab({
   const runAnalysis = () => {
     setStartError(null)
     setWebsiteTyped(false)
-    void startAnalysis({ workspaceId, websiteUrl: website }).catch((cause) => {
+    void startAnalysis({ orgId, websiteUrl: website }).catch((cause) => {
       setStartError(startAnalysisCopy(cause))
     })
   }
@@ -116,7 +106,7 @@ export function CompanyTab({
     setSaving(true)
     setSaveError(null)
     void updateProfile({
-      workspaceId,
+      orgId,
       expectedVersion: baseVersion,
       ...(profile?.websiteUrl !== undefined
         ? { websiteUrl: profile.websiteUrl }
@@ -176,7 +166,6 @@ export function CompanyTab({
       />
       <CompanyProfileCard
         analyzing={analyzing}
-        canEdit={editable}
         complete={companyFormIsComplete(form)}
         dirty={dirty}
         error={saveError}
@@ -185,7 +174,6 @@ export function CompanyTab({
           setForm({ ...form, ...patch })
         }}
         onSave={saveProfile}
-        role={role}
         saving={saving}
         value={form}
       />

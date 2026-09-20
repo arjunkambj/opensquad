@@ -96,11 +96,11 @@ export async function planNextStep(
     return { kind: "idle", reason: "platform_paused" };
   }
 
-  const workspace = await ctx.db.get("workspaces", agent.workspaceId);
-  if (workspace === null) {
+  const org = await ctx.db.get("orgs", agent.orgId);
+  if (org === null) {
     return { kind: "idle", reason: "not_live" };
   }
-  const creditsBucket = await findCreditsBucket(ctx, agent.workspaceId);
+  const creditsBucket = await findCreditsBucket(ctx, agent.orgId);
   const credits = creditsBucket === null ? 0 : bucketRemaining(creditsBucket);
 
   const strategies = await ctx.db
@@ -115,7 +115,7 @@ export async function planNextStep(
 
   const sourcing = await nextStrategyPage(ctx, {
     agent,
-    workspace,
+    org,
     strategies,
     credits,
   });
@@ -125,7 +125,7 @@ export async function planNextStep(
 
   const research = await nextResearchLead(ctx, {
     agent,
-    workspace,
+    org,
     enabledStrategies: strategies.length,
     credits,
   });
@@ -152,14 +152,14 @@ export async function planNextStep(
  *
  * "How many pages today" is read from the usage ledger's own daily search
  * counter rather than from a count of rows: the ledger is already keyed on
- * the workspace's local day, and it is the counter the money layer enforces,
+ * the org's local day, and it is the counter the money layer enforces,
  * so the two can never disagree.
  */
 async function nextStrategyPage(
   ctx: QueryCtx,
   args: {
     agent: Doc<"agents">;
-    workspace: Doc<"workspaces">;
+    org: Doc<"orgs">;
     strategies: Doc<"strategies">[];
     credits: number;
   },
@@ -192,9 +192,9 @@ async function nextStrategyPage(
   );
   const bucket = await findBucket(
     ctx,
-    args.workspace._id,
+    args.org._id,
     "enrich_searches",
-    dailyPeriodKey(args.workspace, Date.now()),
+    dailyPeriodKey(args.org, Date.now()),
   );
   const usedToday =
     bucket === null ? 0 : bucket.reserved + bucket.committed + bucket.uncertain;
@@ -236,15 +236,15 @@ async function nextResearchLead(
   ctx: QueryCtx,
   args: {
     agent: Doc<"agents">;
-    workspace: Doc<"workspaces">;
+    org: Doc<"orgs">;
     enabledStrategies: number;
     credits: number;
   },
 ): Promise<RunStep> {
   const researched = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_scoreKey", (q) =>
-      q.eq("workspaceId", args.workspace._id).gte("scoreKey", LEAD_SCORE_MIN),
+    .withIndex("by_orgId_and_scoreKey", (q) =>
+      q.eq("orgId", args.org._id).gte("scoreKey", LEAD_SCORE_MIN),
     )
     .take(RESEARCH_HISTORY_SCAN);
 
@@ -258,9 +258,9 @@ async function nextResearchLead(
   } else {
     const bucket = await findBucket(
       ctx,
-      args.workspace._id,
+      args.org._id,
       "scrapes",
-      dailyPeriodKey(args.workspace, Date.now()),
+      dailyPeriodKey(args.org, Date.now()),
     );
     // The page allowance is the only day-keyed counter of research we have,
     // and website analysis shares it. Sharing it can only make the agent
@@ -276,7 +276,7 @@ async function nextResearchLead(
 
   const reserved =
     ACTION_PRICES.get_email.credits *
-    (await countApprovedAwaitingEmail(ctx, args.workspace._id));
+    (await countApprovedAwaitingEmail(ctx, args.org._id));
   if (args.credits - reserved < ACTION_PRICES.research_lead.credits) {
     return { kind: "idle", reason: "out_of_credits" };
   }
@@ -350,12 +350,12 @@ function signalDebt(
  *  agent has already promised to spend (PLAN §9.2 step 5). */
 async function countApprovedAwaitingEmail(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<number> {
   const approved = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_approval", (q) =>
-      q.eq("workspaceId", workspaceId).eq("approval", "approved"),
+    .withIndex("by_orgId_and_approval", (q) =>
+      q.eq("orgId", orgId).eq("approval", "approved"),
     )
     .take(APPROVED_SCAN_MAX);
   return approved.filter(

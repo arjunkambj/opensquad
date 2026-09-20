@@ -38,7 +38,7 @@ export type IcpDraftHandle = {
 }
 
 export function useIcpDraft(
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   agent: Doc<"agents">,
 ): IcpDraftHandle {
   const updateIcp = useMutation(api.agents.icp.updateIcp)
@@ -82,7 +82,7 @@ export function useIcpDraft(
       setSaveState("saving")
       setSaveError(null)
       try {
-        await updateIcp({ workspaceId, icp: value })
+        await updateIcp({ orgId, icp: value })
         // Only call it saved if nothing was clicked while the write was in
         // flight; otherwise the newer edit would look like it had landed.
         if (sameIcpDraft(latest.current, value)) {
@@ -98,7 +98,7 @@ export function useIcpDraft(
         return false
       }
     },
-    [updateIcp, workspaceId],
+    [updateIcp, orgId],
   )
 
   const change = useCallback(

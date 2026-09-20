@@ -17,7 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-export function InboxTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
+export function InboxTab({ orgId }: { orgId: Id<"orgs"> }) {
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <Card>
@@ -30,7 +30,7 @@ export function InboxTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <InboxConnection workspaceId={workspaceId} />
+          <InboxConnection orgId={orgId} />
         </CardContent>
       </Card>
 

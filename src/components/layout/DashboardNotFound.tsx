@@ -19,7 +19,7 @@ export function DashboardNotFound() {
     <>
       <DashboardPageTitle
         title="Page not found"
-        description="That address does not match a page in this workspace."
+        description="That address does not match a page in this organization."
       />
       <EmptyState
         title={attempted ?? "Page not found"}

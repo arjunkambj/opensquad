@@ -45,7 +45,7 @@ import { v } from "convex/values";
 const vReplyRefusal = v.union(
   v.literal("conversation_not_open"),
   v.literal("human_takeover"),
-  v.literal("workspace_paused"),
+  v.literal("org_paused"),
   v.literal("inbox_unassigned"),
   v.literal("inbox_mismatch"),
   v.literal("agent_not_sending"),
@@ -100,9 +100,9 @@ export const draftAndSendReply = internalMutation({
     if (conversation === null) {
       throw domainError("NOT_FOUND", "conversation not found");
     }
-    const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
-    if (workspace === null) {
-      throw domainError("NOT_FOUND", "workspace not found");
+    const org = await ctx.db.get("orgs", conversation.orgId);
+    if (org === null) {
+      throw domainError("NOT_FOUND", "organization not found");
     }
     if (conversation.state !== "open") {
       return refuse("conversation_not_open");
@@ -110,20 +110,20 @@ export const draftAndSendReply = internalMutation({
     if (conversation.humanTakeover) {
       return refuse("human_takeover");
     }
-    if (workspace.automationState !== "active") {
-      return refuse("workspace_paused");
+    if (org.automationState !== "active") {
+      return refuse("org_paused");
     }
-    if (workspace.inboxRef === undefined || workspace.inboxConnection !== "connected") {
+    if (org.inboxRef === undefined || org.inboxConnection !== "connected") {
       return refuse("inbox_unassigned");
     }
-    if (workspace.inboxRef !== conversation.inboxRef) {
+    if (org.inboxRef !== conversation.inboxRef) {
       return refuse("inbox_mismatch");
     }
     const agent =
       conversation.agentId === undefined
         ? null
         : await ctx.db.get("agents", conversation.agentId);
-    if (agent === null || agent.workspaceId !== workspace._id) {
+    if (agent === null || agent.orgId !== org._id) {
       return refuse("association_missing");
     }
     // Sourcing-only and paused agents are shown their replies and answer none
@@ -143,7 +143,7 @@ export const draftAndSendReply = internalMutation({
     if (resolved === null) {
       return refuse("recipient_unknown");
     }
-    if ((await matchSuppression(ctx, workspace._id, resolved.recipient)) !== null) {
+    if ((await matchSuppression(ctx, org._id, resolved.recipient)) !== null) {
       return refuse("suppressed");
     }
 

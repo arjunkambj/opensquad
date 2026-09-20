@@ -4,7 +4,7 @@
  * Two cards, in the order a reader needs them: the window your agent may send
  * inside, then the switch that decides whether it runs at all.
  *
- * The workspace record arrives from the page, so there is no second read
+ * The org record arrives from the page, so there is no second read
  * here; each card owns the mutation that writes its own half.
  */
 import { Clock01Icon } from "@hugeicons/core-free-icons"
@@ -12,16 +12,9 @@ import { Link } from "@tanstack/react-router"
 import { AutomationCard } from "@/components/settings/sending/AutomationCard"
 import { SendWindowCard } from "@/components/settings/sending/SendWindowCard"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
-import type { WorkspaceRole } from "@/lib/workspace-role"
-import type { WorkspaceView } from "@/lib/workspace-view"
+import type { OrgView } from "@/lib/org-view"
 
-export function SendingTab({
-  workspace,
-  role,
-}: {
-  workspace: WorkspaceView
-  role: WorkspaceRole
-}) {
+export function SendingTab({ org }: { org: OrgView }) {
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <SectionHeaderCard
@@ -42,8 +35,8 @@ export function SendingTab({
           </>
         }
       />
-      <SendWindowCard role={role} workspace={workspace} />
-      <AutomationCard role={role} workspace={workspace} />
+      <SendWindowCard org={org} />
+      <AutomationCard org={org} />
     </div>
   )
 }

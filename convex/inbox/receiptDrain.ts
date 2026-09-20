@@ -25,7 +25,7 @@ const DRAIN_DISPATCH_LIMIT = 50;
  *
  * An attempt records its `providerMessageRef` in the same transaction as the
  * provider's acceptance, so a receipt for mail this application sent finds its
- * attempt within seconds. A day later, no attempt in the workspace carries
+ * attempt within seconds. A day later, no attempt in the org carries
  * that reference and none ever will — the message was sent from the shared
  * inbox by something other than OpenSquad, or it belongs to an attempt an
  * operator resolved as "not sent" and replaced under a new provider id.
@@ -133,7 +133,7 @@ async function reapUnmatchedOutboundReceipts(
       .collect();
     if (
       candidates.some(
-        (attempt) => attempt.workspaceId === receipt.workspaceId,
+        (attempt) => attempt.orgId === receipt.orgId,
       )
     ) {
       continue;

@@ -29,7 +29,7 @@ export const vPaidAction = v.union(
 
 /**
  * Worst-case provider units, declared before the call and reserved in the
- * workspace buckets AND the platform budget. Written out member by member
+ * org buckets AND the platform budget. Written out member by member
  * rather than as a record, so an unpriced metric cannot be smuggled in.
  */
 export const vProviderUnits = v.object({
@@ -212,7 +212,7 @@ export function normalizeUnits(units: ProviderUnits | undefined): ProviderUnits 
 }
 
 /**
- * The backend receipt for one paid call — what we billed the workspace and
+ * The backend receipt for one paid call — what we billed the org and
  * what the provider says it charged, so our ledger and the provider's
  * invoice stay separately auditable. Server-side only; it is never returned
  * to a client, which is why naming the provider here is allowed.

@@ -101,9 +101,9 @@ export type ThreadEntry = typeof vThreadEntry.type;
 
 /**
  * Project a conversation row down to an inbox row, resolving the lead.
- * The prospect is re-checked against the conversation's own workspace: a
+ * The prospect is re-checked against the conversation's own org: a
  * dangling or foreign id renders as no lead rather than quoting a row from
- * another workspace into this feed.
+ * another org into this feed.
  */
 export async function summarize(
   ctx: QueryCtx,
@@ -130,7 +130,7 @@ export async function summarize(
     hasDraft: conversation.currentDraftId !== undefined,
     currentDraftId: conversation.currentDraftId,
     prospect:
-      prospect === null || prospect.workspaceId !== conversation.workspaceId
+      prospect === null || prospect.orgId !== conversation.orgId
         ? null
         : {
             prospectId: prospect._id,
@@ -173,7 +173,7 @@ export async function resolveOutboundRecipient(
     const email = prospect?.email;
     if (
       prospect !== null &&
-      prospect.workspaceId === conversation.workspaceId &&
+      prospect.orgId === conversation.orgId &&
       email !== undefined
     ) {
       try {

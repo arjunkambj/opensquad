@@ -44,11 +44,11 @@ export type IcpGenerationHandle = {
 }
 
 export function useIcpGeneration(
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   agent: Doc<"agents">,
 ): IcpGenerationHandle {
   const startGeneration = useMutation(api.agents.icp.startGeneration)
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+  const balance = useQuery(api.billing.credits.balance, { orgId })
 
   const [refusal, setRefusal] = useState<IcpStartRefusal | null>(null)
   const [starting, setStarting] = useState(false)
@@ -61,14 +61,14 @@ export function useIcpGeneration(
       setStarting(true)
       setRefusal(null)
       try {
-        await startGeneration({ workspaceId, reason })
+        await startGeneration({ orgId, reason })
       } catch (cause) {
         setRefusal({ message: startGenerationCopy(cause), reason })
       } finally {
         setStarting(false)
       }
     },
-    [startGeneration, workspaceId],
+    [startGeneration, orgId],
   )
 
   // One automatic request per mount. The server decides whether it runs.
@@ -85,7 +85,7 @@ export function useIcpGeneration(
     balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so another run can't happen. You can still edit everything here yourself."
+        ? "This organization has no credit allowance, so another run can't happen. You can still edit everything here yourself."
         : balance.remaining < price
           ? `Another run costs ${price} credits and you have ${balance.remaining} left. Edit the chips yourself to carry on.`
           : null

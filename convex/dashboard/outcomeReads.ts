@@ -19,7 +19,7 @@ import {
 /**
  * Sends the provider ACCEPTED inside the window — `sendAttempts` in state
  * `acknowledged` with `updatedAt` in range, an exact range on
- * `by_workspaceId_and_state_and_updatedAt`.
+ * `by_orgId_and_state_and_updatedAt`.
  *
  * `acknowledged` means accepted, never delivered (PLAN §4.3), and `updatedAt`
  * on such a row is when it was accepted. A follow-up is its own attempt, so
@@ -29,7 +29,7 @@ import {
  */
 export async function loadAcknowledgedSends(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   range: Range,
 ): Promise<{
   rows: Doc<"sendAttempts">[];
@@ -38,9 +38,9 @@ export async function loadAcknowledgedSends(
 }> {
   const page = await ctx.db
     .query("sendAttempts")
-    .withIndex("by_workspaceId_and_state_and_updatedAt", (q) =>
+    .withIndex("by_orgId_and_state_and_updatedAt", (q) =>
       q
-        .eq("workspaceId", workspaceId)
+        .eq("orgId", orgId)
         .eq("state", "acknowledged")
         .gte("updatedAt", range.from)
         .lte("updatedAt", range.to),
@@ -75,19 +75,19 @@ const CONVERSATION_STATES = Object.keys(STATE_PARTITION) as ConversationState[];
  * the Inbox lists as having been replied to.
  *
  * `conversations` has no `lastInboundAt` index, so this walks the three
- * `by_workspaceId_and_state_and_lastMessageAt` ranges from `from` forward.
+ * `by_orgId_and_state_and_lastMessageAt` ranges from `from` forward.
  * That is sound rather than convenient: `lastMessageAt` is bumped by every
  * message, inbound included, so `lastMessageAt >= lastInboundAt` always and
  * no thread whose reply is in the window can sort below `from`. There is no
  * upper bound on the scan for the same reason — a thread we answered after
  * the window still had its reply inside it.
  *
- * The integrator should add `conversations.by_workspaceId_and_lastInboundAt`;
+ * The integrator should add `conversations.by_orgId_and_lastInboundAt`;
  * this becomes one exact range.
  */
 export async function loadRepliedConversations(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   range: Range,
 ): Promise<{ rows: Doc<"conversations">[]; bounded: Bounded }> {
   const rows: Doc<"conversations">[] = [];
@@ -95,9 +95,9 @@ export async function loadRepliedConversations(
   for (const state of CONVERSATION_STATES) {
     const page = await ctx.db
       .query("conversations")
-      .withIndex("by_workspaceId_and_state_and_lastMessageAt", (q) =>
+      .withIndex("by_orgId_and_state_and_lastMessageAt", (q) =>
         q
-          .eq("workspaceId", workspaceId)
+          .eq("orgId", orgId)
           .eq("state", state)
           .gte("lastMessageAt", range.from),
       )
@@ -127,21 +127,21 @@ export async function loadRepliedConversations(
  * Meetings, counted the way PLAN §9.5 defines them: CONFIRMED bookings only,
  * whose meeting time falls inside the window. A confirmed booking always
  * carries `startsAt`, so this is an exact range on
- * `by_workspaceId_and_state_and_startsAt`.
+ * `by_orgId_and_state_and_startsAt`.
  *
  * A booking link in an email and a model reading agreement out of a reply are
  * both proposals — they are counted separately, below, and never here.
  */
 export async function countConfirmedMeetings(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   range: Range,
 ): Promise<Bounded> {
   const page = await ctx.db
     .query("bookings")
-    .withIndex("by_workspaceId_and_state_and_startsAt", (q) =>
+    .withIndex("by_orgId_and_state_and_startsAt", (q) =>
       q
-        .eq("workspaceId", workspaceId)
+        .eq("orgId", orgId)
         .eq("state", "confirmed")
         .gte("startsAt", range.from)
         .lte("startsAt", range.to),
@@ -157,12 +157,12 @@ export async function countConfirmedMeetings(
  */
 export async function countProposedMeetings(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Bounded> {
   const page = await ctx.db
     .query("bookings")
-    .withIndex("by_workspaceId_and_state_and_startsAt", (q) =>
-      q.eq("workspaceId", workspaceId).eq("state", "proposed"),
+    .withIndex("by_orgId_and_state_and_startsAt", (q) =>
+      q.eq("orgId", orgId).eq("state", "proposed"),
     )
     .take(DASHBOARD_SCAN_BOUND + 1);
   return filled(page, DASHBOARD_SCAN_BOUND);

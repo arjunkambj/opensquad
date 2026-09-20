@@ -4,13 +4,13 @@
  * pretending it would succeed.
  */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   localDayKey,
   sendWindowStatus,
   vSendAttemptState,
 } from "../lib/validators";
-import { getDraftInWorkspace } from "./draftsModel";
+import { getDraftInOrg } from "./draftsModel";
 import {
   evaluateSendGates,
   sendResultCode,
@@ -26,7 +26,7 @@ import { v } from "convex/values";
  */
 export const preflight = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
   },
   returns: v.object({
@@ -44,10 +44,10 @@ export const preflight = query({
     ),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const draft = await getDraftInWorkspace(
+    await requireOrgMember(ctx, args.orgId);
+    const draft = await getDraftInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.draftId,
     );
     const attempts = await ctx.db
@@ -67,11 +67,11 @@ export const preflight = query({
       "conversations",
       draft.conversationId,
     );
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (conversation === null || workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (conversation === null || org === null) {
       return {
         permitted: false,
-        code: "workspace_paused",
+        code: "org_paused",
         reason: "send context is incomplete",
         attempts: attemptsView,
       };
@@ -81,7 +81,7 @@ export const preflight = query({
         ? null
         : await ctx.db.get("agents", conversation.agentId);
     const gate = await evaluateSendGates(ctx, {
-      workspace,
+      org,
       conversation,
       draft,
       agent,
@@ -94,26 +94,26 @@ export const preflight = query({
         attempts: attemptsView,
       };
     }
-    const window = sendWindowStatus(workspace, Date.now());
+    const window = sendWindowStatus(org, Date.now());
     if (!window.permitted) {
       return {
         permitted: false,
         code: "outside_window",
-        reason: "outside the workspace send window",
+        reason: "outside the organization send window",
         nextPermittedAt: window.nextPermittedAt,
         attempts: attemptsView,
       };
     }
-    const periodKey = localDayKey(Date.now(), workspace.timezone);
-    const limit = effectiveSendLimit(workspace);
+    const periodKey = localDayKey(Date.now(), org.timezone);
+    const limit = effectiveSendLimit(org);
     const bucket = await ctx.db
       .query("usageBuckets")
       .withIndex(
-        "by_workspaceId_and_scopeKey_and_metric_and_periodKey",
+        "by_orgId_and_scopeKey_and_metric_and_periodKey",
         (q) =>
           q
-            .eq("workspaceId", args.workspaceId)
-            .eq("scopeKey", "workspace")
+            .eq("orgId", args.orgId)
+            .eq("scopeKey", "org")
             .eq("metric", "sends")
             .eq("periodKey", periodKey),
       )
@@ -127,7 +127,7 @@ export const preflight = query({
         permitted: false,
         code: "send_limit_reached",
         reason: `daily send allowance exhausted (${used}/${limit})`,
-        nextPermittedAt: nextWindowStart(workspace, Date.now()),
+        nextPermittedAt: nextWindowStart(org, Date.now()),
         attempts: attemptsView,
       };
     }

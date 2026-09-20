@@ -1,5 +1,5 @@
 /**
- * Agents — the one sales agent a workspace runs (PLAN §7).
+ * Agents — the one sales agent an org runs (PLAN §7).
  *
  * This domain owns the agent record: its mode and status, the ICP and search
  * strategies it sources from, and the run loop that drives it. It owns
@@ -25,22 +25,22 @@ export const vAgentDoc = v.object({
   ...agentFields,
 });
 
-/** The workspace's agent, or `null` before onboarding creates one. */
-export async function getWorkspaceAgent(
+/** The org's agent, or `null` before onboarding creates one. */
+export async function getOrgAgent(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Doc<"agents"> | null> {
   return await ctx.db
     .query("agents")
-    .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId))
+    .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
     .first();
 }
 
 /**
- * Create the workspace's one draft agent — the row onboarding fills in step
+ * Create the org's one draft agent — the row onboarding fills in step
  * by step, and the home every onboarding answer is saved to.
  *
- * ONE AGENT PER WORKSPACE, enforced here rather than by an index: the read
+ * ONE AGENT PER ORG, enforced here rather than by an index: the read
  * and the insert sit in one serializable transaction, so a second create —
  * concurrent or later — sees the first and refuses with CONFLICT.
  *
@@ -49,15 +49,15 @@ export async function getWorkspaceAgent(
  */
 export async function createDraftAgent(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Doc<"agents">> {
-  const existing = await getWorkspaceAgent(ctx, workspaceId);
+  const existing = await getOrgAgent(ctx, orgId);
   if (existing !== null) {
-    throw domainError("CONFLICT", "this workspace already has an agent");
+    throw domainError("CONFLICT", "this organization already has an agent");
   }
   const now = Date.now();
   const agentId = await ctx.db.insert("agents", {
-    workspaceId,
+    orgId,
     // Named from the ICP once onboarding knows one; until then the agent is
     // unnamed rather than carrying a fabricated title.
     name: "",
@@ -85,15 +85,15 @@ export async function createDraftAgent(
 }
 
 /** Load the agent for a write, or refuse. */
-export async function requireWorkspaceAgent(
+export async function requireOrgAgent(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   agentId: Id<"agents">,
 ): Promise<Doc<"agents">> {
   const agent = await ctx.db.get("agents", agentId);
-  if (agent === null || agent.workspaceId !== workspaceId) {
-    // A row in another workspace is the same NOT_FOUND — existence never
-    // leaks across a workspace boundary.
+  if (agent === null || agent.orgId !== orgId) {
+    // A row in another org is the same NOT_FOUND — existence never
+    // leaks across an org boundary.
     throw domainError("NOT_FOUND", "agent not found");
   }
   return agent;

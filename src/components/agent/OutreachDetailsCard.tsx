@@ -10,7 +10,7 @@
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
-import { FormError, PermissionNote } from "@/components/states/states"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -24,8 +24,6 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
-import type { WorkspaceRole } from "@/lib/workspace-role"
-import { canEdit as roleCanEdit } from "@/lib/workspace-role"
 import type { AgentDoc } from "./agent-model"
 import { agentErrorCopy, followUpSummary } from "./agent-model"
 
@@ -49,13 +47,7 @@ function choiceIdOf(days: readonly number[]): string {
   )
 }
 
-export function OutreachDetailsCard({
-  agent,
-  role,
-}: {
-  agent: AgentDoc
-  role: WorkspaceRole
-}) {
+export function OutreachDetailsCard({ agent }: { agent: AgentDoc }) {
   const setBookingUrl = useMutation(api.agents.settings.setBookingUrl)
   const setFollowUpDays = useMutation(api.agents.settings.setFollowUpDays)
   const stored = agent.bookingUrl ?? ""
@@ -69,7 +61,6 @@ export function OutreachDetailsCard({
     setDraft(stored)
   }
 
-  const editable = roleCanEdit(role)
   const currentChoice = choiceIdOf(agent.followUpDays)
 
   const saveBooking = async () => {
@@ -77,7 +68,7 @@ export function OutreachDetailsCard({
     setError(null)
     try {
       await setBookingUrl({
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: agent._id,
         bookingUrl: draft.trim() === "" ? null : draft,
       })
@@ -99,7 +90,7 @@ export function OutreachDetailsCard({
     setError(null)
     try {
       await setFollowUpDays({
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: agent._id,
         followUpDays: choice.days,
       })
@@ -129,24 +120,22 @@ export function OutreachDetailsCard({
               type="url"
               inputMode="url"
               className="max-w-md"
-              disabled={!editable || saving !== null}
+              disabled={saving !== null}
               value={draft}
               placeholder="https://cal.com/you/30min"
               onChange={(event) => setDraft(event.target.value)}
             />
-            {editable ? (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={draft === stored || saving !== null}
-                onClick={() => void saveBooking()}
-              >
-                {saving === "booking" ? (
-                  <Spinner data-icon="inline-start" />
-                ) : null}
-                Save link
-              </Button>
-            ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={draft === stored || saving !== null}
+              onClick={() => void saveBooking()}
+            >
+              {saving === "booking" ? (
+                <Spinner data-icon="inline-start" />
+              ) : null}
+              Save link
+            </Button>
           </div>
           <FieldDescription>
             Leave it empty and the agent proposes times in words instead. A
@@ -159,7 +148,7 @@ export function OutreachDetailsCard({
           <NativeSelect
             id="agent-follow-ups"
             className="max-w-md"
-            disabled={!editable || saving !== null}
+            disabled={saving !== null}
             value={currentChoice}
             onChange={(event) => void saveFollowUps(event.target.value)}
           >
@@ -182,9 +171,6 @@ export function OutreachDetailsCard({
         </Field>
 
         <FormError message={error} />
-        {editable ? null : (
-          <PermissionNote role={role} action="change these settings" />
-        )}
       </CardContent>
     </Card>
   )

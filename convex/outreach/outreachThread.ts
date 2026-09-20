@@ -31,7 +31,7 @@ export type SentThread = {
 
 /**
  * The thread this lead's mail belongs on: the one already open on the
- * workspace's inbox, or — for a first touch — a new one staged with the agent
+ * org's inbox, or — for a first touch — a new one staged with the agent
  * frozen on it, so the send gates can fence the mode and the revision.
  *
  * A thread under human takeover or closed is never reused and never replaced:
@@ -40,7 +40,7 @@ export type SentThread = {
 export async function resolveConversation(
   ctx: MutationCtx,
   args: {
-    workspace: Doc<"workspaces">;
+    org: Doc<"orgs">;
     agent: Doc<"agents">;
     lead: Doc<"prospects">;
     inboxRef: string;
@@ -54,7 +54,7 @@ export async function resolveConversation(
   const usable = existing
     .filter(
       (conversation) =>
-        conversation.workspaceId === args.workspace._id &&
+        conversation.orgId === args.org._id &&
         conversation.inboxRef === args.inboxRef &&
         conversation.state === "open" &&
         !conversation.humanTakeover,
@@ -74,7 +74,7 @@ export async function resolveConversation(
       internal.outreach.conversationStaging.stageConversation,
       {
         conversationId: open._id,
-        workspaceId: args.workspace._id,
+        orgId: args.org._id,
         inboxRef: open.inboxRef,
         prospectId: args.lead._id,
         agentId: args.agent._id,
@@ -89,7 +89,7 @@ export async function resolveConversation(
   return await ctx.runMutation(
     internal.outreach.conversationStaging.stageConversation,
     {
-      workspaceId: args.workspace._id,
+      orgId: args.org._id,
       inboxRef: args.inboxRef,
       prospectId: args.lead._id,
       agentId: args.agent._id,

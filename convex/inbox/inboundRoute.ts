@@ -1,17 +1,17 @@
 /**
- * The per-workspace inbound route — `POST /agentmail/webhook/<token>`
+ * The per-org inbound route — `POST /agentmail/webhook/<token>`
  * (PLAN §4 "Manage inbox" step 4, §9.4 "Matching").
  *
  * TWO THINGS MUST HOLD before an event is attributed, and the second one is
  * the security boundary:
  *
- *   1. the opaque path token resolves to a workspace, and the request is
- *      signed by that workspace's own webhook secret;
- *   2. the event's `inbox_id` equals THAT workspace's `inboxRef`.
+ *   1. the opaque path token resolves to an org, and the request is
+ *      signed by that org's own webhook secret;
+ *   2. the event's `inbox_id` equals THAT org's `inboxRef`.
  *
- * Without (2) a workspace could post a correctly-signed event — signed with
- * its own secret, which it effectively controls — naming another workspace's
- * inbox, and the inbound callbacks, which resolve a workspace from `inboxRef`
+ * Without (2) an org could post a correctly-signed event — signed with
+ * its own secret, which it effectively controls — naming another org's
+ * inbox, and the inbound callbacks, which resolve an org from `inboxRef`
  * alone, would file it there. So the binding is checked here, before the
  * component stores anything, and a mismatch is QUARANTINED rather than
  * attributed or dropped.
@@ -38,7 +38,7 @@ import {
   outboundApplicationKey,
   WEBHOOK_TOKEN_LENGTH,
 } from "../lib/validators";
-import { envelopeOf, readWorkspaceSecret } from "../workspaces/secrets";
+import { envelopeOf, readOrgSecret } from "../orgs/secrets";
 import { recordQuarantinedEvent } from "./quarantine";
 import {
   verifyAgentMailWebhook,
@@ -47,7 +47,7 @@ import {
 import { v } from "convex/values";
 
 /** The mounted path. `http.ts` registers this prefix; the rest is the token. */
-export const WORKSPACE_WEBHOOK_PATH_PREFIX = "/agentmail/webhook/";
+export const ORG_WEBHOOK_PATH_PREFIX = "/agentmail/webhook/";
 
 /** Hex, so twice the byte length. Anything else is not one of our tokens. */
 const WEBHOOK_TOKEN_PATTERN = new RegExp(
@@ -67,13 +67,13 @@ function held(): Response {
 }
 
 const vWebhookTarget = v.object({
-  workspaceId: v.id("workspaces"),
+  orgId: v.id("orgs"),
   inboxRef: v.optional(v.string()),
   secrets: v.array(v.object({ ciphertext: v.string(), iv: v.string() })),
 });
 
 /**
- * Resolve the path token to a workspace and the webhook secrets currently
+ * Resolve the path token to an org and the webhook secrets currently
  * acceptable for it — the live one, plus the rotated-out one while its overlap
  * is open. Internal: the envelopes are decrypted by the HTTP action.
  */
@@ -81,32 +81,32 @@ export const resolveWebhookTarget = internalQuery({
   args: { token: v.string() },
   returns: v.union(vWebhookTarget, v.null()),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db
-      .query("workspaces")
+    const org = await ctx.db
+      .query("orgs")
       .withIndex("by_webhookToken", (q) => q.eq("webhookToken", args.token))
       .unique();
-    if (workspace === null) {
+    if (org === null) {
       return null;
     }
-    const row = await readWorkspaceSecret(
+    const row = await readOrgSecret(
       ctx,
-      workspace._id,
+      org._id,
       "agentmail_webhook",
     );
     if (row === null) {
       return {
-        workspaceId: workspace._id,
-        ...(workspace.inboxRef !== undefined
-          ? { inboxRef: workspace.inboxRef }
+        orgId: org._id,
+        ...(org.inboxRef !== undefined
+          ? { inboxRef: org.inboxRef }
           : {}),
         secrets: [],
       };
     }
     const envelope = envelopeOf(row, Date.now());
     return {
-      workspaceId: workspace._id,
-      ...(workspace.inboxRef !== undefined
-        ? { inboxRef: workspace.inboxRef }
+      orgId: org._id,
+      ...(org.inboxRef !== undefined
+        ? { inboxRef: org.inboxRef }
         : {}),
       secrets: [
         { ciphertext: envelope.ciphertext, iv: envelope.iv },
@@ -155,7 +155,7 @@ export const quarantineForeignEvent = internalMutation({
       // cannot attribute the inbox it was handed. `note` records that the
       // cause was a token/inbox mismatch rather than a missing assignment.
       reason: "inbox_unassigned",
-      note: "event arrived on a workspace webhook whose inbox it does not name",
+      note: "event arrived on an organization webhook whose inbox it does not name",
     });
     return null;
   },
@@ -167,8 +167,8 @@ export const quarantineForeignEvent = internalMutation({
  */
 export const inboundWebhook = httpAction(async (ctx, request) => {
   const path = new URL(request.url).pathname;
-  const token = path.startsWith(WORKSPACE_WEBHOOK_PATH_PREFIX)
-    ? path.slice(WORKSPACE_WEBHOOK_PATH_PREFIX.length).replace(/\/+$/, "")
+  const token = path.startsWith(ORG_WEBHOOK_PATH_PREFIX)
+    ? path.slice(ORG_WEBHOOK_PATH_PREFIX.length).replace(/\/+$/, "")
     : "";
   if (!WEBHOOK_TOKEN_PATTERN.test(token)) {
     return unauthorized();
@@ -178,7 +178,7 @@ export const inboundWebhook = httpAction(async (ctx, request) => {
     { token },
   );
   if (target === null || target.secrets.length === 0) {
-    // Unknown token, or a workspace holding no webhook secret: there is
+    // Unknown token, or an org holding no webhook secret: there is
     // nothing to verify against, so the request is refused rather than
     // trusted. The provider retries, which is what we want during the brief
     // window of a re-registration.
@@ -242,7 +242,7 @@ export const inboundWebhook = httpAction(async (ctx, request) => {
     return held();
   }
 
-  // Verified AND bound to this workspace's inbox. The component re-verifies,
+  // Verified AND bound to this org's inbox. The component re-verifies,
   // dedupes on `event_id`, stores the inbound message and dispatches the
   // app-side callbacks — unchanged behaviour, per-request credentials.
   const client = agentmailForWebhookSecret(verifiedSecret);

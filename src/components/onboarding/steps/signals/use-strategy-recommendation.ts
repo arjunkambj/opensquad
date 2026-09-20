@@ -48,13 +48,13 @@ export type SignalsGenerationHandle = {
 }
 
 export function useStrategyRecommendation(
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   status: GenerationStatus | null | undefined,
 ): SignalsGenerationHandle {
   const startRecommendation = useMutation(
     api.agents.strategies.startRecommendation,
   )
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+  const balance = useQuery(api.billing.credits.balance, { orgId })
 
   const [refusal, setRefusal] = useState<SignalsStartRefusal | null>(null)
   const [starting, setStarting] = useState(false)
@@ -67,14 +67,14 @@ export function useStrategyRecommendation(
       setStarting(true)
       setRefusal(null)
       try {
-        await startRecommendation({ workspaceId, reason })
+        await startRecommendation({ orgId, reason })
       } catch (cause) {
         setRefusal({ message: startRecommendationCopy(cause), reason })
       } finally {
         setStarting(false)
       }
     },
-    [startRecommendation, workspaceId],
+    [startRecommendation, orgId],
   )
 
   // One automatic request per mount, and only once the status has actually
@@ -93,7 +93,7 @@ export function useStrategyRecommendation(
     balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so another run can't happen. Pick from the signals already here and carry on."
+        ? "This organization has no credit allowance, so another run can't happen. Pick from the signals already here and carry on."
         : balance.remaining < price
           ? `Another run costs ${price} credits and you have ${balance.remaining} left.`
           : null

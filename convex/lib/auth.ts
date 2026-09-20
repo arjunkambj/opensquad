@@ -1,16 +1,24 @@
 /**
- * Typed identity, membership and role guards for OpenSquad functions.
+ * Typed identity and tenancy guards for OpenIntent functions.
  *
  * The browser supplies business arguments only — never an authoritative
- * `userId`, owner, role or team claim. Every entry point resolves the verified
+ * `userId`, owner or team claim. Every entry point resolves the verified
  * JWT identity through `ctx.auth.getUserIdentity()` and derives the stable
  * `identityKey` from `tokenIdentifier` (`iss|sub`; see plan/evidence/P01.md).
+ *
+ * The tenant is the Hexclave ORGANIZATION, and the org ACTIVE in Hexclave is
+ * the source of truth (PLAN §4, owner decision 2026-09-21). The token carries
+ * that org in its `selected_team_id` claim; an org row is reachable to a
+ * caller when, and only when, its `hexclaveOrgId` equals that claim. There is
+ * no member table and no role vocabulary on our side: the auth provider
+ * owns who belongs to an org, and every member of the active org may use the
+ * whole product.
  *
  * Hexclave publishes two `customJwt` issuers for one project: real users under
  * `…/api/v1/projects/{id}` and anonymous users under
  * `…/api/v1/projects-anonymous-users/{id}` (`aud` is unbound by the provider
- * config, so the exact `iss` match carries the security check). OpenSquad
- * workspaces belong to real accounts, so `requireUser` rejects the anonymous
+ * config, so the exact `iss` match carries the security check). OpenIntent
+ * orgs belong to real accounts, so `requireUser` rejects the anonymous
  * issuer explicitly.
  */
 import type { Auth, GenericDatabaseReader, UserIdentity } from "convex/server";
@@ -23,17 +31,14 @@ export type AuthCtx = {
   db: GenericDatabaseReader<DataModel>;
 };
 
-export type Role = "owner" | "operator" | "viewer";
-
 export type AuthenticatedUser = {
   identity: UserIdentity;
-  /** Stable key stored on memberships/workspace rows: `tokenIdentifier`. */
+  /** Stable key stored on org and lead rows: `tokenIdentifier`. */
   identityKey: string;
 };
 
-export type WorkspaceContext = AuthenticatedUser & {
-  workspace: Doc<"workspaces">;
-  membership: Doc<"memberships">;
+export type OrgContext = AuthenticatedUser & {
+  org: Doc<"orgs">;
 };
 
 /**
@@ -71,14 +76,14 @@ export async function requireUser(ctx: AuthCtx): Promise<AuthenticatedUser> {
   if (identity.issuer !== expectedUsersIssuer()) {
     throw domainError(
       "FORBIDDEN",
-      "anonymous or foreign-issuer sessions cannot use workspace APIs",
+      "anonymous or foreign-issuer sessions cannot use organization APIs",
     );
   }
   return { identity, identityKey: identity.tokenIdentifier };
 }
 
 /**
- * A verified account — the gate in front of creating a workspace
+ * A verified account — the gate in front of creating an org
  * (PLAN §6 "Closing the ways in", spikes §5).
  *
  * Read entirely from the token: the identity provider's access token carries
@@ -103,89 +108,52 @@ export async function requireVerifiedUser(
   if (identity.emailVerified !== true) {
     throw domainError(
       "EMAIL_NOT_VERIFIED",
-      "verify your email address before creating a workspace",
+      "verify your email address before creating an organization",
     );
   }
   if (typeof identity.email !== "string" || identity.email.length === 0) {
     throw domainError(
       "EMAIL_NOT_VERIFIED",
-      "an account email is required to create a workspace",
+      "an account email is required to create an organization",
     );
   }
   return user;
 }
 
 /**
- * Active membership of an identity in a workspace, or `null`. Revoked
- * memberships never satisfy a guard.
- */
-export async function getActiveMembership(
-  ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
-  identityKey: string,
-): Promise<Doc<"memberships"> | null> {
-  const membership = await ctx.db
-    .query("memberships")
-    .withIndex("by_workspaceId_and_identityKey", (q) =>
-      q.eq("workspaceId", workspaceId).eq("identityKey", identityKey),
-    )
-    .unique();
-  if (membership === null || membership.status !== "active") {
-    return null;
-  }
-  return membership;
-}
-
-/**
- * Resolve identity, workspace and active membership in one check.
+ * The Hexclave organization the caller's token has ACTIVE, or `null`.
  *
- * Returns `NOT_FOUND` both when the workspace does not exist and when the
- * caller is not an active member — never reveal another workspace's existence.
+ * `selected_team_id` is a custom claim, so it arrives through the identity's
+ * index signature rather than a typed field (spikes §5). It is `null` — or,
+ * if the provider ever stops issuing it, absent — for a user who has no
+ * active org, which is a state the client resolves by selecting one, not an
+ * error. This is the ONE place the claim is read.
  */
-export async function requireWorkspaceMember(
-  ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
-): Promise<WorkspaceContext> {
-  const user = await requireUser(ctx);
-  const workspace = await ctx.db.get("workspaces", workspaceId);
-  if (workspace === null) {
-    throw domainError("NOT_FOUND", "workspace not found");
-  }
-  const membership = await getActiveMembership(ctx, workspaceId, user.identityKey);
-  if (membership === null) {
-    throw domainError("NOT_FOUND", "workspace not found");
-  }
-  return { ...user, workspace, membership };
+export function activeHexclaveOrgId(identity: UserIdentity): string | null {
+  const claim = identity["selected_team_id"];
+  return typeof claim === "string" && claim.length > 0 ? claim : null;
 }
 
 /**
- * Membership check restricted to roles. Callers that are members but hold a
- * disallowed role get `FORBIDDEN`; non-members still get `NOT_FOUND`.
+ * Resolve identity and org for a request, authorising ONLY when the org row
+ * belongs to the organization active in the caller's token.
+ *
+ * Returns `NOT_FOUND` when the row does not exist, when the token has no
+ * active org, and when the row belongs to a different org — a caller must
+ * never learn that another organization's row exists.
  */
-export async function requireWorkspaceRole(
+export async function requireOrgMember(
   ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
-  roles: readonly Role[],
-): Promise<WorkspaceContext> {
-  const context = await requireWorkspaceMember(ctx, workspaceId);
-  if (!roles.includes(context.membership.role)) {
-    throw domainError("FORBIDDEN", `requires ${roles.join(" or ")} role`);
+  orgId: Id<"orgs">,
+): Promise<OrgContext> {
+  const user = await requireUser(ctx);
+  const activeOrgId = activeHexclaveOrgId(user.identity);
+  if (activeOrgId === null) {
+    throw domainError("NOT_FOUND", "organization not found");
   }
-  return context;
-}
-
-/** Owner-only guard: membership management, sending policy, provider auth. */
-export function requireWorkspaceOwner(
-  ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
-): Promise<WorkspaceContext> {
-  return requireWorkspaceRole(ctx, workspaceId, ["owner"]);
-}
-
-/** Owner or operator: campaigns, leads and business profile edits. */
-export function requireWorkspaceEditor(
-  ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
-): Promise<WorkspaceContext> {
-  return requireWorkspaceRole(ctx, workspaceId, ["owner", "operator"]);
+  const org = await ctx.db.get("orgs", orgId);
+  if (org === null || org.hexclaveOrgId !== activeOrgId) {
+    throw domainError("NOT_FOUND", "organization not found");
+  }
+  return { ...user, org };
 }

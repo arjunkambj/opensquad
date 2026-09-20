@@ -41,12 +41,12 @@ import { errorMessage, isConflictError } from "@/lib/convex-error"
  * the still-open dialog rather than being thrown away.
  */
 export function EditDraftDialog({
-  workspaceId,
+  orgId,
   draft,
   open,
   onOpenChange,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   draft: Doc<"drafts">
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -72,7 +72,7 @@ export function EditDraftDialog({
     setBusy(true)
     setError(null)
     void revise({
-      workspaceId,
+      orgId,
       draftId: draft._id,
       expectedRevision: draft.revision,
       // Only the fields that changed — revise requires at least one, and

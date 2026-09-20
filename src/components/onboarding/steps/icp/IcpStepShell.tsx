@@ -28,7 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export type IcpStepShellProps = Pick<
   OnboardingStepProps,
-  | "workspaceId"
+  | "orgId"
   | "agent"
   | "progress"
   | "goNext"
@@ -47,7 +47,7 @@ export type IcpStepShellProps = Pick<
 }
 
 export function IcpStepShell({
-  workspaceId,
+  orgId,
   agent,
   progress,
   goNext,
@@ -61,7 +61,7 @@ export function IcpStepShell({
   hint,
   children,
 }: IcpStepShellProps) {
-  const generation = useIcpGeneration(workspaceId, agent)
+  const generation = useIcpGeneration(orgId, agent)
   const [failureDismissed, setFailureDismissed] = useState(false)
   const [leaving, setLeaving] = useState(false)
 

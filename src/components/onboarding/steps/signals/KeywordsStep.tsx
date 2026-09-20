@@ -30,9 +30,9 @@ import { Spinner } from "@/components/ui/spinner"
 const KEYWORD_GENERATION_TIMEOUT_MS = 45_000
 
 export function KeywordsStep(props: OnboardingStepProps) {
-  const { workspaceId, progress, goNext, goBack, moving, moveError } = props
-  const overview = useQuery(api.agents.strategies.overview, { workspaceId })
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+  const { orgId, progress, goNext, goBack, moving, moveError } = props
+  const overview = useQuery(api.agents.strategies.overview, { orgId })
+  const balance = useQuery(api.billing.credits.balance, { orgId })
   const saveKeywords = useMutation(api.agents.strategies.saveKeywords)
   const generateMore = useMutation(api.agents.strategies.generateMoreKeywords)
 
@@ -76,7 +76,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
     setError(null)
     void (async () => {
       try {
-        await saveKeywords({ workspaceId, keywords: next })
+        await saveKeywords({ orgId, keywords: next })
       } catch {
         setError("We couldn't save that. Try it again.")
       }
@@ -88,7 +88,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
     setError(null)
     void (async () => {
       try {
-        await saveKeywords({ workspaceId, keywords: [] })
+        await saveKeywords({ orgId, keywords: [] })
         goNext()
       } catch {
         setError("We couldn't save that. Try it again.")
@@ -102,7 +102,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
     balance === undefined
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so we can't suggest more."
+        ? "This organization has no credit allowance, so we can't suggest more."
         : balance.remaining < KEYWORDS_GENERATION_CREDITS
           ? `More suggestions cost ${KEYWORDS_GENERATION_CREDITS} credits and you have ${balance.remaining} left.`
           : null
@@ -113,7 +113,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
     setGenerating(true)
     void (async () => {
       try {
-        await generateMore({ workspaceId })
+        await generateMore({ orgId })
       } catch {
         requestedAt.current = null
         setGenerating(false)

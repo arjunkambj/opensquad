@@ -7,9 +7,9 @@
 import { internal } from "../_generated/api";
 import { internalMutation, mutation } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { domainError } from "../lib/validators";
-import { getDraftInWorkspace } from "./draftsModel";
+import { getDraftInOrg } from "./draftsModel";
 import { vSendAttemptDoc } from "./sendAttempts";
 import { RECONCILE_WINDOW_MS } from "./sendModel";
 import { v } from "convex/values";
@@ -22,13 +22,13 @@ import { v } from "convex/values";
  */
 export const requestDispatch = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
   },
   returns: v.object({ scheduled: v.boolean() }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    await getDraftInWorkspace(ctx, args.workspaceId, args.draftId);
+    await requireOrgMember(ctx, args.orgId);
+    await getDraftInOrg(ctx, args.orgId, args.draftId);
     await ctx.scheduler.runAfter(
       0,
       internal.outreach.sendActions.sendApprovedDraft,
@@ -47,14 +47,14 @@ export const requestDispatch = mutation({
  */
 export const requestReconciliation = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     sendAttemptId: v.id("sendAttempts"),
   },
   returns: v.object({ scheduled: v.boolean() }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const attempt = await ctx.db.get("sendAttempts", args.sendAttemptId);
-    if (attempt === null || attempt.workspaceId !== args.workspaceId) {
+    if (attempt === null || attempt.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "send attempt not found");
     }
     if (attempt.state !== "uncertain") {
@@ -85,14 +85,14 @@ export const requestReconciliation = mutation({
  */
 export const cancelAttempt = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     sendAttemptId: v.id("sendAttempts"),
   },
   returns: vSendAttemptDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const attempt = await ctx.db.get("sendAttempts", args.sendAttemptId);
-    if (attempt === null || attempt.workspaceId !== args.workspaceId) {
+    if (attempt === null || attempt.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "send attempt not found");
     }
     if (attempt.state !== "reserved") {
@@ -110,20 +110,20 @@ export const cancelAttempt = mutation({
     const reservation = await ctx.runMutation(
       internal.billing.reservations.getByOperationKey,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationKey: attempt.operationKey,
       },
     );
     if (reservation !== null && reservation.state === "reserved") {
       await ctx.runMutation(internal.billing.reservations.release, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationKey: attempt.operationKey,
       });
     }
     const draft = await ctx.db.get("drafts", attempt.draftId);
     if (draft !== null) {
       await recordActivityEvent(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         kind: "send_attempt_cancelled",
         summary: "Reserved send intent cancelled by operator",
         actor: "operator",
@@ -149,7 +149,7 @@ export const cancelAttempt = mutation({
  */
 export const cancelParkedConversationAttempts = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     reason: v.string(),
   },
@@ -177,20 +177,20 @@ export const cancelParkedConversationAttempts = internalMutation({
       const reservation = await ctx.runMutation(
         internal.billing.reservations.getByOperationKey,
         {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           operationKey: attempt.operationKey,
         },
       );
       if (reservation !== null && reservation.state === "reserved") {
         await ctx.runMutation(internal.billing.reservations.release, {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           operationKey: attempt.operationKey,
         });
       }
       const draft = await ctx.db.get("drafts", attempt.draftId);
       if (draft !== null) {
         await recordActivityEvent(ctx, {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           kind: "send_attempt_cancelled",
           summary: `Parked send intent retired — ${args.reason.slice(0, 160)}`,
           actor: "workflow",
@@ -211,14 +211,14 @@ export const cancelParkedConversationAttempts = internalMutation({
  */
 export const cancelDraftParkedAttempts = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     reason: v.string(),
   },
   returns: v.object({ cancelled: v.number() }),
   handler: async (ctx, args) => {
     const draft = await ctx.db.get("drafts", args.draftId);
-    if (draft === null || draft.workspaceId !== args.workspaceId) {
+    if (draft === null || draft.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "draft not found");
     }
     const parked = await ctx.db
@@ -243,18 +243,18 @@ export const cancelDraftParkedAttempts = internalMutation({
       const reservation = await ctx.runMutation(
         internal.billing.reservations.getByOperationKey,
         {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           operationKey: attempt.operationKey,
         },
       );
       if (reservation !== null && reservation.state === "reserved") {
         await ctx.runMutation(internal.billing.reservations.release, {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           operationKey: attempt.operationKey,
         });
       }
       await recordActivityEvent(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         kind: "send_attempt_cancelled",
         summary: `Parked send intent retired — ${args.reason.slice(0, 160)}`,
         actor: "workflow",

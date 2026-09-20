@@ -17,7 +17,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import type {
   ContactsSearch,
   LeadScoreFilter,
-} from "@/routes/_dashboard/_workspace/contacts"
+} from "@/routes/_dashboard/_org/contacts"
 import { APPROVAL_LABEL, STAGE_LABEL } from "../contacts-model"
 
 const APPROVALS: readonly LeadApproval[] = ["pending", "approved", "rejected"]

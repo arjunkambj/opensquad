@@ -1,6 +1,6 @@
-/** Member-guarded reads: the workspace's bookings and one booking's detail. */
+/** Member-guarded reads: the org's bookings and one booking's detail. */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   domainError,
@@ -17,13 +17,13 @@ import { v } from "convex/values";
  *   (`by_prospectId_and_createdAt`; `state` narrows it on
  *   `by_prospectId_and_state`).
  *
- *   `state` — the workspace's bookings in one state, ordered by `startsAt`
- *   (`by_workspaceId_and_state_and_startsAt`): soonest-first for `confirmed`
+ *   `state` — the org's bookings in one state, ordered by `startsAt`
+ *   (`by_orgId_and_state_and_startsAt`): soonest-first for `confirmed`
  *   — the upcoming-meetings view — and `proposed` rows, which have no
  *   `startsAt`, sort together at the front; terminal states newest-first.
  *
  *   `owner` — one member's bookings by `startsAt`
- *   (`by_workspaceId_and_ownerIdentityKey_and_startsAt`), soonest first: the
+ *   (`by_orgId_and_ownerIdentityKey_and_startsAt`), soonest first: the
  *   operator's worklist, where undated proposals lead.
  *
  * Combinations with no index — owner+state, everything together — REFUSE
@@ -31,7 +31,7 @@ import { v } from "convex/values";
  */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.optional(v.id("prospects")),
     state: v.optional(vBookingState),
     owner: v.optional(v.string()),
@@ -40,7 +40,7 @@ export const list = query({
   },
   returns: vListPage,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const paginate = {
       numItems: boundedLimit(args.limit),
       cursor: args.cursor ?? null,
@@ -53,7 +53,7 @@ export const list = query({
       }
       const prospectId = args.prospectId;
       const prospect = await ctx.db.get("prospects", prospectId);
-      if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+      if (prospect === null || prospect.orgId !== args.orgId) {
         throw domainError("NOT_FOUND", "prospect not found");
       }
       const state = args.state;
@@ -88,9 +88,9 @@ export const list = query({
       const state = args.state;
       const result = await ctx.db
         .query("bookings")
-        .withIndex("by_workspaceId_and_state_and_startsAt", (q) =>
+        .withIndex("by_orgId_and_state_and_startsAt", (q) =>
           q
-            .eq("workspaceId", args.workspaceId)
+            .eq("orgId", args.orgId)
             .eq("state", state),
         )
         .order(state === "confirmed" || state === "proposed" ? "asc" : "desc")
@@ -105,8 +105,8 @@ export const list = query({
       const owner = args.owner;
       const result = await ctx.db
         .query("bookings")
-        .withIndex("by_workspaceId_and_ownerIdentityKey_and_startsAt", (q) =>
-          q.eq("workspaceId", args.workspaceId).eq("ownerIdentityKey", owner),
+        .withIndex("by_orgId_and_ownerIdentityKey_and_startsAt", (q) =>
+          q.eq("orgId", args.orgId).eq("ownerIdentityKey", owner),
         )
         .order("asc")
         .paginate(paginate);
@@ -117,7 +117,7 @@ export const list = query({
       };
     }
     throw invalid(
-      "list requires one of prospectId, state or owner — the schema declares an index per supported slice and no workspace-wide range exists",
+      "list requires one of prospectId, state or owner — the schema declares an index per supported slice and no organization-wide range exists",
     );
   },
 });
@@ -125,12 +125,12 @@ export const list = query({
 /** One booking; a foreign or missing row is NOT_FOUND, never FORBIDDEN. */
 export const get = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     bookingId: v.id("bookings"),
   },
   returns: vBookingDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    return await loadBookingForWrite(ctx, args.workspaceId, args.bookingId);
+    await requireOrgMember(ctx, args.orgId);
+    return await loadBookingForWrite(ctx, args.orgId, args.bookingId);
   },
 });

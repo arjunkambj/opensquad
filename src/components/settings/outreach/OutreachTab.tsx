@@ -6,7 +6,7 @@
  * illustrated empty state, saying what the agent writes when nothing is set.
  *
  * The container owns the read and the write. Editing is a mode rather than a
- * separate screen, so a workspace with no default shows the empty state until
+ * separate screen, so an org with no default shows the empty state until
  * someone asks to write one.
  */
 import { MagicWand01Icon, Note01Icon } from "@hugeicons/core-free-icons"
@@ -18,23 +18,15 @@ import type { Id } from "../../../../convex/_generated/dataModel"
 import { EmptyState } from "@/components/kit/EmptyState"
 import { InstructionsEditorCard } from "@/components/settings/outreach/InstructionsEditorCard"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
-import { LoadingState, PermissionNote } from "@/components/states/states"
+import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
-import { canEdit } from "@/lib/workspace-role"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
-export function OutreachTab({
-  workspaceId,
-  role,
-}: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
-}) {
-  const stored = useQuery(api.workspaces.outreachDefaults.get, { workspaceId })
-  const save = useMutation(api.workspaces.outreachDefaults.save)
+export function OutreachTab({ orgId }: { orgId: Id<"orgs"> }) {
+  const stored = useQuery(api.orgs.outreachDefaults.get, { orgId })
+  const save = useMutation(api.orgs.outreachDefaults.save)
 
   const [draft, setDraft] = useState("")
   const [syncedAt, setSyncedAt] = useState(-1)
@@ -58,11 +50,10 @@ export function OutreachTab({
     )
   }
 
-  const editable = canEdit(role)
   const submit = () => {
     setSaving(true)
     setError(null)
-    void save({ workspaceId, instructions: draft })
+    void save({ orgId, instructions: draft })
       .then((result) => {
         setEditing(false)
         setSyncedAt(result.updatedAt)
@@ -92,7 +83,7 @@ export function OutreachTab({
         title="Outreach instructions"
         description="How your agent writes when it has no instructions of its own. An agent with its own takes precedence."
         action={
-          editable && !editing && stored.instructions !== null ? (
+          !editing && stored.instructions !== null ? (
             <Button
               onClick={() => setEditing(true)}
               type="button"
@@ -126,22 +117,15 @@ export function OutreachTab({
               title="No default instructions yet"
               description="Without them your agent writes from your company profile and what it researched about the lead: the problem it thinks they have, one relevant thing you do, and a short ask. Add instructions to set the voice, the length and what it must never claim."
               action={
-                editable ? (
-                  <Button onClick={() => setEditing(true)} type="button">
-                    <HugeiconsIcon
-                      aria-hidden="true"
-                      data-icon="inline-start"
-                      icon={MagicWand01Icon}
-                      strokeWidth={2}
-                    />
-                    Write default instructions
-                  </Button>
-                ) : (
-                  <PermissionNote
-                    role={role}
-                    action="set the default instructions"
+                <Button onClick={() => setEditing(true)} type="button">
+                  <HugeiconsIcon
+                    aria-hidden="true"
+                    data-icon="inline-start"
+                    icon={MagicWand01Icon}
+                    strokeWidth={2}
                   />
-                )
+                  Write default instructions
+                </Button>
               }
             />
           </CardContent>
@@ -152,12 +136,6 @@ export function OutreachTab({
             <p className="text-sm whitespace-pre-wrap text-foreground">
               {stored.instructions}
             </p>
-            {editable ? null : (
-              <PermissionNote
-                role={role}
-                action="change the default instructions"
-              />
-            )}
           </CardContent>
         </Card>
       )}

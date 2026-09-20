@@ -57,7 +57,7 @@ import type { QuarantineReason } from "../lib/validators";
 
 /**
  * The component's app-side callbacks — the only configuration that is the same
- * for every workspace.
+ * for every org.
  */
 const COMPONENT_CALLBACKS = {
   // The cast covers one place where the component contradicts itself: its
@@ -80,12 +80,12 @@ const COMPONENT_CALLBACKS = {
  * (`/agentmail/webhook`, PLAN §9.4 "Legacy inboxes"). It reads
  * `AGENTMAIL_WEBHOOK_SECRET` from deployment env; that variable is no longer
  * set on dev, and `convex/http.ts` answers 401 rather than 500 when it is
- * absent. Per-workspace inbound goes through `agentmailForWebhookSecret`.
+ * absent. Per-org inbound goes through `agentmailForWebhookSecret`.
  */
 export const agentmail = new AgentMail(components.agentmail, COMPONENT_CALLBACKS);
 
 /**
- * A per-request component handle bound to ONE workspace's webhook secret
+ * A per-request component handle bound to ONE org's webhook secret
  * (PLAN §4 step 4). Constructed per inbound request so the component's Svix
  * verification, `event_id` dedupe and message storage are reused unchanged
  * without any shared credential.
@@ -98,31 +98,31 @@ export function agentmailForWebhookSecret(webhookSecret: string): AgentMail {
 }
 
 /**
- * The workspace's own AgentMail key, decrypted inside this action.
+ * The org's own AgentMail key, decrypted inside this action.
  *
  * There is no platform key any more: every outbound request is made with the
- * key its workspace pasted. A workspace with no usable key is a configuration
+ * key its org pasted. An org with no usable key is a configuration
  * refusal, not a provider verdict — it throws, so no send attempt records an
  * outcome for a request that was never made.
  */
-async function workspaceApiKey(
+async function orgApiKey(
   ctx: ActionCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<string> {
-  const envelope = await ctx.runQuery(internal.workspaces.secrets.getEnvelope, {
-    workspaceId,
+  const envelope = await ctx.runQuery(internal.orgs.secrets.getEnvelope, {
+    orgId,
     provider: "agentmail" as const,
   });
   if (envelope === null) {
     throw domainError(
       "FORBIDDEN",
-      "this workspace has no connected mail key",
+      "this organization has no connected mail key",
     );
   }
   if (envelope.status === "invalid") {
     throw domainError(
       "FORBIDDEN",
-      "this workspace's mail key was refused by the provider — reconnect the inbox",
+      "this organization's mail key was refused by the provider — reconnect the inbox",
     );
   }
   return await decryptSecret(envelope);
@@ -130,20 +130,20 @@ async function workspaceApiKey(
 
 /**
  * A 401 at send time is a connection fact, not a send fact (PLAN §4 step 7):
- * the key flips to `invalid` and the workspace's automation pauses with the
+ * the key flips to `invalid` and the org's automation pauses with the
  * reconnect reason. Recorded before the attempt's own outcome is returned, so
  * the banner is up by the time the failure is shown.
  */
 async function noteUnauthorized(
   ctx: ActionCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   result: SendAttemptResult,
 ): Promise<void> {
   if (result.outcome !== "rejected" || result.httpStatus !== 401) {
     return;
   }
   await ctx.runMutation(internal.inbox.connectionState.markInboxKeyInvalid, {
-    workspaceId,
+    orgId,
     reason: "provider_rejected_key_at_send",
   });
 }
@@ -238,7 +238,7 @@ type SendAttemptResult = Infer<typeof vSendAttemptResult>;
  *   another request or mint a fresh key.
  */
 async function performSingleSendRequest(args: {
-  /** The workspace's own decrypted key — never `process.env`. */
+  /** The org's own decrypted key — never `process.env`. */
   apiKey: string;
   inboxId: string;
   idempotencyKey: string;
@@ -431,7 +431,7 @@ function numberField(
  *
  * Caller contract — implemented by P10 (G3 steps 3–4, architecture §8): one
  * Convex transaction immediately before this action validates the approved
- * draft revision, workspace/campaign status, suppression, allowed demo
+ * draft revision, org/campaign status, suppression, allowed demo
  * recipient, conversation version, takeover state and rate allowance, and
  * confirms no successful or unresolved attempt exists across the
  * conversation's revisions. That transaction durably records the send
@@ -453,7 +453,7 @@ function numberField(
  */
 export const executeSendAttempt = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     payload: vSendRequestBody,
@@ -462,10 +462,10 @@ export const executeSendAttempt = internalAction({
   handler: async (ctx, args): Promise<SendAttemptResult> => {
     const result = await performSingleSendRequest({
       ...args,
-      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      apiKey: await orgApiKey(ctx, args.orgId),
       endpointOperation: "send",
     });
-    await noteUnauthorized(ctx, args.workspaceId, result);
+    await noteUnauthorized(ctx, args.orgId, result);
     return result;
   },
 });
@@ -482,7 +482,7 @@ export const executeSendAttempt = internalAction({
  *
  * - the attempt is `uncertain` — never `requesting`, never already
  *   `accepted`, and covered at most once by a recorded replacement decision;
- * - workspace policy still permits dispatch (not paused, taken over or
+ * - org policy still permits dispatch (not paused, taken over or
  *   suppressed; conversation version unchanged; send window valid);
  * - the attempt was recorded within the provider's verified idempotency
  *   window (documented as 24 h after completion — confirm by probe before
@@ -495,7 +495,7 @@ export const executeSendAttempt = internalAction({
  */
 export const reconcileSendAttempt = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     payload: vSendRequestBody,
@@ -504,10 +504,10 @@ export const reconcileSendAttempt = internalAction({
   handler: async (ctx, args): Promise<SendAttemptResult> => {
     const result = await performSingleSendRequest({
       ...args,
-      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      apiKey: await orgApiKey(ctx, args.orgId),
       endpointOperation: "send",
     });
-    await noteUnauthorized(ctx, args.workspaceId, result);
+    await noteUnauthorized(ctx, args.orgId, result);
     return result;
   },
 });
@@ -521,7 +521,7 @@ export const reconcileSendAttempt = internalAction({
  */
 export const executeReplyAttempt = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     parentMessageId: v.string(),
@@ -531,10 +531,10 @@ export const executeReplyAttempt = internalAction({
   handler: async (ctx, args): Promise<SendAttemptResult> => {
     const result = await performSingleSendRequest({
       ...args,
-      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      apiKey: await orgApiKey(ctx, args.orgId),
       endpointOperation: "reply",
     });
-    await noteUnauthorized(ctx, args.workspaceId, result);
+    await noteUnauthorized(ctx, args.orgId, result);
     return result;
   },
 });
@@ -543,7 +543,7 @@ export const executeReplyAttempt = internalAction({
  *  key, same payload, same parent, audit-distinct name. */
 export const reconcileReplyAttempt = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxId: v.string(),
     idempotencyKey: v.string(),
     parentMessageId: v.string(),
@@ -553,10 +553,10 @@ export const reconcileReplyAttempt = internalAction({
   handler: async (ctx, args): Promise<SendAttemptResult> => {
     const result = await performSingleSendRequest({
       ...args,
-      apiKey: await workspaceApiKey(ctx, args.workspaceId),
+      apiKey: await orgApiKey(ctx, args.orgId),
       endpointOperation: "reply",
     });
-    await noteUnauthorized(ctx, args.workspaceId, result);
+    await noteUnauthorized(ctx, args.orgId, result);
     return result;
   },
 });
@@ -564,14 +564,14 @@ export const reconcileReplyAttempt = internalAction({
 /**
  * P10: read-only provider evidence lookup for uncertain-attempt
  * reconciliation (G3 step 8 — "use provider read APIs and webhook
- * evidence"). Direct REST reads with the WORKSPACE's own key — the component's
+ * evidence"). Direct REST reads with the ORG's own key — the component's
  * equivalents read `AGENTMAIL_API_KEY` from env, which no longer exists.
  * Never mutates provider state. Returns a bounded, sanitized projection:
  * provider IDs and existence only, no addresses or bodies.
  */
 export const lookupProviderMessage = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxId: v.string(),
     messageId: v.optional(v.string()),
     threadId: v.optional(v.string()),
@@ -599,7 +599,7 @@ export const lookupProviderMessage = internalAction({
       thread: { threadId: string; messageCount?: number } | null;
       error?: string;
     } = { message: null, thread: null };
-    const apiKey = await workspaceApiKey(ctx, args.workspaceId);
+    const apiKey = await orgApiKey(ctx, args.orgId);
     if (args.messageId !== undefined) {
       const message = await getMessage(apiKey, args.inboxId, args.messageId);
       if (message.ok) {
@@ -692,7 +692,7 @@ function extractEventIndexFields(event: unknown): {
   messageId?: string;
 } {
   // ONE definition of the per-event-type id mapping, shared with the inbound
-  // route's workspace binding: the route must not accept an event this
+  // route's org binding: the route must not accept an event this
   // callback would then file under a different inbox.
   return extractEventIds(event);
 }
@@ -733,8 +733,8 @@ function providerRef(
 }
 
 /**
- * Resolve the owning workspace from the saved inbox assignment alone
- * (architecture §8 step 2: never guess a workspace from a body or a display
+ * Resolve the owning org from the saved inbox assignment alone
+ * (architecture §8 step 2: never guess an org from a body or a display
  * address). `.collect()` rather than `.unique()`: the assignment's uniqueness
  * is transactional, not a database constraint, and `.unique()` would throw on
  * a violated invariant — on the one code path that cannot survive a throw.
@@ -746,30 +746,30 @@ function providerRef(
  * before enqueueing anything, and an unrecorded event is lost for good.
  * Logged with provider IDs only.
  */
-async function resolveWorkspaceByInbox(
+async function resolveOrgByInbox(
   ctx: MutationCtx,
   inboxRef: string,
   context: string,
 ): Promise<
-  | { workspace: Doc<"workspaces"> }
-  | { workspace: null; reason: QuarantineReason }
+  | { org: Doc<"orgs"> }
+  | { org: null; reason: QuarantineReason }
 > {
   const rows = await ctx.db
-    .query("workspaces")
+    .query("orgs")
     .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
     .collect();
   if (rows.length === 0) {
     console.info(`${context}: event for unassigned inbox`, { inboxRef });
-    return { workspace: null, reason: "inbox_unassigned" };
+    return { org: null, reason: "inbox_unassigned" };
   }
   if (rows.length > 1) {
-    console.info(`${context}: inbox claimed by multiple workspaces`, {
+    console.info(`${context}: inbox claimed by multiple organizations`, {
       inboxRef,
       claims: rows.length,
     });
-    return { workspace: null, reason: "inbox_ambiguous" };
+    return { org: null, reason: "inbox_ambiguous" };
   }
-  return { workspace: rows[0] };
+  return { org: rows[0] };
 }
 
 /**
@@ -784,7 +784,7 @@ async function resolveWorkspaceByInbox(
  *
  * P10 wiring (P05's receipt contract landed): each verified event is recorded
  * in `emailEventReceipts` — deduped by `event_id` AND by
- * (workspaceId, applicationKey) — then folded onto the app-owned send
+ * (orgId, applicationKey) — then folded onto the app-owned send
  * attempt by provider `message_id`. The app-owned sender creates no
  * component `outboundMessages` row, so the component's internal status
  * projection never matches ours — delivery facts arrive only here, and a
@@ -792,8 +792,8 @@ async function resolveWorkspaceByInbox(
  * `recordSendOutcome` folds it. Verified bounce/complaint facts suppress the
  * exact email via `applyReceiptToAttempt`.
  *
- * An event whose inbox no workspace claims — or which two claim — has no
- * workspace to file a receipt under, so it is held in
+ * An event whose inbox no org claims — or which two claim — has no
+ * org to file a receipt under, so it is held in
  * `quarantinedEmailEvents` and replayed by `internal.inbox.quarantine.replayForInbox`
  * once the assignment exists (§G3 "Unknown inboxes are quarantined").
  */
@@ -833,14 +833,14 @@ export const onEvent = internalMutation({
       return null;
     }
     const payloadTimestamp = numberField(event, "timestamp");
-    const resolved = await resolveWorkspaceByInbox(
+    const resolved = await resolveOrgByInbox(
       ctx,
       inboxRef,
       "agentmail.onEvent",
     );
-    if (resolved.workspace === null) {
-      // Held, not dropped. `emailEventReceipts.workspaceId` is required and
-      // there is no workspace to put on one, so the event goes to the
+    if (resolved.org === null) {
+      // Held, not dropped. `emailEventReceipts.orgId` is required and
+      // there is no org to put on one, so the event goes to the
       // quarantine table until an assignment exists to replay it into.
       await recordQuarantinedEvent(ctx, {
         inboxRef,
@@ -856,9 +856,9 @@ export const onEvent = internalMutation({
       });
       return null;
     }
-    const workspace = resolved.workspace;
+    const org = resolved.org;
     await recordReceipt(ctx, {
-      workspaceId: workspace._id,
+      orgId: org._id,
       inboxRef,
       providerEventId: eventId,
       applicationKey,
@@ -887,7 +887,7 @@ export const onEvent = internalMutation({
  * .applyInboundMessage` is then scheduled to do the business handling.
  *
  * This function deliberately does the smallest possible amount of work: it
- * projects the payload, resolves the workspace from the saved inbox
+ * projects the payload, resolves the org from the saved inbox
  * assignment, writes the receipt and schedules. Conversation matching,
  * `contextVersion` advancement, approval invalidation and everything
  * downstream live in `convex/inbox/`, where a throw costs a retry instead of
@@ -933,12 +933,12 @@ export const onMessageReceived = internalMutation({
       );
       return null;
     }
-    const resolved = await resolveWorkspaceByInbox(
+    const resolved = await resolveOrgByInbox(
       ctx,
       inboxRef,
       "agentmail.onMessageReceived",
     );
-    if (resolved.workspace === null) {
+    if (resolved.org === null) {
       // Held, not dropped — the customer's reply is the thing this whole path
       // exists for. Provider identifiers only: the message itself is already
       // in the component's own `inboundMessages` row, which is what makes the
@@ -958,9 +958,9 @@ export const onMessageReceived = internalMutation({
       });
       return null;
     }
-    const workspace = resolved.workspace;
+    const org = resolved.org;
     // The only projection of the payload that survives this function. The
-    // sender is stored as DATA — it never selects a workspace or conversation
+    // sender is stored as DATA — it never selects an org or conversation
     // and never becomes a send recipient — and it rides on the receipt rather
     // than in the scheduler argument so the drain can re-drive from the row
     // alone. No subject, no body, no headers: §4.3 keeps receipts to the
@@ -977,12 +977,12 @@ export const onMessageReceived = internalMutation({
       extractedText: message?.extracted_text,
     });
     // THE single writer (PLAN §9.4). It looks the message up on
-    // `(workspaceId, inboxRef, providerMessageRef)` first, so a backfilled row
+    // `(orgId, inboxRef, providerMessageRef)` first, so a backfilled row
     // for this very message is MERGED and promoted to `live` instead of
     // becoming a second row — and so this callback can never insert one
     // directly.
     const { receipt, startsHandling } = await upsertMessage(ctx, {
-      workspaceId: workspace._id,
+      orgId: org._id,
       inboxRef,
       providerMessageRef: messageRef,
       ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),

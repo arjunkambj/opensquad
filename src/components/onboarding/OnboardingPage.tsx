@@ -2,16 +2,16 @@
  * Setup — the full-screen four-dot flow (PLAN §5, §11 M1, references 01–11).
  *
  * This is the container for every dot. It does three things and delegates the
- * rest: it makes sure the workspace record exists, it reads how far the user
+ * rest: it makes sure the org record exists, it reads how far the user
  * got, and it renders the screen that belongs to that step.
  *
- * THERE IS NO WORKSPACE OR TEAM SCREEN. The identity provider already gives
- * every account its own team when it signs up; our workspace row is only what
- * app data hangs off, so it is created silently on first entry and the user is
- * never asked to name, choose or create one. What CAN stop that creation is a
- * real condition with a real answer — an unverified email, a restricted
- * account, a full trial — and each of those gets a designed state here rather
- * than a raw error.
+ * THERE IS NO ORGANIZATION SCREEN. The identity provider already gives every
+ * account its own organization when it signs up, and it owns who belongs to
+ * one; our org row is only what app data hangs off, so it is created silently
+ * for whichever organization is active and the user is never asked to name,
+ * choose or create one. What CAN stop that creation is a real condition with
+ * a real answer — an unverified email, a restricted account, a full trial —
+ * and each of those gets a designed state here rather than a raw error.
  *
  * Progress lives on the agent row, so a refresh resumes on the same screen and
  * the browser holds nothing that could disagree with the server.
@@ -25,6 +25,7 @@ import type { ReactNode } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import type { OnboardingStep } from "../../../convex/lib/validators"
+import { OrgBoundary } from "@/components/auth/OrgBoundary"
 import { OnboardingShell } from "@/components/kit/OnboardingShell"
 import Logo from "@/components/layout/Logo"
 import {
@@ -37,9 +38,9 @@ import {
 import type { OnboardingEntryRefusal } from "@/components/onboarding/onboarding-model"
 import { EmptyState, ErrorState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useCurrentOrg } from "@/hooks/use-current-org"
 import { domainErrorCode } from "@/lib/convex-error"
-import { detectLocalTimezone } from "@/lib/workspace-time"
+import { detectLocalTimezone } from "@/lib/org-time"
 
 export function OnboardingPage() {
   return (
@@ -56,6 +57,12 @@ export function OnboardingPage() {
       <SetupFlow />
     </Suspense>
   )
+}
+
+/** The provider's organization name, as `ensureOrg` will accept it. */
+function boundedOrgName(displayName: string | null | undefined): string | null {
+  const trimmed = (displayName ?? "").trim().slice(0, 100)
+  return trimmed.length === 0 ? null : trimmed
 }
 
 /** The frame every pre-step state sits in, so setup never changes shape. */
@@ -78,23 +85,53 @@ function SetupFlow() {
   // Suspends until the session resolves, and bounces a signed-out visitor to
   // sign-in — setup is not a public page.
   const user = useUser({ or: "redirect" })
-  const current = useCurrentWorkspace()
-  const ensureWorkspace = useMutation(api.workspaces.mutations.ensureWorkspace)
+
+  return (
+    <OrgBoundary
+      user={user}
+      fallback={
+        <SetupFrame>
+          <LoadingState
+            description="Opening the organization your agent runs in."
+            title="Just a moment"
+          />
+        </SetupFrame>
+      }
+    >
+      {/* Keyed by the organization: switching one must start setup over
+          rather than carry the previous one's "already asked for a row". */}
+      <SetupForActiveOrg key={user.selectedTeam?.id} user={user} />
+    </OrgBoundary>
+  )
+}
+
+/** Setup itself, once an organization is active in the auth provider. */
+function SetupForActiveOrg({ user }: { user: CurrentUser }) {
+  const current = useCurrentOrg()
+  const ensureOrg = useMutation(api.orgs.mutations.ensureOrg)
   const [refusal, setRefusal] = useState<OnboardingEntryRefusal | null>(null)
   const [attempt, setAttempt] = useState(0)
   // One creation request per attempt: the mutation is idempotent, but firing
   // it on every render would still be a request per render.
   const requested = useRef(-1)
+  // The row is named after the organization it belongs to, so the name a
+  // member sees here is the one they chose in the auth provider. Trimmed and
+  // bounded to what the mutation accepts: a name the provider allows but we
+  // do not must not turn setup into an error screen.
+  const orgName = boundedOrgName(user.selectedTeam?.displayName)
 
   useEffect(() => {
-    if (current !== null || requested.current === attempt) {
+    if (current.status !== "not_initialised" || requested.current === attempt) {
       return
     }
     requested.current = attempt
     let live = true
     void (async () => {
       try {
-        await ensureWorkspace({ timezone: detectLocalTimezone() })
+        await ensureOrg({
+          timezone: detectLocalTimezone(),
+          ...(orgName === null ? {} : { name: orgName }),
+        })
       } catch (cause) {
         if (live) {
           setRefusal(entryRefusalOf(cause))
@@ -104,20 +141,20 @@ function SetupFlow() {
     return () => {
       live = false
     }
-  }, [attempt, current, ensureWorkspace])
+  }, [attempt, current, ensureOrg, orgName])
 
-  if (current === undefined) {
+  if (current.status === "loading") {
     return (
       <SetupFrame>
         <LoadingState
-          description="Checking your account and workspace."
+          description="Checking your account and organization."
           title="Opening setup"
         />
       </SetupFrame>
     )
   }
 
-  if (current === null) {
+  if (current.status !== "ready") {
     if (refusal !== null) {
       return (
         <EntryRefusalState
@@ -133,28 +170,17 @@ function SetupFlow() {
     return (
       <SetupFrame>
         <LoadingState
-          description="Setting up the workspace your agent runs in."
+          description="Setting up the organization your agent runs in."
           title="Just a moment"
         />
       </SetupFrame>
     )
   }
 
-  if (current.role === "viewer") {
-    return (
-      <SetupFrame>
-        <EmptyState
-          description="Setup writes the company profile and activates the agent, which read-only access cannot do. An owner or operator in this workspace can finish it."
-          title="You have read-only access to this workspace"
-        />
-      </SetupFrame>
-    )
-  }
-
-  return <AgentFlow workspaceId={current.workspace._id} />
+  return <AgentFlow orgId={current.org._id} />
 }
 
-/** Why the workspace could not be prepared, and what to do about it. */
+/** Why the org could not be prepared, and what to do about it. */
 function EntryRefusalState({
   refusal,
   user,
@@ -227,7 +253,7 @@ function EntryRefusalState({
     return (
       <SetupFrame>
         <EmptyState
-          description="This account can't create a workspace. If you think that's wrong, reply to the email you signed up with and we'll take a look."
+          description="This account can't create an organization. If you think that's wrong, reply to the email you signed up with and we'll take a look."
           title="This account isn't ready yet"
         />
       </SetupFrame>
@@ -253,7 +279,7 @@ function EntryRefusalState({
   return (
     <SetupFrame>
       <ErrorState
-        description="We couldn't prepare your workspace. Nothing was lost — try again."
+        description="We couldn't prepare your organization. Nothing was lost — try again."
         onRetry={onRetry}
         title="Setup couldn't start"
       />
@@ -262,8 +288,8 @@ function EntryRefusalState({
 }
 
 /** The step the agent row says the user is on. */
-function AgentFlow({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
-  const agent = useQuery(api.agents.queries.get, { workspaceId })
+function AgentFlow({ orgId }: { orgId: Id<"orgs"> }) {
+  const agent = useQuery(api.agents.queries.get, { orgId })
   const setStep = useMutation(api.agents.onboarding.setStep)
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState<string | null>(null)
@@ -283,7 +309,7 @@ function AgentFlow({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
     return (
       <SetupFrame>
         <ErrorState
-          description="This workspace has no agent to set up, which shouldn't happen. Reload the page and we'll try again."
+          description="This organization has no agent to set up, which shouldn't happen. Reload the page and we'll try again."
           onRetry={() => window.location.reload()}
           retryLabel="Reload"
           title="Your agent is missing"
@@ -304,7 +330,7 @@ function AgentFlow({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
     setMoving(true)
     setMoveError(null)
     try {
-      await setStep({ workspaceId, step })
+      await setStep({ orgId, step })
     } catch (cause) {
       setMoveError(
         domainErrorCode(cause) === "INVALID"
@@ -336,7 +362,7 @@ function AgentFlow({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
         step: entry.stepInDot,
         stepCount: entry.stepsInDot,
       }}
-      workspaceId={workspaceId}
+      orgId={orgId}
       {...(backward === null
         ? {}
         : { goBack: () => void move(backward) })}

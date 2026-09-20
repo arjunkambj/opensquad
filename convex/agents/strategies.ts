@@ -9,7 +9,7 @@
  *                          live state of the recommendation, the suggested
  *                          and chosen keywords.
  *   `startRecommendation`  the only authenticated part of a paid run. It
- *                          checks the role, spends a rate-limit token,
+ *                          checks the organization, spends a rate-limit token,
  *                          records `generating` so the screen shows live
  *                          status from its own reactive query, and schedules
  *                          the internal action that may spend money.
@@ -28,7 +28,7 @@
  */
 import { internal } from "../_generated/api";
 import { action, mutation, query } from "../_generated/server";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
   domainError,
@@ -38,7 +38,7 @@ import {
   vStrategySource,
 } from "../lib/validators";
 import type { LeadFilters } from "../lib/validators";
-import { getWorkspaceAgent } from "./model";
+import { getOrgAgent } from "./model";
 import { vConfirmBlock } from "./strategiesConfirm";
 import {
   boundedKeywords,
@@ -75,16 +75,16 @@ const vStrategyOverview = v.object({
 });
 
 /**
- * Everything dot 4 shows. Membership rather than editor: a viewer may look at
- * what the agent searches for, and nothing here is a provider's vocabulary —
- * the filter sets themselves stay on the server (PLAN §4).
+ * Everything dot 4 shows. Guarded by the active organization, like every
+ * other entry point, and nothing here is a provider's vocabulary — the
+ * filter sets themselves stay on the server (PLAN §4).
  */
 export const overview = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vStrategyOverview,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       return {
         generation: null,
@@ -167,15 +167,15 @@ const vStartResult = v.union(
  */
 export const startRecommendation = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     reason: vRecommendationReason,
   },
   returns: vStartResult,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     if (agent.status !== "draft") {
       throw invalid("this agent has already finished setup");
@@ -219,11 +219,11 @@ export const startRecommendation = mutation({
       0,
       internal.agents.strategiesGeneration.recommend,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         agentId: agent._id,
         startedAt: now,
         operationKey: await strategyOperationKey({
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           purpose: "signals",
           startedAt: now,
         }),
@@ -249,16 +249,16 @@ export const startRecommendation = mutation({
  */
 export const setSelection = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** The strategies that should be on. Everything else is switched off. */
     strategyIds: v.array(v.id("strategies")),
   },
   returns: v.object({ enabled: v.number() }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     if (agent.onboardingStep === "done") {
       throw invalid("setup is finished; change signals on the agent page");
@@ -298,15 +298,15 @@ export const setSelection = mutation({
  *  keywords needed" skips the screen entirely. */
 export const saveKeywords = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     keywords: v.array(v.string()),
   },
   returns: v.object({ keywords: v.array(v.string()) }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     const keywords = boundedKeywords(args.keywords);
     await ctx.db.patch("agents", agent._id, {
@@ -323,13 +323,13 @@ export const saveKeywords = mutation({
  * and the screen checks the balance before it offers it.
  */
 export const generateMoreKeywords = mutation({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({ status: v.literal("started") }),
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     await requireRateLimit(ctx, "regenerate", identityKey);
     // The key carries the moment it was asked for, so each press really
@@ -341,10 +341,10 @@ export const generateMoreKeywords = mutation({
       0,
       internal.agents.strategiesGeneration.generateMore,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         agentId: agent._id,
         operationKey: await strategyOperationKey({
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           purpose: "keywords",
           startedAt,
         }),
@@ -377,12 +377,12 @@ const vConfirmResult = v.union(
  * exactly the same way with one strategy fewer.
  */
 export const confirm = action({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vConfirmResult,
   handler: async (ctx, args): Promise<typeof vConfirmResult.type> => {
     const context = await ctx.runQuery(
       internal.agents.strategiesConfirm.confirmContext,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     if (context.status === "blocked") {
       return context.reason === "already_done"
@@ -413,7 +413,7 @@ export const confirm = action({
     return await ctx.runMutation(
       internal.agents.strategiesConfirm.finishOnboarding,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         ...(keywordStrategy === undefined ? {} : { keywordStrategy }),
       },
     );

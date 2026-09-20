@@ -12,10 +12,10 @@ import { useNavigate, useSearch } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
 import type { PageSize } from "@/lib/search-params"
-import type { ContactsSearch } from "@/routes/_dashboard/_workspace/contacts"
+import type { ContactsSearch } from "@/routes/_dashboard/_org/contacts"
 import { exclusiveFilters, withContactFilters } from "./contacts-model"
 
-const CONTACTS_ROUTE = "/_dashboard/_workspace/contacts"
+const CONTACTS_ROUTE = "/_dashboard/_org/contacts"
 
 const DEFAULT_PAGE_SIZE: PageSize = 25
 

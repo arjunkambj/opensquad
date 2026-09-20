@@ -1,5 +1,5 @@
 /**
- * Activity validators: the kinds of event the workspace feed records.
+ * Activity validators: the kinds of event the org feed records.
  */
 
 /**

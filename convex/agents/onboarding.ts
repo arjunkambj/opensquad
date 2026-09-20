@@ -22,8 +22,8 @@
  *   saved profile with the fields everything downstream reads.
  */
 import { mutation } from "../_generated/server";
-import { getWorkspaceProfile, profileIsComplete } from "../company/model";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { getOrgProfile, profileIsComplete } from "../company/model";
+import { requireOrgMember } from "../lib/auth";
 import {
   domainError,
   invalid,
@@ -31,7 +31,7 @@ import {
   vOnboardingStep,
 } from "../lib/validators";
 import type { OnboardingStep } from "../lib/validators";
-import { getWorkspaceAgent, vAgentDoc } from "./model";
+import { getOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
 function stepIndex(step: OnboardingStep): number {
@@ -39,7 +39,7 @@ function stepIndex(step: OnboardingStep): number {
 }
 
 /**
- * Move the workspace's draft agent to `step`.
+ * Move the org's draft agent to `step`.
  *
  * Idempotent: asking for the step the agent is already on returns it
  * unchanged, so a double click or a replayed request is not an error the user
@@ -47,15 +47,15 @@ function stepIndex(step: OnboardingStep): number {
  */
 export const setStep = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     step: vOnboardingStep,
   },
   returns: vAgentDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
-      throw domainError("NOT_FOUND", "this workspace has no agent yet");
+      throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     if (args.step === "done") {
       throw invalid(
@@ -76,7 +76,7 @@ export const setStep = mutation({
     // reads. Going back never does — a user returning to fix something must
     // not be held by the rule that sent them there.
     if (to > from && agent.onboardingStep === "company") {
-      const profile = await getWorkspaceProfile(ctx, args.workspaceId);
+      const profile = await getOrgProfile(ctx, args.orgId);
       if (!profileIsComplete(profile)) {
         throw invalid(
           "the company profile needs a name, industry, description and at least one key feature",

@@ -20,21 +20,21 @@ import { useSidebar } from "@/components/ui/sidebar"
 const FEED_LIMIT = 8
 
 /**
- * The bell of reference 20 — the workspace's newest activity, on the spot.
+ * The bell of reference 20 — the org's newest activity, on the spot.
  *
  * Every row is an event the backend recorded (`activity.queries.list`), never
  * a derived guess, and the kind is rendered through a total map so a new kind
  * is a build failure rather than a blank row.
  */
 export function NotificationsBell({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces"> | undefined
+  orgId: Id<"orgs"> | undefined
 }) {
   const { setOpenMobile } = useSidebar()
   const feed = useQuery(
     api.activity.queries.list,
-    workspaceId === undefined ? "skip" : { workspaceId, limit: FEED_LIMIT },
+    orgId === undefined ? "skip" : { orgId, limit: FEED_LIMIT },
   )
 
   return (

@@ -17,7 +17,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
  * Whether this viewer keeps the sidebar expanded or on the icon rail.
  *
  * Per viewer and per browser, which is what makes `localStorage` the right
- * home for it: it is a preference about this screen, not workspace state, and
+ * home for it: it is a preference about this screen, not org state, and
  * nothing server-side should care. Every access is guarded — a private window
  * or blocked site data throws on read, and the shell must still render.
  */

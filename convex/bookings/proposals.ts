@@ -13,7 +13,7 @@ import type { Doc } from "../_generated/dataModel";
 import { mutation } from "../_generated/server";
 import { resolveOutboundRecipient } from "../inbox/conversationsModel";
 import { appendLeadEvent, findLeadEventByOperationKey } from "../leads/events";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   assertBookingProposal,
   assertExpectedVersion,
@@ -45,7 +45,7 @@ import { v } from "convex/values";
  */
 export const propose = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     /** OCC on the LEAD the caller saw — the proposal changes its row too. */
     proposal: vBookingProposal,
@@ -55,7 +55,7 @@ export const propose = mutation({
   },
   returns: vBookingDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
@@ -64,13 +64,13 @@ export const propose = mutation({
     const proposal = assertBookingProposal(args.proposal, { now });
     const prospect = await loadProspect(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.prospectId,
     );
     const operationKey = `crm:${args.prospectId}:booking-propose:${requestId}`;
     const prior = await findLeadEventByOperationKey(
       ctx,
-      args.workspaceId,
+      args.orgId,
       operationKey,
     );
     if (prior !== null) {
@@ -119,7 +119,7 @@ export const propose = mutation({
       );
       if (
         conversation === null ||
-        conversation.workspaceId !== args.workspaceId
+        conversation.orgId !== args.orgId
       ) {
         throw domainError("NOT_FOUND", "conversation not found");
       }
@@ -131,11 +131,11 @@ export const propose = mutation({
       }
     }
     // The acting member owns the booking: leads no longer carry an owner
-    // (one agent, one trial workspace), and a booking must always name
+    // (one agent, one trial org), and a booking must always name
     // someone who can act on it.
     const ownerIdentityKey = identityKey;
     const bookingId = await ctx.db.insert("bookings", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       prospectId: prospect._id,
       ownerIdentityKey,
       state: "proposed",
@@ -149,7 +149,7 @@ export const propose = mutation({
     });
     await ctx.db.patch("prospects", prospect._id, { updatedAt: now });
     await appendLeadEvent(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       prospectId: prospect._id,
       kind: "booking_proposed",
       summary:
@@ -181,7 +181,7 @@ export const propose = mutation({
  */
 export const draftProposal = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     bookingId: v.id("bookings"),
     expectedVersion: v.number(),
     conversationId: v.id("conversations"),
@@ -203,14 +203,14 @@ export const draftProposal = mutation({
     booking: Doc<"bookings">;
     draft: Doc<"drafts">;
   }> => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
     });
     const booking = await loadBookingForWrite(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.bookingId,
     );
     // Draft-requestId replay runs BEFORE the booking state gate: the draft a
@@ -218,8 +218,8 @@ export const draftProposal = mutation({
     // since moved on.
     const priorDraft = await ctx.db
       .query("drafts")
-      .withIndex("by_workspaceId_and_requestId", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("requestId", requestId),
+      .withIndex("by_orgId_and_requestId", (q) =>
+        q.eq("orgId", args.orgId).eq("requestId", requestId),
       )
       .unique();
     if (priorDraft !== null) {
@@ -243,13 +243,13 @@ export const draftProposal = mutation({
     assertExpectedVersion(booking.version, args.expectedVersion, "booking");
     const prospect = await loadProspect(
       ctx,
-      args.workspaceId,
+      args.orgId,
       booking.prospectId,
     );
     const conversation = await ctx.db.get("conversations", args.conversationId);
     if (
       conversation === null ||
-      conversation.workspaceId !== args.workspaceId
+      conversation.orgId !== args.orgId
     ) {
       throw domainError("NOT_FOUND", "conversation not found");
     }

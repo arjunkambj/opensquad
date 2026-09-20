@@ -8,8 +8,8 @@
  * mutation (the credit wrapper, the send boundary's own reserve) calls the
  * model directly — a `ctx.runMutation` hop would split one transaction in two.
  *
- * Sends are bucketed by the workspace-local day (`localDayKey(now,
- * workspace.timezone)`), enforced inside the reserving transaction so
+ * Sends are bucketed by the org-local day (`localDayKey(now,
+ * org.timezone)`), enforced inside the reserving transaction so
  * concurrent sends cannot oversubscribe the daily limit.
  */
 import { internalMutation } from "../_generated/server";
@@ -22,7 +22,7 @@ import { v } from "convex/values";
 export const vReserveResult = v.object({
   bucketId: v.id("usageBuckets"),
   reservationId: v.id("usageReservations"),
-  /** `true` when the (workspaceId, operationKey) pair already had a
+  /** `true` when the (orgId, operationKey) pair already had a
    *  reservation — the recorded row is returned unchanged. */
   replayed: v.boolean(),
 });
@@ -32,12 +32,12 @@ export const vReserveResult = v.object({
  * capacity check runs inside this transaction, so concurrent callers
  * serialize on the bucket row and cannot oversubscribe.
  *
- * Idempotent per (workspaceId, operationKey, bucket): a replayed reserve
+ * Idempotent per (orgId, operationKey, bucket): a replayed reserve
  * returns the live reservation instead of double-debiting.
  */
 export const reserve = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     scopeKey: v.string(),
     metric: vUsageMetric,
     periodKey: v.string(),
@@ -59,14 +59,14 @@ const vSettleResult = v.object({
 /** Commit — the debited capacity became real, provider-accepted work. */
 export const commit = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
     providerReference: v.optional(v.string()),
   },
   returns: vSettleResult,
   handler: async (ctx, args) =>
     await settleReservationsByKey(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       operationKey: args.operationKey,
       target: "committed",
       providerReference:
@@ -85,13 +85,13 @@ export const commit = internalMutation({
  *  provider effect; capacity is returned. */
 export const release = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
   },
   returns: vSettleResult,
   handler: async (ctx, args) =>
     await settleReservationsByKey(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       operationKey: args.operationKey,
       target: "released",
     }),
@@ -101,13 +101,13 @@ export const release = internalMutation({
  *  until reconciliation commits or human review releases it. */
 export const markUncertain = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
   },
   returns: vSettleResult,
   handler: async (ctx, args) =>
     await settleReservationsByKey(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       operationKey: args.operationKey,
       target: "uncertain",
     }),
@@ -121,16 +121,16 @@ export const markUncertain = internalMutation({
  */
 export const getByOperationKey = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationKey: v.string(),
   },
   returns: v.union(vUsageReservationDoc, v.null()),
   handler: async (ctx, args) => {
     const rows = await ctx.db
       .query("usageReservations")
-      .withIndex("by_workspaceId_and_operationKey_and_bucketId", (q) =>
+      .withIndex("by_orgId_and_operationKey_and_bucketId", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("operationKey", args.operationKey),
       )
       .collect();

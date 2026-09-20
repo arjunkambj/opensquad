@@ -64,7 +64,7 @@ async function reportThreadLinkMissed(
   },
 ): Promise<void> {
   await recordActivityEvent(ctx, {
-    workspaceId: args.attempt.workspaceId,
+    orgId: args.attempt.orgId,
     kind: "conversation_thread_link_missed",
     summary: `Send acknowledged on thread ${args.threadId.slice(0, 120)} but the conversation thread mapping was not written — ${args.detail}; replies on that thread need manual assignment`,
     actor: "workflow",
@@ -102,12 +102,12 @@ async function linkConversationThread(
     "conversations",
     attempt.conversationId,
   );
-  // Workspace boundary — an attempt never writes through into another
-  // workspace's conversation row. This is the one branch here that indicates a
+  // Org boundary — an attempt never writes through into another
+  // org's conversation row. This is the one branch here that indicates a
   // real integrity violation, so it is reported rather than returned silently.
   if (
     conversation === null ||
-    conversation.workspaceId !== attempt.workspaceId
+    conversation.orgId !== attempt.orgId
   ) {
     await reportThreadLinkMissed(ctx, {
       attempt,
@@ -115,7 +115,7 @@ async function linkConversationThread(
       detail:
         conversation === null
           ? "the attempt's conversation row is missing"
-          : "the attempt's conversation belongs to another workspace",
+          : "the attempt's conversation belongs to another organization",
     });
     return;
   }
@@ -148,8 +148,8 @@ async function linkConversationThread(
     // `conversationStaging.stageConversation` applies before it patches or inserts a
     // thread ref, except it may not throw here. `.collect()`, not `.unique()`:
     // an already-violated pair must not strand an acknowledged send, and the
-    // index is not workspace-scoped, so a foreign row must neither block the
-    // claim nor have its id quoted into this workspace's activity feed.
+    // index is not org-scoped, so a foreign row must neither block the
+    // claim nor have its id quoted into this org's activity feed.
     const holders = await ctx.db
       .query("conversations")
       .withIndex("by_inboxRef_and_providerThreadRef", (q) =>
@@ -161,7 +161,7 @@ async function linkConversationThread(
     const duplicate = holders.find(
       (row) =>
         row._id !== conversation._id &&
-        row.workspaceId === conversation.workspaceId,
+        row.orgId === conversation.orgId,
     );
     mapping =
       duplicate !== undefined
@@ -259,7 +259,7 @@ export const recordSendOutcome = internalMutation({
       const reservation = await ctx.runMutation(
         internal.billing.reservations.getByOperationKey,
         {
-          workspaceId: attempt.workspaceId,
+          orgId: attempt.orgId,
           operationKey: attempt.operationKey,
         },
       );
@@ -273,7 +273,7 @@ export const recordSendOutcome = internalMutation({
             ? internal.billing.reservations.release
             : internal.billing.reservations.markUncertain;
       await ctx.runMutation(fn, {
-        workspaceId: attempt.workspaceId,
+        orgId: attempt.orgId,
         operationKey: attempt.operationKey,
         ...(providerReference !== undefined ? { providerReference } : {}),
       });
@@ -334,7 +334,7 @@ export const recordSendOutcome = internalMutation({
         }
       }
       await recordActivityEvent(ctx, {
-        workspaceId: attempt.workspaceId,
+        orgId: attempt.orgId,
         kind:
           attempt.state === "uncertain"
             ? "send_attempt_reconciled"
@@ -365,7 +365,7 @@ export const recordSendOutcome = internalMutation({
       });
       await settle("released");
       await recordActivityEvent(ctx, {
-        workspaceId: attempt.workspaceId,
+        orgId: attempt.orgId,
         kind:
           attempt.state === "uncertain"
             ? "send_attempt_reconciled"
@@ -391,7 +391,7 @@ export const recordSendOutcome = internalMutation({
       });
       await settle("uncertain");
       await recordActivityEvent(ctx, {
-        workspaceId: attempt.workspaceId,
+        orgId: attempt.orgId,
         kind: "send_attempt_uncertain",
         summary: `Send outcome is uncertain — ${providerError.slice(0, 200)}`,
         actor: "workflow",

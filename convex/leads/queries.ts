@@ -4,7 +4,7 @@
  *
  * ONE LIST MODE AT A TIME. Convex ranges an index, so every filter this screen
  * offers is a range over an index the schema declares — company search, one
- * flame score, the approval queue, one stage, or the whole workspace best
+ * flame score, the approval queue, one stage, or the whole org best
  * score first. A pair with no index REFUSES rather than silently
  * post-filtering a page, because a page that looks filtered and is not is the
  * one failure the user cannot see.
@@ -15,7 +15,7 @@
 import { query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   boundedString,
@@ -56,10 +56,10 @@ type LeadScore = 1 | 2 | 3;
  *   search   — `search_company_name`, relevance order, with `stage` or
  *              `approval` applied INSIDE the index (its declared filter
  *              fields), never on top of the page.
- *   score    — `by_workspaceId_and_scoreKey` at one score, newest first.
- *   approval — `by_workspaceId_and_approval`, newest first.
- *   stage    — `by_workspaceId_and_stage_and_updatedAt`, last change first.
- *   ranked   — `by_workspaceId_and_scoreKey` over every lead. Unresearched
+ *   score    — `by_orgId_and_scoreKey` at one score, newest first.
+ *   approval — `by_orgId_and_approval`, newest first.
+ *   stage    — `by_orgId_and_stage_and_updatedAt`, last change first.
+ *   ranked   — `by_orgId_and_scoreKey` over every lead. Unresearched
  *              leads carry no `scoreKey` and therefore sort last, which is
  *              exactly PLAN §3's "scored first, the rest one click away".
  */
@@ -123,12 +123,12 @@ function modeOf(args: ListArgs): ListMode {
 /** The mode's range, as a query the caller pages or bounds-counts. */
 function rangeOf(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   mode: ListMode,
 ) {
   if (mode.kind === "search") {
     return ctx.db.query("prospects").withSearchIndex("search_company_name", (q) => {
-      let scoped = q.search("companyName", mode.text).eq("workspaceId", workspaceId);
+      let scoped = q.search("companyName", mode.text).eq("orgId", orgId);
       if (mode.stage !== undefined) {
         scoped = scoped.eq("stage", mode.stage);
       }
@@ -141,31 +141,31 @@ function rangeOf(
   if (mode.kind === "score") {
     return ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_scoreKey", (q) =>
-        q.eq("workspaceId", workspaceId).eq("scoreKey", mode.score),
+      .withIndex("by_orgId_and_scoreKey", (q) =>
+        q.eq("orgId", orgId).eq("scoreKey", mode.score),
       )
       .order("desc");
   }
   if (mode.kind === "approval") {
     return ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_approval", (q) =>
-        q.eq("workspaceId", workspaceId).eq("approval", mode.approval),
+      .withIndex("by_orgId_and_approval", (q) =>
+        q.eq("orgId", orgId).eq("approval", mode.approval),
       )
       .order("desc");
   }
   if (mode.kind === "stage") {
     return ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_stage_and_updatedAt", (q) =>
-        q.eq("workspaceId", workspaceId).eq("stage", mode.stage),
+      .withIndex("by_orgId_and_stage_and_updatedAt", (q) =>
+        q.eq("orgId", orgId).eq("stage", mode.stage),
       )
       .order("desc");
   }
   return ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_scoreKey", (q) =>
-      q.eq("workspaceId", workspaceId),
+    .withIndex("by_orgId_and_scoreKey", (q) =>
+      q.eq("orgId", orgId),
     )
     .order(mode.lowestScoreFirst ? "asc" : "desc");
 }
@@ -176,7 +176,7 @@ function rangeOf(
  */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** Company-name search; empty text is the ordinary list. */
     text: v.optional(v.string()),
     stage: v.optional(vLeadStage),
@@ -189,16 +189,16 @@ export const list = query({
   },
   returns: vLeadPage,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const mode = modeOf(args);
-    const result = await rangeOf(ctx, args.workspaceId, mode).paginate({
+    const result = await rangeOf(ctx, args.orgId, mode).paginate({
       numItems: boundedLimit(args.limit),
       cursor: args.cursor ?? null,
     });
-    const counted = await rangeOf(ctx, args.workspaceId, mode).take(
+    const counted = await rangeOf(ctx, args.orgId, mode).take(
       CONTACTS_TOTAL_BOUND + 1,
     );
-    const titles = await signalTitles(ctx, args.workspaceId);
+    const titles = await signalTitles(ctx, args.orgId);
     return {
       items: result.page.map((lead) => toLeadRow(lead, titles)),
       cursor: result.isDone ? null : result.continueCursor,
@@ -214,25 +214,25 @@ export const list = query({
 /**
  * How many leads the state machine owes work to right now — the attention
  * count the app header renders. Bounded at `MAX_LIST_LIMIT` like every
- * workspace count: `hasMore` means the number is the bound, not the total, so
+ * org count: `hasMore` means the number is the bound, not the total, so
  * the UI renders "50+". Leads with no due time can never satisfy the range,
  * so they can never inflate it either.
  */
 export const countDue = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({
     count: v.number(),
     hasMore: v.boolean(),
     bound: v.number(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const now = Date.now();
     const rows = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_nextActionAt", (q) =>
+      .withIndex("by_orgId_and_nextActionAt", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .gte("nextActionAt", 0)
           .lte("nextActionAt", now),
       )
@@ -251,11 +251,11 @@ export const countDue = query({
  * the row. The thread itself is `inbox.conversations.listForProspect` — the
  * drawer asks the domain that owns conversations rather than copying it.
  *
- * A row in another workspace is NOT_FOUND, never FORBIDDEN.
+ * A row in another org is NOT_FOUND, never FORBIDDEN.
  */
 export const getDetail = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
   },
   returns: v.object({
@@ -265,15 +265,15 @@ export const getDetail = query({
     events: v.array(vLeadEventDoc),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const lead: Doc<"prospects"> | null = await ctx.db.get(
       "prospects",
       args.prospectId,
     );
-    if (lead === null || lead.workspaceId !== args.workspaceId) {
+    if (lead === null || lead.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "prospect not found");
     }
-    const titles = await signalTitles(ctx, args.workspaceId);
+    const titles = await signalTitles(ctx, args.orgId);
     const evidence = await ctx.db
       .query("evidence")
       .withIndex("by_prospectId_and_createdAt", (q) =>

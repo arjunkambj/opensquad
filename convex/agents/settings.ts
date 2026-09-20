@@ -25,7 +25,7 @@
 import { mutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { checkPublicHttpUrl } from "../lib/urlSafety";
 import {
   AGENT_INSTRUCTIONS_MAX_LENGTH,
@@ -36,7 +36,7 @@ import {
   invalid,
   normalizeHttpUrl,
 } from "../lib/validators";
-import { requireWorkspaceAgent, vAgentDoc } from "./model";
+import { requireOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
 /* ------------------------------------------------------------------ */
@@ -69,17 +69,17 @@ export type AgentEditContext = {
 };
 
 /**
- * Resolve "the caller may edit this workspace's agent" once, for this file and
- * its siblings. A row in another workspace is the same NOT_FOUND as a missing
- * one — existence never leaks across a workspace boundary.
+ * Resolve "the caller may edit this org's agent" once, for this file and
+ * its siblings. A row in another org is the same NOT_FOUND as a missing
+ * one — existence never leaks across an org boundary.
  */
 export async function requireAgentEditor(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   agentId: Id<"agents">,
 ): Promise<AgentEditContext> {
-  const { identityKey } = await requireWorkspaceEditor(ctx, workspaceId);
-  const agent = await requireWorkspaceAgent(ctx, workspaceId, agentId);
+  const { identityKey } = await requireOrgMember(ctx, orgId);
+  const agent = await requireOrgAgent(ctx, orgId, agentId);
   return { agent, identityKey };
 }
 
@@ -118,7 +118,7 @@ export async function patchAgent(
  */
 export const rename = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     name: v.string(),
   },
@@ -126,7 +126,7 @@ export const rename = mutation({
   handler: async (ctx, args) => {
     const { agent } = await requireAgentEditor(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.agentId,
     );
     const name = boundedString(args.name, "name", {
@@ -143,11 +143,11 @@ export const rename = mutation({
  * This is the one field here that PLAN §9.1 fences: a queued draft written
  * under the old wording must not go out, so a real change bumps `revision`
  * and the outreach loop supersedes and rewrites. An empty string clears the
- * override, and the workspace default from Settings → Outreach applies again.
+ * override, and the org default from Settings → Outreach applies again.
  */
 export const setInstructions = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     instructions: v.string(),
   },
@@ -155,7 +155,7 @@ export const setInstructions = mutation({
   handler: async (ctx, args) => {
     const { agent } = await requireAgentEditor(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.agentId,
     );
     const instructions = boundedString(args.instructions, "instructions", {
@@ -184,7 +184,7 @@ export const setInstructions = mutation({
  */
 export const setBookingUrl = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     bookingUrl: v.union(v.string(), v.null()),
   },
@@ -192,7 +192,7 @@ export const setBookingUrl = mutation({
   handler: async (ctx, args) => {
     const { agent } = await requireAgentEditor(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.agentId,
     );
     const raw = args.bookingUrl === null ? "" : args.bookingUrl.trim();
@@ -220,7 +220,7 @@ export const setBookingUrl = mutation({
  */
 export const setDealSize = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     dealSize: v.union(v.number(), v.null()),
   },
@@ -228,7 +228,7 @@ export const setDealSize = mutation({
   handler: async (ctx, args) => {
     const { agent } = await requireAgentEditor(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.agentId,
     );
     if (args.dealSize === null) {
@@ -251,7 +251,7 @@ export const setDealSize = mutation({
  */
 export const setFollowUpDays = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     followUpDays: v.array(v.number()),
   },
@@ -259,7 +259,7 @@ export const setFollowUpDays = mutation({
   handler: async (ctx, args) => {
     const { agent } = await requireAgentEditor(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.agentId,
     );
     if (args.followUpDays.length > FOLLOW_UP_STEPS_MAX) {

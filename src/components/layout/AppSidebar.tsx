@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar"
 import type { MenuItem } from "@/constants/sidebar-menu"
 import { sidebarMainItems } from "@/constants/sidebar-menu"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useCurrentOrgId } from "@/hooks/use-current-org"
 import { useInboxAttention } from "@/hooks/use-inbox-attention"
 import { boundedCount } from "@/lib/bounded-count"
 
@@ -38,19 +38,15 @@ export function AppSidebar({ user }: { user: ProfileUser }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { setOpenMobile } = useSidebar()
 
-  // The nav lives outside the `_workspace` gate too — `/settings` and
+  // The nav lives outside the `_org` gate too — `/settings` and
   // `/onboarding` are deliberately reachable without a finished setup — so a
-  // missing workspace skips the query and renders no badge at all, rather
+  // missing org skips the query and renders no badge at all, rather
   // than a zero that would claim the queue is empty.
-  const current = useCurrentWorkspace()
-  const workspaceId =
-    current !== undefined && current !== null
-      ? current.workspace._id
-      : undefined
+  const orgId = useCurrentOrgId()
   // The same call the inbox attention surfaces make, with byte-identical
   // arguments, so Convex serves one subscription and the two numbers cannot
   // disagree.
-  const inboxAttention = useInboxAttention(workspaceId)
+  const inboxAttention = useInboxAttention(orgId)
 
   // Prefix match, so a nested route keeps its parent lit. The boundary check
   // stops `/settings` matching a future `/settings-export`.
@@ -76,7 +72,7 @@ export function AppSidebar({ user }: { user: ProfileUser }) {
               labelClassName="group-data-[collapsible=icon]:hidden"
             />
           </Link>
-          <NotificationsBell workspaceId={workspaceId} />
+          <NotificationsBell orgId={orgId} />
           <SidebarCollapseButton />
         </div>
       </SidebarHeader>
@@ -134,7 +130,7 @@ export function AppSidebar({ user }: { user: ProfileUser }) {
       </SidebarContent>
 
       <SidebarFooter className="gap-3 px-3 pb-4 group-data-[collapsible=icon]:px-2">
-        <SidebarCredits workspaceId={workspaceId} />
+        <SidebarCredits orgId={orgId} />
         <SidebarUser user={user} />
       </SidebarFooter>
     </Sidebar>

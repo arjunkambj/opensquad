@@ -86,7 +86,7 @@ export type ApplyInboundMessageResult = typeof vApplyInboundMessageResult.type;
  *
  * Idempotent by construction: it refuses a receipt that is not `pending`, and
  * `recordReceipt` already refused to create a second pending row for a message
- * this workspace has seen.
+ * this org has seen.
  *
  * And ORDER-SAFE by construction: a receipt older than the inbound the
  * conversation already carries is settled without being applied, so the drain
@@ -120,7 +120,7 @@ export const applyInboundMessage = internalMutation({
     let queued = false;
     if (target === null) {
       // Verified mail on a KNOWN inbox that matches no thread. It is not
-      // dropped and it is not guessed at: it enters this workspace's
+      // dropped and it is not guessed at: it enters this org's
       // unassigned queue under human takeover, with no lead, no draft and no
       // send (architecture §8 step 4).
       const threadRef = receipt.providerThreadRef;
@@ -137,7 +137,7 @@ export const applyInboundMessage = internalMutation({
       const ensured = await ctx.runMutation(
         internal.inbox.unassignedQueue.ensureUnassignedConversation,
         {
-          workspaceId: receipt.workspaceId,
+          orgId: receipt.orgId,
           inboxRef: receipt.inboxRef,
           providerThreadRef: threadRef,
           messageRef: receipt.providerMessageRef,

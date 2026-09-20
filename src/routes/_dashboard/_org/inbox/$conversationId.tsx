@@ -3,7 +3,7 @@ import type { Id } from "../../../../../convex/_generated/dataModel"
 import { ConversationPane } from "@/components/inbox/ConversationPane"
 
 export const Route = createFileRoute(
-  "/_dashboard/_workspace/inbox/$conversationId",
+  "/_dashboard/_org/inbox/$conversationId",
 )({
   component: ConversationRoute,
 })
@@ -17,7 +17,7 @@ export const Route = createFileRoute(
  */
 function ConversationRoute() {
   const { conversationId } = useParams({
-    from: "/_dashboard/_workspace/inbox/$conversationId",
+    from: "/_dashboard/_org/inbox/$conversationId",
   })
 
   return (

@@ -33,15 +33,13 @@ const ATTEMPT_LINE: Record<Attempt["state"], string> = {
 }
 
 export function SendStatus({
-  workspaceId,
+  orgId,
   draftId,
   attempts,
-  canAct,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   draftId: Id<"drafts">
   attempts: Attempt[]
-  canAct: boolean
 }) {
   const reconcile = useMutation(api.outreach.sendControls.requestReconciliation)
   const cancel = useMutation(api.outreach.sendControls.cancelAttempt)
@@ -75,64 +73,62 @@ export function SendStatus({
         {formatInstant(latest.createdAt)}
         {attempts.length > 1 ? ` · ${attempts.length} attempts on this reply` : ""}
       </p>
-      {canAct ? (
-        <div className="flex flex-wrap gap-2">
-          {latest.state === "uncertain" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                run(
-                  reconcile({ workspaceId, sendAttemptId: latest.sendAttemptId }),
-                  "Checking with your mail provider",
-                  "We are asking what happened to that send.",
-                  "Could not check that send.",
-                )
-              }
-            >
-              {busy ? <Spinner data-icon="inline-start" /> : null}
-              Check what happened
-            </Button>
-          ) : null}
-          {latest.state === "reserved" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                run(
-                  cancel({ workspaceId, sendAttemptId: latest.sendAttemptId }),
-                  "Send cancelled",
-                  "Nothing went out. The reply stays here.",
-                  "Could not cancel that send.",
-                )
-              }
-            >
-              {busy ? <Spinner data-icon="inline-start" /> : null}
-              Cancel this send
-            </Button>
-          ) : null}
-          {latest.state === "definitively_failed" || latest.state === "cancelled" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                run(
-                  dispatch({ workspaceId, draftId }),
-                  "Trying again",
-                  "Every send check runs again before anything leaves.",
-                  "Could not try that send again.",
-                )
-              }
-            >
-              {busy ? <Spinner data-icon="inline-start" /> : null}
-              Try again
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="flex flex-wrap gap-2">
+        {latest.state === "uncertain" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              run(
+                reconcile({ orgId, sendAttemptId: latest.sendAttemptId }),
+                "Checking with your mail provider",
+                "We are asking what happened to that send.",
+                "Could not check that send.",
+              )
+            }
+          >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
+            Check what happened
+          </Button>
+        ) : null}
+        {latest.state === "reserved" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              run(
+                cancel({ orgId, sendAttemptId: latest.sendAttemptId }),
+                "Send cancelled",
+                "Nothing went out. The reply stays here.",
+                "Could not cancel that send.",
+              )
+            }
+          >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
+            Cancel this send
+          </Button>
+        ) : null}
+        {latest.state === "definitively_failed" || latest.state === "cancelled" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              run(
+                dispatch({ orgId, draftId }),
+                "Trying again",
+                "Every send check runs again before anything leaves.",
+                "Could not try that send again.",
+              )
+            }
+          >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
+            Try again
+          </Button>
+        ) : null}
+      </div>
       <FormError message={error} />
     </div>
   )

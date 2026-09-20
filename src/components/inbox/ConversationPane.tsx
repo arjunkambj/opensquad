@@ -24,7 +24,7 @@ import { ThreadHeader } from "@/components/inbox/thread/ThreadHeader"
 import { ThreadTimeline } from "@/components/inbox/thread/ThreadTimeline"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
+import { useCurrentOrg } from "@/hooks/use-current-org"
 import { useEscapeToParent } from "@/hooks/use-queue-navigation"
 
 export function ConversationPane({
@@ -32,19 +32,18 @@ export function ConversationPane({
 }: {
   conversationId: Id<"conversations">
 }) {
-  const current = useCurrentWorkspace()
+  const current = useCurrentOrg()
   // Escape returns to the list, so the URL and the view never disagree.
   useEscapeToParent("/inbox")
-  const workspaceId =
-    current !== undefined && current !== null ? current.workspace._id : undefined
+  const orgId = current.status === "ready" ? current.org._id : undefined
 
   const detail = useQuery(
     api.inbox.conversations.get,
-    workspaceId === undefined ? "skip" : { workspaceId, conversationId },
+    orgId === undefined ? "skip" : { orgId, conversationId },
   )
   const thread = useQuery(
     api.inbox.conversationThread.thread,
-    workspaceId === undefined ? "skip" : { workspaceId, conversationId },
+    orgId === undefined ? "skip" : { orgId, conversationId },
   )
   const markRead = useMutation(api.inbox.conversationLifecycle.markRead)
 
@@ -53,12 +52,12 @@ export function ConversationPane({
   // `contextVersion`, and a failure here must not break the pane.
   const unread = detail?.conversation.unreadCount ?? 0
   useEffect(() => {
-    if (workspaceId !== undefined && unread > 0) {
-      void markRead({ workspaceId, conversationId }).catch(() => undefined)
+    if (orgId !== undefined && unread > 0) {
+      void markRead({ orgId, conversationId }).catch(() => undefined)
     }
-  }, [workspaceId, conversationId, unread, markRead])
+  }, [orgId, conversationId, unread, markRead])
 
-  if (current === undefined || current === null || detail === undefined) {
+  if (orgId === undefined || detail === undefined) {
     return (
       <LoadingState
         title="Loading the conversation"
@@ -70,8 +69,7 @@ export function ConversationPane({
   return (
     <LoadedConversation
       key={conversationId}
-      workspaceId={current.workspace._id}
-      role={current.role}
+      orgId={orgId}
       detail={detail}
       thread={thread}
     />
@@ -84,13 +82,11 @@ type Thread =
   | undefined
 
 function LoadedConversation({
-  workspaceId,
-  role,
+  orgId,
   detail,
   thread,
 }: {
-  workspaceId: Id<"workspaces">
-  role: "owner" | "operator" | "viewer"
+  orgId: Id<"orgs">
   detail: Detail
   thread: Thread
 }) {
@@ -118,8 +114,7 @@ function LoadedConversation({
 
       {prospect === null ? (
         <AssociateLeadCard
-          workspaceId={workspaceId}
-          role={role}
+          orgId={orgId}
           conversation={conversation}
           expectedContextVersion={seenVersion}
         />
@@ -163,13 +158,11 @@ function LoadedConversation({
       ) : (
         <>
           <ReplyCard
-            workspaceId={workspaceId}
-            role={role}
+            orgId={orgId}
             conversation={conversation}
           />
           <ConversationActions
-            workspaceId={workspaceId}
-            role={role}
+            orgId={orgId}
             conversation={conversation}
             prospect={prospect}
             expectedContextVersion={seenVersion}
@@ -178,8 +171,7 @@ function LoadedConversation({
       )}
 
       <ConversationNotes
-        workspaceId={workspaceId}
-        role={role}
+        orgId={orgId}
         conversation={conversation}
       />
     </div>

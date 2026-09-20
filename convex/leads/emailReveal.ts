@@ -33,7 +33,7 @@ import {
   MAX_LEADS_PER_REVEAL,
   REVEAL_CREDITS_PER_LEAD,
 } from "../integrations/enrich/reveal";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { ACTION_PRICES, TRIAL_METRIC_CAPS } from "../lib/limits";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
@@ -69,7 +69,7 @@ const vSkipReason = v.union(
  */
 export const requestEmails = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
   },
   returns: v.object({
@@ -85,9 +85,9 @@ export const requestEmails = mutation({
     ),
   }),
   handler: async (ctx, args) => {
-    const { identityKey, workspace } = await requireWorkspaceEditor(
+    const { identityKey, org } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     await requireRateLimit(ctx, "revealEmail", identityKey);
     if (args.prospectIds.length === 0) {
@@ -99,9 +99,9 @@ export const requestEmails = mutation({
       );
     }
     const price = ACTION_PRICES.get_email.credits;
-    const affordable = await affordableReveals(ctx, workspace, price);
+    const affordable = await affordableReveals(ctx, org, price);
     if (affordable === 0) {
-      throw await refusal(ctx, workspace, price);
+      throw await refusal(ctx, org, price);
     }
 
     // One lead asked for BY ITSELF is the user explicitly asking for that
@@ -113,7 +113,7 @@ export const requestEmails = mutation({
       [];
 
     for (const prospectId of new Set(args.prospectIds)) {
-      const lead = await loadProspectForWrite(ctx, args.workspaceId, prospectId);
+      const lead = await loadProspectForWrite(ctx, args.orgId, prospectId);
       const reason = ineligible(lead, explicit);
       if (reason !== null) {
         skipped.push({ prospectId, reason });
@@ -137,7 +137,7 @@ export const requestEmails = mutation({
       await ctx.scheduler.runAfter(
         0,
         internal.leads.emailRevealRun.submitReveals,
-        { workspaceId: args.workspaceId, prospectIds: claimed },
+        { orgId: args.orgId, prospectIds: claimed },
       );
     }
     return { started: claimed.length, creditsPerLead: price, skipped };
@@ -176,39 +176,39 @@ function ineligible(
 }
 
 /**
- * How many addresses this workspace can actually pay for right now — the
+ * How many addresses this org can actually pay for right now — the
  * smaller of the visible credit balance and the hidden provider allowance,
  * capped by the provider's own batch ceiling.
  */
 async function affordableReveals(
   ctx: MutationCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   price: number,
 ): Promise<number> {
   const credits = await findBucket(
     ctx,
-    workspace._id,
+    org._id,
     "credits",
     USAGE_PERIOD_LIFETIME,
   );
   if (credits === null) {
     throw domainError(
       "NO_CREDIT_GRANT",
-      "this workspace has no credit grant; no paid step can run",
+      "this organization has no credit grant; no paid step can run",
     );
   }
   const byCredits = Math.floor(bucketRemaining(credits) / price);
   const byProvider = Math.min(
     await providerAllowance(
       ctx,
-      workspace,
+      org,
       USAGE_PERIOD_LIFETIME,
       TRIAL_METRIC_CAPS.enrich_credits.lifetime,
     ),
     await providerAllowance(
       ctx,
-      workspace,
-      dailyPeriodKey(workspace, Date.now()),
+      org,
+      dailyPeriodKey(org, Date.now()),
       TRIAL_METRIC_CAPS.enrich_credits.daily,
     ),
   );
@@ -216,22 +216,22 @@ async function affordableReveals(
 }
 
 /**
- * Addresses the hidden per-workspace allowance still covers in one period.
+ * Addresses the hidden per-org allowance still covers in one period.
  *
  * A period with no bucket yet is not "unlimited": the reserve will create it
- * from the trial cap, so the cap is what this workspace can spend today.
+ * from the trial cap, so the cap is what this org can spend today.
  * Reading it as unbounded would submit reveals the reserve then refuses one
  * by one, which costs a round trip each and tells the user nothing.
  */
 async function providerAllowance(
   ctx: MutationCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   periodKey: string,
   capWhenUnused: number,
 ): Promise<number> {
   const bucket = await findBucket(
     ctx,
-    workspace._id,
+    org._id,
     "enrich_credits",
     periodKey,
   );
@@ -241,18 +241,18 @@ async function providerAllowance(
 }
 
 /**
- * WHICH refusal. PLAN §6: a workspace can hold credits it is no longer
+ * WHICH refusal. PLAN §6: an org can hold credits it is no longer
  * allowed to spend, and "Trial limit for emails reached" is a different
  * sentence from "out of credits". The code is what the client maps to copy.
  */
 async function refusal(
   ctx: MutationCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   price: number,
 ) {
   const credits = await findBucket(
     ctx,
-    workspace._id,
+    org._id,
     "credits",
     USAGE_PERIOD_LIFETIME,
   );
@@ -264,6 +264,6 @@ async function refusal(
   }
   return domainError(
     "TRIAL_LIMIT_REACHED",
-    "this workspace's email allowance for the trial is used up",
+    "this organization's email allowance for the trial is used up",
   );
 }

@@ -15,7 +15,7 @@
 import { useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { InfoBanner } from "@/components/kit/InfoBanner"
-import { LoadingState, PermissionNote } from "@/components/states/states"
+import { LoadingState } from "@/components/states/states"
 import { ConnectedInbox } from "./ConnectedInbox"
 import { DisconnectInboxDialog } from "./DisconnectInboxDialog"
 import { InboxKeyForm } from "./InboxKeyForm"
@@ -24,12 +24,12 @@ import { useInboxConnectActions } from "./use-inbox-connect-actions"
 import { useInboxConnection } from "./use-inbox-connection"
 
 export function InboxConnection({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
 }) {
-  const access = useInboxConnection(workspaceId)
-  const actions = useInboxConnectActions(workspaceId)
+  const access = useInboxConnection(orgId)
+  const actions = useInboxConnectActions(orgId)
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
 
   if (access.state === "loading") {
@@ -41,21 +41,12 @@ export function InboxConnection({
     )
   }
 
-  if (access.state === "no_workspace") {
+  if (access.state === "no_org") {
     return (
       <p className="text-sm text-muted-foreground">
-        We could not read your workspace just now. Refresh the page and try
+        We could not read your organization just now. Refresh the page and try
         again.
       </p>
-    )
-  }
-
-  if (access.state === "forbidden") {
-    return (
-      <PermissionNote
-        role={access.role}
-        action="connect or change the sending inbox"
-      />
     )
   }
 
@@ -136,7 +127,7 @@ export function InboxConnection({
     return (
       <div className="flex flex-col gap-4">
         <InfoBanner
-          title="AgentMail refused this workspace's key."
+          title="AgentMail refused this organization's key."
           className="border-destructive/30 bg-destructive/5"
         >
           Sending is paused and replies are not being read. Paste a new key
@@ -148,7 +139,7 @@ export function InboxConnection({
           label="AgentMail API key"
           description={
             view.last4 === undefined
-              ? "Paste a key from the account that owns this workspace's inbox."
+              ? "Paste a key from the account that owns this organization's inbox."
               : `The stored key ending ${view.last4} no longer works. Paste a current one from the same account.`
           }
           submitLabel="Reconnect"
@@ -163,7 +154,7 @@ export function InboxConnection({
   return (
     <div className="flex flex-col gap-4">
       {view.connection === "legacy_platform_inbox" ? (
-        <InfoBanner title="This workspace is on a shared inbox.">
+        <InfoBanner title="This organization is on a shared inbox.">
           It can receive and read mail, but it cannot send. Connect your own
           AgentMail key to send from an address you control.
         </InfoBanner>

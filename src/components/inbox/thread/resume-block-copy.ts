@@ -13,8 +13,8 @@ export const RESUME_BLOCK_COPY: Record<ResumeBlockCode, string> = {
     "The linked lead now belongs to a different agent than this thread.",
   agent_not_sending:
     "Your agent is not in a sending mode, so replies cannot resume.",
-  workspace_paused:
-    "Sending is paused for this workspace — resume it in Settings first.",
+  org_paused:
+    "Sending is paused for this organization — resume it in Settings first.",
   inbox_unassigned:
     "No sending inbox is connected, so nothing can be mailed from here.",
   inbox_mismatch:

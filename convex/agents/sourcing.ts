@@ -37,7 +37,7 @@ const vSourcingContext = v.union(
   v.object({ status: v.literal("skip") }),
   v.object({
     status: v.literal("ready"),
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** The agent revision this page is planned under; part of its key. */
     revision: v.number(),
     filters: vLeadFilters,
@@ -70,7 +70,7 @@ export const sourcingContext = internalQuery({
     }
     return {
       status: "ready" as const,
-      workspaceId: agent.workspaceId,
+      orgId: agent.orgId,
       revision: agent.revision,
       filters: strategy.filters,
       excludeFilters: strategy.excludeFilters,
@@ -119,7 +119,7 @@ export const recordSourcedPage = internalMutation({
     let merged = 0;
     for (const lead of args.rows) {
       const outcome = await upsertSourcedLead(ctx, {
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: agent._id,
         strategyId: strategy._id,
         lead,
@@ -200,7 +200,7 @@ export const runSourcingStep = internalAction({
     let found;
     try {
       found = await ctx.runAction(internal.integrations.enrich.search.findLeads, {
-        workspaceId: context.workspaceId,
+        orgId: context.orgId,
         operationKey: `${args.agentId}:${args.strategyId}:p${args.page}:search:r${context.revision}`,
         filters: context.filters,
         ...(hasExcludes ? { excludeFilters: context.excludeFilters } : {}),

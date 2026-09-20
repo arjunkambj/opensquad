@@ -71,7 +71,7 @@ export const reserveSendIntent = internalMutation({
   returns: vReserveResult,
   handler: async (ctx, args): Promise<Infer<typeof vReserveResult>> => {
     const context = await loadAttemptContext(ctx, args.draftId);
-    const { draft, workspace, conversation } = context;
+    const { draft, org, conversation } = context;
 
     // --- logical-send dedupe ------------------------------------------------
     const priorAttempts = await ctx.db
@@ -115,14 +115,14 @@ export const reserveSendIntent = internalMutation({
 
     // --- static gates ---------------------------------------------------------
     const gate = await evaluateSendGates(ctx, {
-      workspace: context.workspace,
+      org: context.org,
       conversation,
       draft,
       agent: context.agent,
     });
     if (!gate.ok) {
       await recordActivityEvent(ctx, {
-        workspaceId: workspace._id,
+        orgId: org._id,
         kind: "send_attempt_cancelled",
         summary: `Send blocked (${gate.code}): ${gate.reason}`,
         actor: "workflow",
@@ -135,7 +135,7 @@ export const reserveSendIntent = internalMutation({
     const now = Date.now();
 
     // --- send window ----------------------------------------------------------
-    const window = sendWindowStatus(workspace, now);
+    const window = sendWindowStatus(org, now);
     if (!window.permitted) {
       const sendAttemptId = await insertReservedAttempt(ctx, {
         context,
@@ -160,9 +160,9 @@ export const reserveSendIntent = internalMutation({
     }
 
     // --- daily allowance -------------------------------------------------------
-    const capacity = await sendCapacity(ctx, workspace, now);
+    const capacity = await sendCapacity(ctx, org, now);
     if (capacity.remaining < 1) {
-      const nextPermittedAt = nextWindowStart(workspace, now);
+      const nextPermittedAt = nextWindowStart(org, now);
       const sendAttemptId = await insertReservedAttempt(ctx, {
         context,
         approval: gate.approval,
@@ -197,7 +197,7 @@ export const reserveSendIntent = internalMutation({
     if (attempt === null) {
       throw domainError("NOT_FOUND", "send attempt not found after insert");
     }
-    await ensureUsageReservation(ctx, attempt, workspace);
+    await ensureUsageReservation(ctx, attempt, org);
     return { action: "ready" as const, sendAttemptId };
   },
 });

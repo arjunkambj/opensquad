@@ -217,16 +217,16 @@ export function sameIcp(a: AgentIcp, b: AgentIcp): boolean {
  * identically and for free.
  */
 export async function icpOperationKey(args: {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   startedAt: number;
 }): Promise<string> {
   // Hashed rather than concatenated so the key cannot grow past
   // `OPERATION_KEY_MAX` once the action prefix is added.
   const digest = await computeResultDigest({
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     startedAt: args.startedAt,
   });
-  return `${args.workspaceId}:${digest.slice("sha256:".length, "sha256:".length + 16)}`;
+  return `${args.orgId}:${digest.slice("sha256:".length, "sha256:".length + 16)}`;
 }
 
 /**

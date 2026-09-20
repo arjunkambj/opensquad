@@ -15,17 +15,17 @@ import { internalQuery, query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import { agentmailFailureMessage } from "../integrations/agentmailApi";
 import type { AgentMailErrorCode } from "../integrations/agentmailApi";
-import { requireWorkspaceOwner } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { vInboxConnection, vSecretStatus } from "../lib/validators";
 import {
-  readWorkspaceSecret,
+  readOrgSecret,
   summariseSecret,
   vSecretSummary,
-} from "../workspaces/secrets";
+} from "../orgs/secrets";
 import { readInboxSync, vInboxSync } from "./backfill";
 import { v } from "convex/values";
 
-/** Why the workspace's automation is paused, when WE paused it. */
+/** Why the org's automation is paused, when WE paused it. */
 export const INBOX_DISCONNECTED_PAUSE_REASON = "inbox_disconnected";
 export const INBOX_KEY_INVALID_PAUSE_REASON = "inbox_key_invalid";
 
@@ -93,7 +93,7 @@ export function mapProviderFailure(code: AgentMailErrorCode): {
 /* ------------------------------------------------------------------ */
 
 const vConnectionOwner = v.object({
-  workspaceId: v.id("workspaces"),
+  orgId: v.id("orgs"),
   webhookToken: v.string(),
   inboxConnection: vInboxConnection,
   inboxRef: v.optional(v.string()),
@@ -104,32 +104,32 @@ const vConnectionOwner = v.object({
 /**
  * Owner guard for the connect actions. An action cannot read the database, so
  * the guard runs here and returns only the fields the flow needs — never the
- * whole workspace document, which carries the webhook token's siblings.
+ * whole org document, which carries the webhook token's siblings.
  */
 export const requireConnectionOwner = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vConnectionOwner,
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
+    const { org } = await requireOrgMember(ctx, args.orgId);
     return {
-      workspaceId: workspace._id,
-      webhookToken: workspace.webhookToken,
-      inboxConnection: workspace.inboxConnection,
-      ...(workspace.inboxRef !== undefined
-        ? { inboxRef: workspace.inboxRef }
+      orgId: org._id,
+      webhookToken: org.webhookToken,
+      inboxConnection: org.inboxConnection,
+      ...(org.inboxRef !== undefined
+        ? { inboxRef: org.inboxRef }
         : {}),
-      ...(workspace.agentmailWebhookId !== undefined
-        ? { agentmailWebhookId: workspace.agentmailWebhookId }
+      ...(org.agentmailWebhookId !== undefined
+        ? { agentmailWebhookId: org.agentmailWebhookId }
         : {}),
-      ...(workspace.connectedAt !== undefined
-        ? { connectedAt: workspace.connectedAt }
+      ...(org.connectedAt !== undefined
+        ? { connectedAt: org.connectedAt }
         : {}),
     };
   },
 });
 
 /**
- * When this workspace last received mail — the "webhook health" line in
+ * When this org last received mail — the "webhook health" line in
  * Manage inbox.
  *
  * Derived from `conversations.lastInboundAt`, which only an ingested inbound
@@ -138,14 +138,14 @@ export const requireConnectionOwner = internalQuery({
  */
 async function lastInboundAt(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<number | undefined> {
   let newest: number | undefined;
   for (const state of ["open", "unassigned", "closed"] as const) {
     const rows = await ctx.db
       .query("conversations")
-      .withIndex("by_workspaceId_and_state_and_lastMessageAt", (q) =>
-        q.eq("workspaceId", workspaceId).eq("state", state),
+      .withIndex("by_orgId_and_state_and_lastMessageAt", (q) =>
+        q.eq("orgId", orgId).eq("state", state),
       )
       .order("desc")
       .take(LAST_EVENT_SCAN_LIMIT);
@@ -171,42 +171,42 @@ export const vInboxConnectionView = v.object({
   lastEventAt: v.optional(v.number()),
   sync: vInboxSync,
   connectedAt: v.optional(v.number()),
-  /** Whether this workspace may send at all (legacy inboxes may not). */
+  /** Whether this org may send at all (legacy inboxes may not). */
   canSend: v.boolean(),
   webhook: v.object({ registered: v.boolean(), secret: vSecretSummary }),
 });
 
 /** The whole Manage-inbox surface, in one member-guarded read. */
 export const getInboxConnection = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vInboxConnectionView,
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceOwner(ctx, args.workspaceId);
-    const key = await readWorkspaceSecret(ctx, workspace._id, "agentmail");
-    const webhookSecret = await readWorkspaceSecret(
+    const { org } = await requireOrgMember(ctx, args.orgId);
+    const key = await readOrgSecret(ctx, org._id, "agentmail");
+    const webhookSecret = await readOrgSecret(
       ctx,
-      workspace._id,
+      org._id,
       "agentmail_webhook",
     );
     const summary = summariseSecret(key);
-    const eventAt = await lastInboundAt(ctx, workspace._id);
+    const eventAt = await lastInboundAt(ctx, org._id);
     return {
-      connection: workspace.inboxConnection,
+      connection: org.inboxConnection,
       status: summary.status,
       ...(summary.last4 !== undefined ? { last4: summary.last4 } : {}),
       // AgentMail inbox ids ARE mailbox addresses, so the reference is the
       // address; nothing else about the inbox is stored.
-      ...(workspace.inboxRef !== undefined
-        ? { inboxAddress: workspace.inboxRef }
+      ...(org.inboxRef !== undefined
+        ? { inboxAddress: org.inboxRef }
         : {}),
       ...(eventAt !== undefined ? { lastEventAt: eventAt } : {}),
-      sync: await readInboxSync(ctx, workspace._id, workspace.connectedAt),
-      ...(workspace.connectedAt !== undefined
-        ? { connectedAt: workspace.connectedAt }
+      sync: await readInboxSync(ctx, org._id, org.connectedAt),
+      ...(org.connectedAt !== undefined
+        ? { connectedAt: org.connectedAt }
         : {}),
-      canSend: workspace.inboxConnection === "connected",
+      canSend: org.inboxConnection === "connected",
       webhook: {
-        registered: workspace.agentmailWebhookId !== undefined,
+        registered: org.agentmailWebhookId !== undefined,
         secret: summariseSecret(webhookSecret),
       },
     };

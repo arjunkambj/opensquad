@@ -57,7 +57,7 @@ export const DASHBOARD_DEFAULTS = {
  * The dashboard's URL contract. Filters live here, in the route, rather than
  * in component state, so a reload or a pasted link reopens the same window.
  */
-export const Route = createFileRoute("/_dashboard/_workspace/dashboard")({
+export const Route = createFileRoute("/_dashboard/_org/dashboard")({
   validateSearch: (search): DashboardSearch => ({
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
     from: optionalEpochMs(search.from),

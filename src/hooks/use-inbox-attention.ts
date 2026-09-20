@@ -14,9 +14,9 @@ import type { Id } from "../../convex/_generated/dataModel"
  * count the unassigned threads the takeover tab also lists. The tab's own
  * count is a strictly different set, so the tabs never wear these numbers.
  */
-export function useInboxAttention(workspaceId: Id<"workspaces"> | undefined) {
+export function useInboxAttention(orgId: Id<"orgs"> | undefined) {
   return useQuery(
     api.inbox.conversations.attentionCounts,
-    workspaceId === undefined ? "skip" : { workspaceId },
+    orgId === undefined ? "skip" : { orgId },
   )
 }

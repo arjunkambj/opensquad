@@ -8,14 +8,14 @@
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { mutation } from "../_generated/server";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedString,
   domainError,
   SENDING_AGENT_MODES,
 } from "../lib/validators";
 import {
-  getConversationInWorkspace,
+  getConversationInOrg,
   vConversationDoc,
 } from "../outreach/draftsModel";
 import { matchSuppression } from "../outreach/suppressions";
@@ -39,7 +39,7 @@ export const RESUME_BLOCK_CODES = [
   "association_missing",
   "agent_mismatch",
   "agent_not_sending",
-  "workspace_paused",
+  "org_paused",
   "inbox_unassigned",
   "inbox_mismatch",
   "recipient_unknown",
@@ -69,11 +69,11 @@ const vResumeResult = v.object({
 export type ResumeResult = typeof vResumeResult.type;
 
 /**
- * Link an unassigned thread to a lead and agent already in this workspace.
+ * Link an unassigned thread to a lead and agent already in this org.
  *
  * Association is HUMAN-ONLY: email content can never choose a lead, and this
  * mutation takes ids from an authenticated editor only. It validates that the
- * lead is in this workspace and that it belongs to the named agent — a
+ * lead is in this org and that it belongs to the named agent — a
  * caller asserting which agent it believes it is binding turns a
  * disagreement into a CONFLICT instead of a silent bind.
  *
@@ -89,7 +89,7 @@ export type ResumeResult = typeof vResumeResult.type;
  */
 export const associateProspect = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
     prospectId: v.id("prospects"),
@@ -98,14 +98,14 @@ export const associateProspect = mutation({
   },
   returns: vConversationDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     boundedString(args.requestId, "requestId", { min: 1, max: 100 });
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     // Idempotent retry, checked before the version so a replayed request
@@ -124,13 +124,13 @@ export const associateProspect = mutation({
     }
     assertContextVersion(conversation, args.expectedContextVersion);
     const prospect = await ctx.db.get("prospects", args.prospectId);
-    // The same message for a missing lead and one in another workspace —
-    // never reveal another workspace's rows.
-    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+    // The same message for a missing lead and one in another org —
+    // never reveal another org's rows.
+    if (prospect === null || prospect.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "prospect not found");
     }
     const agent = await ctx.db.get("agents", args.agentId);
-    if (agent === null || agent.workspaceId !== args.workspaceId) {
+    if (agent === null || agent.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "agent not found");
     }
     if (prospect.agentId !== args.agentId) {
@@ -197,21 +197,21 @@ export const associateProspect = mutation({
  */
 export const resume = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
     requestId: v.string(),
   },
   returns: vResumeResult,
   handler: async (ctx, args): Promise<ResumeResult> => {
-    const { identityKey, workspace } = await requireWorkspaceEditor(
+    const { identityKey, org } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     boundedString(args.requestId, "requestId", { min: 1, max: 100 });
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     // Idempotent retry: an already-resumed thread returns rather than
@@ -242,11 +242,11 @@ export const resume = mutation({
       return blocked("association_missing");
     }
     const prospect = await ctx.db.get("prospects", conversation.prospectId);
-    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+    if (prospect === null || prospect.orgId !== args.orgId) {
       return blocked("association_missing");
     }
     const agent = await ctx.db.get("agents", conversation.agentId);
-    if (agent === null || agent.workspaceId !== args.workspaceId) {
+    if (agent === null || agent.orgId !== args.orgId) {
       return blocked("association_missing");
     }
     if (prospect.agentId !== conversation.agentId) {
@@ -257,13 +257,13 @@ export const resume = mutation({
     if (!SENDING_AGENT_MODES.includes(agent.mode)) {
       return blocked("agent_not_sending");
     }
-    if (workspace.automationState !== "active") {
-      return blocked("workspace_paused");
+    if (org.automationState !== "active") {
+      return blocked("org_paused");
     }
-    if (workspace.inboxRef === undefined) {
+    if (org.inboxRef === undefined) {
       return blocked("inbox_unassigned");
     }
-    if (workspace.inboxRef !== conversation.inboxRef) {
+    if (org.inboxRef !== conversation.inboxRef) {
       return blocked("inbox_mismatch");
     }
 
@@ -295,7 +295,7 @@ export const resume = mutation({
 
     const suppression = await matchSuppression(
       ctx,
-      args.workspaceId,
+      args.orgId,
       recipient,
     );
     if (suppression !== null) {

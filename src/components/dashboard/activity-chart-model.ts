@@ -116,7 +116,7 @@ const dayLabelFormatter = new Intl.DateTimeFormat("en", {
 
 /**
  * `YYYY-MM-DD` as "Sep 18". Read back as UTC on purpose: the key is a civil
- * date the server already cut in the WORKSPACE's zone, so running it through
+ * date the server already cut in the ORG's zone, so running it through
  * the browser's zone would shift half the labels by a day.
  */
 export function dayLabel(dayKey: string): string {

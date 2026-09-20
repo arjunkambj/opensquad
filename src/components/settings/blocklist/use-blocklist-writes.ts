@@ -27,11 +27,11 @@ export type BlocklistWrites = {
 }
 
 export function useBlocklistWrites({
-  workspaceId,
+  orgId,
   onAdded,
   onRemoved,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   onAdded: () => void
   onRemoved: () => void
 }): BlocklistWrites {
@@ -53,7 +53,7 @@ export function useBlocklistWrites({
       // `reason: "manual"` is not a choice: unsubscribe, bounce and provider
       // rows are written by the backend from things that actually happened,
       // and a form able to mint them would let a person fabricate an opt-out.
-      void addSuppression({ workspaceId, ...entry, reason: "manual" })
+      void addSuppression({ orgId, ...entry, reason: "manual" })
         .then((added) => {
           onAdded()
           toast.add({
@@ -74,7 +74,7 @@ export function useBlocklistWrites({
     remove: (entry) => {
       setBusy("remove")
       setRemoveError(null)
-      void removeSuppression({ workspaceId, suppressionId: entry._id })
+      void removeSuppression({ orgId, suppressionId: entry._id })
         .then(() => {
           onRemoved()
           toast.add({

@@ -49,7 +49,7 @@ export function LatestReplies({
   /** `undefined` while the query is still reading. */
   replies: LatestRepliesData | undefined
   hint: string
-  /** The workspace's zone — every timestamp on this screen is on its clock. */
+  /** The org's zone — every timestamp on this screen is on its clock. */
   timezone: string
 }) {
   return (

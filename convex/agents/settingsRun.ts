@@ -13,7 +13,7 @@
 import { internal } from "../_generated/api";
 import { mutation } from "../_generated/server";
 import { appendLeadEvent } from "../leads/events";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
   boundedString,
@@ -26,7 +26,7 @@ import type { LeadResearch, LeadStage } from "../lib/validators";
 import { v } from "convex/values";
 
 /** What a retried lead's history records. */
-const RETRY_STAGE_REASON = "Put back in the queue by the workspace";
+const RETRY_STAGE_REASON = "Put back in the queue by the organization";
 
 /**
  * Switch one signal on or off.
@@ -39,17 +39,17 @@ const RETRY_STAGE_REASON = "Put back in the queue by the workspace";
  */
 export const setStrategyEnabled = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     strategyId: v.id("strategies"),
     enabled: v.boolean(),
   },
   returns: v.object({ enabled: v.boolean() }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const strategy = await ctx.db.get("strategies", args.strategyId);
-    if (strategy === null || strategy.workspaceId !== args.workspaceId) {
-      // A strategy in another workspace is the same NOT_FOUND as a missing
-      // one — existence never leaks across a workspace boundary.
+    if (strategy === null || strategy.orgId !== args.orgId) {
+      // A strategy in another org is the same NOT_FOUND as a missing
+      // one — existence never leaks across an org boundary.
       throw domainError("NOT_FOUND", "signal not found");
     }
     if (strategy.enabled !== args.enabled) {
@@ -79,7 +79,7 @@ export type RunNowResult = {
  */
 export const runNow = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
   },
   returns: v.object({
@@ -95,13 +95,13 @@ export const runNow = mutation({
   // generated graph this module is part of: without it the inference is
   // circular and every module in that graph loses its types.
   handler: async (ctx, args): Promise<RunNowResult> => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     await requireRateLimit(ctx, "runAgentNow", identityKey);
     return await ctx.runMutation(internal.agents.run.requestRun, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       agentId: args.agentId,
     });
   },
@@ -124,17 +124,17 @@ export const runNow = mutation({
  */
 export const retryLead = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
   },
   returns: v.object({ stage: vLeadStage }),
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     const lead = await ctx.db.get("prospects", args.prospectId);
-    if (lead === null || lead.workspaceId !== args.workspaceId) {
+    if (lead === null || lead.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "lead not found");
     }
     if (lead.stage !== "needs_attention") {
@@ -161,7 +161,7 @@ export const retryLead = mutation({
       updatedAt: now,
     });
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "stage_changed",
       summary: RETRY_STAGE_REASON,

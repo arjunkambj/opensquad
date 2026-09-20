@@ -64,7 +64,7 @@ export async function retireConversationDrafts(
   await ctx.runMutation(
     internal.outreach.sendControls.cancelParkedConversationAttempts,
     {
-      workspaceId: conversation.workspaceId,
+      orgId: conversation.orgId,
       conversationId: conversation._id,
       reason,
     },
@@ -160,7 +160,7 @@ export const refreshStaleRevisionLead = internalMutation({
       .take(CONVERSATION_SCAN_MAX);
     let draftsSuperseded = 0;
     for (const conversation of conversations) {
-      if (conversation.workspaceId !== lead.workspaceId) {
+      if (conversation.orgId !== lead.orgId) {
         continue;
       }
       const stale = await hasStaleCurrentDraft(ctx, conversation, agent.revision);

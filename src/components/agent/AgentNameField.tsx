@@ -17,7 +17,6 @@ export const UNNAMED_AGENT_LABEL = "Your agent"
 
 export function AgentNameField({
   name,
-  canEdit,
   editing,
   saving,
   onStartEditing,
@@ -25,7 +24,6 @@ export function AgentNameField({
   onSave,
 }: {
   name: string
-  canEdit: boolean
   editing: boolean
   saving: boolean
   onStartEditing: () => void
@@ -50,16 +48,14 @@ export function AgentNameField({
         <h2 className="truncate font-heading text-base font-medium text-foreground">
           {name === "" ? UNNAMED_AGENT_LABEL : name}
         </h2>
-        {canEdit ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Rename agent"
-            onClick={onStartEditing}
-          >
-            <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={2} />
-          </Button>
-        ) : null}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Rename agent"
+          onClick={onStartEditing}
+        >
+          <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={2} />
+        </Button>
       </div>
     )
   }

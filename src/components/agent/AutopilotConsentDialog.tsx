@@ -48,7 +48,7 @@ export function AutopilotConsentDialog({
   onAccept,
 }: {
   agent: AgentDoc
-  /** The workspace's own ceiling on mail per day — the send limit it will
+  /** The org's own ceiling on mail per day — the send limit it will
    *  never exceed, whatever the agent's caps say. */
   dailySendLimit: number
   open: boolean

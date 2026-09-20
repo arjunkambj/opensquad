@@ -86,7 +86,7 @@ const START_REFUSALS: Record<string, IcpMessage> = {
   FORBIDDEN: {
     title: "You can't change this agent",
     description:
-      "Describing the ideal customer edits the workspace's agent, which needs an owner or operator role.",
+      "This account can't edit this organization's agent, so the ideal customer can't be saved here.",
   },
   UNAUTHENTICATED: {
     title: "Your session expired",

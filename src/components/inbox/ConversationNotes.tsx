@@ -17,7 +17,6 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 /**
  * Internal notes on one thread (`conversationNotes`).
@@ -30,17 +29,15 @@ import type { WorkspaceRole } from "@/lib/workspace-role"
  * approve/reject group on a draft (§4.2 / J3 ③).
  */
 export function ConversationNotes({
-  workspaceId,
-  role,
+  orgId,
   conversation,
 }: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
+  orgId: Id<"orgs">
   conversation: Doc<"conversations">
 }) {
   const [cursor, setCursor] = useState<string | undefined>(undefined)
   const page = useQuery(api.inbox.conversationNotes.listNotes, {
-    workspaceId,
+    orgId,
     conversationId: conversation._id,
     ...(cursor === undefined ? {} : { cursor }),
   })
@@ -50,7 +47,6 @@ export function ConversationNotes({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canNote = role === "owner" || role === "operator"
   // A closed thread is read-only end to end (`plan/ux.md` §233) — the notes
   // stay, the composer does not.
   const readOnly = conversation.state === "closed"
@@ -63,7 +59,7 @@ export function ConversationNotes({
     setPending(true)
     setError(null)
     void addNote({
-      workspaceId,
+      orgId,
       conversationId: conversation._id,
       body: trimmed,
     })
@@ -82,7 +78,7 @@ export function ConversationNotes({
       <CardHeader>
         <CardTitle>Notes</CardTitle>
         <CardDescription>
-          Private to this workspace. A note records context — it can never
+          Private to this organization. A note records context — it can never
           approve, resume or send anything.
         </CardDescription>
       </CardHeader>
@@ -139,7 +135,11 @@ export function ConversationNotes({
           </div>
         ) : null}
 
-        {canNote && !readOnly ? (
+        {readOnly ? (
+          <p className="text-sm text-muted-foreground">
+            Closed threads are read-only — reopen it to add a note.
+          </p>
+        ) : (
           <div className="flex flex-col gap-2">
             <Label htmlFor="conversation-note">Add a note</Label>
             <Textarea
@@ -161,12 +161,6 @@ export function ConversationNotes({
               </Button>
             </div>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {readOnly
-              ? "Closed threads are read-only — reopen it to add a note."
-              : "You have read-only access to this workspace. An owner or operator can add notes."}
-          </p>
         )}
         <FormError message={error} />
       </CardContent>

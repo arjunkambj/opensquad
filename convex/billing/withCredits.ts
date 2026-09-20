@@ -68,7 +68,7 @@ export const settlePaidCall = internalMutation({
 export async function withCredits<R>(
   ctx: ActionCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     action: PaidAction;
     operationKey: string;
     worstCaseProviderUnits?: ProviderUnits;
@@ -78,7 +78,7 @@ export async function withCredits<R>(
   const begin: BeginResult = await ctx.runMutation(
     internal.billing.reserve.beginPaidCall,
     {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       action: args.action,
       operationKey: args.operationKey,
       ...(args.worstCaseProviderUnits !== undefined

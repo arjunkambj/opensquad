@@ -17,9 +17,9 @@ import {
  * The params and what each one is FOR — a value the backend cannot honour is
  * never sent, because a filter must never silently post-filter a page:
  *
- * - `stage` — one lead stage, on `by_workspaceId_and_stage_and_updatedAt`.
- * - `approval` — the approval queue, on `by_workspaceId_and_approval`.
- * - `score` — one flame score, on `by_workspaceId_and_scoreKey`.
+ * - `stage` — one lead stage, on `by_orgId_and_stage_and_updatedAt`.
+ * - `approval` — the approval queue, on `by_orgId_and_approval`.
+ * - `score` — one flame score, on `by_orgId_and_scoreKey`.
  * - `q` — company-name search text, on `search_company_name`.
  * - `sort` — `lowest` flips the default best-score-first order. It applies to
  *   the unfiltered list; every other mode has the order its own index gives.
@@ -99,7 +99,7 @@ function oneFilter(search: Record<string, unknown>, searching: boolean) {
   return stage === undefined ? {} : { stage }
 }
 
-export const Route = createFileRoute("/_dashboard/_workspace/contacts")({
+export const Route = createFileRoute("/_dashboard/_org/contacts")({
   validateSearch: (search): ContactsSearch => {
     const q = optionalText(search.q)
     return {

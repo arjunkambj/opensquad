@@ -21,11 +21,11 @@ import { errorMessage } from "@/lib/convex-error"
 import { useRequestIntents } from "@/lib/use-request-intents"
 
 export function ReplyActions({
-  workspaceId,
+  orgId,
   draft,
   approved,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   draft: Doc<"drafts">
   approved: boolean
 }) {
@@ -54,7 +54,7 @@ export function ReplyActions({
               setBusy(true)
               setError(null)
               void approve({
-                workspaceId,
+                orgId,
                 draftId: draft._id,
                 requestId: intentId(draft._id, "approve"),
               })
@@ -80,7 +80,7 @@ export function ReplyActions({
       <FormError message={error} />
       {editing ? (
         <EditDraftDialog
-          workspaceId={workspaceId}
+          orgId={orgId}
           draft={draft}
           open={editing}
           onOpenChange={setEditing}

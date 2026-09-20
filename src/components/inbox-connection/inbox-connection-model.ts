@@ -50,9 +50,9 @@ export const INBOX_CONNECT_ERROR_COPY: Record<InboxConnectErrorCode, string> = {
     "This deployment has no public address yet, so replies could not reach it.",
   inbox_not_found: "That inbox is no longer on this AgentMail account.",
   inbox_claimed_elsewhere:
-    "That inbox is already the sending inbox of another workspace. Pick a different one.",
+    "That inbox is already the sending inbox of another organization. Pick a different one.",
   inbox_not_visible_to_key:
-    "That key cannot see this workspace's inbox. Use a key from the same AgentMail account, or disconnect first to move to a different mailbox.",
+    "That key cannot see this organization's inbox. Use a key from the same AgentMail account, or disconnect first to move to a different mailbox.",
   webhook_registration_failed:
     "We could not set up inbound mail for that inbox. Try again.",
   not_connected: "Connect an inbox before replacing its key.",
@@ -79,7 +79,7 @@ export function requestErrorCopy(error: unknown, fallback: string): string {
     case "RATE_LIMITED":
       return "Too many attempts in a row. Wait a moment and try again."
     case "FORBIDDEN":
-      return "Only the workspace owner can change the sending inbox."
+      return "Only the organization owner can change the sending inbox."
     case "UNAUTHENTICATED":
       return "Your session expired. Sign in again to change the sending inbox."
     case "INVALID":

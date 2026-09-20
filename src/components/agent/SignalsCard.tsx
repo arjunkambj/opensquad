@@ -34,13 +34,11 @@ import type { StrategyRow } from "./agent-model"
 import { agentErrorCopy, SIGNAL_KIND_LABEL } from "./agent-model"
 
 export function SignalsCard({
-  workspaceId,
+  orgId,
   strategies,
-  canEdit,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   strategies: StrategyRow[] | undefined
-  canEdit: boolean
 }) {
   const setEnabled = useMutation(api.agents.settingsRun.setStrategyEnabled)
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -51,7 +49,7 @@ export function SignalsCard({
     setError(null)
     try {
       await setEnabled({
-        workspaceId,
+        orgId,
         strategyId: row.strategyId,
         enabled: !row.enabled,
       })
@@ -127,7 +125,7 @@ export function SignalsCard({
                       size="sm"
                       aria-label={`Use the ${row.title} signal`}
                       pressed={row.enabled}
-                      disabled={!canEdit || pendingId === row.strategyId}
+                      disabled={pendingId === row.strategyId}
                       onPressedChange={() => void toggle(row)}
                     >
                       {row.enabled ? "On" : "Off"}

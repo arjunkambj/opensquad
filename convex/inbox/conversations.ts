@@ -1,6 +1,6 @@
 /** The inbox list, the per-lead list, one conversation and the tab counts. */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   domainError,
@@ -8,7 +8,7 @@ import {
   vConversationTab,
 } from "../lib/validators";
 import {
-  getConversationInWorkspace,
+  getConversationInOrg,
   vConversationDoc,
 } from "../outreach/draftsModel";
 import {
@@ -24,14 +24,14 @@ import { v } from "convex/values";
  * The inbox list, one exact index range per tab (`plan/ux.md` §48/§165).
  *
  * `open`/`unassigned`/`closed` slice
- * `by_workspaceId_and_state_and_lastMessageAt`; `takeover` slices
- * `by_workspaceId_and_humanTakeover_and_lastMessageAt`. No tab post-filters a
+ * `by_orgId_and_state_and_lastMessageAt`; `takeover` slices
+ * `by_orgId_and_humanTakeover_and_lastMessageAt`. No tab post-filters a
  * page — a post-filtered truncated page is not a filtered result (§5).
  *
  * The `takeover` tab is every frozen thread — unassigned ones, which are
  * frozen by construction, and closed-but-frozen ones. Both are included
  * because excluding either would mean post-filtering a page, and only
- * `by_workspaceId_and_humanTakeover_and_lastMessageAt` carries the ordering
+ * `by_orgId_and_humanTakeover_and_lastMessageAt` carries the ordering
  * column this tab pages by. `unassigned` and `closed` are the narrower slices
  * when that is what the operator wants.
  *
@@ -41,7 +41,7 @@ import { v } from "convex/values";
  */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     tab: v.optional(vConversationTab),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
@@ -52,7 +52,7 @@ export const list = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const limit = boundedLimit(args.limit);
     const tab = args.tab ?? "open";
     const result =
@@ -60,16 +60,16 @@ export const list = query({
         ? await ctx.db
             .query("conversations")
             .withIndex(
-              "by_workspaceId_and_humanTakeover_and_lastMessageAt",
+              "by_orgId_and_humanTakeover_and_lastMessageAt",
               (q) =>
-                q.eq("workspaceId", args.workspaceId).eq("humanTakeover", true),
+                q.eq("orgId", args.orgId).eq("humanTakeover", true),
             )
             .order("desc")
             .paginate({ numItems: limit, cursor: args.cursor ?? null })
         : await ctx.db
             .query("conversations")
-            .withIndex("by_workspaceId_and_state_and_lastMessageAt", (q) =>
-              q.eq("workspaceId", args.workspaceId).eq("state", tab),
+            .withIndex("by_orgId_and_state_and_lastMessageAt", (q) =>
+              q.eq("orgId", args.orgId).eq("state", tab),
             )
             .order("desc")
             .paginate({ numItems: limit, cursor: args.cursor ?? null });
@@ -90,11 +90,11 @@ export const list = query({
  * booking proposal flow's "which thread does this draft go on" pick both read
  * it. `by_prospectId` is an exact range, so no page is ever post-filtered. A
  * foreign or missing prospect is NOT_FOUND rather than an empty list —
- * existence must not leak across a workspace boundary.
+ * existence must not leak across an org boundary.
  */
 export const listForProspect = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
@@ -105,9 +105,9 @@ export const listForProspect = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const prospect = await ctx.db.get("prospects", args.prospectId);
-    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+    if (prospect === null || prospect.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "prospect not found");
     }
     const limit = boundedLimit(args.limit);
@@ -139,7 +139,7 @@ export const listForProspect = query({
  */
 export const get = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
   },
   returns: v.object({
@@ -148,10 +148,10 @@ export const get = query({
     agent: v.union(vConversationAgentRef, v.null()),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const conversation = await getConversationInWorkspace(
+    await requireOrgMember(ctx, args.orgId);
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     const prospectRow =
@@ -159,14 +159,14 @@ export const get = query({
         ? null
         : await ctx.db.get("prospects", conversation.prospectId);
     const prospect =
-      prospectRow === null || prospectRow.workspaceId !== args.workspaceId
+      prospectRow === null || prospectRow.orgId !== args.orgId
         ? null
         : prospectRow;
     const agentId = conversation.agentId ?? prospect?.agentId;
     const agentRow =
       agentId === undefined ? null : await ctx.db.get("agents", agentId);
     const agent =
-      agentRow === null || agentRow.workspaceId !== args.workspaceId
+      agentRow === null || agentRow.orgId !== args.orgId
         ? null
         : agentRow;
     return {
@@ -198,7 +198,7 @@ export const get = query({
  * defect.
  *
  * Both buckets are exact ranges on
- * `by_workspaceId_and_state_and_humanTakeover`, and they are disjoint by
+ * `by_orgId_and_state_and_humanTakeover`, and they are disjoint by
  * construction: every unassigned thread is also under takeover, so summing
  * the plain takeover index would double-count. Scoping the second bucket to
  * `state: "open"` removes the overlap and also drops closed-but-frozen
@@ -207,7 +207,7 @@ export const get = query({
  *
  * THE SECOND BUCKET IS NOT THE `takeover` TAB, AND IT IS NAMED SO IT CANNOT
  * BE MISTAKEN FOR IT. `list({tab: "takeover"})` ranges over
- * `by_workspaceId_and_humanTakeover_and_lastMessageAt` and returns EVERY
+ * `by_orgId_and_humanTakeover_and_lastMessageAt` and returns EVERY
  * frozen thread — unassigned ones, which are frozen by construction, and
  * closed-but-frozen ones — because that index carries `lastMessageAt` and the
  * tab must page in inbox order without post-filtering. This count is
@@ -221,7 +221,7 @@ export const get = query({
  * renders "50+". Architecture §5 forbids an exact unlimited counter.
  */
 export const attentionCounts = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({
     unassigned: v.number(),
     unassignedHasMore: v.boolean(),
@@ -233,18 +233,18 @@ export const attentionCounts = query({
     bound: v.number(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const unassignedRows = await ctx.db
       .query("conversations")
-      .withIndex("by_workspaceId_and_state_and_humanTakeover", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("state", "unassigned"),
+      .withIndex("by_orgId_and_state_and_humanTakeover", (q) =>
+        q.eq("orgId", args.orgId).eq("state", "unassigned"),
       )
       .take(MAX_LIST_LIMIT + 1);
     const takeoverRows = await ctx.db
       .query("conversations")
-      .withIndex("by_workspaceId_and_state_and_humanTakeover", (q) =>
+      .withIndex("by_orgId_and_state_and_humanTakeover", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("state", "open")
           .eq("humanTakeover", true),
       )

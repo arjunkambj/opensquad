@@ -42,7 +42,7 @@ export const pricingPlans: PricingPlan[] = [
     features: [
       "Everything in Starter",
       "Several campaigns running at once",
-      "Your whole team in, with owner, editor and viewer roles",
+      "Your whole team in, each working in your organization",
       "Emails only go out in the hours you set",
       "Anyone who says stop is never emailed again",
       "A dated record of who did what, on every lead",
@@ -51,13 +51,13 @@ export const pricingPlans: PricingPlan[] = [
   {
     key: "studio",
     name: "Studio",
-    description: "For studios that need more workspaces and want things done faster.",
+    description: "For studios that need more organizations and want things done faster.",
     priceAmount: null,
     priceLabel: "Custom",
     ctaLabel: "Talk to us",
     features: [
       "Everything in Agency",
-      "More workspaces, kept apart from each other",
+      "More organizations, kept apart from each other",
       "Your work goes first in the queue",
       "We set up your first campaigns with you",
     ],
@@ -92,7 +92,7 @@ export const faqItems = [
   },
   {
     content:
-      "OpenAI models, called from the backend on your workspace's own data. Your work never mixes with another team's.",
+      "OpenAI models, called from the backend on your organization's own data. Your work never mixes with another team's.",
     title: "What does the agent run on?",
   },
   {
@@ -102,7 +102,7 @@ export const faqItems = [
   },
   {
     content:
-      "Everyone is an owner, editor or viewer. Owners manage the team and the rules, editors run campaigns and approve emails, and viewers can follow along without changing anything.",
-    title: "How do team roles work?",
+      "Everyone you add to your organization works in it the same way: they see the same leads, the same drafts and the same replies, and every action is recorded against the person who took it. You manage who is in the organization from your account.",
+    title: "How does working as a team work?",
   },
 ] as const

@@ -21,7 +21,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { mutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import { bucketRemaining, findBucket } from "../billing/model";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { ACTION_PRICES } from "../lib/limits";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
@@ -56,7 +56,7 @@ const vSkipReason = v.union(
  */
 export const researchNow = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
   },
   returns: v.object({
@@ -67,9 +67,9 @@ export const researchNow = mutation({
     ),
   }),
   handler: async (ctx, args) => {
-    const { identityKey, workspace } = await requireWorkspaceEditor(
+    const { identityKey, org } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     await requireRateLimit(ctx, "researchLead", identityKey);
     if (args.prospectIds.length === 0) {
@@ -83,14 +83,14 @@ export const researchNow = mutation({
     const price = ACTION_PRICES.research_lead.credits;
     const credits = await findBucket(
       ctx,
-      workspace._id,
+      org._id,
       "credits",
       USAGE_PERIOD_LIFETIME,
     );
     if (credits === null) {
       throw domainError(
         "NO_CREDIT_GRANT",
-        "this workspace has no credit grant; no paid step can run",
+        "this organization has no credit grant; no paid step can run",
       );
     }
     const affordable = Math.floor(bucketRemaining(credits) / price);
@@ -108,7 +108,7 @@ export const researchNow = mutation({
       reason: typeof vSkipReason.type;
     }[] = [];
     for (const prospectId of new Set(args.prospectIds)) {
-      const lead = await loadProspectForWrite(ctx, args.workspaceId, prospectId);
+      const lead = await loadProspectForWrite(ctx, args.orgId, prospectId);
       if (lead.approval === "rejected") {
         skipped.push({ prospectId, reason: "rejected" });
         continue;
@@ -130,7 +130,7 @@ export const researchNow = mutation({
         0,
         internal.leads.manualResearchRun.runManualResearch,
         {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           prospectId,
           claimedAt: now,
         },

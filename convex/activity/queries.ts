@@ -1,6 +1,6 @@
 /** Member-guarded, indexed, cursor-paginated reads over the activity feed. */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedLimit } from "../lib/validators";
 import { activityEventFields } from "../schema";
 import { v } from "convex/values";
@@ -12,12 +12,12 @@ export const vActivityEventDoc = v.object({
 });
 
 /**
- * Chronological workspace activity feed. `from`/`to` bound the `createdAt`
+ * Chronological org activity feed. `from`/`to` bound the `createdAt`
  * range. Newest first, cursor-paginated, `{items, cursor, hasMore}`.
  */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     from: v.optional(v.number()),
     to: v.optional(v.number()),
     cursor: v.optional(v.union(v.string(), v.null())),
@@ -29,12 +29,12 @@ export const list = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const limit = boundedLimit(args.limit);
     const result = await ctx.db
       .query("activityEvents")
-      .withIndex("by_workspaceId_and_createdAt", (q) => {
-        const bound = q.eq("workspaceId", args.workspaceId);
+      .withIndex("by_orgId_and_createdAt", (q) => {
+        const bound = q.eq("orgId", args.orgId);
         if (args.from !== undefined && args.to !== undefined) {
           return bound.gte("createdAt", args.from).lte("createdAt", args.to);
         }

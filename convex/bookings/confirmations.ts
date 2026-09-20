@@ -9,7 +9,7 @@
  */
 import { mutation } from "../_generated/server";
 import { appendLeadEvent, findLeadEventByOperationKey } from "../leads/events";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   assertConfirmationSourceEnabled,
   assertExpectedVersion,
@@ -48,7 +48,7 @@ import { v } from "convex/values";
  */
 export const confirm = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     bookingId: v.id("bookings"),
     expectedVersion: v.number(),
     startsAt: v.number(),
@@ -61,7 +61,7 @@ export const confirm = mutation({
   },
   returns: vBookingDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
@@ -78,12 +78,12 @@ export const confirm = mutation({
     }
     const booking = await loadBookingForWrite(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.bookingId,
     );
     const prior = await findLeadEventByOperationKey(
       ctx,
-      args.workspaceId,
+      args.orgId,
       `booking:${args.bookingId}:confirmed:${requestId}`,
     );
     if (prior !== null) {
@@ -119,7 +119,7 @@ export const confirm = mutation({
     );
     const prospect = await loadProspect(
       ctx,
-      args.workspaceId,
+      args.orgId,
       booking.prospectId,
     );
     if (TERMINAL_LEAD_STAGES.includes(prospect.stage)) {
@@ -158,7 +158,7 @@ export const confirm = mutation({
       updatedAt: now,
     });
     await appendLeadEvent(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       prospectId: prospect._id,
       kind: "booking_confirmed",
       summary: `Meeting confirmed for ${new Date(times.startsAt).toISOString()} ${times.timezone} — ${confirmationNote}`,
@@ -193,7 +193,7 @@ export const confirm = mutation({
  */
 export const reschedule = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     bookingId: v.id("bookings"),
     expectedVersion: v.number(),
     startsAt: v.number(),
@@ -204,7 +204,7 @@ export const reschedule = mutation({
   },
   returns: vBookingDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
@@ -215,12 +215,12 @@ export const reschedule = mutation({
     });
     const booking = await loadBookingForWrite(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.bookingId,
     );
     const prior = await findLeadEventByOperationKey(
       ctx,
-      args.workspaceId,
+      args.orgId,
       `booking:${args.bookingId}:rescheduled:${requestId}`,
     );
     if (prior !== null) {
@@ -255,7 +255,7 @@ export const reschedule = mutation({
     );
     const prospect = await loadProspect(
       ctx,
-      args.workspaceId,
+      args.orgId,
       booking.prospectId,
     );
     await ctx.db.patch("bookings", booking._id, {
@@ -274,7 +274,7 @@ export const reschedule = mutation({
       `booking rescheduled — the proposed times are no longer the agreement`,
     );
     await appendLeadEvent(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       prospectId: prospect._id,
       kind: "booking_rescheduled",
       summary: `Meeting moved to ${new Date(times.startsAt).toISOString()} ${times.timezone} — ${reason}`,

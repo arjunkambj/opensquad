@@ -25,7 +25,7 @@
  * the idempotency key and every gate.
  *
  * NOTHING NEW STARTS while the agent is paused or in `sourcing_only`, while
- * the workspace is paused, while its inbox is not connected, or while the
+ * the org is paused, while its inbox is not connected, or while the
  * platform kill switch is on. Work already in flight finishes and writes its
  * result, and unsent drafts stay drafts (PLAN §9.1).
  */
@@ -68,7 +68,7 @@ const vTickResult = v.object({
  * One pass of the outreach loop. Registered as the `outreach-tick` cron.
  *
  * The agent scan is the same exact index range the run loop uses — live
- * agents only — so draft agents are never paged through. A workspace whose
+ * agents only — so draft agents are never paged through. An org whose
  * agent is not in a sending mode costs one document read and nothing else.
  */
 export const tickOutreach = internalMutation({
@@ -86,8 +86,8 @@ export const tickOutreach = internalMutation({
     let writesScheduled = 0;
 
     for (const agent of agents) {
-      const workspace = await ctx.db.get("workspaces", agent.workspaceId);
-      if (workspace === null || !agentRunsOutreach(workspace, agent)) {
+      const org = await ctx.db.get("orgs", agent.orgId);
+      if (org === null || !agentRunsOutreach(org, agent)) {
         continue;
       }
 

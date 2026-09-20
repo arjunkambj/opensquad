@@ -7,13 +7,13 @@
  * answer comes back `null` and the screen says so, rather than a zero that
  * reads as a counted result.
  *
- * `from`/`to` are instants the caller derived in the workspace's own zone;
+ * `from`/`to` are instants the caller derived in the org's own zone;
  * `model.ts` explains the bounds, and `leadReads.ts` / `outcomeReads.ts`
  * name the rows behind every number.
  */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
-import { getWorkspaceAgent } from "../agents/model";
+import { requireOrgMember } from "../lib/auth";
+import { getOrgAgent } from "../agents/model";
 import { vAgentMode, vInboxConnection } from "../lib/validators";
 import {
   countInterested,
@@ -69,16 +69,16 @@ export const summary = query({
     ),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const range = assertRange(args.from, args.to);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    const agent = await getOrgAgent(ctx, args.orgId);
 
-    const hotLeads = (await loadHotLeads(ctx, args.workspaceId, range)).bounded;
-    const sends = await loadAcknowledgedSends(ctx, args.workspaceId, range);
-    const replies = await loadRepliedConversations(ctx, args.workspaceId, range);
-    const meetings = await countConfirmedMeetings(ctx, args.workspaceId, range);
-    const meetingsProposed = await countProposedMeetings(ctx, args.workspaceId);
-    const interested = await countInterested(ctx, args.workspaceId, range);
+    const hotLeads = (await loadHotLeads(ctx, args.orgId, range)).bounded;
+    const sends = await loadAcknowledgedSends(ctx, args.orgId, range);
+    const replies = await loadRepliedConversations(ctx, args.orgId, range);
+    const meetings = await countConfirmedMeetings(ctx, args.orgId, range);
+    const meetingsProposed = await countProposedMeetings(ctx, args.orgId);
+    const interested = await countInterested(ctx, args.orgId, range);
 
     const dealSize = agent?.dealSize ?? null;
     return {
@@ -103,9 +103,9 @@ export const summary = query({
 });
 
 /**
- * The activity chart's daily series, in the workspace's own days.
+ * The activity chart's daily series, in the org's own days.
  *
- * All three series are real counts of stored rows, so on a workspace that has
+ * All three series are real counts of stored rows, so on an org that has
  * not sent anything yet `contacted` and `replies` are flat zeros — which is
  * why the chart draws a series only once its rows exist, rather than three
  * lines along the axis.
@@ -127,21 +127,21 @@ export const activitySeries = query({
     ),
   }),
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
+    const { org } = await requireOrgMember(ctx, args.orgId);
     const range = assertRange(args.from, args.to);
 
-    const leads = await loadLeadsCreated(ctx, args.workspaceId, range);
-    const sends = await loadAcknowledgedSends(ctx, args.workspaceId, range);
-    const replies = await loadRepliedConversations(ctx, args.workspaceId, range);
+    const leads = await loadLeadsCreated(ctx, args.orgId, range);
+    const sends = await loadAcknowledgedSends(ctx, args.orgId, range);
+    const replies = await loadRepliedConversations(ctx, args.orgId, range);
 
     return {
       bound: DASHBOARD_SCAN_BOUND,
-      timezone: workspace.timezone,
+      timezone: org.timezone,
       truncated:
         leads.bounded.hasMore ||
         sends.emails.hasMore ||
         replies.bounded.hasMore,
-      days: bucketByDay(range, workspace.timezone, {
+      days: bucketByDay(range, org.timezone, {
         leadsCreated: leads.createdAt,
         contacted: sends.rows.map((row) => row.updatedAt),
         replies: replies.rows.map((row) => row.lastInboundAt ?? row.updatedAt),
@@ -161,7 +161,7 @@ export const activitySeries = query({
  * returns the state and the numbers behind it.
  */
 export const nextStep = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.union(
     v.object({ kind: v.literal("finish_setup") }),
     v.object({
@@ -174,21 +174,21 @@ export const nextStep = query({
     v.object({ kind: v.literal("all_set") }),
   ),
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceMember(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    const { org } = await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null || agent.status === "draft") {
       return { kind: "finish_setup" as const };
     }
-    if (workspace.inboxConnection !== "connected") {
+    if (org.inboxConnection !== "connected") {
       return {
         kind: "connect_inbox" as const,
-        inboxConnection: workspace.inboxConnection,
+        inboxConnection: org.inboxConnection,
       };
     }
     if (agent.mode === "paused" || agent.mode === "sourcing_only") {
       return { kind: "start_sending" as const, mode: agent.mode };
     }
-    const pending = await countPendingApprovals(ctx, args.workspaceId);
+    const pending = await countPendingApprovals(ctx, args.orgId);
     if (pending.count > 0) {
       return { kind: "approve_leads" as const, pending };
     }

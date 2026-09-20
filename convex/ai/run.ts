@@ -108,7 +108,7 @@ export type StructuredResult<T> =
   | { status: "invalid_response"; attempts: number; usage: AiUsage };
 
 export type RunStructuredArgs<T extends Validator<unknown, "required", string>> = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   /**
    * The action whose price applies. A single-provider AI action carries its
    * own credits (`generate_icp`, `recommend_signals`, `generate_keywords`,
@@ -201,7 +201,7 @@ export async function runStructured<T extends Validator<unknown, "required", str
   return await withCredits(
     ctx,
     {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       action: args.action,
       operationKey: args.operationKey,
       // Worst case is the retry: one completed generation whose object we

@@ -40,14 +40,14 @@ import { errorMessage, isConflictError } from "@/lib/convex-error"
 const ANALYSIS_CREDITS = ACTION_PRICES.analyze_website.credits
 
 export function CompanyStep({
-  workspaceId,
+  orgId,
   progress,
   goNext,
   moving,
   moveError,
 }: OnboardingStepProps) {
-  const profile = useQuery(api.company.queries.get, { workspaceId })
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+  const profile = useQuery(api.company.queries.get, { orgId })
+  const balance = useQuery(api.billing.credits.balance, { orgId })
   const startAnalysis = useMutation(api.company.mutations.startAnalysis)
   const updateProfile = useMutation(api.company.mutations.update)
 
@@ -94,7 +94,7 @@ export function CompanyStep({
     balance === undefined || price === 0
       ? null
       : balance === null
-        ? "This workspace has no credit allowance, so website analysis can't run. You can still fill your profile in yourself."
+        ? "This organization has no credit allowance, so website analysis can't run. You can still fill your profile in yourself."
         : balance.remaining < price
           ? `Another analysis costs ${price} credits and you have ${balance.remaining} left. Fill your profile in yourself to carry on.`
           : null
@@ -103,7 +103,7 @@ export function CompanyStep({
     setStartError(null)
     setWebsiteTyped(false)
     try {
-      await startAnalysis({ workspaceId, websiteUrl: website })
+      await startAnalysis({ orgId, websiteUrl: website })
     } catch (cause) {
       setStartError(startAnalysisCopy(cause))
     }
@@ -114,7 +114,7 @@ export function CompanyStep({
     setSaveError(null)
     try {
       await updateProfile({
-        workspaceId,
+        orgId,
         expectedVersion: baseVersion,
         ...(profile?.websiteUrl !== undefined
           ? { websiteUrl: profile.websiteUrl }

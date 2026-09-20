@@ -18,9 +18,15 @@ leads, emails them, and works the replies until a meeting is booked.
   server-only fields.
 - **Money safety.** Every paid provider call goes through `withCredits`, runs in
   an internal action scheduled by an authenticated mutation, and respects the
-  workspace caps, platform budgets and kill switch (PLAN §6).
+  organization caps, platform budgets and kill switch (PLAN §6).
 - AI calls go through Convex AI Gateway (`@convex-dev/ai-sdk-provider`) with
   OpenAI models from Convex actions.
+- **The tenant is the Hexclave organization**, and the org ACTIVE in Hexclave
+  is the source of truth: the token's `selected_team_id` claim decides whose
+  data a request sees (PLAN §4). One `orgs` row per Hexclave organization, no
+  member records and no roles of our own — every member of the active
+  organization may use the whole product. No screen ever asks the user to
+  create, name or pick one.
 - Keep Vite, React, TanStack Router, Convex, Hexclave, pnpm, shadcn/Base UI and
   Hugeicons. Code is organised by domain folder on both sides (PLAN §10).
 - Write idiomatic TypeScript: explicit domain unions, typed functions, generated
