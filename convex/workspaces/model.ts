@@ -40,7 +40,7 @@ export const vMembershipDoc = v.object({
  * path is the ONLY thing that resolves an inbound request to a workspace, so
  * a guessable token would be a way in (PLAN §9.4).
  */
-function generateWebhookToken(): string {
+export function generateWebhookToken(): string {
   const bytes = new Uint8Array(WEBHOOK_TOKEN_LENGTH);
   crypto.getRandomValues(bytes);
   return [...bytes]

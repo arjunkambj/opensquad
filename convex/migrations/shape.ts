@@ -31,6 +31,7 @@ import type { DataModel, Doc, Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import { invalid, WEBHOOK_TOKEN_LENGTH } from "../lib/validators";
+import { generateWebhookToken } from "../workspaces/model";
 
 export const migrations = new Migrations<DataModel>(components.migrations, {
   internalMutation,
@@ -112,19 +113,6 @@ function requireWorkspaceRef(
 /* workspaces → final shape                                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * The token in this workspace's inbound webhook path. This is the same
- * construction workspace creation uses (`generateWebhookToken` in
- * `convex/workspaces.ts`): `WEBHOOK_TOKEN_LENGTH` bytes from the runtime
- * CSPRNG, lower-case hex, never derived from anything a caller can see. That
- * function is module-private, so the shared length constant is imported and
- * the construction repeated; see the T06 hand-off note.
- */
-function generateWebhookToken(): string {
-  const bytes = new Uint8Array(WEBHOOK_TOKEN_LENGTH);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
 
 const WEBHOOK_TOKEN_PATTERN = new RegExp(
   `^[0-9a-f]{${WEBHOOK_TOKEN_LENGTH * 2}}$`,
