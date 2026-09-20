@@ -60,14 +60,12 @@ function parkedReason(lead: ParkedLead): string {
 }
 
 export function NeedsAttentionCard({
-  workspaceId,
-  canEdit,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces">
-  canEdit: boolean
+  orgId: Id<"orgs">
 }) {
   const page = useQuery(api.leads.queries.list, {
-    workspaceId,
+    orgId,
     stage: "needs_attention",
     limit: PARKED_SHOWN,
   })
@@ -79,7 +77,7 @@ export function NeedsAttentionCard({
     setPendingId(lead._id)
     setError(null)
     try {
-      await retryLead({ workspaceId, prospectId: lead._id })
+      await retryLead({ orgId, prospectId: lead._id })
     } catch (cause) {
       setError(agentErrorCopy(cause, "Could not queue that lead again."))
     } finally {
@@ -122,16 +120,14 @@ export function NeedsAttentionCard({
                   Stopped {formatWaited(lead.updatedAt)}
                 </span>
               </div>
-              {canEdit ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pendingId === lead._id}
-                  onClick={() => void retry(lead)}
-                >
-                  Retry
-                </Button>
-              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pendingId === lead._id}
+                onClick={() => void retry(lead)}
+              >
+                Retry
+              </Button>
             </li>
           ))}
         </ul>

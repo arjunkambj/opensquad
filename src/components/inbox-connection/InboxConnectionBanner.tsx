@@ -1,9 +1,9 @@
 /**
- * The container for `ConnectInboxBanner`: it reads the workspace's inbox
- * connection and renders the banner only while the workspace cannot send.
+ * The container for `ConnectInboxBanner`: it reads the org's inbox
+ * connection and renders the banner only while the org cannot send.
  *
  * Mounted by the Agent and Contacts screens (EXECUTION T31, T32). A connected
- * workspace renders nothing at all — a banner that says "you are fine" is
+ * org renders nothing at all — a banner that says "you are fine" is
  * chrome, and the reference screens do not carry one. Neither does a reader
  * who cannot act on it: the connect screen is owner-only.
  */
@@ -14,13 +14,13 @@ import { ConnectInboxBanner } from "./ConnectInboxBanner"
 import { useInboxConnection } from "./use-inbox-connection"
 
 export function InboxConnectionBanner({
-  workspaceId,
+  orgId,
   className,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   className?: string
 }) {
-  const access = useInboxConnection(workspaceId)
+  const access = useInboxConnection(orgId)
 
   // While the read is in flight there is nothing to warn about yet, and a
   // skeleton above the page content would move it twice.

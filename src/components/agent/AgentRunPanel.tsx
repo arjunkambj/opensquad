@@ -26,17 +26,15 @@ import type { RunState } from "./agent-model"
 import { agentErrorCopy, RUN_NOW_COPY } from "./agent-model"
 
 export function AgentRunPanel({
-  workspaceId,
+  orgId,
   agentId,
   timezone,
   runState,
-  canEdit,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   agentId: Id<"agents">
   timezone: string
   runState: RunState | undefined
-  canEdit: boolean
 }) {
   const runNow = useMutation(api.agents.settingsRun.runNow)
   const [requesting, setRequesting] = useState(false)
@@ -48,7 +46,7 @@ export function AgentRunPanel({
     setRequesting(true)
     setError(null)
     try {
-      const result = await runNow({ workspaceId, agentId })
+      const result = await runNow({ orgId, agentId })
       if (result.started) {
         toast.add({ title: RUN_NOW_COPY.started, type: "success" })
       } else {
@@ -98,24 +96,22 @@ export function AgentRunPanel({
           ) : null}
           <FormError message={error} />
         </div>
-        {canEdit ? (
-          <Button
-            size="sm"
-            disabled={requesting || running || runState === undefined}
-            onClick={() => void start()}
-          >
-            {requesting ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <HugeiconsIcon
-                icon={PlayIcon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-            )}
-            Run now
-          </Button>
-        ) : null}
+        <Button
+          size="sm"
+          disabled={requesting || running || runState === undefined}
+          onClick={() => void start()}
+        >
+          {requesting ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <HugeiconsIcon
+              icon={PlayIcon}
+              strokeWidth={2}
+              data-icon="inline-start"
+            />
+          )}
+          Run now
+        </Button>
       </CardContent>
     </Card>
   )

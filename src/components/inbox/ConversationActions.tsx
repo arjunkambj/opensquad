@@ -13,7 +13,7 @@ import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { MarkAsBookedDialog } from "@/components/inbox/MarkAsBookedDialog"
 import { resumeBlockCopy } from "@/components/inbox/thread/resume-block-copy"
-import { FormError, PermissionNote } from "@/components/states/states"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -26,19 +26,16 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
 import { useRequestIntents } from "@/lib/use-request-intents"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 type Detail = FunctionReturnType<typeof api.inbox.conversations.get>
 
 export function ConversationActions({
-  workspaceId,
-  role,
+  orgId,
   conversation,
   prospect,
   expectedContextVersion,
 }: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
+  orgId: Id<"orgs">
   conversation: Doc<"conversations">
   prospect: Detail["prospect"]
   expectedContextVersion: number
@@ -56,7 +53,7 @@ export function ConversationActions({
     prospect === null
       ? "skip"
       : {
-          workspaceId,
+          orgId,
           prospectId: prospect.prospectId,
           state: "proposed" as const,
           limit: 1,
@@ -67,7 +64,6 @@ export function ConversationActions({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canAct = role === "owner" || role === "operator"
   const closed = conversation.state === "closed"
 
   const run = (work: Promise<unknown>, title: string, failure: string) => {
@@ -89,8 +85,7 @@ export function ConversationActions({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {canAct ? (
-          <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2">
             {prospect === null ? null : (
               <Button
                 size="sm"
@@ -110,7 +105,7 @@ export function ConversationActions({
                   setBusy(true)
                   setError(null)
                   void resume({
-                    workspaceId,
+                    orgId,
                     conversationId: conversation._id,
                     expectedContextVersion,
                     requestId: intentId(conversation._id, "resume"),
@@ -142,7 +137,7 @@ export function ConversationActions({
                 onClick={() =>
                   run(
                     setTakeover({
-                      workspaceId,
+                      orgId,
                       conversationId: conversation._id,
                       expectedContextVersion,
                       enabled: true,
@@ -163,12 +158,12 @@ export function ConversationActions({
                 run(
                   closed
                     ? reopen({
-                        workspaceId,
+                        orgId,
                         conversationId: conversation._id,
                         expectedContextVersion,
                       })
                     : close({
-                        workspaceId,
+                        orgId,
                         conversationId: conversation._id,
                         expectedContextVersion,
                       }),
@@ -182,15 +177,12 @@ export function ConversationActions({
               {closed ? "Reopen" : "Close"}
             </Button>
           </div>
-        ) : (
-          <PermissionNote role={role} action="act on this conversation" />
-        )}
         <FormError message={error} />
       </CardContent>
 
       {booking && prospect !== null ? (
         <MarkAsBookedDialog
-          workspaceId={workspaceId}
+          orgId={orgId}
           prospectId={prospect.prospectId}
           conversationId={conversation._id}
           existingProposal={proposals?.items[0] ?? null}

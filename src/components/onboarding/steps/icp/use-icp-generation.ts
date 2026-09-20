@@ -44,11 +44,11 @@ export type IcpGenerationHandle = {
 }
 
 export function useIcpGeneration(
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   agent: Doc<"agents">,
 ): IcpGenerationHandle {
   const startGeneration = useMutation(api.agents.icp.startGeneration)
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+  const balance = useQuery(api.billing.credits.balance, { orgId })
 
   const [refusal, setRefusal] = useState<IcpStartRefusal | null>(null)
   const [starting, setStarting] = useState(false)
@@ -61,14 +61,14 @@ export function useIcpGeneration(
       setStarting(true)
       setRefusal(null)
       try {
-        await startGeneration({ workspaceId, reason })
+        await startGeneration({ orgId, reason })
       } catch (cause) {
         setRefusal({ message: startGenerationCopy(cause), reason })
       } finally {
         setStarting(false)
       }
     },
-    [startGeneration, workspaceId],
+    [startGeneration, orgId],
   )
 
   // One automatic request per mount. The server decides whether it runs.

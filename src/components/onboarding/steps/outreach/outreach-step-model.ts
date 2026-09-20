@@ -9,7 +9,7 @@ import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../../convex/_generated/api"
 import type { Id } from "../../../../../convex/_generated/dataModel"
 
-/** The workspace's agent, as `api.agents.queries.get` returns it. */
+/** The org's agent, as `api.agents.queries.get` returns it. */
 export type OnboardingAgent = NonNullable<
   FunctionReturnType<typeof api.agents.queries.get>
 >
@@ -20,7 +20,7 @@ export type OnboardingAgent = NonNullable<
  * folder compiles on its own branch.
  */
 export type OutreachStepProps = {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   agent: OnboardingAgent
   goNext: () => void
   goBack: () => void

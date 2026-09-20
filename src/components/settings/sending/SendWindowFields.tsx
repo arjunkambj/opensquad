@@ -13,7 +13,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { timezoneOptions, WEEKDAYS } from "@/lib/workspace-time"
+import { timezoneOptions, WEEKDAYS } from "@/lib/org-time"
 
 export type SendWindowValues = {
   /** IANA timezone; the window and the daily boundary are evaluated in it. */

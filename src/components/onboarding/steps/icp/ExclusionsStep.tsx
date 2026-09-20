@@ -19,9 +19,9 @@ import { useIcpDraft } from "@/components/onboarding/steps/icp/use-icp-draft"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function ExclusionsStep(props: OnboardingStepProps) {
-  const draft = useIcpDraft(props.workspaceId, props.agent)
+  const draft = useIcpDraft(props.orgId, props.agent)
   const options = useQuery(api.agents.icp.options, {
-    workspaceId: props.workspaceId,
+    orgId: props.orgId,
   })
   const icp = draft.draft
 

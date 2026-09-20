@@ -29,7 +29,7 @@ export function DashboardRouteError({ error, reset }: ErrorComponentProps) {
         }
         description={
           code === "FORBIDDEN"
-            ? "Your role in this organization doesn't allow this page. An owner can change it in Settings."
+            ? "This account can't open that page in this organization."
             : "Sign in again to continue."
         }
         action={

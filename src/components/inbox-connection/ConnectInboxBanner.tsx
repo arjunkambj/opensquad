@@ -1,6 +1,6 @@
 /**
  * "Connect inbox to start sending" — the banner the Agent and Contacts
- * screens carry while the workspace cannot send (PLAN §5 "Inbox step is
+ * screens carry while the org cannot send (PLAN §5 "Inbox step is
  * skippable", §9.3 `sourcing_only`).
  *
  * It states the consequence rather than the setting: leads keep being found

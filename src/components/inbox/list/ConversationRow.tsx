@@ -16,7 +16,7 @@ import {
 } from "@/components/inbox/inbox-presentation"
 import { formatWaited } from "@/components/shared/presentation"
 import { cn } from "@/lib/utils"
-import type { InboxSearch } from "@/routes/_dashboard/_workspace/inbox"
+import type { InboxSearch } from "@/routes/_dashboard/_org/inbox"
 
 export function ConversationRow({
   row,

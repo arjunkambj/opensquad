@@ -26,21 +26,13 @@ import { BlocklistTable } from "@/components/settings/blocklist/BlocklistTable"
 import { RemoveBlockDialog } from "@/components/settings/blocklist/RemoveBlockDialog"
 import { useBlocklistWrites } from "@/components/settings/blocklist/use-blocklist-writes"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
-import { LoadingState, PermissionNote } from "@/components/states/states"
+import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { canEdit } from "@/lib/workspace-role"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 type Cursor = { at: number; id: Id<"suppressions"> }
 
-export function BlocklistTab({
-  workspaceId,
-  role,
-}: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
-}) {
+export function BlocklistTab({ orgId }: { orgId: Id<"orgs"> }) {
   const [kind, setKind] = useState<BlocklistKindFilter>("all")
   const [search, setSearch] = useState("")
   // The cursors of every page BEFORE the current one, so Back is a pop rather
@@ -52,14 +44,14 @@ export function BlocklistTab({
 
   const after = trail.at(-1)
   const result = useQuery(api.outreach.suppressions.page, {
-    workspaceId,
+    orgId,
     ...(kind === "all" ? {} : { kind }),
     ...(search.trim() === "" ? {} : { search: search.trim() }),
     ...(after === undefined ? {} : { after }),
   })
 
   const writes = useBlocklistWrites({
-    workspaceId,
+    orgId,
     onAdded: () => {
       setAdding(false)
       setTrail([])
@@ -70,7 +62,6 @@ export function BlocklistTab({
     },
   })
 
-  const editable = canEdit(role)
   const filtered = kind !== "all" || search.trim() !== ""
 
   return (
@@ -80,17 +71,15 @@ export function BlocklistTab({
         title="Blocklist"
         description="Addresses and domains your agent may never contact. Unsubscribes and bounces land here on their own."
         action={
-          editable ? (
-            <Button onClick={() => setAdding(true)} type="button">
-              <HugeiconsIcon
-                aria-hidden="true"
-                data-icon="inline-start"
-                icon={Add01Icon}
-                strokeWidth={2}
-              />
-              Add to blocklist
-            </Button>
-          ) : undefined
+          <Button onClick={() => setAdding(true)} type="button">
+            <HugeiconsIcon
+              aria-hidden="true"
+              data-icon="inline-start"
+              icon={Add01Icon}
+              strokeWidth={2}
+            />
+            Add to blocklist
+          </Button>
         }
       />
 
@@ -114,9 +103,7 @@ export function BlocklistTab({
             <LoadingState title="Loading the blocklist" />
           ) : result.entries.length === 0 ? (
             <BlocklistEmpty
-              canEdit={editable}
               filtered={filtered}
-              role={role}
               onAdd={() => setAdding(true)}
               onClearFilters={() => {
                 setSearch("")
@@ -126,7 +113,6 @@ export function BlocklistTab({
             />
           ) : (
             <BlocklistTable
-              canEdit={editable}
               entries={result.entries}
               onRemove={setPendingRemove}
               removing={writes.busy === "remove"}
@@ -140,9 +126,6 @@ export function BlocklistTab({
             </InfoBanner>
           ) : null}
 
-          {editable ? null : (
-            <PermissionNote role={role} action="add or remove entries" />
-          )}
         </CardContent>
 
         {result === undefined || result.matched === 0 ? null : (

@@ -3,13 +3,12 @@
  * selected section as a stack of cards.
  *
  * This is the frame and the gate, nothing more. It resolves the signed-in
- * user and the current workspace once — every tab needs both — and hands each
- * section the workspace id and the caller's role. The sections own their own
- * Convex reads and writes, because a tab that is not open must not be
- * subscribed to anything.
+ * user and the active organization once — every tab needs both — and hands
+ * each section the org id. The sections own their own Convex reads and
+ * writes, because a tab that is not open must not be subscribed to anything.
  *
- * Account is the one section that renders without a workspace: it is an
- * identity surface, and someone whose membership was revoked must still be
+ * Account is the one section that renders without an organization: it is an
+ * identity surface, and someone who has left every organization must still be
  * able to see who they are signed in as and sign out.
  */
 import { useUser } from "@hexclave/react"
@@ -29,15 +28,14 @@ import type { SettingsTab } from "@/components/settings/settings-model"
 import { UsageTab } from "@/components/settings/usage/UsageTab"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { EmptyState, LoadingState } from "@/components/states/states"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
-import type { WorkspaceRole } from "@/lib/workspace-role"
-import type { WorkspaceView } from "@/lib/workspace-view"
+import { useCurrentOrg } from "@/hooks/use-current-org"
+import type { OrgView } from "@/lib/org-view"
 
 export function SettingsPage() {
   const user = useUser()
   const search = useSearch({ from: "/_dashboard/settings" })
   const tab = search.tab ?? DEFAULT_SETTINGS_TAB
-  const current = useCurrentWorkspace()
+  const current = useCurrentOrg()
 
   // `useUser()` resolves asynchronously; a null under `_dashboard` is a
   // session the shell is still checking or redirecting — loading is the
@@ -55,52 +53,40 @@ export function SettingsPage() {
       <SettingsTabBar current={tab} />
       {tab === "account" ? (
         <AccountTab user={user} />
-      ) : current === undefined ? (
+      ) : current.status === "loading" ? (
         <LoadingState
           title="Loading your organization"
           description="Reading your company profile, sending policy and blocklist."
         />
-      ) : current === null ? (
+      ) : current.status !== "ready" ? (
         <EmptyState
           title="Nothing to configure yet"
           description="These settings appear once setup has run once. Finish setup and come back."
         />
       ) : (
-        <WorkspaceTab
-          tab={tab}
-          workspace={current.workspace}
-          role={current.role}
-        />
+        <OrgTab tab={tab} org={current.org} />
       )}
     </div>
   )
 }
 
-/** The workspace-scoped sections. Account is rendered by the page above. */
-function WorkspaceTab({
-  tab,
-  workspace,
-  role,
-}: {
-  tab: SettingsTab
-  workspace: WorkspaceView
-  role: WorkspaceRole
-}) {
+/** The org-scoped sections. Account is rendered by the page above. */
+function OrgTab({ tab, org }: { tab: SettingsTab; org: OrgView }) {
   switch (tab) {
     case "company":
-      return <CompanyTab workspaceId={workspace._id} role={role} />
+      return <CompanyTab orgId={org._id} />
     case "inbox":
       // The connect / verify / sync flow of PLAN §4, shared with onboarding
-      // dot 3; it does its own owner check, because the read is owner-guarded.
-      return <InboxTab workspaceId={workspace._id} />
+      // dot 3; it resolves the active organization itself before reading.
+      return <InboxTab orgId={org._id} />
     case "outreach":
-      return <OutreachTab workspaceId={workspace._id} role={role} />
+      return <OutreachTab orgId={org._id} />
     case "blocklist":
-      return <BlocklistTab workspaceId={workspace._id} role={role} />
+      return <BlocklistTab orgId={org._id} />
     case "sending":
-      return <SendingTab workspace={workspace} role={role} />
+      return <SendingTab org={org} />
     case "usage":
-      return <UsageTab workspaceId={workspace._id} />
+      return <UsageTab orgId={org._id} />
     case "account":
       return null
   }

@@ -35,14 +35,14 @@ import { useIntentId } from "@/lib/use-intent-id"
 const DURATIONS = [15, 30, 45, 60, 90] as const
 
 export function MarkAsBookedDialog({
-  workspaceId,
+  orgId,
   prospectId,
   conversationId,
   existingProposal,
   open,
   onOpenChange,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   prospectId: Id<"prospects">
   conversationId: Id<"conversations">
   /** The lead's live proposal, when it already has one. */
@@ -87,7 +87,7 @@ export function MarkAsBookedDialog({
       existingProposal !== null
         ? Promise.resolve(existingProposal)
         : propose({
-            workspaceId,
+            orgId,
             prospectId,
             conversationId,
             proposal: {
@@ -100,7 +100,7 @@ export function MarkAsBookedDialog({
     void ensureProposal
       .then((booking) =>
         confirm({
-          workspaceId,
+          orgId,
           bookingId: booking._id,
           expectedVersion: booking.version,
           startsAt,

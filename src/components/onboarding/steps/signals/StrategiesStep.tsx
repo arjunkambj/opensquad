@@ -33,11 +33,11 @@ import type { SignalsRunReason } from "@/components/onboarding/steps/signals/use
 import { EmptyState } from "@/components/states/states"
 
 export function StrategiesStep(props: OnboardingStepProps) {
-  const { workspaceId, progress, goNext, goBack, moving, moveError } = props
-  const overview = useQuery(api.agents.strategies.overview, { workspaceId })
+  const { orgId, progress, goNext, goBack, moving, moveError } = props
+  const overview = useQuery(api.agents.strategies.overview, { orgId })
   const setSelection = useMutation(api.agents.strategies.setSelection)
   const generation = useStrategyRecommendation(
-    workspaceId,
+    orgId,
     overview === undefined ? undefined : overview.generation,
   )
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -66,7 +66,7 @@ export function StrategiesStep(props: OnboardingStepProps) {
     setSaveError(null)
     void (async () => {
       try {
-        await setSelection({ workspaceId, strategyIds: next })
+        await setSelection({ orgId, strategyIds: next })
       } catch {
         setSaveError("We couldn't save that choice. Try it again.")
       }

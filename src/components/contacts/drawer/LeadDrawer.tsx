@@ -34,7 +34,7 @@ import { LeadFacts } from "./LeadFacts"
 import { LeadResearchPanel } from "./LeadResearchPanel"
 
 export function LeadDrawer({
-  workspaceId,
+  orgId,
   prospectId,
   busy,
   spend,
@@ -45,7 +45,7 @@ export function LeadDrawer({
   onGetEmail,
   onResearch,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   prospectId: Id<"prospects">
   busy: boolean
   spend: SpendContext
@@ -58,11 +58,11 @@ export function LeadDrawer({
 }) {
   const navigate = useNavigate()
   const detail = useQuery(api.leads.queries.getDetail, {
-    workspaceId,
+    orgId,
     prospectId,
   })
   const conversations = useQuery(api.inbox.conversations.listForProspect, {
-    workspaceId,
+    orgId,
     prospectId,
   })
 

@@ -42,7 +42,7 @@ export type OnboardingProgress = {
 
 /** Everything a step screen is given. One shape for all four dots. */
 export type OnboardingStepProps = {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   agent: Doc<"agents">
   progress: OnboardingProgress
   /** Save the move forward. The server refuses while this dot is unanswered. */
@@ -159,8 +159,8 @@ export function previousOnboardingStep(
 /* ------------------------------------------------------------------ */
 
 /**
- * Why the workspace could not be prepared. These are the typed refusals
- * `workspaces.ensureWorkspace` returns (PLAN §6 "Closing the ways in"); every
+ * Why the org could not be prepared. These are the typed refusals
+ * `orgs.ensureOrg` returns (PLAN §6 "Closing the ways in"); every
  * other failure is `unknown` and gets the retryable error state.
  */
 export type OnboardingEntryRefusal =
@@ -175,7 +175,7 @@ const ENTRY_REFUSALS = [
   "TRIAL_CAPACITY_REACHED",
 ] as const
 
-/** Read the backend's code off a failed `ensureWorkspace` call. */
+/** Read the backend's code off a failed `ensureOrg` call. */
 export function entryRefusalOf(error: unknown): OnboardingEntryRefusal {
   if (error instanceof ConvexError) {
     const data: unknown = error.data

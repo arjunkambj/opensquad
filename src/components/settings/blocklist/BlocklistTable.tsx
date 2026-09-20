@@ -26,7 +26,6 @@ import {
 
 export type BlocklistTableProps = {
   entries: readonly Doc<"suppressions">[]
-  canEdit: boolean
   /** A removal is in flight; the confirm dialog holds which row it is. */
   removing: boolean
   onRemove: (entry: Doc<"suppressions">) => void
@@ -34,7 +33,6 @@ export type BlocklistTableProps = {
 
 export function BlocklistTable({
   entries,
-  canEdit,
   removing,
   onRemove,
 }: BlocklistTableProps) {
@@ -46,11 +44,9 @@ export function BlocklistTable({
           <TableHead>Scope</TableHead>
           <TableHead>Why</TableHead>
           <TableHead>Added</TableHead>
-          {canEdit ? (
-            <TableHead>
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          ) : null}
+          <TableHead>
+            <span className="sr-only">Actions</span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -68,25 +64,23 @@ export function BlocklistTable({
             <TableCell className="whitespace-nowrap text-muted-foreground">
               {formatInstant(entry.createdAt)}
             </TableCell>
-            {canEdit ? (
-              <TableCell className="text-right">
-                <Button
-                  aria-label={`Remove ${entry.normalizedValue} from the blocklist`}
-                  disabled={removing}
-                  onClick={() => onRemove(entry)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  <HugeiconsIcon
-                    aria-hidden="true"
-                    icon={Delete02Icon}
-                    strokeWidth={2}
-                  />
-                </Button>
-              </TableCell>
-            ) : null}
+            <TableCell className="text-right">
+              <Button
+                aria-label={`Remove ${entry.normalizedValue} from the blocklist`}
+                disabled={removing}
+                onClick={() => onRemove(entry)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  icon={Delete02Icon}
+                  strokeWidth={2}
+                />
+              </Button>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

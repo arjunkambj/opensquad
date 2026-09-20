@@ -21,16 +21,16 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SquadsRouteImport } from './routes/squads'
 import { Route as TourRouteImport } from './routes/tour'
 import { Route as DashboardSplatRouteImport } from './routes/_dashboard/$'
-import { Route as DashboardWorkspaceRouteImport } from './routes/_dashboard/_workspace'
+import { Route as DashboardOrgRouteImport } from './routes/_dashboard/_org'
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
 import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
 import { Route as HandlerSplatRouteImport } from './routes/handler.$'
-import { Route as DashboardWorkspaceAgentRouteImport } from './routes/_dashboard/_workspace/agent'
-import { Route as DashboardWorkspaceContactsRouteImport } from './routes/_dashboard/_workspace/contacts'
-import { Route as DashboardWorkspaceDashboardRouteImport } from './routes/_dashboard/_workspace/dashboard'
-import { Route as DashboardWorkspaceInboxRouteImport } from './routes/_dashboard/_workspace/inbox'
-import { Route as DashboardWorkspaceInboxIndexRouteImport } from './routes/_dashboard/_workspace/inbox/index'
-import { Route as DashboardWorkspaceInboxConversationIdRouteImport } from './routes/_dashboard/_workspace/inbox/$conversationId'
+import { Route as DashboardOrgAgentRouteImport } from './routes/_dashboard/_org/agent'
+import { Route as DashboardOrgContactsRouteImport } from './routes/_dashboard/_org/contacts'
+import { Route as DashboardOrgDashboardRouteImport } from './routes/_dashboard/_org/dashboard'
+import { Route as DashboardOrgInboxRouteImport } from './routes/_dashboard/_org/inbox'
+import { Route as DashboardOrgInboxIndexRouteImport } from './routes/_dashboard/_org/inbox/index'
+import { Route as DashboardOrgInboxConversationIdRouteImport } from './routes/_dashboard/_org/inbox/$conversationId'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/_dashboard',
@@ -90,8 +90,8 @@ const DashboardSplatRoute = DashboardSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardWorkspaceRoute = DashboardWorkspaceRouteImport.update({
-  id: '/_workspace',
+const DashboardOrgRoute = DashboardOrgRouteImport.update({
+  id: '/_org',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
@@ -109,39 +109,36 @@ const HandlerSplatRoute = HandlerSplatRouteImport.update({
   path: '/handler/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardWorkspaceAgentRoute = DashboardWorkspaceAgentRouteImport.update({
+const DashboardOrgAgentRoute = DashboardOrgAgentRouteImport.update({
   id: '/agent',
   path: '/agent',
-  getParentRoute: () => DashboardWorkspaceRoute,
+  getParentRoute: () => DashboardOrgRoute,
 } as any)
-const DashboardWorkspaceContactsRoute =
-  DashboardWorkspaceContactsRouteImport.update({
-    id: '/contacts',
-    path: '/contacts',
-    getParentRoute: () => DashboardWorkspaceRoute,
-  } as any)
-const DashboardWorkspaceDashboardRoute =
-  DashboardWorkspaceDashboardRouteImport.update({
-    id: '/dashboard',
-    path: '/dashboard',
-    getParentRoute: () => DashboardWorkspaceRoute,
-  } as any)
-const DashboardWorkspaceInboxRoute = DashboardWorkspaceInboxRouteImport.update({
+const DashboardOrgContactsRoute = DashboardOrgContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
+const DashboardOrgDashboardRoute = DashboardOrgDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
+const DashboardOrgInboxRoute = DashboardOrgInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
-  getParentRoute: () => DashboardWorkspaceRoute,
+  getParentRoute: () => DashboardOrgRoute,
 } as any)
-const DashboardWorkspaceInboxIndexRoute =
-  DashboardWorkspaceInboxIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => DashboardWorkspaceInboxRoute,
-  } as any)
-const DashboardWorkspaceInboxConversationIdRoute =
-  DashboardWorkspaceInboxConversationIdRouteImport.update({
+const DashboardOrgInboxIndexRoute = DashboardOrgInboxIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardOrgInboxRoute,
+} as any)
+const DashboardOrgInboxConversationIdRoute =
+  DashboardOrgInboxConversationIdRouteImport.update({
     id: '/$conversationId',
     path: '/$conversationId',
-    getParentRoute: () => DashboardWorkspaceInboxRoute,
+    getParentRoute: () => DashboardOrgInboxRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -158,12 +155,12 @@ export interface FileRoutesByFullPath {
   '/$': typeof DashboardSplatRoute
   '/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
-  '/agent': typeof DashboardWorkspaceAgentRoute
-  '/contacts': typeof DashboardWorkspaceContactsRoute
-  '/dashboard': typeof DashboardWorkspaceDashboardRoute
-  '/inbox': typeof DashboardWorkspaceInboxRouteWithChildren
-  '/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
-  '/inbox/': typeof DashboardWorkspaceInboxIndexRoute
+  '/agent': typeof DashboardOrgAgentRoute
+  '/contacts': typeof DashboardOrgContactsRoute
+  '/dashboard': typeof DashboardOrgDashboardRoute
+  '/inbox': typeof DashboardOrgInboxRouteWithChildren
+  '/inbox/$conversationId': typeof DashboardOrgInboxConversationIdRoute
+  '/inbox/': typeof DashboardOrgInboxIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
@@ -179,11 +176,11 @@ export interface FileRoutesByTo {
   '/$': typeof DashboardSplatRoute
   '/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
-  '/agent': typeof DashboardWorkspaceAgentRoute
-  '/contacts': typeof DashboardWorkspaceContactsRoute
-  '/dashboard': typeof DashboardWorkspaceDashboardRoute
-  '/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
-  '/inbox': typeof DashboardWorkspaceInboxIndexRoute
+  '/agent': typeof DashboardOrgAgentRoute
+  '/contacts': typeof DashboardOrgContactsRoute
+  '/dashboard': typeof DashboardOrgDashboardRoute
+  '/inbox/$conversationId': typeof DashboardOrgInboxConversationIdRoute
+  '/inbox': typeof DashboardOrgInboxIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -199,16 +196,16 @@ export interface FileRoutesById {
   '/squads': typeof SquadsRoute
   '/tour': typeof TourRoute
   '/_dashboard/$': typeof DashboardSplatRoute
-  '/_dashboard/_workspace': typeof DashboardWorkspaceRouteWithChildren
+  '/_dashboard/_org': typeof DashboardOrgRouteWithChildren
   '/_dashboard/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
   '/_marketing/': typeof MarketingIndexRoute
-  '/_dashboard/_workspace/agent': typeof DashboardWorkspaceAgentRoute
-  '/_dashboard/_workspace/contacts': typeof DashboardWorkspaceContactsRoute
-  '/_dashboard/_workspace/dashboard': typeof DashboardWorkspaceDashboardRoute
-  '/_dashboard/_workspace/inbox': typeof DashboardWorkspaceInboxRouteWithChildren
-  '/_dashboard/_workspace/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
-  '/_dashboard/_workspace/inbox/': typeof DashboardWorkspaceInboxIndexRoute
+  '/_dashboard/_org/agent': typeof DashboardOrgAgentRoute
+  '/_dashboard/_org/contacts': typeof DashboardOrgContactsRoute
+  '/_dashboard/_org/dashboard': typeof DashboardOrgDashboardRoute
+  '/_dashboard/_org/inbox': typeof DashboardOrgInboxRouteWithChildren
+  '/_dashboard/_org/inbox/$conversationId': typeof DashboardOrgInboxConversationIdRoute
+  '/_dashboard/_org/inbox/': typeof DashboardOrgInboxIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -266,16 +263,16 @@ export interface FileRouteTypes {
     | '/squads'
     | '/tour'
     | '/_dashboard/$'
-    | '/_dashboard/_workspace'
+    | '/_dashboard/_org'
     | '/_dashboard/settings'
     | '/handler/$'
     | '/_marketing/'
-    | '/_dashboard/_workspace/agent'
-    | '/_dashboard/_workspace/contacts'
-    | '/_dashboard/_workspace/dashboard'
-    | '/_dashboard/_workspace/inbox'
-    | '/_dashboard/_workspace/inbox/$conversationId'
-    | '/_dashboard/_workspace/inbox/'
+    | '/_dashboard/_org/agent'
+    | '/_dashboard/_org/contacts'
+    | '/_dashboard/_org/dashboard'
+    | '/_dashboard/_org/inbox'
+    | '/_dashboard/_org/inbox/$conversationId'
+    | '/_dashboard/_org/inbox/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -379,11 +376,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSplatRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/_dashboard/_workspace': {
-      id: '/_dashboard/_workspace'
+    '/_dashboard/_org': {
+      id: '/_dashboard/_org'
       path: ''
       fullPath: '/'
-      preLoaderRoute: typeof DashboardWorkspaceRouteImport
+      preLoaderRoute: typeof DashboardOrgRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/_dashboard/settings': {
@@ -407,94 +404,91 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HandlerSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_dashboard/_workspace/agent': {
-      id: '/_dashboard/_workspace/agent'
+    '/_dashboard/_org/agent': {
+      id: '/_dashboard/_org/agent'
       path: '/agent'
       fullPath: '/agent'
-      preLoaderRoute: typeof DashboardWorkspaceAgentRouteImport
-      parentRoute: typeof DashboardWorkspaceRoute
+      preLoaderRoute: typeof DashboardOrgAgentRouteImport
+      parentRoute: typeof DashboardOrgRoute
     }
-    '/_dashboard/_workspace/contacts': {
-      id: '/_dashboard/_workspace/contacts'
+    '/_dashboard/_org/contacts': {
+      id: '/_dashboard/_org/contacts'
       path: '/contacts'
       fullPath: '/contacts'
-      preLoaderRoute: typeof DashboardWorkspaceContactsRouteImport
-      parentRoute: typeof DashboardWorkspaceRoute
+      preLoaderRoute: typeof DashboardOrgContactsRouteImport
+      parentRoute: typeof DashboardOrgRoute
     }
-    '/_dashboard/_workspace/dashboard': {
-      id: '/_dashboard/_workspace/dashboard'
+    '/_dashboard/_org/dashboard': {
+      id: '/_dashboard/_org/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardWorkspaceDashboardRouteImport
-      parentRoute: typeof DashboardWorkspaceRoute
+      preLoaderRoute: typeof DashboardOrgDashboardRouteImport
+      parentRoute: typeof DashboardOrgRoute
     }
-    '/_dashboard/_workspace/inbox': {
-      id: '/_dashboard/_workspace/inbox'
+    '/_dashboard/_org/inbox': {
+      id: '/_dashboard/_org/inbox'
       path: '/inbox'
       fullPath: '/inbox'
-      preLoaderRoute: typeof DashboardWorkspaceInboxRouteImport
-      parentRoute: typeof DashboardWorkspaceRoute
+      preLoaderRoute: typeof DashboardOrgInboxRouteImport
+      parentRoute: typeof DashboardOrgRoute
     }
-    '/_dashboard/_workspace/inbox/': {
-      id: '/_dashboard/_workspace/inbox/'
+    '/_dashboard/_org/inbox/': {
+      id: '/_dashboard/_org/inbox/'
       path: '/'
       fullPath: '/inbox/'
-      preLoaderRoute: typeof DashboardWorkspaceInboxIndexRouteImport
-      parentRoute: typeof DashboardWorkspaceInboxRoute
+      preLoaderRoute: typeof DashboardOrgInboxIndexRouteImport
+      parentRoute: typeof DashboardOrgInboxRoute
     }
-    '/_dashboard/_workspace/inbox/$conversationId': {
-      id: '/_dashboard/_workspace/inbox/$conversationId'
+    '/_dashboard/_org/inbox/$conversationId': {
+      id: '/_dashboard/_org/inbox/$conversationId'
       path: '/$conversationId'
       fullPath: '/inbox/$conversationId'
-      preLoaderRoute: typeof DashboardWorkspaceInboxConversationIdRouteImport
-      parentRoute: typeof DashboardWorkspaceInboxRoute
+      preLoaderRoute: typeof DashboardOrgInboxConversationIdRouteImport
+      parentRoute: typeof DashboardOrgInboxRoute
     }
   }
 }
 
-interface DashboardWorkspaceInboxRouteChildren {
-  DashboardWorkspaceInboxConversationIdRoute: typeof DashboardWorkspaceInboxConversationIdRoute
-  DashboardWorkspaceInboxIndexRoute: typeof DashboardWorkspaceInboxIndexRoute
+interface DashboardOrgInboxRouteChildren {
+  DashboardOrgInboxConversationIdRoute: typeof DashboardOrgInboxConversationIdRoute
+  DashboardOrgInboxIndexRoute: typeof DashboardOrgInboxIndexRoute
 }
 
-const DashboardWorkspaceInboxRouteChildren: DashboardWorkspaceInboxRouteChildren =
-  {
-    DashboardWorkspaceInboxConversationIdRoute:
-      DashboardWorkspaceInboxConversationIdRoute,
-    DashboardWorkspaceInboxIndexRoute: DashboardWorkspaceInboxIndexRoute,
-  }
-
-const DashboardWorkspaceInboxRouteWithChildren =
-  DashboardWorkspaceInboxRoute._addFileChildren(
-    DashboardWorkspaceInboxRouteChildren,
-  )
-
-interface DashboardWorkspaceRouteChildren {
-  DashboardWorkspaceAgentRoute: typeof DashboardWorkspaceAgentRoute
-  DashboardWorkspaceContactsRoute: typeof DashboardWorkspaceContactsRoute
-  DashboardWorkspaceDashboardRoute: typeof DashboardWorkspaceDashboardRoute
-  DashboardWorkspaceInboxRoute: typeof DashboardWorkspaceInboxRouteWithChildren
+const DashboardOrgInboxRouteChildren: DashboardOrgInboxRouteChildren = {
+  DashboardOrgInboxConversationIdRoute: DashboardOrgInboxConversationIdRoute,
+  DashboardOrgInboxIndexRoute: DashboardOrgInboxIndexRoute,
 }
 
-const DashboardWorkspaceRouteChildren: DashboardWorkspaceRouteChildren = {
-  DashboardWorkspaceAgentRoute: DashboardWorkspaceAgentRoute,
-  DashboardWorkspaceContactsRoute: DashboardWorkspaceContactsRoute,
-  DashboardWorkspaceDashboardRoute: DashboardWorkspaceDashboardRoute,
-  DashboardWorkspaceInboxRoute: DashboardWorkspaceInboxRouteWithChildren,
+const DashboardOrgInboxRouteWithChildren =
+  DashboardOrgInboxRoute._addFileChildren(DashboardOrgInboxRouteChildren)
+
+interface DashboardOrgRouteChildren {
+  DashboardOrgAgentRoute: typeof DashboardOrgAgentRoute
+  DashboardOrgContactsRoute: typeof DashboardOrgContactsRoute
+  DashboardOrgDashboardRoute: typeof DashboardOrgDashboardRoute
+  DashboardOrgInboxRoute: typeof DashboardOrgInboxRouteWithChildren
 }
 
-const DashboardWorkspaceRouteWithChildren =
-  DashboardWorkspaceRoute._addFileChildren(DashboardWorkspaceRouteChildren)
+const DashboardOrgRouteChildren: DashboardOrgRouteChildren = {
+  DashboardOrgAgentRoute: DashboardOrgAgentRoute,
+  DashboardOrgContactsRoute: DashboardOrgContactsRoute,
+  DashboardOrgDashboardRoute: DashboardOrgDashboardRoute,
+  DashboardOrgInboxRoute: DashboardOrgInboxRouteWithChildren,
+}
+
+const DashboardOrgRouteWithChildren = DashboardOrgRoute._addFileChildren(
+  DashboardOrgRouteChildren,
+)
 
 interface DashboardRouteChildren {
   DashboardSplatRoute: typeof DashboardSplatRoute
-  DashboardWorkspaceRoute: typeof DashboardWorkspaceRouteWithChildren
+  DashboardOrgRoute: typeof DashboardOrgRouteWithChildren
   DashboardSettingsRoute: typeof DashboardSettingsRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardSplatRoute: DashboardSplatRoute,
-  DashboardWorkspaceRoute: DashboardWorkspaceRouteWithChildren,
+  DashboardOrgRoute: DashboardOrgRouteWithChildren,
   DashboardSettingsRoute: DashboardSettingsRoute,
 }
 

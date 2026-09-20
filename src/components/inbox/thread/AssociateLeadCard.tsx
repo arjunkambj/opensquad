@@ -1,5 +1,5 @@
 /**
- * Link a thread that matched no lead to one already in this workspace.
+ * Link a thread that matched no lead to one already in this org.
  *
  * Human-only by contract: the mutation takes ids from an authenticated
  * editor and refuses an agent the lead does not belong to, so the picker
@@ -15,8 +15,7 @@ import { DetailRow } from "@/components/shared/presentation"
 import {
   FormError,
   LoadingState,
-  PermissionNote,
-} from "@/components/states/states"
+  } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -31,28 +30,23 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 import { useRequestIntents } from "@/lib/use-request-intents"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 export function AssociateLeadCard({
-  workspaceId,
-  role,
+  orgId,
   conversation,
   expectedContextVersion,
 }: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
+  orgId: Id<"orgs">
   conversation: Doc<"conversations">
   expectedContextVersion: number
 }) {
-  const leads = useQuery(api.leads.queries.list, { workspaceId, limit: 50 })
+  const leads = useQuery(api.leads.queries.list, { orgId, limit: 50 })
   const associate = useMutation(api.inbox.conversationResume.associateProspect)
   const intentId = useRequestIntents()
 
   const [prospectId, setProspectId] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const canAct = role === "owner" || role === "operator"
 
   const submit = () => {
     const lead = leads?.items.find((item) => item._id === prospectId)
@@ -62,7 +56,7 @@ export function AssociateLeadCard({
     setPending(true)
     setError(null)
     void associate({
-      workspaceId,
+      orgId,
       conversationId: conversation._id,
       expectedContextVersion,
       prospectId: lead._id,
@@ -101,8 +95,6 @@ export function AssociateLeadCard({
         )}
         {leads === undefined ? (
           <LoadingState title="Loading leads" />
-        ) : !canAct ? (
-          <PermissionNote role={role} action="link this thread to a lead" />
         ) : leads.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             This organization has no leads to link yet. The thread stays here

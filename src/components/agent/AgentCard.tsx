@@ -4,7 +4,7 @@
  *
  * The reference's "Open" button is absent — this page IS the agent, so there
  * is nowhere for it to lead — and so is its "n / m running agents" counter: a
- * workspace runs exactly one agent (PLAN §2).
+ * org runs exactly one agent (PLAN §2).
  */
 import { MoreHorizontalCircle01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { WorkspaceView } from "@/lib/workspace-view"
+import type { OrgView } from "@/lib/org-view"
 import { AgentFunnelRow } from "./AgentFunnelRow"
 import { AgentModeMenu } from "./AgentModeMenu"
 import { AgentNameField } from "./AgentNameField"
@@ -29,14 +29,12 @@ import type { AgentDoc, AgentFunnel } from "./agent-model"
 
 export function AgentCard({
   agent,
-  workspace,
+  org,
   funnel,
-  canEdit,
 }: {
   agent: AgentDoc
-  workspace: WorkspaceView
+  org: OrgView
   funnel: AgentFunnel | undefined
-  canEdit: boolean
 }) {
   const rename = useMutation(api.agents.settings.rename)
   const setMode = useMutation(api.agents.settingsMode.setMode)
@@ -48,7 +46,7 @@ export function AgentCard({
     setSaving(true)
     setError(null)
     try {
-      await rename({ workspaceId: agent.workspaceId, agentId: agent._id, name })
+      await rename({ orgId: agent.orgId, agentId: agent._id, name })
       setEditingName(false)
     } catch (cause) {
       setError(agentErrorCopy(cause, "Could not rename the agent."))
@@ -63,7 +61,7 @@ export function AgentCard({
       // Pausing needs no consent and can never be refused for a missing
       // inbox, so the typed refusal is only surfaced defensively.
       const result = await setMode({
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: agent._id,
         mode: "paused",
       })
@@ -88,7 +86,6 @@ export function AgentCard({
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <AgentNameField
             name={agent.name}
-            canEdit={canEdit}
             editing={editingName}
             saving={saving}
             onStartEditing={() => setEditingName(true)}
@@ -97,34 +94,31 @@ export function AgentCard({
           />
           <AgentModeMenu
             agent={agent}
-            dailySendLimit={workspace.dailySendLimit}
-            canEdit={canEdit}
+            dailySendLimit={org.dailySendLimit}
           />
         </div>
-        {canEdit ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Agent actions"
-              render={<Button variant="ghost" size="icon-sm" />}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Agent actions"
+            render={<Button variant="ghost" size="icon-sm" />}
+          >
+            <HugeiconsIcon
+              icon={MoreHorizontalCircle01Icon}
+              strokeWidth={2}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => setEditingName(true)}>
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={agent.mode === "paused"}
+              onClick={() => void pause()}
             >
-              <HugeiconsIcon
-                icon={MoreHorizontalCircle01Icon}
-                strokeWidth={2}
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setEditingName(true)}>
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={agent.mode === "paused"}
-                onClick={() => void pause()}
-              >
-                Pause
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+              Pause
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3">
@@ -140,11 +134,11 @@ export function AgentCard({
 
       <CardFooter className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-4 text-xs text-muted-foreground">
         <span>
-          {workspace.inboxRef === undefined
+          {org.inboxRef === undefined
             ? "No sending inbox connected"
-            : `Sends from ${workspace.inboxRef}`}
+            : `Sends from ${org.inboxRef}`}
         </span>
-        <span>Created {formatDay(agent.createdAt, workspace.timezone)}</span>
+        <span>Created {formatDay(agent.createdAt, org.timezone)}</span>
       </CardFooter>
     </Card>
   )

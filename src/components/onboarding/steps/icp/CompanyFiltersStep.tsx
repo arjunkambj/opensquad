@@ -27,9 +27,9 @@ function chips(values: readonly string[]) {
 }
 
 export function CompanyFiltersStep(props: OnboardingStepProps) {
-  const draft = useIcpDraft(props.workspaceId, props.agent)
+  const draft = useIcpDraft(props.orgId, props.agent)
   const options = useQuery(api.agents.icp.options, {
-    workspaceId: props.workspaceId,
+    orgId: props.orgId,
   })
   const icp = draft.draft
 

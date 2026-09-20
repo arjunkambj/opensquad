@@ -41,8 +41,8 @@ export function LeadDrawerActions({
 }) {
   const emailReason = emailDisabledReason(lead, prices.email, spend)
   const researchReason = researchDisabledReason(lead, prices.research, spend)
-  const approveReason = decisionDisabledReason(lead, "approved", spend)
-  const rejectReason = decisionDisabledReason(lead, "rejected", spend)
+  const approveReason = decisionDisabledReason(lead, "approved")
+  const rejectReason = decisionDisabledReason(lead, "rejected")
   const parked = lead.stage === "needs_attention"
 
   return (

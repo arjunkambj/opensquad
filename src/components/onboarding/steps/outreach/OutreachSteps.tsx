@@ -13,7 +13,7 @@ function stayHere(): void {}
 export function OutreachInboxStep(props: OnboardingStepProps) {
   return (
     <ConnectInboxStep
-      workspaceId={props.workspaceId}
+      orgId={props.orgId}
       agent={props.agent}
       goNext={props.goNext}
       goBack={props.goBack ?? stayHere}
@@ -24,7 +24,7 @@ export function OutreachInboxStep(props: OnboardingStepProps) {
 export function OutreachGoalsStep(props: OnboardingStepProps) {
   return (
     <GoalsStep
-      workspaceId={props.workspaceId}
+      orgId={props.orgId}
       agent={props.agent}
       goNext={props.goNext}
       goBack={props.goBack ?? stayHere}

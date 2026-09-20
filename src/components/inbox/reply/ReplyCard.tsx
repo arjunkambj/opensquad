@@ -16,7 +16,6 @@ import { DraftPreview } from "@/components/inbox/reply/DraftPreview"
 import { ReplyActions } from "@/components/inbox/reply/ReplyActions"
 import { SendStatus } from "@/components/inbox/reply/SendStatus"
 import { sendBlockCopy } from "@/components/inbox/reply/send-block-copy"
-import { PermissionNote } from "@/components/states/states"
 import {
   Card,
   CardContent,
@@ -24,29 +23,26 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 export function ReplyCard({
-  workspaceId,
-  role,
+  orgId,
   conversation,
 }: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
+  orgId: Id<"orgs">
   conversation: Doc<"conversations">
 }) {
   const draftId = conversation.currentDraftId
   const draft = useQuery(
     api.outreach.drafts.get,
-    draftId === undefined ? "skip" : { workspaceId, draftId },
+    draftId === undefined ? "skip" : { orgId, draftId },
   )
   const verdicts = useQuery(
     api.outreach.approvals.listForDraft,
-    draftId === undefined ? "skip" : { workspaceId, draftId },
+    draftId === undefined ? "skip" : { orgId, draftId },
   )
   const preflight = useQuery(
     api.outreach.sendPreflight.preflight,
-    draftId === undefined ? "skip" : { workspaceId, draftId },
+    draftId === undefined ? "skip" : { orgId, draftId },
   )
 
   if (draftId === undefined) {
@@ -76,8 +72,7 @@ export function ReplyCard({
 
   return (
     <LoadedReply
-      workspaceId={workspaceId}
-      role={role}
+      orgId={orgId}
       draft={draft}
       verdicts={verdicts}
       preflight={preflight}
@@ -86,19 +81,16 @@ export function ReplyCard({
 }
 
 function LoadedReply({
-  workspaceId,
-  role,
+  orgId,
   draft,
   verdicts,
   preflight,
 }: {
-  workspaceId: Id<"workspaces">
-  role: WorkspaceRole
+  orgId: Id<"orgs">
   draft: Doc<"drafts">
   verdicts: Doc<"approvals">[]
   preflight: FunctionReturnType<typeof api.outreach.sendPreflight.preflight>
 }) {
-  const canAct = role === "owner" || role === "operator"
   const approved = verdicts.some((verdict) => verdict.decision === "approved")
   const changesAsked =
     !approved && verdicts.some((verdict) => verdict.decision === "rejected")
@@ -136,21 +128,12 @@ function LoadedReply({
           </p>
         ) : null}
 
-        {canAct ? (
-          <ReplyActions
-            workspaceId={workspaceId}
-            draft={draft}
-            approved={approved}
-          />
-        ) : (
-          <PermissionNote role={role} action="approve or edit this reply" />
-        )}
+        <ReplyActions orgId={orgId} draft={draft} approved={approved} />
 
         <SendStatus
-          workspaceId={workspaceId}
+          orgId={orgId}
           draftId={draft._id}
           attempts={preflight.attempts}
-          canAct={canAct}
         />
       </CardContent>
     </Card>

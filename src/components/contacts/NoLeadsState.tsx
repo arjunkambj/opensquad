@@ -1,7 +1,7 @@
 /**
  * The empty table, which is never just an empty table.
  *
- * A workspace with no contacts has a reason, and the reason is actionable:
+ * An org with no contacts has a reason, and the reason is actionable:
  * the agent has not run yet, the run is still going, or the signals it ran
  * returned nothing — in which case this names them, with the matches each one
  * claimed, and links to where they can be changed. "No leads yet" on its own

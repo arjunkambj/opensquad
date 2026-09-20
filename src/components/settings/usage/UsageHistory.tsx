@@ -50,14 +50,14 @@ const OUTCOME_CLASS: Record<UsageOutcome, string> = {
 }
 
 export function UsageHistory({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
 }) {
   const [trail, setTrail] = useState<number[]>([])
   const before = trail.at(-1)
   const result = useQuery(api.billing.queries.history, {
-    workspaceId,
+    orgId,
     ...(before === undefined ? {} : { before }),
   })
 

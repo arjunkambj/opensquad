@@ -7,7 +7,7 @@
  * wording and has them rewritten on the next pass. That is not something to
  * do per character.
  *
- * Empty means the workspace default from Settings → Outreach applies, which
+ * Empty means the org default from Settings → Outreach applies, which
  * the card says rather than leaving the user to discover.
  */
 import { useMutation } from "convex/react"
@@ -15,7 +15,7 @@ import { useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { AGENT_INSTRUCTIONS_MAX_LENGTH } from "../../../convex/lib/validators"
 import { api } from "../../../convex/_generated/api"
-import { FormError, PermissionNote } from "@/components/states/states"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -28,18 +28,10 @@ import { Field, FieldDescription } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import type { WorkspaceRole } from "@/lib/workspace-role"
-import { canEdit as roleCanEdit } from "@/lib/workspace-role"
 import { agentErrorCopy } from "./agent-model"
 import type { AgentDoc } from "./agent-model"
 
-export function InstructionsCard({
-  agent,
-  role,
-}: {
-  agent: AgentDoc
-  role: WorkspaceRole
-}) {
+export function InstructionsCard({ agent }: { agent: AgentDoc }) {
   const setInstructions = useMutation(api.agents.settings.setInstructions)
   const stored = agent.instructions ?? ""
   const [draft, setDraft] = useState(stored)
@@ -54,7 +46,6 @@ export function InstructionsCard({
     setDraft(stored)
   }
 
-  const editable = roleCanEdit(role)
   const dirty = draft !== stored
 
   const save = async () => {
@@ -62,7 +53,7 @@ export function InstructionsCard({
     setError(null)
     try {
       await setInstructions({
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: agent._id,
         instructions: draft,
       })
@@ -95,7 +86,7 @@ export function InstructionsCard({
             aria-label="Agent instructions"
             rows={6}
             maxLength={AGENT_INSTRUCTIONS_MAX_LENGTH}
-            disabled={!editable || saving}
+            disabled={saving}
             value={draft}
             placeholder="Mention that we integrate with their CRM. Never promise a discount."
             onChange={(event) => setDraft(event.target.value)}
@@ -109,16 +100,16 @@ export function InstructionsCard({
           </FieldDescription>
         </Field>
         <FormError message={error} />
-        {editable ? (
-          <div className="flex justify-end">
-            <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
-              {saving ? <Spinner data-icon="inline-start" /> : null}
-              Save instructions
-            </Button>
-          </div>
-        ) : (
-          <PermissionNote role={role} action="change what the agent says" />
-        )}
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            disabled={!dirty || saving}
+            onClick={() => void save()}
+          >
+            {saving ? <Spinner data-icon="inline-start" /> : null}
+            Save instructions
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

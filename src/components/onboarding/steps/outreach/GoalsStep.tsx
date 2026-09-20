@@ -30,12 +30,12 @@ import { OutreachStepShell } from "./OutreachStepShell"
 const PAIN_POINTS_MAX_LENGTH = 2_000
 
 export function GoalsStep({
-  workspaceId,
+  orgId,
   agent,
   goNext,
   goBack,
 }: OutreachStepProps) {
-  const profile = useQuery(api.company.queries.get, { workspaceId })
+  const profile = useQuery(api.company.queries.get, { orgId })
   const save = useMutation(api.agents.outreachGoals.save)
 
   const [painPoints, setPainPoints] = useState<string | null>(null)
@@ -52,7 +52,7 @@ export function GoalsStep({
     setSaving(true)
     setError(null)
     try {
-      await save({ workspaceId, goal, tone, painPoints: painPointsValue })
+      await save({ orgId, goal, tone, painPoints: painPointsValue })
       goNext()
     } catch (cause) {
       setError(

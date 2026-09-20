@@ -55,8 +55,8 @@ export function ContactRow({
   const name = personName(lead)
   const emailReason = emailDisabledReason(lead, prices.email, spend)
   const researchReason = researchDisabledReason(lead, prices.research, spend)
-  const approveReason = decisionDisabledReason(lead, "approved", spend)
-  const rejectReason = decisionDisabledReason(lead, "rejected", spend)
+  const approveReason = decisionDisabledReason(lead, "approved")
+  const rejectReason = decisionDisabledReason(lead, "rejected")
 
   return (
     <TableRow data-state={selected ? "selected" : undefined}>

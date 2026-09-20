@@ -6,6 +6,6 @@ import { InboxStartPane } from "@/components/inbox/InboxStartPane"
  * layout needs an index child; what it shows depends on whether an inbox is
  * connected yet, which `InboxStartPane` reads.
  */
-export const Route = createFileRoute("/_dashboard/_workspace/inbox/")({
+export const Route = createFileRoute("/_dashboard/_org/inbox/")({
   component: InboxStartPane,
 })

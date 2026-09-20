@@ -1,10 +1,10 @@
 /**
- * `/agent` — the one sales agent a workspace runs: what it looks for, how
+ * `/agent` — the one sales agent an organization runs: what it looks for, how
  * much it may do on its own, and what it has been up to (reference 21, plus
  * reference 25's per-signal table).
  *
- * There is no agent list and no "Create an agent": a workspace has exactly
- * one agent, created with the workspace and filled in by setup, so the page
+ * There is no agent list and no "Create an agent": an organization has
+ * exactly one agent, created with its row and filled in by setup, so the page
  * opens straight on it (PLAN §2).
  *
  * This container owns every Convex read on the screen; each card below owns
@@ -19,8 +19,7 @@ import { InboxConnectionBanner } from "@/components/inbox-connection/InboxConnec
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { EmptyState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
-import { canEdit as roleCanEdit } from "@/lib/workspace-role"
+import { useCurrentOrg } from "@/hooks/use-current-org"
 import { AgentCard } from "./AgentCard"
 import { AgentRunPanel } from "./AgentRunPanel"
 import { InstructionsCard } from "./InstructionsCard"
@@ -30,10 +29,10 @@ import { SignalsCard } from "./SignalsCard"
 import { agentFunnel } from "./agent-model"
 
 export function AgentPage() {
-  const current = useCurrentWorkspace()
-  const workspaceId =
-    current !== undefined && current !== null ? current.workspace._id : undefined
-  const skip = workspaceId === undefined ? "skip" : { workspaceId }
+  const current = useCurrentOrg()
+  const org = current.status === "ready" ? current.org : undefined
+  const orgId = org?._id
+  const skip = orgId === undefined ? "skip" : { orgId }
 
   const agent = useQuery(api.agents.queries.get, skip)
   const runState = useQuery(api.leads.counts.runState, skip)
@@ -47,7 +46,7 @@ export function AgentPage() {
     />
   )
 
-  if (current === undefined || agent === undefined) {
+  if (current.status === "loading" || agent === undefined) {
     return (
       <div className="flex flex-col gap-6">
         {header}
@@ -59,10 +58,10 @@ export function AgentPage() {
     )
   }
 
-  // `null` cannot normally reach here — the `_workspace` gate redirects a
-  // membership-less user to setup — but an honest state is cheaper than an
+  // This cannot normally reach here — the `_org` gate sends a caller with no
+  // organization row to setup — but an honest state is cheaper than an
   // assertion.
-  if (current === null || workspaceId === undefined) {
+  if (org === undefined || orgId === undefined) {
     return (
       <div className="flex flex-col gap-6">
         {header}
@@ -88,33 +87,25 @@ export function AgentPage() {
     )
   }
 
-  const canEdit = roleCanEdit(current.role)
-
   return (
     <div className="flex flex-col gap-6">
       {header}
-      <InboxConnectionBanner workspaceId={workspaceId} />
+      <InboxConnectionBanner orgId={orgId} />
       <AgentCard
         agent={agent}
-        workspace={current.workspace}
+        org={org}
         funnel={counts === undefined ? undefined : agentFunnel(counts)}
-        canEdit={canEdit}
       />
       <AgentRunPanel
-        workspaceId={workspaceId}
+        orgId={orgId}
         agentId={agent._id}
-        timezone={current.workspace.timezone}
+        timezone={org.timezone}
         runState={runState ?? undefined}
-        canEdit={canEdit}
       />
-      <NeedsAttentionCard workspaceId={workspaceId} canEdit={canEdit} />
-      <SignalsCard
-        workspaceId={workspaceId}
-        strategies={strategies}
-        canEdit={canEdit}
-      />
-      <InstructionsCard agent={agent} role={current.role} />
-      <OutreachDetailsCard agent={agent} role={current.role} />
+      <NeedsAttentionCard orgId={orgId} />
+      <SignalsCard orgId={orgId} strategies={strategies} />
+      <InstructionsCard agent={agent} />
+      <OutreachDetailsCard agent={agent} />
     </div>
   )
 }

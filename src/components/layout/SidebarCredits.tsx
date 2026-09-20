@@ -19,24 +19,24 @@ import {
  * and provider names never reach this query.
  *
  * `null` from the balance query is NOT zero. Zero means the grant is spent;
- * `null` means the workspace never got one, which is a different sentence and
+ * `null` means the org never got one, which is a different sentence and
  * a different fix (PLAN §6 — no bucket, every paid call refuses).
  */
 export function SidebarCredits({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces"> | undefined
+  orgId: Id<"orgs"> | undefined
 }) {
   const { state, isMobile } = useSidebar()
   const balance = useQuery(
     api.billing.credits.balance,
-    workspaceId === undefined ? "skip" : { workspaceId },
+    orgId === undefined ? "skip" : { orgId },
   )
   const collapsed = state === "collapsed" && !isMobile
 
-  // Before a workspace exists there is nothing to state — the block is absent
+  // Before an org exists there is nothing to state — the block is absent
   // rather than showing a dash that reads as "none left".
-  if (workspaceId === undefined) {
+  if (orgId === undefined) {
     return null
   }
 

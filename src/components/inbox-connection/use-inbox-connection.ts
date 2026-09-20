@@ -1,48 +1,37 @@
 /**
- * The Manage-inbox read, with its owner guard resolved.
+ * The Manage-inbox read, resolved against the active organization.
  *
- * `inbox.connection.getInboxConnection` is owner-guarded, so calling it as
- * anyone else throws and takes the screen down with it. This hook answers the
- * role question first and skips the query when the answer is no, which is
- * what lets the connect flow, the settings tab and the "connect inbox" banner
- * all render an honest state instead of an error boundary.
+ * `inbox.connection.getInboxConnection` refuses a request whose active
+ * organization is not the one being asked about, so the query is skipped
+ * until the two agree. That is what lets the connect flow, the settings tab
+ * and the "connect inbox" banner all render an honest state instead of an
+ * error boundary.
  */
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
-import type { WorkspaceRole } from "@/lib/workspace-role"
+import { useCurrentOrg } from "@/hooks/use-current-org"
 import type { InboxConnectionView } from "./inbox-connection-model"
 
 export type InboxConnectionAccess =
   | { state: "loading" }
-  /** Signed in, but holding no membership on this workspace. */
-  | { state: "no_workspace" }
-  | { state: "forbidden"; role: WorkspaceRole }
+  /** Signed in, but this organization is not the caller's active one. */
+  | { state: "no_org" }
   | { state: "ready"; view: InboxConnectionView }
 
-export function useInboxConnection(
-  workspaceId: Id<"workspaces">,
-): InboxConnectionAccess {
-  const current = useCurrentWorkspace()
-  const isOwner =
-    current !== undefined &&
-    current !== null &&
-    current.workspace._id === workspaceId &&
-    current.role === "owner"
+export function useInboxConnection(orgId: Id<"orgs">): InboxConnectionAccess {
+  const current = useCurrentOrg()
+  const active = current.status === "ready" && current.org._id === orgId
   const view = useQuery(
     api.inbox.connection.getInboxConnection,
-    isOwner ? { workspaceId } : "skip",
+    active ? { orgId } : "skip",
   )
 
-  if (current === undefined) {
+  if (current.status === "loading") {
     return { state: "loading" }
   }
-  if (current === null || current.workspace._id !== workspaceId) {
-    return { state: "no_workspace" }
-  }
-  if (!isOwner) {
-    return { state: "forbidden", role: current.role }
+  if (!active) {
+    return { state: "no_org" }
   }
   if (view === undefined) {
     return { state: "loading" }

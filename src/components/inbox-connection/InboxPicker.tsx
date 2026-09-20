@@ -1,5 +1,5 @@
 /**
- * Step 2 of the connect flow: which mailbox this workspace sends from
+ * Step 2 of the connect flow: which mailbox this org sends from
  * (PLAN §4 "Manage inbox" step 2).
  *
  * Either an inbox that already exists on the pasted key's account, or a new

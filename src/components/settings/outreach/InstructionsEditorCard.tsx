@@ -9,7 +9,7 @@
  * Presentational: the container owns the value, the save and the permission.
  */
 import { InformationCircleIcon } from "@hugeicons/core-free-icons"
-import { DEFAULT_INSTRUCTIONS_MAX_LENGTH } from "../../../../convex/workspaces/outreachDefaults"
+import { DEFAULT_INSTRUCTIONS_MAX_LENGTH } from "../../../../convex/orgs/outreachDefaults"
 import { InfoBanner } from "@/components/kit/InfoBanner"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"

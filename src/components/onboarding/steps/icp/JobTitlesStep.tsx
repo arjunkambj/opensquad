@@ -13,7 +13,7 @@ import { IcpStepShell } from "@/components/onboarding/steps/icp/IcpStepShell"
 import { useIcpDraft } from "@/components/onboarding/steps/icp/use-icp-draft"
 
 export function JobTitlesStep(props: OnboardingStepProps) {
-  const draft = useIcpDraft(props.workspaceId, props.agent)
+  const draft = useIcpDraft(props.orgId, props.agent)
   const jobTitles = draft.draft.jobTitles
 
   return (

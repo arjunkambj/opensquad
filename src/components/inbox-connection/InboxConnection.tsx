@@ -15,7 +15,7 @@
 import { useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { InfoBanner } from "@/components/kit/InfoBanner"
-import { LoadingState, PermissionNote } from "@/components/states/states"
+import { LoadingState } from "@/components/states/states"
 import { ConnectedInbox } from "./ConnectedInbox"
 import { DisconnectInboxDialog } from "./DisconnectInboxDialog"
 import { InboxKeyForm } from "./InboxKeyForm"
@@ -24,12 +24,12 @@ import { useInboxConnectActions } from "./use-inbox-connect-actions"
 import { useInboxConnection } from "./use-inbox-connection"
 
 export function InboxConnection({
-  workspaceId,
+  orgId,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
 }) {
-  const access = useInboxConnection(workspaceId)
-  const actions = useInboxConnectActions(workspaceId)
+  const access = useInboxConnection(orgId)
+  const actions = useInboxConnectActions(orgId)
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
 
   if (access.state === "loading") {
@@ -41,21 +41,12 @@ export function InboxConnection({
     )
   }
 
-  if (access.state === "no_workspace") {
+  if (access.state === "no_org") {
     return (
       <p className="text-sm text-muted-foreground">
         We could not read your organization just now. Refresh the page and try
         again.
       </p>
-    )
-  }
-
-  if (access.state === "forbidden") {
-    return (
-      <PermissionNote
-        role={access.role}
-        action="connect or change the sending inbox"
-      />
     )
   }
 

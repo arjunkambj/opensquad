@@ -34,15 +34,12 @@ export function BulkActionsBar({
   onClear: () => void
 }) {
   const none = count === 0
-  const roleReason = spend.canAct ? null : "Your role cannot change leads."
   const selectReason = none ? "Select at least one contact." : null
   const covered = (price: number) =>
     spend.remaining === null ? count : Math.floor(spend.remaining / price)
 
   const paidReason = (price: number) =>
-    roleReason ??
-    selectReason ??
-    (covered(price) === 0 ? "Not enough credits left." : null)
+    selectReason ?? (covered(price) === 0 ? "Not enough credits left." : null)
 
   const emailsCovered = covered(prices.email)
   const researchCovered = covered(prices.research)
@@ -102,8 +99,8 @@ export function BulkActionsBar({
 
         <Button
           size="sm"
-          disabled={busy || roleReason !== null || none}
-          title={roleReason ?? selectReason ?? undefined}
+          disabled={busy || none}
+          title={selectReason ?? undefined}
           onClick={onApprove}
         >
           Approve
@@ -112,8 +109,8 @@ export function BulkActionsBar({
         <Button
           size="sm"
           variant="ghost"
-          disabled={busy || roleReason !== null || none}
-          title={roleReason ?? selectReason ?? undefined}
+          disabled={busy || none}
+          title={selectReason ?? undefined}
           onClick={onReject}
         >
           Reject

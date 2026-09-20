@@ -3,7 +3,7 @@
  * and MCP are cut).
  *
  * The sign-in identity, presented AS identity. The email is the canonical row
- * (a membership's `identityKey` is `iss|sub`, never an email) and the display
+ * (an `identityKey` is `iss|sub`, never an email) and the display
  * name is a label, not a credential.
  *
  * Nothing here is an editable field: the auth provider owns profile edits

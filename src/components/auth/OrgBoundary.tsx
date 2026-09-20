@@ -1,0 +1,75 @@
+/**
+ * The tenant gate of the signed-in app.
+ *
+ * Every Convex request is answered for the organization ACTIVE in the auth
+ * provider (PLAN §4), so a session with none active can read nothing. That is
+ * not an error state and never a question for the user: the provider gives
+ * every account a personal organization on sign-up, so this selects the first
+ * one and waits for the refreshed token.
+ *
+ * It renders `fallback` while that is happening, because a screen rendered
+ * against the old token would read the previous organization for a moment and
+ * then swap under the user.
+ */
+import { useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
+import type { CurrentUser } from "@hexclave/react"
+import { refreshConvexIdentity } from "@/components/ConvexClientProvider"
+import { EmptyState, ErrorState } from "@/components/states/states"
+
+export function OrgBoundary({
+  user,
+  fallback,
+  children,
+}: {
+  user: CurrentUser
+  fallback: ReactNode
+  children: ReactNode
+}) {
+  const teams = user.useTeams()
+  const selected = user.selectedTeam
+  const [failed, setFailed] = useState(false)
+  // One selection request per mount: `setSelectedTeam` is a write, and the
+  // re-render its own user refresh causes would otherwise fire a second.
+  const requested = useRef(false)
+
+  useEffect(() => {
+    const first = teams[0]
+    if (selected !== null || requested.current || first === undefined) {
+      return
+    }
+    requested.current = true
+    void user
+      .setSelectedTeam(first)
+      // The token is what carries the organization to Convex, so the switch
+      // is not real until a new one is minted and installed.
+      .then(refreshConvexIdentity)
+      .catch(() => setFailed(true))
+  }, [selected, teams, user])
+
+  if (selected !== null) {
+    return <>{children}</>
+  }
+
+  if (teams.length === 0) {
+    return (
+      <EmptyState
+        title="No organization on this account"
+        description="Every account gets its own organization. This one has none, so there is nothing to open yet — create or join one from your account, then come back."
+      />
+    )
+  }
+
+  if (failed) {
+    return (
+      <ErrorState
+        title="Could not open your organization"
+        description="We could not select an organization for this session. Reload the page and we'll try again."
+        onRetry={() => window.location.reload()}
+        retryLabel="Reload"
+      />
+    )
+  }
+
+  return <>{fallback}</>
+}

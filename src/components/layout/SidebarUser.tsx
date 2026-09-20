@@ -6,7 +6,7 @@ import {
   UnfoldMoreIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useHexclaveApp } from "@hexclave/react"
+import { useHexclaveApp, useUser } from "@hexclave/react"
 import { useNavigate } from "@tanstack/react-router"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { OrgSwitcherMenu } from "@/components/layout/OrgSwitcherMenu"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTheme } from "@/components/theme-provider"
@@ -38,7 +39,8 @@ const getInitials = (value: string | null) =>
 
 /**
  * The signed-in user at the foot of the sidebar (reference 20): the real
- * account, and the menu that leads out of the app.
+ * account, the organization being worked in, and the menu that leads out of
+ * the app.
  *
  * It sits here rather than in a top bar because the reference has no top bar
  * and because this is where a user looks for "who am I signed in as" — and
@@ -48,6 +50,9 @@ const getInitials = (value: string | null) =>
 export function SidebarUser({ user }: { user: ProfileUser }) {
   const navigate = useNavigate()
   const app = useHexclaveApp()
+  // The account in the auth provider, which owns the organizations this
+  // switches between. `user` above is the display copy the shell passes down.
+  const account = useUser()
   const { theme, setTheme } = useTheme()
   const { state, isMobile } = useSidebar()
   const collapsed = state === "collapsed" && !isMobile
@@ -113,6 +118,12 @@ export function SidebarUser({ user }: { user: ProfileUser }) {
           </div>
         </div>
         <DropdownMenuSeparator />
+        {account === null ? null : (
+          <>
+            <OrgSwitcherMenu user={account} />
+            <DropdownMenuSeparator />
+          </>
+        )}
         <div className="flex items-center gap-2 px-2 py-1">
           <span className="flex items-center gap-2 text-sm [&_svg]:size-4">
             <HugeiconsIcon icon={Sun03Icon} />

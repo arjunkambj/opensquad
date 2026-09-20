@@ -8,8 +8,8 @@
  * they travel as absolute `from`/`to` instants, exactly as
  * `calendarRangeToSearch` does for every other preset the URL cannot spell.
  *
- * Every boundary is derived in the WORKSPACE's zone, never the browser's: the
- * numbers on this screen are counted in the workspace's days, so the window
+ * Every boundary is derived in the ORG's zone, never the browser's: the
+ * numbers on this screen are counted in the org's days, so the window
  * that asks for them has to be cut on the same clock. Every function here is
  * day-granular, which is also what keeps the query arguments stable between
  * renders — an instant recomputed per render would re-subscribe every frame.
@@ -24,7 +24,7 @@ import {
 import {
   DASHBOARD_DEFAULTS,
   type DashboardSearch,
-} from "@/routes/_dashboard/_workspace/dashboard"
+} from "@/routes/_dashboard/_org/dashboard"
 
 export const DASHBOARD_RANGE_PILLS = ["7d", "30d", "3m", "mtd"] as const
 
@@ -46,7 +46,7 @@ export const DASHBOARD_RANGE_HINT: Record<DashboardRangePill, string> = {
   mtd: "This month",
 }
 
-/** The civil days a pill covers, on the workspace's calendar. */
+/** The civil days a pill covers, on the org's calendar. */
 function pillCalendar(
   pill: DashboardRangePill,
   timezone: string,
@@ -168,7 +168,7 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
  * same answer in half a dozen places on one render.
  *
  * No `timeZone` option on the formatter, deliberately. The instants were
- * derived from civil days in the workspace's zone and are read back the same
+ * derived from civil days in the org's zone and are read back the same
  * way by `activityRangeToBounds`, so putting them through a zone again would
  * shift the label off the days that were actually counted.
  */

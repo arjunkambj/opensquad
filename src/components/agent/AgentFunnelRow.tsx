@@ -3,7 +3,7 @@
  * Replied, Interested.
  *
  * There is no "Opened" column. PLAN §9.6 admits the metric only once open
- * events are verified for the workspace, and this build never verifies one —
+ * events are verified for the org, and this build never verifies one —
  * so it is absent entirely rather than rendered as a zero or a dash.
  *
  * Presentational: the counts arrive derived, and a still-loading read is a

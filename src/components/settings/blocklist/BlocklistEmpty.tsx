@@ -8,23 +8,17 @@
  */
 import { ShieldBanIcon } from "@hugeicons/core-free-icons"
 import { EmptyState } from "@/components/kit/EmptyState"
-import { PermissionNote } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 export type BlocklistEmptyProps = {
   /** A search or scope is narrowing the list. */
   filtered: boolean
-  canEdit: boolean
-  role: WorkspaceRole
   onClearFilters: () => void
   onAdd: () => void
 }
 
 export function BlocklistEmpty({
   filtered,
-  canEdit,
-  role,
   onClearFilters,
   onAdd,
 }: BlocklistEmptyProps) {
@@ -49,13 +43,9 @@ export function BlocklistEmpty({
       title="Nothing is blocked yet"
       description="An unsubscribe or a bounce adds itself here. Add an address by hand when someone asks to be left alone off-channel, or a domain when no mail to that company should ever go out."
       action={
-        canEdit ? (
-          <Button onClick={onAdd} type="button">
-            Add the first entry
-          </Button>
-        ) : (
-          <PermissionNote role={role} action="edit the blocklist" />
-        )
+        <Button onClick={onAdd} type="button">
+          Add the first entry
+        </Button>
       }
     />
   )

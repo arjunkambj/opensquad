@@ -7,7 +7,7 @@
  * hidden cap can reach this screen.
  *
  * There is no refill, no upgrade and no price list, because there is none —
- * one lifetime grant per workspace (PLAN §6), and a button offering more
+ * one lifetime grant per org (PLAN §6), and a button offering more
  * would be a button that does nothing.
  */
 import { Coins01Icon } from "@hugeicons/core-free-icons"
@@ -19,8 +19,8 @@ import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
 import { UsageHistory } from "@/components/settings/usage/UsageHistory"
 import { EmptyState } from "@/components/states/states"
 
-export function UsageTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
-  const balance = useQuery(api.billing.credits.balance, { workspaceId })
+export function UsageTab({ orgId }: { orgId: Id<"orgs"> }) {
+  const balance = useQuery(api.billing.credits.balance, { orgId })
   const loading = balance === undefined
 
   return (
@@ -31,7 +31,7 @@ export function UsageTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
         description="One grant per organization. Browsing, approving, sending and handling unsubscribes are free and never touch it."
       />
 
-      {/* `null` is not zero: the workspace holds no grant at all, so every
+      {/* `null` is not zero: the org holds no grant at all, so every
           paid step refuses for a different reason than an empty balance. */}
       {balance === null ? (
         <EmptyState
@@ -61,7 +61,7 @@ export function UsageTab({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
         </div>
       )}
 
-      <UsageHistory workspaceId={workspaceId} />
+      <UsageHistory orgId={orgId} />
     </div>
   )
 }

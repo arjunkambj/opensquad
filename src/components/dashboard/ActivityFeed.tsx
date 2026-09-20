@@ -1,5 +1,5 @@
 /**
- * Dashboard — the dated receipt feed of what the workspace has done.
+ * Dashboard — the dated receipt feed of what the org has done.
  *
  * Read-only: every row is an activity event the backend recorded, never a
  * derived guess, and the date range comes from the route's search contract.
@@ -24,7 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-const DASHBOARD_ROUTE = "/_dashboard/_workspace/dashboard"
+const DASHBOARD_ROUTE = "/_dashboard/_org/dashboard"
 
 /**
  * Dated receipts — the feed the sidebar bell's "See all activity" leads to,
@@ -37,15 +37,15 @@ const DASHBOARD_ROUTE = "/_dashboard/_workspace/dashboard"
  * reopens the same page of the same window.
  */
 export function ActivityFeed({
-  workspaceId,
+  orgId,
   timezone,
   bounds,
   hint,
 }: {
-  workspaceId: Id<"workspaces">
-  /** The workspace's zone — every row below is stamped on its clock. */
+  orgId: Id<"orgs">
+  /** The org's zone — every row below is stamped on its clock. */
   timezone: string
-  /** The window the range pills chose, in the workspace's own days. */
+  /** The window the range pills chose, in the org's own days. */
   bounds: { from: number; to: number }
   /** That window in words, e.g. "Last 30 days". */
   hint: string
@@ -72,7 +72,7 @@ export function ActivityFeed({
           errorComponent={ActivityFeedError}
         >
           <ActivityFeedBody
-            workspaceId={workspaceId}
+            orgId={orgId}
             timezone={timezone}
             bounds={bounds}
             label={hint}
@@ -85,13 +85,13 @@ export function ActivityFeed({
 }
 
 function ActivityFeedBody({
-  workspaceId,
+  orgId,
   timezone,
   bounds,
   label,
   cursor,
 }: {
-  workspaceId: Id<"workspaces">
+  orgId: Id<"orgs">
   timezone: string
   bounds: { from: number; to: number }
   label: string
@@ -101,7 +101,7 @@ function ActivityFeedBody({
   const navigate = useNavigate()
 
   const page = useQuery(api.activity.queries.list, {
-    workspaceId,
+    orgId,
     from: bounds.from,
     to: bounds.to,
     ...(cursor === undefined ? {} : { cursor }),

@@ -8,12 +8,12 @@
  *
  * ONE WINDOW, ONE CLOCK. The range pills write the route's search params, and
  * every query on this page is given the same two instants, derived in the
- * WORKSPACE's zone. That is what makes the acceptance check possible: each
+ * ORG's zone. That is what makes the acceptance check possible: each
  * figure counts rows Contacts and the Inbox can be filtered to over the same
  * window (`convex/dashboard/leadReads.ts` and `outcomeReads.ts` name the rows
  * behind each one exactly).
  *
- * A brand-new workspace reaches every panel's designed empty state. Nothing
+ * A brand-new org reaches every panel's designed empty state. Nothing
  * here renders a zero that was not counted, and nothing renders sample rows.
  */
 import { useUser } from "@hexclave/react"
@@ -37,13 +37,11 @@ import {
 } from "@/components/dashboard/dashboard-range"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
-import { canEdit } from "@/lib/workspace-role"
-import type { WorkspaceView } from "@/lib/workspace-view"
-import type { WorkspaceRole } from "@/lib/workspace-role"
+import { useCurrentOrg } from "@/hooks/use-current-org"
+import type { OrgView } from "@/lib/org-view"
 import { withFilters } from "@/lib/search-params"
 
-const DASHBOARD_ROUTE = "/_dashboard/_workspace/dashboard"
+const DASHBOARD_ROUTE = "/_dashboard/_org/dashboard"
 
 /** How many rows each bottom panel lists before "View more". */
 const PANEL_ROWS = 5
@@ -56,13 +54,13 @@ function firstName(displayName: string | null): string | null {
 
 export function DashboardPage() {
   const user = useUser()
-  const current = useCurrentWorkspace()
+  const current = useCurrentOrg()
   const name = firstName(user?.displayName ?? null)
 
-  // `null` cannot reach here — the `_workspace` gate redirects a
-  // membership-less user to setup — but loading is the only honest render for
-  // a case that resolves elsewhere.
-  if (current === undefined || current === null) {
+  // Anything but `ready` cannot reach here — the `_org` gate sends a caller
+  // with no organization row to setup — but loading is the only honest render
+  // for a case that resolves elsewhere.
+  if (current.status !== "ready") {
     return (
       <div className="flex flex-col gap-6">
         <DashboardPageTitle
@@ -77,27 +75,21 @@ export function DashboardPage() {
   }
 
   return (
-    <DashboardBody
-      workspace={current.workspace}
-      role={current.role}
-      name={name}
-    />
+    <DashboardBody org={current.org} name={name} />
   )
 }
 
 function DashboardBody({
-  workspace,
-  role,
+  org,
   name,
 }: {
-  workspace: WorkspaceView
-  role: WorkspaceRole
+  org: OrgView
   name: string | null
 }) {
   const search = useSearch({ from: DASHBOARD_ROUTE })
   const navigate = useNavigate()
-  const workspaceId = workspace._id
-  const timezone = workspace.timezone
+  const orgId = org._id
+  const timezone = org.timezone
 
   // Day-granular, so the query arguments below are stable between renders and
   // the subscriptions are not torn down and rebuilt on every frame. Memoised
@@ -112,7 +104,7 @@ function DashboardBody({
       hint: windowHint(active, resolved),
     }
   }, [search, timezone])
-  const scope = { workspaceId, from: bounds.from, to: bounds.to }
+  const scope = { orgId, from: bounds.from, to: bounds.to }
 
   const summary = useQuery(api.dashboard.queries.summary, scope)
   const series = useQuery(api.dashboard.queries.activitySeries, scope)
@@ -124,9 +116,9 @@ function DashboardBody({
     ...scope,
     limit: PANEL_ROWS,
   })
-  const next = useQuery(api.dashboard.queries.nextStep, { workspaceId })
-  const agent = useQuery(api.agents.queries.get, { workspaceId })
-  const strategies = useQuery(api.leads.counts.byStrategy, { workspaceId })
+  const next = useQuery(api.dashboard.queries.nextStep, { orgId })
+  const agent = useQuery(api.agents.queries.get, { orgId })
+  const strategies = useQuery(api.leads.counts.byStrategy, { orgId })
   const updateAgent = useMutation(api.agents.settings.setDealSize)
 
   const agentId = agent?._id
@@ -142,7 +134,7 @@ function DashboardBody({
                 ? undefined
                 : strategies.filter((strategy) => strategy.enabled).length
             }
-            inboxConnection={workspace.inboxConnection}
+            inboxConnection={org.inboxConnection}
           />
         }
       />
@@ -169,12 +161,12 @@ function DashboardBody({
         <DashboardStats
           summary={summary}
           hint={hint}
-          canEditDealSize={canEdit(role) && agentId !== undefined}
+          canEditDealSize={agentId !== undefined}
           onSaveDealSize={async (dealSize) => {
             if (agentId === undefined) {
               return
             }
-            await updateAgent({ workspaceId, agentId, dealSize })
+            await updateAgent({ orgId, agentId, dealSize })
           }}
         />
       </div>
@@ -187,7 +179,7 @@ function DashboardBody({
       </div>
 
       <ActivityFeed
-        workspaceId={workspaceId}
+        orgId={orgId}
         timezone={timezone}
         bounds={bounds}
         hint={hint}

@@ -5,7 +5,7 @@
  * Both are links to the page that changes the thing they report, which is the
  * only reason a status chip earns a place in a header. Neither invents a
  * state: the signal count is still loading until its query answers, and the
- * inbox line is the workspace's own `inboxConnection` in words.
+ * inbox line is the org's own `inboxConnection` in words.
  */
 import { CheckmarkCircle02Icon, MailAdd01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"

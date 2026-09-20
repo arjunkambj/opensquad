@@ -15,7 +15,7 @@ import { Link } from "@tanstack/react-router"
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
-import { FormError, PermissionNote } from "@/components/states/states"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -28,31 +28,23 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { errorMessage } from "@/lib/convex-error"
-import type { WorkspaceRole } from "@/lib/workspace-role"
-import type { WorkspaceView } from "@/lib/workspace-view"
+import type { OrgView } from "@/lib/org-view"
 
-export function AutomationCard({
-  workspace,
-  role,
-}: {
-  workspace: WorkspaceView
-  role: WorkspaceRole
-}) {
+export function AutomationCard({ org }: { org: OrgView }) {
   const setAutomationState = useMutation(
-    api.workspaces.mutations.setAutomationState,
+    api.orgs.mutations.setAutomationState,
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const paused = workspace.automationState === "paused"
+  const paused = org.automationState === "paused"
   const onboardingPending =
-    paused && workspace.pauseReason === "onboarding_pending"
-  const editable = role === "owner"
+    paused && org.pauseReason === "onboarding_pending"
 
   const setState = (state: "active" | "paused") => {
     setSaving(true)
     setError(null)
-    void setAutomationState({ workspaceId: workspace._id, state })
+    void setAutomationState({ orgId: org._id, state })
       .then(() =>
         toast.add({
           title: state === "active" ? "Automation resumed" : "Automation paused",
@@ -112,41 +104,37 @@ export function AutomationCard({
 
         <FormError message={error} />
 
-        {editable ? (
-          <div>
-            {onboardingPending ? (
-              <Button
-                render={<Link to="/onboarding" />}
-                size="sm"
-                variant="secondary"
-              >
-                Finish setup
-              </Button>
-            ) : (
-              <Button
-                disabled={saving}
-                onClick={() => setState(paused ? "active" : "paused")}
-                size="sm"
-                type="button"
-                variant={paused ? "default" : "secondary"}
-              >
-                {saving ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <HugeiconsIcon
-                    aria-hidden="true"
-                    data-icon="inline-start"
-                    icon={paused ? PlayIcon : PauseIcon}
-                    strokeWidth={2}
-                  />
-                )}
-                {paused ? "Resume automation" : "Pause automation"}
-              </Button>
-            )}
-          </div>
-        ) : (
-          <PermissionNote role={role} action="pause or resume automation" />
-        )}
+        <div>
+          {onboardingPending ? (
+            <Button
+              render={<Link to="/onboarding" />}
+              size="sm"
+              variant="secondary"
+            >
+              Finish setup
+            </Button>
+          ) : (
+            <Button
+              disabled={saving}
+              onClick={() => setState(paused ? "active" : "paused")}
+              size="sm"
+              type="button"
+              variant={paused ? "default" : "secondary"}
+            >
+              {saving ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  data-icon="inline-start"
+                  icon={paused ? PlayIcon : PauseIcon}
+                  strokeWidth={2}
+                />
+              )}
+              {paused ? "Resume automation" : "Pause automation"}
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

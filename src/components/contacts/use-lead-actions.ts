@@ -27,7 +27,7 @@ export type LeadActionNotice = {
   text: string
 }
 
-export function useLeadActions(workspaceId: Id<"workspaces">) {
+export function useLeadActions(orgId: Id<"orgs">) {
   const setApproval = useMutation(api.leads.mutations.setApproval)
   const requestEmails = useMutation(api.leads.emailReveal.requestEmails)
   const researchNow = useMutation(api.leads.manualResearch.researchNow)
@@ -46,7 +46,7 @@ export function useLeadActions(workspaceId: Id<"workspaces">) {
       setNotice(null)
       try {
         const result = await setApproval({
-          workspaceId,
+          orgId,
           prospectIds,
           approval,
           ...(approval === "rejected"
@@ -70,7 +70,7 @@ export function useLeadActions(workspaceId: Id<"workspaces">) {
         setPending(null)
       }
     },
-    [intentFor, setApproval, workspaceId],
+    [intentFor, setApproval, orgId],
   )
 
   const getEmails = useCallback(
@@ -81,7 +81,7 @@ export function useLeadActions(workspaceId: Id<"workspaces">) {
       setPending("email")
       setNotice(null)
       try {
-        const result = await requestEmails({ workspaceId, prospectIds })
+        const result = await requestEmails({ orgId, prospectIds })
         setNotice({
           tone: "info",
           text: outcomeSummary("Finding emails", result),
@@ -95,7 +95,7 @@ export function useLeadActions(workspaceId: Id<"workspaces">) {
         setPending(null)
       }
     },
-    [requestEmails, workspaceId],
+    [requestEmails, orgId],
   )
 
   const research = useCallback(
@@ -106,7 +106,7 @@ export function useLeadActions(workspaceId: Id<"workspaces">) {
       setPending("research")
       setNotice(null)
       try {
-        const result = await researchNow({ workspaceId, prospectIds })
+        const result = await researchNow({ orgId, prospectIds })
         setNotice({ tone: "info", text: outcomeSummary("Research", result) })
       } catch (cause) {
         setNotice({
@@ -117,7 +117,7 @@ export function useLeadActions(workspaceId: Id<"workspaces">) {
         setPending(null)
       }
     },
-    [researchNow, workspaceId],
+    [researchNow, orgId],
   )
 
   const dismiss = useCallback(() => setNotice(null), [])

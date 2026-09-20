@@ -29,11 +29,11 @@ const BENEFITS = [
 ]
 
 export function ConnectInboxStep({
-  workspaceId,
+  orgId,
   goNext,
   goBack,
 }: OutreachStepProps) {
-  const access = useInboxConnection(workspaceId)
+  const access = useInboxConnection(orgId)
   const connected = access.state === "ready" && access.view.canSend
 
   return (
@@ -65,7 +65,7 @@ export function ConnectInboxStep({
         }
         title="Connect your email account"
         benefits={BENEFITS}
-        action={<InboxConnection workspaceId={workspaceId} />}
+        action={<InboxConnection orgId={orgId} />}
       />
       {connected ? null : (
         <p className="mt-4 text-sm text-muted-foreground">

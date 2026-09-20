@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
-import type { WorkspaceRole } from "@/lib/workspace-role"
 
 /**
  * Shared empty/loading/error states (V11). Page-level components should use
@@ -124,43 +123,6 @@ export function ErrorState({
         </CardContent>
       ) : null}
     </Card>
-  )
-}
-
-/**
- * Permission-denied, which is NOT empty and must not look like it.
- *
- * Empty says *nothing is here yet, and here is what will fill it*.
- * Permission-denied says *this exists, you cannot change it, and here is who
- * can*. It replaces the action group rather than sitting beneath a row of
- * disabled buttons — a disabled control whose reason is three paragraphs away
- * is the defect this exists to remove.
- *
- * Pass `id` and point the control's `aria-describedby` at it where a control
- * genuinely has to stay rendered and disabled; `role="status"` then makes the
- * reason reachable to a screen-reader user rather than only to a sighted one.
- */
-export function PermissionNote({
-  role,
-  action,
-  id,
-  className,
-}: {
-  role: WorkspaceRole
-  action: string
-  id?: string
-  className?: string
-}) {
-  return (
-    <p
-      id={id}
-      role="status"
-      className={cn("text-sm text-muted-foreground", className)}
-    >
-      {role === "viewer"
-        ? `You have read-only access to this organization. An owner or operator can ${action}.`
-        : `Your ${role} role cannot ${action}. An owner can.`}
-    </p>
   )
 }
 

@@ -4,7 +4,7 @@
  *
  * Two of these maps carry rules rather than labels:
  *
- *   `refusalCopy` is PLAN §6's distinction, made once: a workspace can hold
+ *   `refusalCopy` is PLAN §6's distinction, made once: an org can hold
  *   credits it is no longer allowed to spend, so the hidden trial cap says
  *   "Trial limit for emails reached" and an empty balance says "out of
  *   credits". Every paid button on this screen reports through it.
@@ -15,7 +15,7 @@
  */
 import { ConvexError } from "convex/values"
 import type { FunctionReturnType } from "convex/server"
-import type { ContactsSearch } from "@/routes/_dashboard/_workspace/contacts"
+import type { ContactsSearch } from "@/routes/_dashboard/_org/contacts"
 import type { api } from "../../../convex/_generated/api"
 import { DOMAIN_ERROR_CODES } from "../../../convex/lib/errors"
 import type { DomainErrorCode } from "../../../convex/lib/errors"
@@ -80,12 +80,13 @@ export const LEAD_ERROR_COPY: Record<OperationErrorCode, string> = {
 
 const REFUSAL_COPY: Record<DomainErrorCode, string> = {
   UNAUTHENTICATED: "Sign in again to continue.",
-  FORBIDDEN: "Your role cannot do that.",
+  FORBIDDEN: "That is not something this account can do.",
   NOT_FOUND: "That lead is no longer here.",
   CONFLICT: "That decision was already recorded.",
   INVALID: "That request could not be made.",
   EMAIL_NOT_VERIFIED: "Verify your email address first.",
   ACCOUNT_RESTRICTED: "This account is not fully set up.",
+  NO_ACTIVE_ORG: "Pick an organization to work in first.",
   TRIAL_CAPACITY_REACHED: "New organizations are at capacity right now.",
   NO_CREDIT_GRANT: "This organization has no credits.",
   INSUFFICIENT_CREDITS: "Not enough credits left for that.",
@@ -158,8 +159,6 @@ export function outcomeSummary(
 
 /** What the screen knows about the caller's ability to spend. */
 export type SpendContext = {
-  /** Owner or operator; a viewer reads this screen and changes nothing. */
-  canAct: boolean
   /** Credits left, or `null` while the balance is still being read. */
   remaining: number | null
 }
@@ -168,7 +167,7 @@ export type SpendContext = {
  * Why Get email cannot run for this lead, or `null` when it can.
  *
  * The visible balance is the only money fact a client may know: the hidden
- * per-workspace provider allowance is server-side (PLAN §6), so a trial that
+ * per-org provider allowance is server-side (PLAN §6), so a trial that
  * has used its emails up is reported by the refusal, not predicted here.
  */
 export function emailDisabledReason(
@@ -176,9 +175,6 @@ export function emailDisabledReason(
   price: number,
   spend: SpendContext,
 ): string | null {
-  if (!spend.canAct) {
-    return "Your role cannot spend credits."
-  }
   if (lead.emailStatus === "found") {
     return "This lead already has an address."
   }
@@ -210,9 +206,6 @@ export function researchDisabledReason(
   price: number,
   spend: SpendContext,
 ): string | null {
-  if (!spend.canAct) {
-    return "Your role cannot spend credits."
-  }
   if (lead.research.status === "researched") {
     return "This lead has already been researched."
   }
@@ -232,11 +225,7 @@ export function researchDisabledReason(
 export function decisionDisabledReason(
   lead: Pick<ContactRowData, "approval">,
   approval: LeadApproval,
-  spend: SpendContext,
 ): string | null {
-  if (!spend.canAct) {
-    return "Your role cannot decide on leads."
-  }
   return lead.approval === approval
     ? `Already ${APPROVAL_LABEL[approval].toLowerCase()}.`
     : null

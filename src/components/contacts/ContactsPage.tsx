@@ -16,8 +16,7 @@ import { ACTION_PRICES } from "../../../convex/lib/limits"
 import { InboxConnectionBanner } from "@/components/inbox-connection/InboxConnectionBanner"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
-import { useCurrentWorkspace } from "@/hooks/use-current-workspace"
-import { canEdit } from "@/lib/workspace-role"
+import { useCurrentOrg } from "@/hooks/use-current-org"
 import { LeadDrawer } from "./drawer/LeadDrawer"
 import { BulkActionsBar } from "./filters/BulkActionsBar"
 import { ContactsFilters } from "./filters/ContactsFilters"
@@ -34,7 +33,7 @@ const PRICES = {
 }
 
 export function ContactsPage() {
-  const current = useCurrentWorkspace()
+  const current = useCurrentOrg()
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,38 +41,29 @@ export function ContactsPage() {
         title="Contacts"
         description="Everyone your agent found, what it learned about them, and what happens next."
       />
-      {/* `null` cannot reach here — the `_workspace` gate redirects a
-          membership-less user to setup — but loading is the only honest
-          render for a case that resolves elsewhere. */}
-      {current === undefined || current === null ? (
+      {/* Anything but `ready` cannot reach here — the `_org` gate sends a
+          caller with no organization row to setup — but loading is the only
+          honest render for a case that resolves elsewhere. */}
+      {current.status === "ready" ? (
+        <ContactsBody orgId={current.org._id} />
+      ) : (
         <LoadingState
           title="Loading contacts"
           description="Reading this organization's pipeline."
-        />
-      ) : (
-        <ContactsBody
-          workspaceId={current.workspace._id}
-          canAct={canEdit(current.role)}
         />
       )}
     </div>
   )
 }
 
-function ContactsBody({
-  workspaceId,
-  canAct,
-}: {
-  workspaceId: Id<"workspaces">
-  canAct: boolean
-}) {
+function ContactsBody({ orgId }: { orgId: Id<"orgs"> }) {
   const url = useContactsSearch()
-  const actions = useLeadActions(workspaceId)
+  const actions = useLeadActions(orgId)
   const [selected, setSelected] = useState<Set<Id<"prospects">>>(new Set())
 
   const { search, limit } = url
   const page = useQuery(api.leads.queries.list, {
-    workspaceId,
+    orgId,
     ...(search.q !== undefined ? { text: search.q } : {}),
     ...(search.stage !== undefined ? { stage: search.stage } : {}),
     ...(search.approval !== undefined ? { approval: search.approval } : {}),
@@ -82,14 +72,13 @@ function ContactsBody({
     ...(search.cursor !== undefined ? { cursor: search.cursor } : {}),
     limit,
   })
-  const run = useQuery(api.leads.counts.runState, { workspaceId })
-  const signals = useQuery(api.leads.counts.byStrategy, { workspaceId })
-  const credits = useQuery(api.billing.credits.balance, { workspaceId })
+  const run = useQuery(api.leads.counts.runState, { orgId })
+  const signals = useQuery(api.leads.counts.byStrategy, { orgId })
+  const credits = useQuery(api.billing.credits.balance, { orgId })
 
   const selectedIds = [...selected]
   const clearSelection = () => setSelected(new Set())
   const spend = {
-    canAct,
     remaining: credits === undefined ? null : (credits?.remaining ?? 0),
   }
   const busy = actions.pending !== null
@@ -109,7 +98,7 @@ function ContactsBody({
 
   return (
     <div className="flex flex-col gap-4">
-      <InboxConnectionBanner workspaceId={workspaceId} />
+      <InboxConnectionBanner orgId={orgId} />
       {run === undefined || run === null ? null : (
         <RunStateStrip
           run={run}
@@ -230,7 +219,7 @@ function ContactsBody({
 
       {search.lead === undefined ? null : (
         <LeadDrawer
-          workspaceId={workspaceId}
+          orgId={orgId}
           prospectId={search.lead as Id<"prospects">}
           busy={busy}
           spend={spend}

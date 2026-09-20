@@ -86,7 +86,7 @@ const START_REFUSALS: Record<string, SignalsMessage> = {
   FORBIDDEN: {
     title: "You can't change this agent",
     description:
-      "Choosing signals edits the organization's agent, which needs an owner or operator role.",
+      "This account can't edit this organization's agent, so the chosen signals can't be saved here.",
   },
   UNAUTHENTICATED: {
     title: "Your session expired",

@@ -2,7 +2,7 @@
  * The "Ready to outreach?" card of reference 20, made state-aware.
  *
  * The reference offers one fixed call to action. Ours offers the step the
- * workspace is actually on — finish setup, connect the inbox, choose how the
+ * org is actually on — finish setup, connect the inbox, choose how the
  * agent sends, approve what is waiting, hand it the wheel, or nothing at all
  * — decided on the server from real rows (`dashboard.queries.nextStep`) and
  * only put into words here.
