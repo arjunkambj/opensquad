@@ -17,7 +17,7 @@ export function InboxLayout() {
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
         title="Inbox"
-        description="Every reply the workspace inbox received, and who — person or squad — owns each thread. Nothing is sent from here."
+        description="Every reply your inbox received, and who — you or the agent — owns each thread."
       />
       <div className="flex min-w-0 flex-col gap-6 xl:grid xl:grid-cols-[24rem_minmax(0,1fr)] xl:items-start">
         <div className={detailOpen ? "hidden min-w-0 xl:block" : "min-w-0"}>

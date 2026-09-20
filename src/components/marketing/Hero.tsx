@@ -64,7 +64,7 @@ export function Hero() {
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              aria-label="Get started with OpenSquad"
+              aria-label="Get started with OpenIntent"
               nativeButton={false}
               render={<Link to="/sign-in" />}
               size="cta"

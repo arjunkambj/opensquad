@@ -18,7 +18,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           </main>
 
           <footer className="text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} OpenSquad. All rights reserved.
+            &copy; {new Date().getFullYear()} OpenIntent. All rights reserved.
           </footer>
         </div>
       </div>
@@ -50,7 +50,7 @@ function AuthPanel() {
 
       <div className="relative flex max-w-md flex-col gap-3">
         <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
-          Your AI sales squad
+          Your AI sales agent
         </h2>
         <p className="text-sm leading-6 text-muted-foreground">
           Finds leads, does the research, sends the emails from your inbox.

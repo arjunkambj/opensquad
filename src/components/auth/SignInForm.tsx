@@ -49,7 +49,7 @@ export function SignInForm() {
       // No explicit `returnTo`: the SDK then lands back on the CURRENT URL —
       // `/sign-in?after_auth_return_to=…` — where SignInGate forwards a
       // signed-in user to the sanitized target. Pinning `afterSignIn` here
-      // instead carried the param onto `/leads`, which never reads it, so a
+      // instead carried the param onto `/dashboard`, which never reads it, so a
       // bounced visitor lost the page they were headed for.
       await app.signInWithOAuth("google")
     } catch {
@@ -195,7 +195,7 @@ export function SignInForm() {
     <div className="mx-auto flex w-full flex-col gap-6 sm:max-w-sm">
       <div className="text-center">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          Welcome to OpenSquad
+          Welcome to OpenIntent
         </h1>
         <p className="mt-2 text-sm font-light text-muted-foreground">
           {step === "email"

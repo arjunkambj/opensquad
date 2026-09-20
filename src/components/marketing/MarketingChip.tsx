@@ -17,7 +17,7 @@ export function MarketingChip({
   href,
   tone = "default",
 }: {
-  /** A section icon, or "logo" to use the OpenSquad mark as the tile. */
+  /** A section icon, or "logo" to use the OpenIntent mark as the tile. */
   icon: IconSvgElement | "logo"
   label: string
   href?: string

@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values"
 
 /**
- * Domain error codes thrown by the OpenSquad backend via
+ * Domain error codes thrown by the OpenIntent backend via
  * `domainError`/`invalid` in `convex/lib/validators/shared.ts`.
  */
 export type DomainErrorCode =
