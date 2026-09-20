@@ -12,7 +12,7 @@
 - **Auth:** Other
 - **AI models:** openai/gpt-5.6-sol (Convex AI Gateway)
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-20T20:30:00Z
+- **Last updated:** 2026-09-20T22:00:00Z
 
 ## Log
 
@@ -697,3 +697,43 @@ webhook token to the browser (`convex/workspaces/model.ts`).
 Not yet verified: everything that needs a signed-in workspace or the owner's
 mail key — the search/reveal money path, real scrapes, and the whole connect
 flow. Listed in `plan/followups.md`.
+
+### 2026-09-20 - db59e22
+
+**Waves 2 and 3: the whole setup flow, the run loop and the working pages.**
+Onboarding is four dots on one page that renders from the agent row, so a
+refresh resumes and a hand-edited URL cannot skip a step
+(`src/components/onboarding/`, `convex/agents/onboarding.ts`). Dot 1 reads the
+user's website with the budgeted scraper and turns it into an editable company
+profile through one schema-constrained gateway call; the first successful run
+is free and a retry replays the pages already bought (`convex/company/`,
+`convex/ai/analyzeWebsite.ts`). Dot 2 generates the ideal customer profile
+where every industry, location and company type is an exact value from the
+cached filter catalogue, re-checked server-side (`convex/agents/icp*.ts`). Dot
+3 connects the user's own sending inbox or skips it, and saves goal and tone
+(`src/components/inbox-connection/`, `convex/agents/outreachGoals.ts`). Dot 4
+recommends three to five search strategies: the core-ICP half is compiled in
+plain code, the model writes only the signal half, every strategy is validated
+and counted for free, one plain-code relax or tighten pass runs, and no
+zero-match strategy is pre-checked; Confirm flips the agent live and spends
+nothing (`convex/agents/strategies*.ts`, `convex/ai/recommendStrategies.ts`).
+
+The agent run is a single-flight lease plus a chain of short idempotent steps
+picked up by a cron: one search page or one lead per step, rows and cursor
+stored in one transaction, leads deduped on the source id with signals merged,
+a free pre-rank, an initial research batch of eight across signals, a retry
+ladder that parks a lead as needs-attention, and a recovery sweep that
+reclaims expired leases and reconciles unsettled holds
+(`convex/agents/run.ts`, `runPlan.ts`, `sourcing.ts`, `recovery.ts`,
+`convex/leads/research*.ts`, `preRank.ts`). Pages over real queries: the Agent
+page with mode matrix, an Autopilot consent dialog that is the only path to
+autopilot, run now, per-signal table and needs-attention retry
+(`src/components/agent/`, `convex/agents/settings*.ts`); Settings rebuilt as
+seven real tabs (`src/components/settings/`); and the Dashboard with bounded,
+timezone-aware aggregates and designed empty states (`convex/dashboard/`,
+`src/components/dashboard/`).
+
+Not yet verified: none of this has run against a signed-in workspace yet, so
+the real website analysis, ICP, strategy counts on a real profile, a real
+agent run and every page's click-through are still owed; the list is in
+`plan/followups.md`.
