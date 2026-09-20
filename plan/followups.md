@@ -25,6 +25,11 @@ running list that pass starts from. Items come from task hand-offs
 - [ ] `/tour` currently redirects to `/` (its old content was prepared sample
       cards). Rebuild as real marketing copy, or drop it from PLAN §5.
 
+## Live checks passed (evidence)
+- [x] 2026-09-21, dev, real signed-in session: the session token carries `selected_team_id` as a string, `email_verified`, `is_restricted`, `is_anonymous` (T00.5 and T44's first check). `/dashboard` with no org row redirects to `/onboarding` (T04 guard). `orgs/mutations:ensureOrg` refused an account whose token says `email_verified: false` with `EMAIL_NOT_VERIFIED` and created nothing (T02 gate, fails closed). The onboarding shell matches ref 01 (logo, 4-dot stepper with the ticked-and-ringed current dot, rounded card on the warm gradient). Found and fixed on the way: the refusal was dropped by an effect-cleanup race, leaving "Just a moment…" spinning forever; the designed "Verify your email to continue" state with Resend / I've verified it now renders.
+- [x] 2026-09-20, dev, real provider (T11): catalogue refresh 46 filters / 38 with values; wallet 10,000; real count 89,731; three invalid filters refused with no network call; balance watchdog `tripped: false`.
+- [x] 2026-09-20, dev (T06): `migrations/clear:clearProgress` and `migrations/verify:suppressionOwnership` run and report a clean, empty deployment.
+
 ## Live checks still owed (need a signed-in owner, a real key, or a call this session may not make)
 - [ ] T00.3: people search pages 1–3 cost 0 on this account (balance before/after) + live preview-row shape.
 - [ ] T00.4 / T10: AgentMail live shapes and the whole connect flow with a real key.
