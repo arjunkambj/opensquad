@@ -32,6 +32,15 @@ export const stageConversation = internalMutation({
     inboxRef: v.string(),
     providerThreadRef: v.optional(v.string()),
     prospectId: v.optional(v.id("prospects")),
+    /**
+     * The agent whose reply work this thread runs under, frozen here the way
+     * `conversations.associateProspect` freezes it for an inbound thread. The
+     * outreach loop stages the threads it STARTS, and a conversation with no
+     * agent would leave `evaluateSendGates` with nothing to fence the mode and
+     * the revision against — so an outbound thread records it at creation.
+     * Refused unless the named agent owns the named lead.
+     */
+    agentId: v.optional(v.id("agents")),
     source: v.optional(vMessageSource),
     state: v.optional(vConversationState),
     humanTakeover: v.optional(v.boolean()),
@@ -53,6 +62,26 @@ export const stageConversation = internalMutation({
             max: PROVIDER_REF_MAX_LENGTH,
           });
     const prospectId = args.prospectId;
+    if (args.agentId !== undefined) {
+      const agent = await ctx.db.get("agents", args.agentId);
+      if (agent === null || agent.workspaceId !== args.workspaceId) {
+        throw domainError("NOT_FOUND", "agent not found");
+      }
+      // The same refusal `conversations.associateProspect` makes: a thread may
+      // only be bound to the agent the lead actually belongs to.
+      if (prospectId !== undefined) {
+        const prospect = await ctx.db.get("prospects", prospectId);
+        if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+          throw domainError("NOT_FOUND", "prospect not found");
+        }
+        if (prospect.agentId !== agent._id) {
+          throw domainError(
+            "CONFLICT",
+            "the lead belongs to a different agent than the one named",
+          );
+        }
+      }
+    }
 
     if (args.conversationId !== undefined) {
       const existing = await ctx.db.get("conversations", args.conversationId);
@@ -81,6 +110,7 @@ export const stageConversation = internalMutation({
       await ctx.db.patch("conversations", existing._id, {
         ...(providerThreadRef !== undefined ? { providerThreadRef } : {}),
         ...(prospectId !== undefined ? { prospectId } : {}),
+        ...(args.agentId !== undefined ? { agentId: args.agentId } : {}),
         ...(args.state !== undefined ? { state: args.state } : {}),
         ...(args.humanTakeover !== undefined
           ? { humanTakeover: args.humanTakeover }
@@ -130,6 +160,7 @@ export const stageConversation = internalMutation({
       createdAt: now,
       updatedAt: now,
       ...(prospectId !== undefined ? { prospectId } : {}),
+      ...(args.agentId !== undefined ? { agentId: args.agentId } : {}),
       ...(providerThreadRef !== undefined ? { providerThreadRef } : {}),
     });
     const conversation = await ctx.db.get("conversations", conversationId);

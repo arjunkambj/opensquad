@@ -86,6 +86,20 @@ crons.weekly(
 // the first leads appear while the user is still looking at the screen.
 crons.interval("agent-run", { minutes: 1 }, internal.agents.run.tickDueAgents, {});
 
+// The outreach loop (PLAN §9.1, §9.3). Like `agent-run` this is not a belt:
+// it is how outreach happens at all. `stage` + `nextActionAt` is the whole
+// state machine, so each pass reads what is due — a lead to approve, a stale
+// draft to retire, an address to buy, a first touch or a follow-up — and
+// schedules one short step for it. Every step claims its lead in its own
+// transaction before spending, so concurrent ticks cannot double-spend, and a
+// minute of latency is all a deploy or a crash costs.
+crons.interval(
+  "outreach-tick",
+  { minutes: 1 },
+  internal.outreach.outreachTick.tickOutreach,
+  {},
+);
+
 // The other half of PLAN §9.1: Convex does not re-run a failed action, so the
 // sweep IS the retry. Expired run leases, leads stuck mid-research, and
 // `uncertain` email-finder holds that nothing has asked the provider about.

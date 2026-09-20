@@ -31,6 +31,10 @@ export const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
     "No sending inbox is connected, so nothing can go out yet. Connect one in Settings.",
   inbox_mismatch:
     "This reply was written for a different inbox than the one connected now.",
+  lead_rejected:
+    "You rejected this lead, so nothing is sent to them. Approve the lead again if that changed.",
+  lead_replied:
+    "They replied after this was written, so it no longer fits the conversation. Write a new reply instead.",
   suppressed_email:
     "This address is on your blocklist, so it is never contacted.",
   suppressed_domain:

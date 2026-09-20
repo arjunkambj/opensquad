@@ -35,6 +35,10 @@ export const SEND_BLOCK_CODES = [
   "inbox_mismatch",
   "suppressed_email",
   "suppressed_domain",
+  /** The user rejected the lead this thread is for (PLAN §9.1). */
+  "lead_rejected",
+  /** The lead replied after this text was written, so it is stale mail. */
+  "lead_replied",
   "already_sent",
   "attempt_in_flight",
   "attempt_uncertain",
@@ -210,6 +214,35 @@ export async function evaluateSendGates(
       "agent_revision_changed",
       `agent is at revision ${agent.revision}; draft was written against ${draft.agentRevision}`,
     );
+  }
+
+  // --- the lead this thread is for (PLAN §9.1 send-time list) ------------
+  // Two of the invalidation table's rows are facts of the LEAD rather than of
+  // the draft, and neither is implied by anything above: a rejection
+  // supersedes the drafts it can see in its own transaction, and a reply
+  // advances the conversation's context version — but a draft written on a
+  // second thread, or a reply the inbound path recorded without a context
+  // bump, would slip through. Re-read here, at the moment of effect, which
+  // PLAN §9.1 makes the authority.
+  if (conversation.prospectId !== undefined) {
+    const lead = await ctx.db.get("prospects", conversation.prospectId);
+    if (lead !== null && lead.workspaceId === workspace._id) {
+      if (lead.approval === "rejected" || lead.stage === "rejected") {
+        return block(
+          "lead_rejected",
+          "the lead this conversation is for has been rejected",
+        );
+      }
+      // A REPLY draft is written after the message it answers, so this
+      // compares times rather than presence: only mail composed BEFORE the
+      // latest reply is stale.
+      if (lead.lastReplyAt !== undefined && lead.lastReplyAt >= draft.createdAt) {
+        return block(
+          "lead_replied",
+          "the lead replied after this draft was written — answer the reply instead",
+        );
+      }
+    }
   }
 
   // --- booking link (§4.3, P19) ------------------------------------------
