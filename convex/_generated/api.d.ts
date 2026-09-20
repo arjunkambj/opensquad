@@ -17,6 +17,7 @@ import type * as agents_queries from "../agents/queries.js";
 import type * as billing_credits from "../billing/credits.js";
 import type * as billing_model from "../billing/model.js";
 import type * as billing_paidCall from "../billing/paidCall.js";
+import type * as billing_platformBalance from "../billing/platformBalance.js";
 import type * as billing_platformBudgets from "../billing/platformBudgets.js";
 import type * as billing_queries from "../billing/queries.js";
 import type * as billing_reservations from "../billing/reservations.js";
@@ -123,6 +124,7 @@ declare const fullApi: ApiFromModules<{
   "billing/credits": typeof billing_credits;
   "billing/model": typeof billing_model;
   "billing/paidCall": typeof billing_paidCall;
+  "billing/platformBalance": typeof billing_platformBalance;
   "billing/platformBudgets": typeof billing_platformBudgets;
   "billing/queries": typeof billing_queries;
   "billing/reservations": typeof billing_reservations;
