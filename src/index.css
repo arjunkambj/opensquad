@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/bricolage-grotesque";
 @import "lenis/dist/lenis.css";
@@ -9,8 +8,11 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: 'Figtree Variable', sans-serif;
-    --font-sans: 'Inter Variable', sans-serif;
+    /* Geometric sans for headings, a warm humanist sans for everything else
+     * (PLAN §2 "Visual system"). Both are already installed; nothing here
+     * fetches a font at runtime. */
+    --font-heading: 'Bricolage Grotesque Variable', sans-serif;
+    --font-sans: 'Figtree Variable', sans-serif;
     --font-display: 'Bricolage Grotesque Variable', sans-serif;
 
     /* Uppercase eyebrow labels, and the tight display price lockup. */
@@ -79,76 +81,100 @@
     --radius-5xl: calc(var(--radius) * 3);
 }
 
+/*
+ * The palette (PLAN §2): warm coral primary on a near-white ground, white
+ * cards, large radii, soft shadows.
+ *
+ * Everything is expressed through the shadcn semantic tokens and nothing
+ * else, so a component that only ever says `bg-card`, `text-muted-foreground`
+ * or `bg-primary` — which is every component in `kit/` and `ui/` — inherits
+ * this pass without being touched.
+ *
+ * The coral is dark enough to carry white text (contrast ≈ 4.6:1): the
+ * reference's lighter tint is decorative there, and ours has to be legible on
+ * a button label.
+ */
 :root {
-    --background: oklch(0.985 0 0);
-    --foreground: oklch(0.274 0.006 286.033);
-    --card: oklch(0.967 0.001 286.375);
-    --card-foreground: oklch(0.141 0.005 285.823);
+    --background: oklch(0.977 0.003 70);
+    --foreground: oklch(0.268 0.012 45);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.268 0.012 45);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
-    --primary: oklch(0.274 0.006 286.033);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    /* Menus and palettes highlight with accent, so it stays a quiet tint. */
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
+    --popover-foreground: oklch(0.268 0.012 45);
+    --primary: oklch(0.632 0.171 34);
+    --primary-foreground: oklch(0.995 0.005 70);
+    --secondary: oklch(0.958 0.006 70);
+    --secondary-foreground: oklch(0.31 0.014 45);
+    --muted: oklch(0.958 0.006 70);
+    --muted-foreground: oklch(0.548 0.016 50);
+    /* Menus and popovers highlight with accent, so it stays a quiet warm
+     * tint rather than a second coral. */
+    --accent: oklch(0.953 0.018 45);
+    --accent-foreground: oklch(0.31 0.014 45);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.552 0.016 285.938);
+    --border: oklch(0.917 0.006 70);
+    --input: oklch(0.917 0.006 70);
+    --ring: oklch(0.632 0.171 34);
     --illustration: oklch(1 0 0);
-    --chart-1: oklch(0.871 0.006 286.286);
-    --chart-2: oklch(0.552 0.016 285.938);
-    --chart-3: oklch(0.442 0.017 285.786);
-    --chart-4: oklch(0.37 0.013 285.805);
-    --chart-5: oklch(0.274 0.006 286.033);
-    --radius: 0.425rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
-    --sidebar-primary: oklch(0.274 0.006 286.033);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    /* Charts read as one coral-anchored family: the series that matters is
+     * the primary, the rest step away in lightness, not in hue. */
+    --chart-1: oklch(0.632 0.171 34);
+    --chart-2: oklch(0.72 0.115 48);
+    --chart-3: oklch(0.79 0.075 62);
+    --chart-4: oklch(0.6 0.052 40);
+    --chart-5: oklch(0.42 0.036 40);
+    --radius: 0.75rem;
+    --sidebar: oklch(1 0 0);
+    --sidebar-foreground: oklch(0.268 0.012 45);
+    --sidebar-primary: oklch(0.632 0.171 34);
+    --sidebar-primary-foreground: oklch(0.995 0.005 70);
+    /* The active pill of reference 20: a coral wash, with the label still in
+     * near-black so the row reads before the colour does. */
+    --sidebar-accent: oklch(0.955 0.027 40);
+    --sidebar-accent-foreground: oklch(0.31 0.014 45);
+    --sidebar-border: oklch(0.925 0.005 70);
+    --sidebar-ring: oklch(0.632 0.171 34);
+    /* The lift under a white card on a near-white ground. */
+    --shadow-card: 0 1px 2px oklch(0.4 0.03 45 / 0.05),
+        0 10px 28px -16px oklch(0.4 0.03 45 / 0.18);
 }
 
 .dark {
-    --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.92 0.004 286.32);
-    --primary-foreground: oklch(0.21 0.006 285.885);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: oklch(0.172 0.008 45);
+    --foreground: oklch(0.975 0.004 70);
+    --card: oklch(0.225 0.009 45);
+    --card-foreground: oklch(0.975 0.004 70);
+    --popover: oklch(0.225 0.009 45);
+    --popover-foreground: oklch(0.975 0.004 70);
+    --primary: oklch(0.7 0.155 35);
+    --primary-foreground: oklch(0.185 0.012 40);
+    --secondary: oklch(0.28 0.012 45);
+    --secondary-foreground: oklch(0.975 0.004 70);
+    --muted: oklch(0.28 0.012 45);
+    --muted-foreground: oklch(0.715 0.014 60);
+    --accent: oklch(0.31 0.021 40);
+    --accent-foreground: oklch(0.975 0.004 70);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
-    --chart-1: oklch(0.871 0.006 286.286);
-    --chart-2: oklch(0.552 0.016 285.938);
-    --chart-3: oklch(0.442 0.017 285.786);
-    --chart-4: oklch(0.37 0.013 285.805);
-    --chart-5: oklch(0.274 0.006 286.033);
-    --illustration: oklch(0.21 0.006 285.885);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.92 0.004 286.32);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --ring: oklch(0.7 0.155 35);
+    --chart-1: oklch(0.7 0.155 35);
+    --chart-2: oklch(0.77 0.11 50);
+    --chart-3: oklch(0.83 0.07 65);
+    --chart-4: oklch(0.6 0.05 40);
+    --chart-5: oklch(0.45 0.038 40);
+    --illustration: oklch(0.225 0.009 45);
+    --sidebar: oklch(0.198 0.009 45);
+    --sidebar-foreground: oklch(0.975 0.004 70);
+    --sidebar-primary: oklch(0.7 0.155 35);
+    --sidebar-primary-foreground: oklch(0.185 0.012 40);
+    --sidebar-accent: oklch(0.315 0.032 38);
+    --sidebar-accent-foreground: oklch(0.975 0.004 70);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --sidebar-ring: oklch(0.7 0.155 35);
+    /* On a dark ground the card separates by its border; the shadow only
+     * deepens the edge instead of glowing. */
+    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 32px -20px oklch(0 0 0 / 0.6);
 }
 
 @layer base {
@@ -164,6 +190,22 @@
   html {
     @apply font-sans;
     }
+  /* A card is white on a near-white ground now (reference 20), so it is read
+   * by its lift and its hairline rather than by a grey fill. Declared here,
+   * on the slot, because `ui/card.tsx` is generated and is not hand-edited;
+   * a utility class on a card still wins over this. */
+  [data-slot="card"] {
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    }
+}
+
+/* Headings are the geometric sans; body copy stays in the humanist one. */
+@layer base {
+  h1, h2, h3 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+    }
 }
 
 .marketing-page :is(h1, h2, h3, h4, h5, h6) {
@@ -171,9 +213,9 @@
     font-weight: 600;
 }
 
-/* Marketing cards, FAQ and CTA sit on zinc-100 instead of white. */
+/* Marketing cards, FAQ and CTA sit a step down from white. */
 .marketing-page {
-    --popover: oklch(0.967 0.001 286.375);
+    --popover: oklch(0.958 0.006 70);
 }
 
 /* Navbar ink. */
@@ -184,7 +226,7 @@
 
 /* Footer ink: a step darker than the navbar so it reads as the page floor. */
 .marketing-ink-deep {
-    background-color: oklch(0.21 0.006 286.033);
+    background-color: oklch(0.225 0.009 45);
     color: var(--background);
 }
 

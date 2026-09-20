@@ -69,7 +69,7 @@ function MockButton({
 export function HeroApprovalPreview() {
   return (
     <div
-      aria-label="Illustrative preview of an OpenSquad draft approval screen, where a human reviews an exact email before it sends"
+      aria-label="Illustrative preview of an OpenIntent draft approval screen, where a human reviews an exact email before it sends"
       className="relative w-full overflow-hidden rounded-2xl bg-background text-foreground select-none sm:min-h-[600px]"
       role="img"
     >

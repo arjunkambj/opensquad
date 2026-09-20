@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
  *
  * The root's `notFoundComponent` renders outside the shell and strands the
  * user with no navigation, which is the wrong answer for a path inside the
- * app: the routes architecture §10 promises (`/leads`, `/inbox`, `/overview`)
+ * app: the routes architecture §10 promises (`/contacts`, `/inbox`, `/dashboard`)
  * are typed into the address bar by people who already work here.
  */
 export function DashboardNotFound() {
@@ -23,8 +23,8 @@ export function DashboardNotFound() {
       />
       <EmptyState
         title={attempted ?? "Page not found"}
-        description="Check the address, or pick a page from the sidebar. Some parts of OpenSquad are still being built."
-        action={<Button render={<Link to="/leads" />}>Go to Leads</Button>}
+        description="Check the address, or pick a page from the sidebar."
+        action={<Button render={<Link to="/dashboard" />}>Go to Dashboard</Button>}
       />
     </>
   )

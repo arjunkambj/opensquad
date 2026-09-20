@@ -1,12 +1,18 @@
 import {
-  Briefcase01Icon,
-  Home01Icon,
+  DashboardSquare01Icon,
   InboxIcon,
+  Robot01Icon,
   Settings02Icon,
+  UserMultipleIcon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 
-export type MenuHref = "/inbox" | "/leads" | "/overview" | "/settings"
+export type MenuHref =
+  | "/dashboard"
+  | "/agent"
+  | "/contacts"
+  | "/inbox"
+  | "/settings"
 
 export type MenuItem = {
   name: string
@@ -14,40 +20,40 @@ export type MenuItem = {
   icon: IconSvgElement
 }
 
-export type MenuCategory = {
-  name: string
-  items: MenuItem[]
-}
-
-// The work band, in §3 order: Leads, Inbox, Overview. Each item lands in the
-// same change as its route — never before, or the nav promises a page that
-// 404s. `/leads` is the CRM home; `/prospects` is a redirect, not a second
-// entry.
-//
-// Inbox's count badge is not declared here, and deliberately so: it comes from
-// `useInboxAttention` — the same hook and arguments the attention surface uses,
-// one call. Two sources for one count is a defect.
+/**
+ * The whole navigation, in PLAN §5 order: Dashboard, Agent, Contacts, Inbox,
+ * Settings. Five pages, all of which work — the reference's Copilot, Search,
+ * Insights, Help, Roadmap and Referral entries are cut (PLAN §2), and a cut
+ * item is left out rather than rendered as dead chrome.
+ *
+ * Each item lands in the same change as its route; never before, or the nav
+ * promises a page that 404s.
+ *
+ * Inbox's count badge is not declared here, and deliberately so: it comes
+ * from `useInboxAttention` — the same hook and arguments the inbox surfaces
+ * use, one call. Two sources for one count is a defect.
+ */
 export const sidebarMainItems: MenuItem[] = [
   {
-    name: "Leads",
-    href: "/leads",
-    icon: Briefcase01Icon,
+    name: "Dashboard",
+    href: "/dashboard",
+    icon: DashboardSquare01Icon,
+  },
+  {
+    name: "Agent",
+    href: "/agent",
+    icon: Robot01Icon,
+  },
+  {
+    name: "Contacts",
+    href: "/contacts",
+    icon: UserMultipleIcon,
   },
   {
     name: "Inbox",
     href: "/inbox",
     icon: InboxIcon,
   },
-  {
-    name: "Overview",
-    href: "/overview",
-    icon: Home01Icon,
-  },
-]
-
-export const sidebarCategories: MenuCategory[] = []
-
-export const sidebarFooterItems: MenuItem[] = [
   {
     name: "Settings",
     href: "/settings",

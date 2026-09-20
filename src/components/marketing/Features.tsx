@@ -250,7 +250,7 @@ const features = [
     eyebrow: "Replies",
     title: "A reply stops the sequence",
     description:
-      "Someone answers, the squad stops on that lead and drafts a reply.",
+      "Someone answers, the agent stops on that lead and drafts a reply.",
     background: "/marketing/services/strategy.webp",
     Illustration: InboxTakeover,
   },

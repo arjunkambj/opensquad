@@ -12,7 +12,7 @@ export interface PricingPlan {
 }
 
 /**
- * OpenSquad has no billing integration yet, so every plan's call to action
+ * OpenIntent has no billing integration yet, so every plan's call to action
  * leads to sign-in rather than a checkout.
  */
 export const pricingPlans: PricingPlan[] = [
@@ -67,7 +67,7 @@ export const pricingPlans: PricingPlan[] = [
 export const faqItems = [
   {
     content:
-      "Every email gets a quick OK from someone on your team before it goes out from your inbox. It takes a few seconds and keeps the squad in your voice. Replies work the same way.",
+      "Every email gets a quick OK from someone on your team before it goes out from your inbox. It takes a few seconds and keeps the agent in your voice. Replies work the same way.",
     title: "Does anything send without my approval?",
   },
   {

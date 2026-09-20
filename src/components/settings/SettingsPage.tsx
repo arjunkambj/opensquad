@@ -3,42 +3,34 @@ import { Link, useSearch } from "@tanstack/react-router"
 import { AccountSection } from "@/components/settings/AccountSection"
 import { SettingsSections } from "@/components/settings/SettingsSections"
 import {
-  DEFAULT_SETTINGS_SECTION,
-  SETTINGS_SECTIONS,
+  DEFAULT_SETTINGS_TAB,
+  SETTINGS_TABS,
+  SETTINGS_TAB_LABEL,
 } from "@/components/settings/settings-model"
-import type { SettingsSection } from "@/components/settings/settings-model"
+import type { SettingsTab } from "@/components/settings/settings-model"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { LoadingState } from "@/components/states/states"
 import { Chip } from "@/components/shared/presentation"
 import { cn } from "@/lib/utils"
 
-const SECTION_LABEL: Record<SettingsSection, string> = {
-  account: "Account",
-  workspace: "Workspace",
-  sending: "Sending",
-  automation: "Automation",
-  members: "Members",
-  integrations: "Integrations",
-}
-
 /**
- * The sections whose write controls belong to the owner alone. Marked BEFORE
- * the user opens them (`plan/ux.md` §5) so a non-owner learns from the nav
- * why a control will not be there — not after opening the card and hunting
- * for it. `sending` is marked too: its suppression list is editor-writable,
- * but the policy itself is owner-only.
+ * The tabs whose write controls belong to the owner alone. Marked BEFORE the
+ * user opens them so a non-owner learns from the tab bar why a control will
+ * not be there — not after opening the card and hunting for it. `sending` is
+ * marked too: its blocklist is editor-writable, but the policy itself is
+ * owner-only.
  */
-const OWNER_ONLY: ReadonlySet<SettingsSection> = new Set([
-  "workspace",
+const OWNER_ONLY: ReadonlySet<SettingsTab> = new Set([
+  "company",
+  "inbox",
+  "outreach",
   "sending",
-  "automation",
-  "members",
 ])
 
 export function SettingsPage() {
   const user = useUser()
   const search = useSearch({ from: "/_dashboard/settings" })
-  const section = search.section ?? DEFAULT_SETTINGS_SECTION
+  const tab = search.tab ?? DEFAULT_SETTINGS_TAB
 
   // `useUser()` resolves asynchronously; a null under `_dashboard` is a
   // session the shell is still checking or redirecting — loading is the
@@ -51,39 +43,46 @@ export function SettingsPage() {
     <div className="flex flex-col gap-6">
       <DashboardPageTitle
         title="Settings"
-        description="Your profile and workspace preferences."
+        description="Your company profile, how the agent sends, and who it may never contact."
       />
       <nav
-        aria-label="Settings sections"
-        className="flex flex-wrap gap-1.5"
+        aria-label="Settings tabs"
+        className="flex flex-wrap gap-1.5 border-b border-border pb-3"
       >
-        {SETTINGS_SECTIONS.map((value) => {
-          const active = section === value
+        {SETTINGS_TABS.map((value) => {
+          const active = tab === value
           return (
             <Link
               key={value}
               to="/settings"
-              search={{ section: value }}
+              search={{ tab: value }}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
                 active
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground",
               )}
             >
-              {SECTION_LABEL[value]}
+              {SETTINGS_TAB_LABEL[value]}
               {OWNER_ONLY.has(value) ? (
-                <Chip className="px-1.5 py-0 text-[10px]">owner</Chip>
+                <Chip
+                  className={cn(
+                    "px-1.5 py-0 text-[10px]",
+                    active && "bg-primary-foreground/20 text-primary-foreground",
+                  )}
+                >
+                  owner
+                </Chip>
               ) : null}
             </Link>
           )
         })}
       </nav>
-      {section === "account" ? (
+      {tab === "account" ? (
         <AccountSection user={user} />
       ) : (
-        <SettingsSections section={section} />
+        <SettingsSections tab={tab} />
       )}
     </div>
   )

@@ -1,17 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { SettingsPage } from "@/components/settings/SettingsPage"
-import { SETTINGS_SECTIONS } from "@/components/settings/settings-model"
-import type { SettingsSection } from "@/components/settings/settings-model"
+import { SETTINGS_TABS } from "@/components/settings/settings-model"
+import type { SettingsTab } from "@/components/settings/settings-model"
 import { optionalOneOf } from "@/lib/search-params"
 
 /**
- * `?section=` rather than six route files. The requirement is a deep link: a
+ * `?tab=` rather than seven route files. The requirement is a deep link: a
  * send blocked by the policy window must be able to point at the sending
- * policy. One `validateSearch` delivers that.
+ * policy, and the sidebar's inbox status at the inbox connection. One
+ * `validateSearch` delivers that, and an unknown tab falls back to the
+ * default rather than throwing.
  */
 export const Route = createFileRoute("/_dashboard/settings")({
-  validateSearch: (search): { section?: SettingsSection } => ({
-    section: optionalOneOf(SETTINGS_SECTIONS, search.section),
+  validateSearch: (search): { tab?: SettingsTab } => ({
+    tab: optionalOneOf(SETTINGS_TABS, search.tab),
   }),
   component: SettingsPage,
 })

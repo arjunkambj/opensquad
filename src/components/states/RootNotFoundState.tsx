@@ -10,7 +10,9 @@ export function RootNotFoundState() {
         className="w-full max-w-md"
         title="Page not found"
         description="The page you're looking for doesn't exist."
-        action={<Button render={<Link to="/leads" />}>Back to your leads</Button>}
+        action={
+          <Button render={<Link to="/dashboard" />}>Back to the dashboard</Button>
+        }
       />
     </div>
   )

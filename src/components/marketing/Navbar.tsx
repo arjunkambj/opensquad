@@ -65,7 +65,7 @@ function AccountActions() {
     return (
       <Button
         nativeButton={false}
-        render={<Link to="/overview" />}
+        render={<Link to="/dashboard" />}
         size="nav"
         variant="outline"
       >
@@ -81,7 +81,7 @@ function SheetAccountLink({ onNavigate }: { onNavigate: () => void }) {
   const user = useUser()
 
   return user ? (
-    <Link className={sheetLinkClassName} onClick={onNavigate} to="/overview">
+    <Link className={sheetLinkClassName} onClick={onNavigate} to="/dashboard">
       Dashboard
     </Link>
   ) : (
@@ -109,7 +109,7 @@ export function Navbar() {
           className="marketing-ink flex w-full items-center justify-between gap-4 rounded-xl p-1.5 sm:w-fit sm:gap-5"
         >
           <Link
-            aria-label="OpenSquad home"
+            aria-label="OpenIntent home"
             className="flex shrink-0 items-center rounded-lg text-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-background"
             to="/"
           >

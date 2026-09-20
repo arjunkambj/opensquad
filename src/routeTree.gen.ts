@@ -11,21 +11,26 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/_dashboard'
 import { Route as MarketingRouteImport } from './routes/_marketing'
+import { Route as DecisionsRouteImport } from './routes/decisions'
+import { Route as EmployeesRouteImport } from './routes/employees'
+import { Route as LeadsRouteImport } from './routes/leads'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as OverviewRouteImport } from './routes/overview'
+import { Route as ProspectsRouteImport } from './routes/prospects'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as SquadsRouteImport } from './routes/squads'
+import { Route as TourRouteImport } from './routes/tour'
 import { Route as DashboardSplatRouteImport } from './routes/_dashboard/$'
 import { Route as DashboardWorkspaceRouteImport } from './routes/_dashboard/_workspace'
-import { Route as DashboardOnboardingRouteImport } from './routes/_dashboard/onboarding'
-import { Route as DashboardProspectsRouteImport } from './routes/_dashboard/prospects'
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
 import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
 import { Route as HandlerSplatRouteImport } from './routes/handler.$'
+import { Route as DashboardWorkspaceAgentRouteImport } from './routes/_dashboard/_workspace/agent'
+import { Route as DashboardWorkspaceContactsRouteImport } from './routes/_dashboard/_workspace/contacts'
+import { Route as DashboardWorkspaceDashboardRouteImport } from './routes/_dashboard/_workspace/dashboard'
 import { Route as DashboardWorkspaceInboxRouteImport } from './routes/_dashboard/_workspace/inbox'
-import { Route as DashboardWorkspaceLeadsRouteImport } from './routes/_dashboard/_workspace/leads'
-import { Route as DashboardWorkspaceOverviewRouteImport } from './routes/_dashboard/_workspace/overview'
 import { Route as DashboardWorkspaceInboxIndexRouteImport } from './routes/_dashboard/_workspace/inbox/index'
 import { Route as DashboardWorkspaceInboxConversationIdRouteImport } from './routes/_dashboard/_workspace/inbox/$conversationId'
-import { Route as DashboardWorkspaceLeadsIndexRouteImport } from './routes/_dashboard/_workspace/leads/index'
-import { Route as DashboardWorkspaceOverviewIndexRouteImport } from './routes/_dashboard/_workspace/overview/index'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/_dashboard',
@@ -35,9 +40,49 @@ const MarketingRoute = MarketingRouteImport.update({
   id: '/_marketing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DecisionsRoute = DecisionsRouteImport.update({
+  id: '/decisions',
+  path: '/decisions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmployeesRoute = EmployeesRouteImport.update({
+  id: '/employees',
+  path: '/employees',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsRoute = LeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OverviewRoute = OverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProspectsRoute = ProspectsRouteImport.update({
+  id: '/prospects',
+  path: '/prospects',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SquadsRoute = SquadsRouteImport.update({
+  id: '/squads',
+  path: '/squads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TourRoute = TourRouteImport.update({
+  id: '/tour',
+  path: '/tour',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardSplatRoute = DashboardSplatRouteImport.update({
@@ -47,16 +92,6 @@ const DashboardSplatRoute = DashboardSplatRouteImport.update({
 } as any)
 const DashboardWorkspaceRoute = DashboardWorkspaceRouteImport.update({
   id: '/_workspace',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardOnboardingRoute = DashboardOnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardProspectsRoute = DashboardProspectsRouteImport.update({
-  id: '/prospects',
-  path: '/prospects',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
@@ -74,22 +109,28 @@ const HandlerSplatRoute = HandlerSplatRouteImport.update({
   path: '/handler/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardWorkspaceAgentRoute = DashboardWorkspaceAgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
+  getParentRoute: () => DashboardWorkspaceRoute,
+} as any)
+const DashboardWorkspaceContactsRoute =
+  DashboardWorkspaceContactsRouteImport.update({
+    id: '/contacts',
+    path: '/contacts',
+    getParentRoute: () => DashboardWorkspaceRoute,
+  } as any)
+const DashboardWorkspaceDashboardRoute =
+  DashboardWorkspaceDashboardRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => DashboardWorkspaceRoute,
+  } as any)
 const DashboardWorkspaceInboxRoute = DashboardWorkspaceInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
   getParentRoute: () => DashboardWorkspaceRoute,
 } as any)
-const DashboardWorkspaceLeadsRoute = DashboardWorkspaceLeadsRouteImport.update({
-  id: '/leads',
-  path: '/leads',
-  getParentRoute: () => DashboardWorkspaceRoute,
-} as any)
-const DashboardWorkspaceOverviewRoute =
-  DashboardWorkspaceOverviewRouteImport.update({
-    id: '/overview',
-    path: '/overview',
-    getParentRoute: () => DashboardWorkspaceRoute,
-  } as any)
 const DashboardWorkspaceInboxIndexRoute =
   DashboardWorkspaceInboxIndexRouteImport.update({
     id: '/',
@@ -102,123 +143,153 @@ const DashboardWorkspaceInboxConversationIdRoute =
     path: '/$conversationId',
     getParentRoute: () => DashboardWorkspaceInboxRoute,
   } as any)
-const DashboardWorkspaceLeadsIndexRoute =
-  DashboardWorkspaceLeadsIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => DashboardWorkspaceLeadsRoute,
-  } as any)
-const DashboardWorkspaceOverviewIndexRoute =
-  DashboardWorkspaceOverviewIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => DashboardWorkspaceOverviewRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
+  '/decisions': typeof DecisionsRoute
+  '/employees': typeof EmployeesRoute
+  '/leads': typeof LeadsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/overview': typeof OverviewRoute
+  '/prospects': typeof ProspectsRoute
   '/sign-in': typeof SignInRoute
+  '/squads': typeof SquadsRoute
+  '/tour': typeof TourRoute
   '/$': typeof DashboardSplatRoute
-  '/onboarding': typeof DashboardOnboardingRoute
-  '/prospects': typeof DashboardProspectsRoute
   '/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
+  '/agent': typeof DashboardWorkspaceAgentRoute
+  '/contacts': typeof DashboardWorkspaceContactsRoute
+  '/dashboard': typeof DashboardWorkspaceDashboardRoute
   '/inbox': typeof DashboardWorkspaceInboxRouteWithChildren
-  '/leads': typeof DashboardWorkspaceLeadsRouteWithChildren
-  '/overview': typeof DashboardWorkspaceOverviewRouteWithChildren
   '/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
   '/inbox/': typeof DashboardWorkspaceInboxIndexRoute
-  '/leads/': typeof DashboardWorkspaceLeadsIndexRoute
-  '/overview/': typeof DashboardWorkspaceOverviewIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
+  '/decisions': typeof DecisionsRoute
+  '/employees': typeof EmployeesRoute
+  '/leads': typeof LeadsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/overview': typeof OverviewRoute
+  '/prospects': typeof ProspectsRoute
   '/sign-in': typeof SignInRoute
+  '/squads': typeof SquadsRoute
+  '/tour': typeof TourRoute
   '/$': typeof DashboardSplatRoute
-  '/onboarding': typeof DashboardOnboardingRoute
-  '/prospects': typeof DashboardProspectsRoute
   '/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
+  '/agent': typeof DashboardWorkspaceAgentRoute
+  '/contacts': typeof DashboardWorkspaceContactsRoute
+  '/dashboard': typeof DashboardWorkspaceDashboardRoute
   '/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
   '/inbox': typeof DashboardWorkspaceInboxIndexRoute
-  '/leads': typeof DashboardWorkspaceLeadsIndexRoute
-  '/overview': typeof DashboardWorkspaceOverviewIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_dashboard': typeof DashboardRouteWithChildren
   '/_marketing': typeof MarketingRouteWithChildren
+  '/decisions': typeof DecisionsRoute
+  '/employees': typeof EmployeesRoute
+  '/leads': typeof LeadsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/overview': typeof OverviewRoute
+  '/prospects': typeof ProspectsRoute
   '/sign-in': typeof SignInRoute
+  '/squads': typeof SquadsRoute
+  '/tour': typeof TourRoute
   '/_dashboard/$': typeof DashboardSplatRoute
   '/_dashboard/_workspace': typeof DashboardWorkspaceRouteWithChildren
-  '/_dashboard/onboarding': typeof DashboardOnboardingRoute
-  '/_dashboard/prospects': typeof DashboardProspectsRoute
   '/_dashboard/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
   '/_marketing/': typeof MarketingIndexRoute
+  '/_dashboard/_workspace/agent': typeof DashboardWorkspaceAgentRoute
+  '/_dashboard/_workspace/contacts': typeof DashboardWorkspaceContactsRoute
+  '/_dashboard/_workspace/dashboard': typeof DashboardWorkspaceDashboardRoute
   '/_dashboard/_workspace/inbox': typeof DashboardWorkspaceInboxRouteWithChildren
-  '/_dashboard/_workspace/leads': typeof DashboardWorkspaceLeadsRouteWithChildren
-  '/_dashboard/_workspace/overview': typeof DashboardWorkspaceOverviewRouteWithChildren
   '/_dashboard/_workspace/inbox/$conversationId': typeof DashboardWorkspaceInboxConversationIdRoute
   '/_dashboard/_workspace/inbox/': typeof DashboardWorkspaceInboxIndexRoute
-  '/_dashboard/_workspace/leads/': typeof DashboardWorkspaceLeadsIndexRoute
-  '/_dashboard/_workspace/overview/': typeof DashboardWorkspaceOverviewIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/sign-in'
-    | '/$'
+    | '/decisions'
+    | '/employees'
+    | '/leads'
     | '/onboarding'
+    | '/overview'
     | '/prospects'
+    | '/sign-in'
+    | '/squads'
+    | '/tour'
+    | '/$'
     | '/settings'
     | '/handler/$'
+    | '/agent'
+    | '/contacts'
+    | '/dashboard'
     | '/inbox'
-    | '/leads'
-    | '/overview'
     | '/inbox/$conversationId'
     | '/inbox/'
-    | '/leads/'
-    | '/overview/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/sign-in'
-    | '/$'
+    | '/decisions'
+    | '/employees'
+    | '/leads'
     | '/onboarding'
+    | '/overview'
     | '/prospects'
+    | '/sign-in'
+    | '/squads'
+    | '/tour'
+    | '/$'
     | '/settings'
     | '/handler/$'
+    | '/agent'
+    | '/contacts'
+    | '/dashboard'
     | '/inbox/$conversationId'
     | '/inbox'
-    | '/leads'
-    | '/overview'
   id:
     | '__root__'
     | '/_dashboard'
     | '/_marketing'
+    | '/decisions'
+    | '/employees'
+    | '/leads'
+    | '/onboarding'
+    | '/overview'
+    | '/prospects'
     | '/sign-in'
+    | '/squads'
+    | '/tour'
     | '/_dashboard/$'
     | '/_dashboard/_workspace'
-    | '/_dashboard/onboarding'
-    | '/_dashboard/prospects'
     | '/_dashboard/settings'
     | '/handler/$'
     | '/_marketing/'
+    | '/_dashboard/_workspace/agent'
+    | '/_dashboard/_workspace/contacts'
+    | '/_dashboard/_workspace/dashboard'
     | '/_dashboard/_workspace/inbox'
-    | '/_dashboard/_workspace/leads'
-    | '/_dashboard/_workspace/overview'
     | '/_dashboard/_workspace/inbox/$conversationId'
     | '/_dashboard/_workspace/inbox/'
-    | '/_dashboard/_workspace/leads/'
-    | '/_dashboard/_workspace/overview/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   MarketingRoute: typeof MarketingRouteWithChildren
+  DecisionsRoute: typeof DecisionsRoute
+  EmployeesRoute: typeof EmployeesRoute
+  LeadsRoute: typeof LeadsRoute
+  OnboardingRoute: typeof OnboardingRoute
+  OverviewRoute: typeof OverviewRoute
+  ProspectsRoute: typeof ProspectsRoute
   SignInRoute: typeof SignInRoute
+  SquadsRoute: typeof SquadsRoute
+  TourRoute: typeof TourRoute
   HandlerSplatRoute: typeof HandlerSplatRoute
 }
 
@@ -238,11 +309,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/decisions': {
+      id: '/decisions'
+      path: '/decisions'
+      fullPath: '/decisions'
+      preLoaderRoute: typeof DecisionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/employees': {
+      id: '/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof EmployeesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads': {
+      id: '/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof LeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/overview': {
+      id: '/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof OverviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prospects': {
+      id: '/prospects'
+      path: '/prospects'
+      fullPath: '/prospects'
+      preLoaderRoute: typeof ProspectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sign-in': {
       id: '/sign-in'
       path: '/sign-in'
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/squads': {
+      id: '/squads'
+      path: '/squads'
+      fullPath: '/squads'
+      preLoaderRoute: typeof SquadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tour': {
+      id: '/tour'
+      path: '/tour'
+      fullPath: '/tour'
+      preLoaderRoute: typeof TourRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_dashboard/$': {
@@ -257,20 +384,6 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof DashboardWorkspaceRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/_dashboard/onboarding': {
-      id: '/_dashboard/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof DashboardOnboardingRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/_dashboard/prospects': {
-      id: '/_dashboard/prospects'
-      path: '/prospects'
-      fullPath: '/prospects'
-      preLoaderRoute: typeof DashboardProspectsRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/_dashboard/settings': {
@@ -294,25 +407,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HandlerSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_dashboard/_workspace/agent': {
+      id: '/_dashboard/_workspace/agent'
+      path: '/agent'
+      fullPath: '/agent'
+      preLoaderRoute: typeof DashboardWorkspaceAgentRouteImport
+      parentRoute: typeof DashboardWorkspaceRoute
+    }
+    '/_dashboard/_workspace/contacts': {
+      id: '/_dashboard/_workspace/contacts'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof DashboardWorkspaceContactsRouteImport
+      parentRoute: typeof DashboardWorkspaceRoute
+    }
+    '/_dashboard/_workspace/dashboard': {
+      id: '/_dashboard/_workspace/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardWorkspaceDashboardRouteImport
+      parentRoute: typeof DashboardWorkspaceRoute
+    }
     '/_dashboard/_workspace/inbox': {
       id: '/_dashboard/_workspace/inbox'
       path: '/inbox'
       fullPath: '/inbox'
       preLoaderRoute: typeof DashboardWorkspaceInboxRouteImport
-      parentRoute: typeof DashboardWorkspaceRoute
-    }
-    '/_dashboard/_workspace/leads': {
-      id: '/_dashboard/_workspace/leads'
-      path: '/leads'
-      fullPath: '/leads'
-      preLoaderRoute: typeof DashboardWorkspaceLeadsRouteImport
-      parentRoute: typeof DashboardWorkspaceRoute
-    }
-    '/_dashboard/_workspace/overview': {
-      id: '/_dashboard/_workspace/overview'
-      path: '/overview'
-      fullPath: '/overview'
-      preLoaderRoute: typeof DashboardWorkspaceOverviewRouteImport
       parentRoute: typeof DashboardWorkspaceRoute
     }
     '/_dashboard/_workspace/inbox/': {
@@ -328,20 +448,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/inbox/$conversationId'
       preLoaderRoute: typeof DashboardWorkspaceInboxConversationIdRouteImport
       parentRoute: typeof DashboardWorkspaceInboxRoute
-    }
-    '/_dashboard/_workspace/leads/': {
-      id: '/_dashboard/_workspace/leads/'
-      path: '/'
-      fullPath: '/leads/'
-      preLoaderRoute: typeof DashboardWorkspaceLeadsIndexRouteImport
-      parentRoute: typeof DashboardWorkspaceLeadsRoute
-    }
-    '/_dashboard/_workspace/overview/': {
-      id: '/_dashboard/_workspace/overview/'
-      path: '/'
-      fullPath: '/overview/'
-      preLoaderRoute: typeof DashboardWorkspaceOverviewIndexRouteImport
-      parentRoute: typeof DashboardWorkspaceOverviewRoute
     }
   }
 }
@@ -363,44 +469,18 @@ const DashboardWorkspaceInboxRouteWithChildren =
     DashboardWorkspaceInboxRouteChildren,
   )
 
-interface DashboardWorkspaceLeadsRouteChildren {
-  DashboardWorkspaceLeadsIndexRoute: typeof DashboardWorkspaceLeadsIndexRoute
-}
-
-const DashboardWorkspaceLeadsRouteChildren: DashboardWorkspaceLeadsRouteChildren =
-  {
-    DashboardWorkspaceLeadsIndexRoute: DashboardWorkspaceLeadsIndexRoute,
-  }
-
-const DashboardWorkspaceLeadsRouteWithChildren =
-  DashboardWorkspaceLeadsRoute._addFileChildren(
-    DashboardWorkspaceLeadsRouteChildren,
-  )
-
-interface DashboardWorkspaceOverviewRouteChildren {
-  DashboardWorkspaceOverviewIndexRoute: typeof DashboardWorkspaceOverviewIndexRoute
-}
-
-const DashboardWorkspaceOverviewRouteChildren: DashboardWorkspaceOverviewRouteChildren =
-  {
-    DashboardWorkspaceOverviewIndexRoute: DashboardWorkspaceOverviewIndexRoute,
-  }
-
-const DashboardWorkspaceOverviewRouteWithChildren =
-  DashboardWorkspaceOverviewRoute._addFileChildren(
-    DashboardWorkspaceOverviewRouteChildren,
-  )
-
 interface DashboardWorkspaceRouteChildren {
+  DashboardWorkspaceAgentRoute: typeof DashboardWorkspaceAgentRoute
+  DashboardWorkspaceContactsRoute: typeof DashboardWorkspaceContactsRoute
+  DashboardWorkspaceDashboardRoute: typeof DashboardWorkspaceDashboardRoute
   DashboardWorkspaceInboxRoute: typeof DashboardWorkspaceInboxRouteWithChildren
-  DashboardWorkspaceLeadsRoute: typeof DashboardWorkspaceLeadsRouteWithChildren
-  DashboardWorkspaceOverviewRoute: typeof DashboardWorkspaceOverviewRouteWithChildren
 }
 
 const DashboardWorkspaceRouteChildren: DashboardWorkspaceRouteChildren = {
+  DashboardWorkspaceAgentRoute: DashboardWorkspaceAgentRoute,
+  DashboardWorkspaceContactsRoute: DashboardWorkspaceContactsRoute,
+  DashboardWorkspaceDashboardRoute: DashboardWorkspaceDashboardRoute,
   DashboardWorkspaceInboxRoute: DashboardWorkspaceInboxRouteWithChildren,
-  DashboardWorkspaceLeadsRoute: DashboardWorkspaceLeadsRouteWithChildren,
-  DashboardWorkspaceOverviewRoute: DashboardWorkspaceOverviewRouteWithChildren,
 }
 
 const DashboardWorkspaceRouteWithChildren =
@@ -409,16 +489,12 @@ const DashboardWorkspaceRouteWithChildren =
 interface DashboardRouteChildren {
   DashboardSplatRoute: typeof DashboardSplatRoute
   DashboardWorkspaceRoute: typeof DashboardWorkspaceRouteWithChildren
-  DashboardOnboardingRoute: typeof DashboardOnboardingRoute
-  DashboardProspectsRoute: typeof DashboardProspectsRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardSplatRoute: DashboardSplatRoute,
   DashboardWorkspaceRoute: DashboardWorkspaceRouteWithChildren,
-  DashboardOnboardingRoute: DashboardOnboardingRoute,
-  DashboardProspectsRoute: DashboardProspectsRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
 }
 
@@ -441,7 +517,15 @@ const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   MarketingRoute: MarketingRouteWithChildren,
+  DecisionsRoute: DecisionsRoute,
+  EmployeesRoute: EmployeesRoute,
+  LeadsRoute: LeadsRoute,
+  OnboardingRoute: OnboardingRoute,
+  OverviewRoute: OverviewRoute,
+  ProspectsRoute: ProspectsRoute,
   SignInRoute: SignInRoute,
+  SquadsRoute: SquadsRoute,
+  TourRoute: TourRoute,
   HandlerSplatRoute: HandlerSplatRoute,
 }
 export const routeTree = rootRouteImport

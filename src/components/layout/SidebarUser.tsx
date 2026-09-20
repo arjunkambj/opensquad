@@ -3,12 +3,12 @@ import {
   Moon02Icon,
   Settings02Icon,
   Sun03Icon,
+  UnfoldMoreIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp } from "@hexclave/react"
 import { useNavigate } from "@tanstack/react-router"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,8 +17,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useSidebar } from "@/components/ui/sidebar"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTheme } from "@/components/theme-provider"
+import { cn } from "@/lib/utils"
 
 export type ProfileUser = {
   displayName: string | null
@@ -34,50 +36,69 @@ const getInitials = (value: string | null) =>
     .map((part) => part[0]?.toUpperCase())
     .join("")
 
-export function UserProfileMenu({ user }: { user: ProfileUser }) {
+/**
+ * The signed-in user at the foot of the sidebar (reference 20): the real
+ * account, and the menu that leads out of the app.
+ *
+ * It sits here rather than in a top bar because the reference has no top bar
+ * and because this is where a user looks for "who am I signed in as" — and
+ * the collapsed rail keeps the avatar, which is the one part still legible at
+ * 3rem.
+ */
+export function SidebarUser({ user }: { user: ProfileUser }) {
   const navigate = useNavigate()
   const app = useHexclaveApp()
   const { theme, setTheme } = useTheme()
+  const { state, isMobile } = useSidebar()
+  const collapsed = state === "collapsed" && !isMobile
   const initials =
     getInitials(user.displayName) || getInitials(user.primaryEmail)
+
+  const avatar = (
+    <Avatar className="size-8">
+      {user.profileImageUrl ? (
+        <AvatarImage alt={user.displayName ?? ""} src={user.profileImageUrl} />
+      ) : null}
+      <AvatarFallback className="text-xs font-medium">
+        {initials}
+      </AvatarFallback>
+    </Avatar>
+  )
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label="Open user profile"
-        render={
-          <Button
-            size="icon-lg"
-            variant="ghost"
-            className="aria-expanded:bg-transparent!"
-          />
-        }
+        aria-label="Open account menu"
+        className={cn(
+          "flex w-full items-center gap-2 rounded-2xl p-1.5 text-left outline-hidden transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/40",
+          collapsed && "justify-center p-1",
+        )}
       >
-        <Avatar className="size-8">
-          {user.profileImageUrl ? (
-            <AvatarImage
-              alt={user.displayName ?? ""}
-              src={user.profileImageUrl}
+        {avatar}
+        {collapsed ? null : (
+          <>
+            <span className="min-w-0 flex-1">
+              {user.displayName ? (
+                <span className="block truncate text-sm font-medium text-sidebar-foreground">
+                  {user.displayName}
+                </span>
+              ) : null}
+              {user.primaryEmail ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {user.primaryEmail}
+                </span>
+              ) : null}
+            </span>
+            <HugeiconsIcon
+              icon={UnfoldMoreIcon}
+              className="size-4 shrink-0 text-muted-foreground"
             />
-          ) : null}
-          <AvatarFallback className="text-xs font-medium">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+          </>
+        )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="start" side="top" className="w-60">
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <Avatar className="size-9">
-            {user.profileImageUrl ? (
-              <AvatarImage
-                alt={user.displayName ?? ""}
-                src={user.profileImageUrl}
-              />
-            ) : null}
-            <AvatarFallback className="text-sm font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          {avatar}
           <div className="min-w-0">
             {user.displayName ? (
               <div className="truncate text-sm font-semibold">
@@ -123,16 +144,20 @@ export function UserProfileMenu({ user }: { user: ProfileUser }) {
           </Tabs>
         </div>
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => void navigate({ to: "/settings" })}>
+          <DropdownMenuItem
+            onClick={() =>
+              void navigate({ to: "/settings", search: { tab: "account" } })
+            }
+          >
             <HugeiconsIcon icon={Settings02Icon} />
-            Settings
+            Account settings
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             onClick={() => void app.signOut()}
           >
             <HugeiconsIcon icon={Logout03Icon} />
-            Logout
+            Sign out
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
