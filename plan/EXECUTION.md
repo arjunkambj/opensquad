@@ -35,12 +35,12 @@ files, and how we know it is done*. Read PLAN.md fully before taking a task.
 8. **Verify before hand-off:** `pnpm lint`, `pnpm exec tsc -b`,
    `pnpm exec tsc -p convex/tsconfig.json --noEmit`, `pnpm build`. All four
    pass, or the task is not done. Paste the tail of each into the hand-off.
-9. **Structure** (PLAN §9). Domain folders on both sides; thin Convex
+9. **Structure** (PLAN §10). Domain folders on both sides; thin Convex
    functions over a `model.ts`; page containers own data, children are
    presentational; one component per file; no `utils`/`helpers` dumping
    grounds, no barrels, no magic numbers, no cross-domain imports. Files past
    ~300 lines (backend) / ~200 lines (component) split. Put new files where
-   PLAN §9 says, even if your task's *Owns* list names only the folder.
+   PLAN §10 says, even if your task's *Owns* list names only the folder.
 10. **Hand-off note** (final message): commits made, verification output,
    anything needed from Integrator-only files, anything unverified. Never claim
    a provider integration works unless you saw a real response.
@@ -57,6 +57,34 @@ owns `npx convex codegen` / `convex dev` against the **dev** deployment, merges
 task branches in dependency order, runs the click-through after each wave, and
 writes the `hackathon.md` entry.
 
+### Who may touch a deployment
+| Action | Who |
+|---|---|
+| `npx convex codegen` (dev deployment only) | any task agent, to regenerate `convex/_generated` after adding or moving function files. Commit the result. |
+| `npx convex dev` / pushing functions to **dev** | integrator only, after merging a wave |
+| Anything against **production** (`deploy`, `env set --prod`, `import`, migrations) | integrator, and only after the user says go, per MIGRATION.md |
+| Provider dashboards, real keys | user; keys reach Convex env via the user or integrator, never a task agent's shell history or a file |
+
+Consequences for acceptance: a task agent's **Done when** has two halves.
+*Static* (the four verify commands, structure, no mock data) is the agent's
+job. *Live* (anything phrased "a real …") needs pushed code and real keys, so
+the agent lists those checks in its hand-off and the **integrator runs them
+after the merge**; a task is ticked in §5 only when both halves pass.
+
+### API hand-offs between tasks
+Tasks never call a function another in-flight task is still writing.
+- **Couple through data, not function references**, wherever one task starts
+  work another task performs. Example: T23's Confirm sets
+  `agents.status = "live"` and `nextRunAt = now`; T30's run cron picks up any
+  agent whose `nextRunAt` is due. T23 needs nothing from T30 to compile or to
+  be verified.
+- Where a direct call is unavoidable, the callee is in an **earlier wave** and
+  already merged, so it exists in the committed `convex/_generated/api`.
+- `convex/_generated` conflicts at merge time are never hand-resolved: the
+  integrator takes either side and re-runs codegen.
+- A task that adds a cron or HTTP route writes the exact registration snippet
+  in its hand-off; the integrator pastes it into `crons.ts` / `http.ts`.
+
 ### Worktrees
 One git worktree + branch per task (`task/T20-company-analysis`), branched from
 the integrated tip of the previous wave. Tasks inside a wave own disjoint
@@ -67,7 +95,7 @@ committed `convex/_generated`.
 ## 1. Task graph
 
 ```
-Wave 0 (serial)     T00 ─▶ T01 ─▶ T05 ─▶ T02 ─▶ T03 ─▶ T04
+Wave 0 (serial)     T00 ─▶ T01 ─▶ T06 ─▶ T05 ─▶ T02 ─▶ T03 ─▶ T04
 Wave 1 (parallel)   T10 inbox backend   T11 lead-data client   T12 scraper   T13 UI kit
 Wave 2 (parallel)   T20 company ─▶ T21 ICP ─▶ T23 signals        T22 inbox + goals UI
 Wave 3 (parallel)   T30 sourcing + research ─▶ T31 contacts      T32 agent page
@@ -75,6 +103,8 @@ Wave 4 (parallel)   T40 outreach ─▶ T41 close + inbox UI         T42 dashboa
 Wave 5 (serial)     T50 polish, audit, ship
 ```
 
+T23 does not depend on T30: Confirm only flips the agent live and sets
+`nextRunAt` (see API hand-offs); leads appearing is T30's acceptance.
 Within wave 2, T20 → T21 → T23 is a chain (each needs the previous step's
 data); T22 runs beside it. Within wave 3, T32 can start once T30's queries
 exist. Within wave 4, T42 and T43 run beside the T40 → T41 chain.
@@ -88,7 +118,7 @@ Each task lists **Depends**, **Owns**, **Build**, **Done when**.
 ### T00 · Verification spikes — integrator
 **Depends:** removal finished. **Owns:** `plan/spikes.md`, a throwaway
 `convex/spikes.ts` deleted at the end of the task.
-**Build:** five 10-minute probes, each recording the real request/response
+**Build:** eight short probes, each recording the real request/response
 shape (secrets redacted) in `plan/spikes.md`:
 1. AI Gateway is enabled on the dev deployment; list the OpenAI model ids it
    serves; choose `MODELS.fast` and `MODELS.smart`.
@@ -99,6 +129,13 @@ shape (secrets redacted) in `plan/spikes.md`:
 4. AgentMail: `GET /v0/inboxes`, `POST /v0/webhooks` response incl. `secret`,
    thread + message list shapes for backfill.
 5. Hexclave: how verified-email status reaches Convex auth.
+6. Open tracking: does the mail provider emit open events for our inbox type,
+   what must the sender configure, does the installed component pass them
+   through. Result decides PLAN §9.6 (conditional metric, or dropped).
+7. Whether `npx convex codegen` on this project pushes anything to dev; if it
+   does, note it under "Who may touch a deployment".
+8. Production data census for MIGRATION.md §0 (row counts, real vs test data)
+   — read-only — and the user's choice of full vs clean-slate path.
 **Done when:** every probe has a recorded real response or an explicit
 "blocked: …" with the fallback chosen. Any blocker is raised to the user
 before T01.
@@ -111,13 +148,28 @@ before T01.
 indexes for every query in PLAN §5 (`prospects` by workspace+stage,
 workspace+nextActionAt, workspace+aiScore, agent+sourceLeadId; `strategies` by
 agent; `conversations` by workspace+state). Migrate/rename `campaigns` call
-sites minimally so the tree typechecks.
+sites minimally so the tree typechecks. Land it as MIGRATION.md's **widened**
+schema (deploy A): new fields optional, removed fields still optional, so it
+deploys onto existing data. Includes the unique indexes from PLAN §9.4.
 **Done when:** codegen + all four verify commands pass; no table or field from
 PLAN §7 is missing.
 
+### T06 · Data migration — integrator
+**Depends:** T01, user's path decision from T00.8. **Owns:**
+`convex/migrations/**`, `plan/migration-log.md`, the migrations component in
+`convex/convex.config.ts`.
+**Build:** MIGRATION.md end to end **on dev**: migrations `m01`–`m07`, each
+idempotent with a dry run; verification queries; then the narrowed final
+schema (deploy B). Production cutover is a separate, user-approved step run
+from the same runbook (normally just before T50).
+**Done when:** on dev, every check in MIGRATION.md §3 passes and is recorded;
+re-running every migration changes nothing; the rollback in §5 has been
+rehearsed once on dev (deploy A commit redeployed over migrated data, app
+still works).
+
 ### T05 · Restructure into domain folders — integrator
-**Depends:** T01. **Owns:** the whole tree, for this task only.
-**Build:** mechanical moves, **no behaviour change**, per PLAN §9:
+**Depends:** T06. **Owns:** the whole tree, for this task only.
+**Build:** mechanical moves, **no behaviour change**, per PLAN §10:
 - Backend: move kept modules into `workspaces/`, `billing/`, `company/`,
   `agents/`, `leads/`, `outreach/`, `inbox/`, `bookings/`, `activity/`; split
   `lib/validators.ts` into `lib/validators/<domain>.ts` + `index.ts`
@@ -145,11 +197,15 @@ one transaction → run → commit actuals → release rest; `uncertain` on unkn
 outcome; idempotent by `operationKey`); trial buckets created with the
 workspace; one workspace per user; `MAX_TRIAL_WORKSPACES` waitlist state;
 `PLATFORM_PAUSED` kill switch; per-user token buckets; public query
-`credits.summary` (balance + recent usage, no provider names).
+`credits.summary` (balance, pending holds, recent usage, no provider names).
+The three outcomes of PLAN §6 — refunded / billed / uncertain — are explicit
+in the wrapper's return type, and a billed upstream step is never re-bought on
+retry (its result is stored and reused).
 **Done when:** a scripted run in the Convex dashboard shows: reserve beyond
 balance refuses; two concurrent reserves cannot overspend; release refunds;
 platform bucket at zero refuses for a second workspace; kill switch refuses
-everything.
+everything; a simulated timeout leaves an `uncertain` hold that the sweep
+later commits or releases; a provider answer of "charged 0" refunds in full.
 
 ### T03 · AI foundation — integrator
 **Depends:** T02. **Owns:** `convex/ai/models.ts`, `convex/ai/run.ts`,
@@ -192,11 +248,18 @@ webhook on the user's account and store its secret encrypted, per-request
 `new AgentMail(components.agentmail, { webhookSecret })` handler function for
 the integrator to mount, 30-day thread backfill with progress, send path takes
 the decrypted key as an argument, disconnect/rotate, 401 → key `invalid` +
-agent paused. Client queries expose `{ status, last4, inboxAddress, lastEventAt, sync }` only.
+agent paused. All of PLAN §9.4: event accepted only when token → workspace
+**and** `inbox_id` = `inboxRef` (else quarantine); unique `inboxRef`; webhook
+`client_id` = workspace id so re-connect is idempotent; rotation order with a
+10-minute two-secret overlap; backfill and live both upsert on provider
+`message_id`; rows tagged `source`; `connectedAt` stamped. Client queries expose `{ status, last4, inboxAddress, lastEventAt, sync }` only.
 **Done when:** with a real AgentMail key in the dev deployment: connect
 verifies, webhook appears in that account, an email sent to the inbox arrives
 in `conversations` through the per-workspace route, a bad signature gets 401,
-backfill imports existing threads, disconnect deletes the webhook.
+backfill imports existing threads, disconnect deletes the webhook; connecting
+the same inbox from a second workspace is refused; connecting twice creates
+one webhook; a message delivered by both backfill and webhook exists once; an
+event for a different `inbox_id` on a valid token is quarantined.
 
 ### T11 · Lead-data client
 **Depends:** T02. **Owns:** `convex/integrations/enrich.ts`,
@@ -213,7 +276,7 @@ affords) + `revealJob` poll, `walletBalance`. Every billable call inside
 present in the cached options. Balance floor trips the platform breaker.
 **Done when:** real `count` and `search` return rows at 0 provider credits; an
 invalid enum value is rejected before any network call; a reveal of one lead
-debits 20 credits / 10 provider units and records the operation.
+debits 15 credits / 10 provider units and records the operation.
 
 ### T12 · Website scraper
 **Depends:** T02. **Owns:** `convex/integrations/firecrawl.ts`,
@@ -290,25 +353,36 @@ described in PLAN §5.
 ICP + catalogue + cached allowed values; free count per strategy; one
 relax/tighten pass; cards with rationale, live count and recommended
 pre-checked; keywords with AI suggestions and Generate more; review accordion;
-**Confirm & preview leads** → agent live, first run scheduled, redirect to
-`/contacts`.
+**Confirm & preview leads** → `agents.status = "live"`, `nextRunAt = now`,
+redirect to `/contacts` (which shows its real "Finding your first leads…"
+state from the agent's run fields).
 **Done when:** every card's count is a real count; no strategy with zero
-matches is pre-checked; Confirm lands on Contacts with the run in progress.
+matches is pre-checked; Confirm leaves a live agent with `nextRunAt` due and
+redirects. (Leads actually appearing is T30's acceptance.)
 
 ---
 
 ### T30 · Sourcing and research
-**Depends:** T23, T12. **Owns:** `convex/agents/run.ts`, `convex/agents/sourcing.ts`,
+**Depends:** T23, T12. **Owns:** `convex/agents/run.ts`, `convex/agents/recovery.ts`,
+`convex/agents/sourcing.ts`, `convex/leads/preRank.ts`,
 `convex/ai/researchLead.ts`, `convex/leads/research.ts`, source/upsert parts of
 `convex/leads/model.ts`. **Hand-off to integrator:** `agent-run` cron.
-**Build:** per enabled strategy: search next free page → upsert, dedupe on
-`sourceLeadId`, merge `strategyIds` → schedule research (scrape company home
+**Build:** the execution contract of PLAN §9.1 — run lease (single flight),
+one-lead-per-step scheduling, `operationKey`s, step retry ladder →
+`needs_attention`, the 10-minute recovery sweep, revision fencing helpers used
+by later tasks. Then sourcing: per enabled strategy search next free page →
+upsert, dedupe on `sourceLeadId`, merge `strategyIds` → free pre-rank →
+**initial batch of ~8 across strategies, then `dailyResearchCap` a day**
+(PLAN §9.2), reserving credits for approved leads' emails first → research (scrape company home
 page → score 1–3, reason, summary, hooks; multi-signal boost) → stage
 `researched`. Respects `dailyLeadCap`, credits and caps; records
 `leadsFound`, `nextPage`, `lastRunAt`. Queries for Contacts, Agent and
 Dashboard counts.
-**Done when:** Confirm produces real scored leads tagged with their signal; a
-second run does not duplicate; out-of-credits stops paid steps cleanly.
+**Done when:** Confirm produces real leads tagged with their signal, ~8 of them
+scored and the rest "Not researched yet"; two simultaneous Run now clicks
+produce one run; killing an action mid-run is recovered by the sweep without
+double-charging; a second run does not duplicate; out-of-credits stops paid
+steps cleanly and leaves free ones working.
 
 ### T31 · Contacts
 **Depends:** T30. **Ref:** `23-contacts`.
@@ -320,8 +394,11 @@ Reject), dense table (contact with profile link, signal with "+n signals",
 sortable flame score, email state with **Get email** → reveal job + poll,
 stage, imported, approval, row menu), page size + "Showing x to y of z", lead
 drawer (`?lead=`): research summary, score reason, signals, thread, actions.
-Zero-lead state explains which signals returned nothing.
-**Done when:** everything is live data; Get email spends 20 credits once and
+Per-row and bulk **Research** (3 credits) for leads not yet
+researched. Approve here is **lead approval** (PLAN §9.3): it authorises
+finding the email and drafting, not sending. Rejecting cancels that lead's
+pending work. Zero-lead state explains which signals returned nothing.
+**Done when:** everything is live data; Get email spends 15 credits once and
 is idempotent; rows appear while the run is in progress.
 
 ### T32 · Agent page
@@ -330,8 +407,9 @@ is idempotent; rows appear while the run is in progress.
 `convex/agents/settings.ts` (mode, instructions, bookingUrl, dealSize, runNow,
 strategy toggle — ICP mutations stay in T21's `agents/icp.ts`).
 **Build:** agent card with generated editable name, mode dropdown (Sourcing only /
-Review / Autopilot / Paused), funnel metrics (Contacted n / total, Opened from
-AgentMail open events, Replied, Interested), sender address, created date, signals list with on/off and leads per signal, instructions, booking
+Review / Autopilot / Paused), funnel metrics (Contacted n / total, Replied, Interested; Opened only
+when `opensObserved`, per PLAN §9.6), Autopilot consent dialog that records
+`agents.autopilot` (PLAN §9.3), needs-attention list with Retry, sender address, created date, signals list with on/off and leads per signal, instructions, booking
 link, follow-up days, Run now (rate-limited), "connect inbox" banner.
 **Done when:** toggling a signal changes the next run; Run now schedules one
 run and is rate-limited; counts match Contacts.
@@ -341,28 +419,43 @@ run and is rate-limited; counts match Contacts.
 ### T40 · Outreach
 **Depends:** T31, T10. **Owns:** `convex/ai/writeOutreach.ts`,
 `convex/outreach/**`. **Hand-off to integrator:** outreach cron.
-**Build:** due leads (researched, score ≥ 2, approved in Review mode, email
-found, not suppressed) → write step 0 with opt-out line → draft → Autopilot
+**Build:** the mode matrix of PLAN §9.3. **Automatic email reveal lives here**:
+Review → reveal when the user approves the lead; Autopilot → auto-approve at
+`autoApproveMinScore`, reveal up to `autoRevealDailyCap` a day. Autopilot
+email approval = an `approvals` row with `actor: "autopilot"` bound to draft +
+revision, then the unchanged send ledger. Send-time re-validation and the
+invalidation table of PLAN §9.1 (pause, reject, instruction change, reply).
+Due leads (researched, lead-approved, email found, not suppressed) → write step 0 with opt-out line → draft → Autopilot
 sends, Review waits, Sourcing only never reaches this step for approval → existing ledger (suppression, window, daily
 limit, idempotency key) → stage `contacted`, `nextActionAt`. Follow-ups at
 `followUpDays` in-thread while no reply.
 **Done when:** a real email reaches an address we control in both modes;
 suppressed and out-of-window leads are not sent; a follow-up goes out only
-with no reply.
+with no reply; pausing mid-batch sends nothing further; rejecting a lead with
+a queued draft sends nothing; editing instructions supersedes unsent drafts;
+Autopilot never turns itself on.
 
 ### T41 · Close + Inbox
 **Depends:** T40. **Ref:** `24-inbox`.
 **Owns:** `convex/ai/handleReply.ts`, `convex/inbox/replies.ts`, the AI seams left in
 `convex/inbox/inbound.ts` (search for `AI classify/draft`), `src/routes/_dashboard/_workspace/inbox*.tsx`,
 `src/components/inbox/**`.
-**Build:** inbound → classify → next move per PLAN §1 / flow.html reply
-branches (answer, booking proposal, booked → `bookings`, not now → reschedule,
+**Build:** the reply gate of PLAN §9.4 (live, after `connectedAt`, thread we
+started, not from us, not handled) before anything else. **Unsubscribe and
+bounce handling is rule-based, free and never blocked** by credits, caps or
+the kill switch: header / phrase detection → suppression → stop. Only then the
+AI path: classify → next move per PLAN §1 / flow.html reply branches (answer,
+booking proposal → `meeting_proposed`; **booked only via the user's "Mark as
+booked"**, PLAN §9.5; at most 2 automatic replies per thread; not now → reschedule,
 not interested → closed lost, unsubscribe → suppression). Autopilot sends,
 Review queues. Inbox: list with conversation count, search, Received / Interested / Unread /
 All, thread,
 suggested reply with edit + send, mark interested, connect-inbox empty state.
 **Done when:** a real reply is classified and answered end to end; an
-unsubscribe reply blocks all later sends to that address.
+unsubscribe reply blocks all later sends **with the workspace at zero credits
+and with the kill switch on**; a backfilled message and a mail in a thread we
+did not start are never answered; a reply arriving while a follow-up is queued
+cancels it; nothing but the user's click produces `meeting_booked`.
 
 ### T42 · Dashboard
 **Depends:** T30 (complete after T41). **Ref:** `20-dashboard`.
@@ -370,7 +463,8 @@ unsubscribe reply blocks all later sends to that address.
 `src/components/dashboard/**`, `convex/dashboard/queries.ts`.
 **Build:** welcome header with two status chips (active signals → `/agent`, inbox
 connection → Settings), range pills (7 days / 30 days / 3 months / This month),
-stat cards (hot leads, contacted, conversations, pipeline = `dealSize` ×
+stat cards (hot leads, contacted, conversations, meetings = confirmed
+bookings only with proposed shown separately, pipeline = `dealSize` ×
 (interested + meetings) with inline Edit), activity chart from real daily counts, latest hot
 leads, latest replies, next-step CTA card that reflects real state.
 **Done when:** every number reconciles with Contacts and Inbox for the same
@@ -393,9 +487,10 @@ provider name.
 **Build:** loading/error/empty pass on every screen; landing copy for the new
 product; audits: `grep -ri` client bundle and `src/` for provider names
 (white-label), for hard-coded sample data, for any public action; confirm every
-paid call path goes through `withCredits`; structure audit against PLAN §9
-(no cross-domain imports, no oversized files, no `utils`/barrels, READMEs true); set production env budgets; deploy
-to the production Convex host; final `hackathon.md` entry.
+paid call path goes through `withCredits`; structure audit against PLAN §10
+(no cross-domain imports, no oversized files, no `utils`/barrels, READMEs true); set production env budgets; **production
+cutover per MIGRATION.md §4 after the user says go**; deploy to the production
+Convex host; final `hackathon.md` entry.
 **Done when:** a fresh signup completes website → leads → email sent → reply
 handled on production with real data, and the three audits are clean.
 
@@ -418,11 +513,26 @@ handled on production with real data, and the three audits are clean.
 3. `npx convex codegen` against **dev**, then the four verify commands.
 4. Click through the wave's screens next to their reference images.
 5. Run the white-label and no-mock greps.
-6. One `hackathon.md` entry; tick the tasks below.
+6. Run the wave's **live** acceptance checks handed over by task agents, plus
+   the standing manual checks that apply so far:
+   - *Migration:* MIGRATION.md §3 counts on dev; old conversation opens; a
+     legacy suppressed address is still refused.
+   - *Concurrency:* double-click Run now / Get email / Approve → one effect,
+     one charge.
+   - *Timeouts:* force a provider timeout (bad base URL env on dev) → hold
+     shows as pending, sweep resolves it, no double charge, lead ends in
+     `needs_attention` with Retry.
+   - *Pause:* pause during a run and during a send batch → nothing further is
+     sent, drafts survive, resume continues.
+   - *Zero credits:* with the balance at 0 — app browsable, free actions work,
+     paid buttons explain themselves, inbound mail still lands, unsubscribe
+     still suppresses.
+   - *Kill switch:* `PLATFORM_PAUSED=true` → no provider call of any kind.
+7. One `hackathon.md` entry; tick the tasks below.
 
 ## 5. Status
 
-- [ ] T00 spikes · [ ] T01 schema · [ ] T05 restructure · [ ] T02 credits · [ ] T03 AI · [ ] T04 shell
+- [ ] T00 spikes · [ ] T01 schema · [ ] T06 migration · [ ] T05 restructure · [ ] T02 credits · [ ] T03 AI · [ ] T04 shell
 - [ ] T10 inbox backend · [ ] T11 lead data · [ ] T12 scraper · [ ] T13 UI kit
 - [ ] T20 company · [ ] T21 ICP · [ ] T22 inbox + goals · [ ] T23 signals
 - [ ] T30 sourcing · [ ] T31 contacts · [ ] T32 agent

@@ -143,7 +143,7 @@ td:first-child{font-weight:600;white-space:nowrap}
     <div class="branches">
       <div class="branch"><b>Question or objection</b><span>Draft an answer from the company profile, send it (or queue for review), stay in the thread.</span></div>
       <div class="branch"><b>Interested</b><span>Stage → interested. Reply with the booking link and two concrete time suggestions.</span></div>
-      <div class="branch"><b>Meeting accepted</b><span>Write a bookings row, stage → meeting booked, stop the sequence.</span></div>
+      <div class="branch"><b>Call agreed</b><span>Stage → meeting proposed. Only the user marks it booked; the agent can suggest it but never sets it.</span></div>
       <div class="branch"><b>Not now / out of office</b><span>Pause follow-ups and set a later nextActionAt.</span></div>
       <div class="branch"><b>Not interested</b><span>Stage → closed lost. No more email.</span></div>
       <div class="branch"><b>Unsubscribe</b><span>Add to suppressions. Checked before every future send.</span></div>
@@ -174,13 +174,14 @@ td:first-child{font-weight:600;white-space:nowrap}
     <div class="sechead"><span class="eyebrow">Guard rails</span><h2>Rules the calls follow</h2></div>
     <ul class="rules">
       <li><b>No mock data.</b> Every row, count and chip comes from a real call or a real record. Empty screens say what to do next.</li>
-      <li><b>200 credits, one plan, no upgrade.</b> Credits are our own unit: finding a page of leads 5, researching a lead 2, getting an email 20, writing or answering an email 1. First-run onboarding is free. No balance, no call.</li>
+      <li><b>300 credits, one plan, no upgrade.</b> Credits are our own unit: finding a page of leads 2, researching a lead 3, getting an email 15, writing or answering an email 1. First-run onboarding is free. No balance, no call.</li>
       <li><b>A hidden hard cap behind the credits.</b> Whatever the balance says, one trial workspace can never cost more than 100 real Enrich credits, 400 GPT calls or 80 scraped pages. Each call reserves its worst case first and settles to what the provider actually charged.</li>
       <li><b>Our keys cannot be drained.</b> A platform-wide daily budget sits behind every workspace limit, plus per-user rate limits, one trial workspace per verified email, a cap on total trials and a kill switch. Paid work runs only in internal actions that rebuild the request server-side.</li>
       <li><b>White-label.</b> This page names providers because it is an engineering map. The product never does: users see lead search, email finder, website analysis and credits. Provider names, ids and raw error text never reach the browser.</li>
       <li><b>Free first.</b> Enrich filter options, counts and the first 75 rows of a search cost nothing. Credits are spent only on revealing an email, and only for leads scored 2 or 3.</li>
       <li><b>Never phone.</b> Reveal always passes <span class="mono">fields: ["email"]</span>; a phone reveal costs about fifty times more.</li>
       <li><b>Exact values only.</b> Enrich filters are case-sensitive and a typo silently returns nothing, so GPT picks from the cached allowed values and every value is re-checked before the call.</li>
+      <li><b>Three outcomes for every paid step.</b> Refunded when nothing was charged, billed when the provider did the work even if a later step failed, held as pending when we cannot tell. A sweep reconciles pending holds with the provider.</li>
       <li><b>One send, once.</b> Every email goes out with an idempotency key through the send ledger, after the suppression, sending-window and daily-limit checks.</li>
       <li><b>No model key to manage.</b> GPT calls go through Convex AI Gateway from inside actions. The only key a user ever brings is AgentMail.</li>
     </ul>
@@ -203,7 +204,7 @@ const ONBOARDING = [
       ["user","Adds, removes or toggles chips"],
       ["convex","mutation <m>agents.updateIcp</m> on a draft agent"]
     ], stored: "<b>agents</b> (draft) · icp" },
-  { title: "Connect your inbox, set your goal", body: "Paste an AgentMail key (or Connect later). Lead data needs no key: every trial workspace starts with 200 credits that cover lead search, research, emails found and AI writing. Then pain points, campaign goal and message tone.", ref: "04-connect-accounts · 05-goals-tone",
+  { title: "Connect your inbox, set your goal", body: "Paste an AgentMail key (or Connect later). Lead data needs no key: every trial workspace starts with 300 credits that cover lead search, research, emails found and AI writing. Then pain points, campaign goal and message tone.", ref: "04-connect-accounts · 05-goals-tone",
     calls: [
       ["user","Pastes a key, clicks Verify"],
       ["mail","<m>GET /v0/inboxes</m> proves the key · user picks an inbox or creates one with <m>POST /v0/inboxes</m>", "free"],
@@ -230,20 +231,20 @@ const ONBOARDING = [
     ], stored: "<b>prospects</b> · stage found → researched, aiScore, researchSummary, strategyIds" }
 ];
 const LOOP = [
-  { title: "Find", body: "Pulls the next page for every enabled signal, up to the agent's daily lead cap.", ref: "",
-    calls: [["convex","cron <m>agent-run</m> picks agents that are not paused"],["enrich","<m>POST /lead-finder/search</m> next page per strategy","free within 3 pages"],["convex","dedupe and insert · stage found"]], stored: "<b>prospects</b> · <b>strategies</b>.nextPage, leadsFound" },
-  { title: "Research", body: "Reads the lead's company site and decides how good the fit is, and why.", ref: "",
+  { title: "Find", body: "Pulls the next page for every enabled signal. Only one run per agent at a time: a second trigger is a no-op.", ref: "",
+    calls: [["convex","cron picks agents whose <m>nextRunAt</m> is due and takes a run lease · one lead per step, every step safe to run twice"],["enrich","<m>POST /lead-finder/search</m> next page per strategy","free within 3 pages"],["convex","dedupe and insert · stage found · free pre-rank in plain code"]], stored: "<b>prospects</b> · <b>strategies</b>.nextPage, leadsFound" },
+  { title: "Research", body: "Reads the lead's company site and decides how good the fit is, and why. Only the top ~8 leads at first, then a few a day: credits are kept for emails and conversations.", ref: "",
     calls: [["firecrawl","scrape company home page"],["gpt","<m>ai/researchLead</m>"],["convex","stage researched · scores of 1 stop here"]], stored: "<b>prospects</b> · aiScore, aiScoreReason, researchSummary · <b>evidence</b>" },
-  { title: "Get the email", body: "Only for leads scored 2 or 3, and in Review mode only after the user approves the lead.", ref: "",
-    calls: [["convex","reserve 20 credits and 10 real Enrich credits per lead · refuse if the balance, the workspace cap or today's platform budget cannot cover it"],["enrich","<m>POST /lead-finder/reveal</m> with <m>fields: [\"email\"]</m>","10 credits per lead"],["enrich","poll <m>GET /lead-finder/reveal-jobs/{id}</m> every 2 s","free"],["convex","emailStatus found or not_found · commit what Enrich actually charged, release the rest"]], stored: "<b>prospects</b>.email · <b>providerOperations</b>" },
+  { title: "Get the email", body: "Review: when the user approves the lead. Autopilot: automatically for leads scored 2 or 3, a few a day. Approving a lead is not approving an email.", ref: "",
+    calls: [["convex","reserve 15 credits and 10 real Enrich credits per lead · refuse if the balance, the workspace cap or today's platform budget cannot cover it"],["enrich","<m>POST /lead-finder/reveal</m> with <m>fields: [\"email\"]</m>","10 credits per lead"],["enrich","poll <m>GET /lead-finder/reveal-jobs/{id}</m> every 2 s","free"],["convex","emailStatus found or not_found · commit what Enrich actually charged, release the rest"]], stored: "<b>prospects</b>.email · <b>providerOperations</b>" },
   { title: "Write", body: "One email per lead, written from the research, the company profile, the chosen tone and goal, and the user's instructions.", ref: "",
-    calls: [["gpt","<m>ai/writeOutreach</m> · step 0 → subject and body with an opt-out line"],["convex","insert draft · Review mode waits here for Approve"]], stored: "<b>drafts</b> · <b>approvals</b>" },
+    calls: [["gpt","<m>ai/writeOutreach</m> · step 0 → subject and body with an opt-out line"],["convex","insert draft stamped with the agent revision · Review waits for email approval · Autopilot records its own approval, then uses the same send checks"]], stored: "<b>drafts</b> · <b>approvals</b>" },
   { title: "Send", body: "Inside the workspace's sending days and hours, under its daily limit.", ref: "",
-    calls: [["convex","checks: suppression list, sending window, daily limit, draft approved"],["mail","<m>POST /v0/inboxes/{inbox}/messages/send</m> with an Idempotency-Key"],["convex","stage contacted · nextActionAt = +3 days"]], stored: "<b>sendAttempts</b> · <b>conversations</b>" },
+    calls: [["convex","re-checked at send time, in one transaction: not paused, revision current, lead not rejected, no reply since, not suppressed, approval valid, window, daily limit"],["mail","<m>POST /v0/inboxes/{inbox}/messages/send</m> with an Idempotency-Key"],["convex","stage contacted · nextActionAt = +3 days"]], stored: "<b>sendAttempts</b> · <b>conversations</b>" },
   { title: "Follow up", body: "Two short nudges, on day 3 and day 7, only while there is no reply.", ref: "",
     calls: [["convex","cron finds contacted leads whose nextActionAt has passed"],["gpt","<m>ai/writeOutreach</m> · step 1 or 2, in the same thread"],["mail","send, same checks as above"]], stored: "<b>prospects</b>.followUpsSent" },
   { title: "Handle the reply", body: "The part that closes. The agent reads the reply, decides what it means, and makes the next move.", ref: "",
-    calls: [["mail","webhook → <m>POST /agentmail/webhook/{workspace token}</m> · verified with that workspace's own secret, deduped by event id"],["convex","attach to the conversation · stage replied · follow-ups stop"],["gpt","<m>ai/handleReply</m> · class + next move + reply draft"],["mail","sends the reply in Autopilot, or queues it in Inbox in Review"]], stored: "<b>conversations</b> · <b>drafts</b> · <b>bookings</b> · <b>suppressions</b>" }
+    calls: [["mail","webhook → <m>POST /agentmail/webhook/{workspace token}</m> · verified with that workspace's own secret, deduped by event id"],["convex","accept only if token and inbox match · rule-based unsubscribe / bounce first (free, never blocked) · attach · stage replied · follow-ups cancelled"],["convex","answer only live mail, newer than the connection, in a thread we started"],["gpt","<m>ai/handleReply</m> · class + next move + reply draft"],["mail","sends the reply in Autopilot, or queues it in Inbox in Review"]], stored: "<b>conversations</b> · <b>drafts</b> · <b>bookings</b> · <b>suppressions</b>" }
 ];
 const LABEL = { user:"User", convex:"Convex", firecrawl:"Firecrawl", gpt:"GPT", enrich:"Enrich", mail:"AgentMail" };
 function render(id, steps){

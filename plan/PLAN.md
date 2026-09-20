@@ -5,7 +5,8 @@ you, and works the replies until a meeting is booked.** Email only. UI modelled
 on Gojiberry AI (see §2 for the per-screen references).
 
 Call-by-call user flow (what each screen triggers and what gets stored):
-[flow.html](flow.html). How to build it, task by task: [EXECUTION.md](EXECUTION.md).
+[flow.html](flow.html). How to build it, task by task: [EXECUTION.md](EXECUTION.md). Moving existing
+data to the new model: [MIGRATION.md](MIGRATION.md).
 
 ## 1. The loop
 
@@ -91,7 +92,7 @@ are left out entirely — never rendered as inactive chrome.
 | 21 | not-connected banner with Connect link | built (inbox) |
 | 21 | agent name generated from ICP ("Title · Region · Industry") | built, editable |
 | 21 | mode dropdown incl. "Leads sourcing only" | built: Sourcing only / Review / Autopilot / Paused |
-| 21 | Contacted n / total, Accepted, Replied, Interested | built: Contacted n / total, **Opened** (AgentMail open events), Replied, Interested |
+| 21 | Contacted n / total, Accepted, Replied, Interested | built: Contacted n / total, Replied, Interested; **Opened** only once open events are verified for the workspace (§9.6) |
 | 21 | channel icons, sender account, created date, row menu | built: sender address, created date, menu (rename, pause) |
 | 22 | Search page | cut |
 | 23 | All contacts / Lists tabs, Add leads, Add to list, Export, phone column + Enrich Phone | cut |
@@ -143,7 +144,7 @@ signals Enrich can actually answer are offered.
 3. **Recommend** (`ai/recommendStrategies.ts`): input = company profile + ICP + the catalogue + allowed values. Output = 3–5 strategies `{ title, signalKind, rationale, filters, excludeFilters, recommended }`, each = core ICP filters ∧ one signal, plus 6–10 suggested keywords. Schema-constrained; every enum value is re-checked against the cached options before use.
 4. **Validate for free**: run `POST /lead-finder/count` per strategy. Zero or tiny → one automatic relax pass (model gets the count back and widens: drop `jobTitle` for `jobLevel`+`jobFunction`, widen size/geo). Absurdly large → tighten. Counts are shown on the cards.
 5. **User picks** strategies and keywords (references 09 and 10). Keywords compile into one extra "keyword match" strategy.
-6. **Preview real leads**: on Confirm, run `search` page 1 for each selected strategy (free tier: 75 rows per search, 50 unique searches a month — so we search only what the user selected, never speculatively), dedupe by `sourceLeadId`, score with `researchLead`, and land the user on Contacts with real, scored leads tagged by the strategy that found them.
+6. **Preview real leads**: on Confirm, run `search` page 1 for each selected strategy (free tier: 75 rows per search, 50 unique searches a month — so we search only what the user selected, never speculatively), dedupe by `sourceLeadId`, pre-rank for free and research only the top ~8 across strategies (§9.2), and land the user on Contacts with real leads tagged by the strategy that found them — the best ones scored, the rest one click away.
 
 A lead matched by more than one strategy keeps all of them (`+n signals` in the
 table) and gets a score boost. The Agent page shows leads generated per
@@ -297,17 +298,23 @@ swapping the lookup.
 2. **Provider caps** — hidden, per workspace, in the provider's real units.
    These are the actual guarantee. A call must pass both layers.
 
-### Layer 1 · visible credits (trial grant: 200, lifetime, no refill)
+### Layer 1 · visible credits (trial grant: 300, lifetime, no refill)
 | Action | Credits |
 |---|---|
 | First-run onboarding: analyze website, generate ICP, recommend signals | 0 (once each) |
 | Re-run any of those, or "Generate more" keywords | 3 |
-| Find leads: one search page, up to 25 people | 5 |
-| Research and score one lead (scrape + AI) | 2 |
-| Get a lead's email | 20 |
+| Find leads: one search page, up to 25 people | 2 |
+| Research and score one lead (scrape + AI) | 3 |
+| Get a lead's email | 15 |
 | Write an outreach email or follow-up | 1 |
 | Read a reply and draft the answer | 1 |
-| Counts, filter options, browsing, approving, sending | 0 |
+| Counts, filter options, browsing, approving, sending, unsubscribe handling | 0 |
+
+Budget check — a realistic trial: 4 signal searches (8) + 10 researched leads
+(30) + 10 emails found (150) + 30 emails written incl. follow-ups (30) + 10
+replies handled (10) = 228, leaving ~70 for more research. The expensive,
+valuable steps (emails found, conversations) are what the credits are for —
+so research is **deliberately small at first** (§10 "Initial batch").
 
 Prices live in `convex/lib/limits.ts` as a typed map, so the numbers can be
 retuned without touching call sites.
@@ -321,9 +328,9 @@ retuned without touching call sites.
 | Firecrawl pages | 80 | 15 |
 | Emails sent | — (user's own AgentMail key) | existing daily send limit, max 30 |
 
-Also: 1 workspace per user, 1 agent per workspace. 200 credits at 20 per email
-is at most 10 reveals = 100 Enrich credits, so the two layers agree by design
-and the hidden cap is the backstop if prices are ever retuned.
+Also: 1 workspace per user, 1 agent per workspace. The hidden 100-credit cap
+means at most 10 emails found per trial whatever the visible balance says; the
+button explains "Trial limit for emails reached" rather than "out of credits".
 
 The sidebar shows "Credits · n remaining" like the reference's Team credits
 block — no refill date, no upgrade button, no pricing page. Out of credits:
@@ -341,7 +348,18 @@ cannot overspend. Changes:
   **reserve the action's credit price + the worst-case provider units (workspace
   and platform buckets) in one transaction → call provider → commit credits,
   commit the provider's actual `meta.creditsUsed`, release the rest**. A
-  provider call that finds nothing and costs us nothing refunds the credits. Unknown outcome (timeout after the
+  provider call that finds nothing and costs us nothing refunds the credits.
+- **Three outcomes, never two.** Every paid step ends in exactly one of:
+  | Outcome | When | Credits | Provider units |
+  |---|---|---|---|
+  | **refunded** | refused before any provider effect (validation, 401/403, 429 after back-off, kill switch), or the provider answered and charged 0 (email not found, zero rows) | released in full | released |
+  | **billed** | the provider did the work — even if a *later* step failed. A lead whose page was scraped but whose AI scoring failed is billed the scrape, refunded the AI call, and retried from the stored markdown without scraping again | committed | committed at the provider's reported actual |
+  | **uncertain** | the request left us and we do not know (timeout, 5xx after send, crash mid-action) | held | held at worst case |
+  An `uncertain` hold is resolved by the recovery sweep (§10): look the
+  operation up at the provider (reveal job by id, idempotency key for sends);
+  found → billed/refunded accordingly; still unknown after 24 h → committed at
+  worst case (we never hand back money we may have spent). The Usage tab shows
+  held credits as "pending". Unknown outcome (timeout after the
   request left) → `uncertain`, which keeps the capacity blocked until the
   reveal job / balance is reconciled. `operationKey` makes retries free.
 - A reveal reserves `10 × leads` before the call and is never sent with more
@@ -401,7 +419,10 @@ Kept as-is: `workspaces`, `memberships`, `conversations`, `conversationNotes`,
   `goal: "start_conversations" | "book_calls"`,
   `tone: "professional" | "conversational" | "direct"`,
   `instructions?`, `bookingUrl?`, `keywords[]`,
-  `dailyLeadCap`, `followUpDays: [3, 7]`, `lastRunAt`.
+  `dailyLeadCap`, `dailyResearchCap`, `autoRevealDailyCap`, `autoApproveMinScore`,
+  `followUpDays: [3, 7]`, `revision`, `run { leaseId, leaseUntil, startedAt }`,
+  `autopilot? { authorizedBy, authorizedAt, revision }`, `nextRunAt`, `lastRunAt`,
+  `legacyCampaignId?`.
 - **`strategies`**: `agentId`, `title`, `signalKind: "core_icp" | "funded" | "hiring" | "growth" | "ad_spend" | "tech" | "team_shape" | "keyword"`,
   `rationale`, `filters`, `excludeFilters`, `matchCount`, `enabled`,
   `source: "recommended" | "user"`, `nextPage`, `lastRunAt`, `leadsFound`.
@@ -409,10 +430,15 @@ Kept as-is: `workspaces`, `memberships`, `conversations`, `conversationNotes`,
 - **`prospects`** (extend): `agentId`, `strategyIds[]`, `sourceLeadId`, `linkedinUrl`,
   `aiScore: 1 | 2 | 3`, `aiScoreReason`, `researchSummary`,
   `emailStatus: "locked" | "revealing" | "found" | "not_found"`,
-  `stage: "found" | "researched" | "queued" | "contacted" | "replied" | "interested" | "meeting_booked" | "closed_lost" | "rejected"`,
-  `followUpsSent`, `nextActionAt`.
+  `stage: "found" | "researched" | "queued" | "contacted" | "replied" | "interested" | "meeting_proposed" | "meeting_booked" | "closed_lost" | "rejected" | "needs_attention"`,
+  `approval: "pending" | "approved" | "rejected"`, `approvedBy: "user" | "autopilot"`,
+  `preRank`, `lastError?`, `followUpsSent`, `nextActionAt`, `legacy?`.
 - **`workspaceSecrets`**: above.
-- **`workspaces`** (extend): `plan: "trial"`, `webhookToken`, `agentmailWebhookId`.
+- **`workspaces`** (extend): `plan: "trial"`, `webhookToken`, `agentmailWebhookId`,
+  `connectedAt`, `opensObserved`; unique index on `inboxRef`.
+- **`conversations` / messages** (extend): `source: "backfill" | "live"`, unique
+  index on provider `message_id`. **`drafts`** (extend): `agentRevision`, state
+  `superseded`. **`approvals`** (extend): `actor: "user" | "autopilot"`.
 - **`platformBudgets`**: §6. `usageBuckets` metrics change as in §6.
 
 `stage` + `nextActionAt` (indexed) is the whole state machine; the cron picks up
@@ -429,7 +455,138 @@ whatever is due.
 | `writeOutreach.ts` | lead + research + profile + tone/goal/instructions, step 0/1/2 → subject, body |
 | `handleReply.ts` | inbound + thread + profile → class (`interested | question | objection | not_now | not_interested | ooo | unsubscribe`) and the next move: reply draft, booking proposal, stop, or reschedule |
 
-## 9. Code structure
+## 9. Contracts
+
+### 9.1 Background execution
+All background work is driven by **state in the database plus short idempotent
+steps**, never by long-running actions or chains of in-memory timers.
+
+- **Single flight.** `agents.run { leaseId, leaseUntil, startedAt }`. The
+  cron / Run now mutation takes the lease in a transaction only if none is
+  live; a second trigger is a no-op that returns "already running". Every step
+  re-checks it still holds `leaseId` before writing; a lost lease stops
+  quietly. Lease 5 min, renewed per step; a crashed run is reclaimable when the
+  lease expires.
+- **Steps, not loops.** A run is a sequence of small internal mutations/actions
+  scheduled one after another, each handling one lead or one page and each
+  safe to run twice (`operationKey` = agent + lead + step + revision). No
+  action depends on finishing a whole batch inside its timeout.
+- **Retries.** Provider calls retry inside `integrations/*` for 429/5xx with
+  capped back-off (3 tries). A step that still fails records
+  `lastError { code, at, attempts }` on the lead, moves `nextActionAt` out
+  (5 min → 30 min → 4 h), and after 3 step-level attempts parks the lead as
+  `needs_attention` with a human-readable reason and a Retry button. Convex
+  does not auto-retry actions, so **the sweep is the retry mechanism**.
+- **Recovery sweep** (cron, every 10 min): expired run leases; leads stuck in a
+  transient state (`revealing`, `researching`, `sending`) past their deadline;
+  `uncertain` reservations; reveal jobs never polled to completion. Each is
+  reconciled against the provider first, then retried or parked.
+- **Revision fencing.** `agents.revision` increments whenever instructions,
+  tone, goal, ICP, template or mode change. Every draft and queued step stores
+  the revision it was made under.
+- **Invalidate on change.** The authoritative check is *at the moment of
+  effect*: the send mutation re-validates everything in its own transaction
+  (agent not paused and in a sending mode, revision matches, lead not rejected,
+  no reply since the draft was written, not suppressed, approval valid, inside
+  window and limits). Cancelling scheduled functions is a courtesy on top.
+
+  | Event | Pending work |
+  |---|---|
+  | User pauses the agent / kill switch | nothing new starts; in-flight step finishes its current provider call, writes its result, then stops; unsent drafts stay as drafts |
+  | User rejects a lead | queued reveal, draft, send and follow-ups for that lead cancelled; open drafts → `superseded`; held credits released |
+  | User changes instructions / tone / goal | `revision`++; unsent drafts under the old revision → `superseded` and rewritten on the next pass (1 credit each, only for leads still due); sent mail untouched |
+  | A reply arrives | follow-ups for that conversation cancelled in the same mutation that stores the reply; any unsent draft in the thread → `superseded`; stage → `replied` |
+  | Lead unsubscribes / is blocklisted | as reject, plus suppression; checked again at send time regardless |
+  | Inbox key becomes invalid | agent → `paused` with reason; nothing is dropped, everything resumes on reconnect |
+
+### 9.2 Initial batch
+Confirm does **not** research everything it finds.
+1. Search page 1 of each selected strategy (2 credits each) → rows stored as
+   `found` with the free preview data. No AI, no scrape.
+2. **Free pre-rank** in plain code: title/seniority match to the ICP, company
+   size in range, number of strategies that found the person, domain present.
+3. Research the top **8** overall, round-robin across strategies so each
+   selected signal is represented (minimum 1 per strategy, maximum 10).
+4. Everything else stays `found`, visible in Contacts with "Not researched
+   yet" and a **Research** action (3 credits) per row and in bulk.
+5. Afterwards the agent researches at most `dailyResearchCap` (default 5) new
+   leads a day, best pre-rank first, and only while credits allow it to still
+   afford the emails for leads already approved (it reserves 15 × approved
+   leads awaiting an email before spending on research).
+
+### 9.3 Approval and Autopilot
+Two different approvals, never conflated:
+- **Lead approval** — "yes, contact this person". Authorises finding their
+  email (15 credits) and drafting.
+- **Email approval** — "yes, send this text". Authorises one specific draft
+  version.
+
+| Mode | Lead approval | Email reveal | Email approval | Replies |
+|---|---|---|---|---|
+| Sourcing only | manual, optional | manual button only | — nothing is sent | shown, never answered |
+| Review | **manual** | automatic once the lead is approved | **manual**, per draft | drafted, wait for send |
+| Autopilot | automatic for score ≥ `autoApproveMinScore` (default 2); user can still reject any time | automatic, max `autoRevealDailyCap` (default 5) a day | automatic | automatic within the limits below |
+| Paused | — | — | — | shown, never answered |
+
+Autopilot authorisation:
+- Switching to Autopilot opens a consent dialog stating exactly what it will
+  do (find emails using credits, send without review, reply on your behalf,
+  daily limits). Accepting writes `agents.autopilot { authorizedBy, authorizedAt, revision }`.
+  A change of instructions/goal/tone keeps Autopilot on but is recorded; a
+  migration or a key reconnect never turns it on.
+- Autopilot does not bypass anything. It produces an `approvals` row with
+  `actor: "autopilot"` bound to the draft id + revision, and the send goes
+  through the **same** ledger: suppression, blocklist, sending window, daily
+  limit, idempotency key, credits, platform budget, kill switch.
+- Auto-replies only for classes `question`, `objection`, `interested`; at most
+  2 automatic replies per thread, then the thread is handed to the user
+  ("Needs you"). Never auto-reply to `not_interested`, `unsubscribe`, `ooo`,
+  to a thread we did not start, or to anything older than the connection (9.4).
+- Automatic reveal is part of the outreach loop (EXECUTION T40), not sourcing.
+
+### 9.4 Inbox connection
+- **Matching.** A webhook event is accepted only if the path token resolves to
+  a workspace **and** the event's `inbox_id` equals that workspace's
+  `inboxRef`; otherwise it is quarantined, never attached.
+- **One inbox, one workspace.** Unique index on `inboxRef`. Connecting an inbox
+  already connected elsewhere is refused ("This inbox is connected to another
+  workspace"). The same key may serve two workspaces only with two different
+  inboxes. Reconnecting the same inbox to the same workspace is idempotent:
+  webhook `client_id` = workspace id, so a second registration returns the
+  existing webhook instead of a duplicate.
+- **Rotation.** New key must be able to see the current inbox, else it is a
+  different connection (disconnect first). Order: verify new key → register new
+  webhook → store new key + secret → delete old webhook with the old key
+  (best effort). Both secrets are accepted for 10 minutes so nothing is lost
+  in between.
+- **Backfill vs live.** Unique index on the provider `message_id`; backfill and
+  webhook both upsert through it, so a message that arrives both ways exists
+  once, and the live copy wins. Rows carry `source: "backfill" | "live"`.
+- **Never answer history.** `handleReply` runs only when **all** hold: source
+  is `live`; message time > `connectedAt`; the thread was started by one of our
+  `sendAttempts` to a known prospect; sender is not us; not already handled.
+  Backfilled and unrelated mail is readable in the Inbox and nothing more.
+
+### 9.5 Meetings
+A booking link in our email, or a model saying "they agreed", is not a meeting.
+- Stages: `interested` → `meeting_proposed` (we sent the link / times, or the
+  lead asked for a call) → `meeting_booked`.
+- `meeting_booked` is set **only by the user** ("Mark as booked" with date and
+  time, in the thread and the lead drawer), writing the `bookings` row. The
+  model may *suggest* it ("Looks like they confirmed Tuesday 3 pm — mark as
+  booked?") but never sets it.
+- Dashboard "Meetings" counts confirmed bookings only; proposed ones are shown
+  separately. A calendar-provider integration that verifies bookings is
+  post-MVP and would be the only other writer.
+
+### 9.6 Open tracking
+Optional, never assumed. T00 checks whether the mail provider emits open events
+for our inbox type and what the sender must configure. `workspaces.opensObserved`
+flips true on the first verified open event. Until then the Agent card shows
+Contacted · Replied · Interested — no "Opened" column, no zero, no dash. If T00
+finds tracking unsupported, the metric is dropped from the build entirely.
+
+## 10. Code structure
 
 Organised by **domain**, not by technical layer. A new contributor should find
 everything about "leads" in one backend folder and one frontend folder.
@@ -527,7 +684,7 @@ Inside a component domain folder:
 - `convex/README.md` and the root `README.md` describe this layout and how to
   run the app; keep them true.
 
-## 10. Milestones
+## 11. Milestones
 
 Each ends with `pnpm lint`, `pnpm exec tsc -b`, `pnpm build`, a manual
 click-through, feature-wise commits and a `hackathon.md` entry.
@@ -563,8 +720,8 @@ counts, instructions, booking link, run now.
 
 **M4 – Close.** Inbound → `handleReply` at the seams left by the removal.
 Autopilot answers questions/objections and proposes the booking link; review
-mode drafts and waits. Interested → `interested`; meeting accepted →
-`meeting_booked` + `bookings` row; unsubscribe → suppression + stop. Inbox tabs:
+mode drafts and waits. Interested → `interested`; call agreed →
+`meeting_proposed`; the user confirms → `meeting_booked` + `bookings` row (§9.5); unsubscribe → suppression + stop. Inbox tabs:
 Received / Interested / Unread / All, with thread, suggested reply, edit, send.
 
 **M5 – Dashboard + ship.** Stat cards (found, contacted, replied, interested,
@@ -573,7 +730,7 @@ states, landing copy, production deploy, final log entry.
 
 Strictly sequential M0 → M4; dashboard work in M5 can start once M2 data exists.
 
-## 11. Working rules
+## 12. Working rules
 
 - No tests unless asked. Idiomatic TypeScript, explicit unions, no `any`.
 - Feature-wise commits. No co-author trailers, no tool/vendor attribution in commits.
