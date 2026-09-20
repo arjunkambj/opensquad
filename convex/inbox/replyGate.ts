@@ -32,7 +32,7 @@ export const REPLY_GATE_BLOCK_CODES = [
   "association_missing",
   "agent_mismatch",
   "agent_not_sending",
-  "workspace_paused",
+  "org_paused",
   "inbox_unassigned",
   "inbox_mismatch",
   "recipient_unknown",
@@ -51,7 +51,7 @@ export const vReplyGateBlockCode = v.union(
   v.literal("association_missing"),
   v.literal("agent_mismatch"),
   v.literal("agent_not_sending"),
-  v.literal("workspace_paused"),
+  v.literal("org_paused"),
   v.literal("inbox_unassigned"),
   v.literal("inbox_mismatch"),
   v.literal("recipient_unknown"),
@@ -71,7 +71,7 @@ export type ReplyGateVerdict = typeof vReplyGateVerdict.type;
  *
  * It is a pure read, so it can be re-run — and must be. Ingest runs it here;
  * every later path to model work re-runs it before dispatch, because a
- * takeover, a close, a workspace pause or a suppression can land in between,
+ * takeover, a close, an org pause or a suppression can land in between,
  * and a stale wake must then spend nothing.
  *
  * Order matters only for which blocker gets REPORTED, and it is chosen so the
@@ -111,11 +111,11 @@ export async function evaluateReplyAutomation(
     return blocked("association_missing");
   }
   const prospect = await ctx.db.get("prospects", conversation.prospectId);
-  if (prospect === null || prospect.workspaceId !== conversation.workspaceId) {
+  if (prospect === null || prospect.orgId !== conversation.orgId) {
     return blocked("association_missing");
   }
   const agent = await ctx.db.get("agents", conversation.agentId);
-  if (agent === null || agent.workspaceId !== conversation.workspaceId) {
+  if (agent === null || agent.orgId !== conversation.orgId) {
     return blocked("association_missing");
   }
   // The agent frozen on the conversation at association is the authority; a
@@ -128,21 +128,21 @@ export async function evaluateReplyAutomation(
   if (!SENDING_AGENT_MODES.includes(agent.mode)) {
     return blocked("agent_not_sending");
   }
-  const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
-  if (workspace === null || workspace.automationState !== "active") {
-    return blocked("workspace_paused");
+  const org = await ctx.db.get("orgs", conversation.orgId);
+  if (org === null || org.automationState !== "active") {
+    return blocked("org_paused");
   }
-  if (workspace.inboxRef === undefined) {
+  if (org.inboxRef === undefined) {
     return blocked("inbox_unassigned");
   }
   // A legacy platform inbox is RECEIVE-ONLY (PLAN §9.4 "Legacy inboxes"):
   // its mail is shown in the Inbox and never auto-answered. The same refusal
-  // covers a key the provider rejected — a workspace that cannot send cannot
+  // covers a key the provider rejected — an org that cannot send cannot
   // usefully start reply work either.
-  if (workspace.inboxConnection !== "connected") {
+  if (org.inboxConnection !== "connected") {
     return blocked("inbox_unassigned");
   }
-  if (workspace.inboxRef !== conversation.inboxRef) {
+  if (org.inboxRef !== conversation.inboxRef) {
     return blocked("inbox_mismatch");
   }
   const { recipient } = await resolveOutboundRecipient(ctx, conversation);
@@ -153,7 +153,7 @@ export async function evaluateReplyAutomation(
   // domain key. An email suppression never implies its domain.
   const suppression = await matchSuppression(
     ctx,
-    conversation.workspaceId,
+    conversation.orgId,
     recipient,
   );
   if (suppression !== null) {
@@ -178,7 +178,7 @@ export const NOTED_REPLY_GATE_BLOCKS: ReadonlySet<ReplyGateBlockCode> = new Set<
   "association_missing",
   "agent_mismatch",
   "agent_not_sending",
-  "workspace_paused",
+  "org_paused",
   "inbox_unassigned",
   "inbox_mismatch",
   "recipient_unknown",

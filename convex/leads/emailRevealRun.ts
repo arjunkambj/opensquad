@@ -39,7 +39,7 @@ const LEAD_POLL_INTERVAL_MS = REVEAL_POLL_INTERVAL_MS + 1_000;
  */
 export const submitReveals = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
   },
   returns: v.object({ submitted: v.number(), released: v.number() }),
@@ -48,7 +48,7 @@ export const submitReveals = internalAction({
     args,
   ): Promise<{ submitted: number; released: number }> => {
     const targets = await ctx.runQuery(internal.leads.emailRevealState.revealTargets, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       prospectIds: args.prospectIds,
     });
     if (targets.length === 0) {
@@ -61,7 +61,7 @@ export const submitReveals = internalAction({
     const outcome = await ctx.runAction(
       internal.integrations.enrich.reveal.revealLeadEmails,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         leads: targets.map((target) => ({
           sourceLeadId: target.sourceLeadId,
           // The caller's half of the ledger key. Derived from the lead, so
@@ -76,7 +76,7 @@ export const submitReveals = internalAction({
         submitted: 0,
         released: await release(
           ctx,
-          args.workspaceId,
+          args.orgId,
           targets.map((target) => target.prospectId),
         ),
       };
@@ -91,7 +91,7 @@ export const submitReveals = internalAction({
       }
       if (result.status === "submitted") {
         await schedulePoll(ctx, {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           prospectId,
           operationKey: result.operationKey,
           jobId: result.jobId,
@@ -104,7 +104,7 @@ export const submitReveals = internalAction({
         // Already paid for on an earlier request: recover the job reference
         // and read the address back rather than buying it again.
         await ctx.runAction(internal.leads.emailRevealRun.recoverLeadReveal, {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           prospectId,
         });
         submitted += 1;
@@ -122,7 +122,7 @@ export const submitReveals = internalAction({
     }
     return {
       submitted,
-      released: await release(ctx, args.workspaceId, releasing),
+      released: await release(ctx, args.orgId, releasing),
     };
   },
 });
@@ -130,7 +130,7 @@ export const submitReveals = internalAction({
 /** Follow one job until it says what it found, then write it on the lead. */
 export const driveLeadReveal = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     operationKey: v.string(),
     jobId: v.string(),
@@ -141,7 +141,7 @@ export const driveLeadReveal = internalAction({
     const polled: RevealPollResult = await ctx.runAction(
       internal.integrations.enrich.revealPoll.pollLeadReveal,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationKey: args.operationKey,
         jobId: args.jobId,
       },
@@ -165,7 +165,7 @@ export const driveLeadReveal = internalAction({
  */
 export const recoverLeadReveal = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
   },
   returns: v.object({ status: v.string() }),
@@ -173,30 +173,30 @@ export const recoverLeadReveal = internalAction({
     const operationKey = composeOperationKey("get_email", args.prospectId);
     const recorded = await ctx.runQuery(
       internal.integrations.enrich.revealPoll.revealJobOf,
-      { workspaceId: args.workspaceId, operationKey },
+      { orgId: args.orgId, operationKey },
     );
     if (recorded === null || recorded.jobId === null) {
-      await release(ctx, args.workspaceId, [args.prospectId]);
+      await release(ctx, args.orgId, [args.prospectId]);
       return { status: "no_reference" };
     }
     const polled: RevealPollResult = await ctx.runAction(
       internal.integrations.enrich.revealPoll.pollLeadReveal,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationKey,
         jobId: recorded.jobId,
       },
     );
     await applyPoll(
       ctx,
-      { workspaceId: args.workspaceId, prospectId: args.prospectId },
+      { orgId: args.orgId, prospectId: args.prospectId },
       polled,
     );
     if (polled.status === "pending" || polled.status === "unknown") {
       // Still running: follow it again rather than leaving it to the next
       // sweep ten minutes from now.
       await schedulePoll(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         prospectId: args.prospectId,
         operationKey,
         jobId: recorded.jobId,
@@ -214,12 +214,12 @@ export const recoverLeadReveal = internalAction({
 /** One poll result, written on the lead. Pending and unknown write nothing. */
 async function applyPoll(
   ctx: ActionCtx,
-  target: { workspaceId: Id<"workspaces">; prospectId: Id<"prospects"> },
+  target: { orgId: Id<"orgs">; prospectId: Id<"prospects"> },
   polled: RevealPollResult,
 ): Promise<void> {
   if (polled.status === "revealed") {
     await ctx.runMutation(internal.leads.emailRevealState.applyRevealedEmail, {
-      workspaceId: target.workspaceId,
+      orgId: target.orgId,
       prospectId: target.prospectId,
       contact: polled.contact,
     });
@@ -227,20 +227,20 @@ async function applyPoll(
   }
   if (polled.status === "no_email") {
     await ctx.runMutation(internal.leads.emailRevealState.applyNoEmail, {
-      workspaceId: target.workspaceId,
+      orgId: target.orgId,
       prospectId: target.prospectId,
     });
     return;
   }
   if (polled.status === "failed") {
-    await release(ctx, target.workspaceId, [target.prospectId]);
+    await release(ctx, target.orgId, [target.prospectId]);
   }
 }
 
 async function schedulePoll(
   ctx: ActionCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     prospectId: Id<"prospects">;
     operationKey: string;
     jobId: string;
@@ -256,7 +256,7 @@ async function schedulePoll(
 
 async function release(
   ctx: ActionCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   prospectIds: Id<"prospects">[],
 ): Promise<number> {
   if (prospectIds.length === 0) {
@@ -264,7 +264,7 @@ async function release(
   }
   const result = await ctx.runMutation(
     internal.leads.emailRevealState.releaseReveal,
-    { workspaceId, prospectIds },
+    { orgId, prospectIds },
   );
   return result.released;
 }

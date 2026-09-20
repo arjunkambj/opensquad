@@ -26,7 +26,7 @@ const vPrepareResult = v.union(
     action: v.literal("replay"),
     sendAttemptId: v.id("sendAttempts"),
     /** Whose key the replay is made with — there is no platform key. */
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
     providerIdempotencyKey: v.string(),
     endpointOperation: v.union(v.literal("send"), v.literal("reply")),
@@ -57,7 +57,7 @@ const vPrepareResult = v.union(
 /**
  * Guarded recheck before an uncertain attempt may be replayed (G3 step 8):
  * the SAME idempotency key + SAME payload, only inside the provider's key
- * retention window, and only while workspace policy still permits dispatch
+ * retention window, and only while org policy still permits dispatch
  * (not paused, no takeover, no suppression, context unchanged, inside the
  * send window). Anything else routes to human review — the recorded
  * attempt stays `uncertain`.
@@ -85,9 +85,9 @@ export const prepareReconcile = internalMutation({
       };
     }
     const context = await loadAttemptContext(ctx, attempt.draftId);
-    const { workspace, conversation, draft, agent } = context;
+    const { org, conversation, draft, agent } = context;
     const gate = await evaluateSendGates(ctx, {
-      workspace,
+      org,
       conversation,
       draft,
       agent,
@@ -99,7 +99,7 @@ export const prepareReconcile = internalMutation({
         reason: `policy no longer permits dispatch (${gate.code}: ${gate.reason})`,
       };
     }
-    const window = sendWindowStatus(workspace, Date.now());
+    const window = sendWindowStatus(org, Date.now());
     if (!window.permitted) {
       // Transactional re-drive — a reconcile wait can never be lost between
       // this return and a caller-side schedule.
@@ -117,7 +117,7 @@ export const prepareReconcile = internalMutation({
     return {
       action: "replay" as const,
       sendAttemptId: attempt._id,
-      workspaceId: workspace._id,
+      orgId: org._id,
       inboxRef: draft.inboxRef,
       providerIdempotencyKey: attempt.providerIdempotencyKey,
       endpointOperation: attempt.endpointOperation,
@@ -182,7 +182,7 @@ export const reconcileUncertainAttempt = internalAction({
         const call = await ctx.runAction(
           internal.integrations.agentmail.reconcileReplyAttempt,
           {
-            workspaceId: prepared.workspaceId,
+            orgId: prepared.orgId,
             inboxId: prepared.inboxRef,
             idempotencyKey: prepared.providerIdempotencyKey,
             parentMessageId: prepared.parentMessageId ?? "",
@@ -194,7 +194,7 @@ export const reconcileUncertainAttempt = internalAction({
         const call = await ctx.runAction(
           internal.integrations.agentmail.reconcileSendAttempt,
           {
-            workspaceId: prepared.workspaceId,
+            orgId: prepared.orgId,
             inboxId: prepared.inboxRef,
             idempotencyKey: prepared.providerIdempotencyKey,
             payload: prepared.payload,
@@ -300,7 +300,7 @@ export const gatherProviderEvidence = internalAction({
     const provider = await ctx.runAction(
       internal.integrations.agentmail.lookupProviderMessage,
       {
-        workspaceId: attempt.workspaceId,
+        orgId: attempt.orgId,
         inboxId: attempt.inboxRef,
         ...(attempt.providerMessageRef !== undefined
           ? { messageId: attempt.providerMessageRef }

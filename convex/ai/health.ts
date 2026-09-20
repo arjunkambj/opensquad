@@ -38,7 +38,7 @@ const HEALTH_INPUT =
 
 export const check = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** A fresh key each run, or the operation replays instead of calling. */
     operationKey: v.optional(v.string()),
     /** Pass a nonsense id to provoke the gateway's 400 refusal branch. */
@@ -66,7 +66,7 @@ export const check = internalAction({
   }),
   handler: async (ctx, args) => {
     const outcome = await runStructured(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       action: "profile_company",
       tier: "fast",
       system: HEALTH_SYSTEM,

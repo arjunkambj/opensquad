@@ -19,16 +19,14 @@ import type { TableNames } from "../_generated/dataModel";
 import schema from "../schema";
 
 /**
- * The three tables the clean-slate cutover keeps, documents and `_id`s
- * intact. They are kept together or not at all: a suppression is owned by a
- * `workspaceId`, and an opt-out only suppresses anything while the workspace
- * that owns it — and the membership its owner signs in through — still
- * exists. Re-importing suppressions into a cleared workspace table would
- * produce rows that suppress nothing (MIGRATION.md §6 preamble).
+ * The two tables the clean-slate cutover keeps, documents and `_id`s intact.
+ * They are kept together or not at all: a suppression is owned by an `orgId`,
+ * and an opt-out only suppresses anything while the org that owns it still
+ * exists. Re-importing suppressions into a cleared org table would produce
+ * rows that suppress nothing (MIGRATION.md §6 preamble).
  */
 export const KEPT_TABLES = [
-  "workspaces",
-  "memberships",
+  "orgs",
   "suppressions",
 ] as const satisfies readonly TableNames[];
 
@@ -44,7 +42,7 @@ const KEPT: ReadonlySet<string> = new Set<string>(KEPT_TABLES);
  * deployment: the argument validator rejects anything else.
  */
 export const CLEAR_CONFIRMATION =
-  "yes-clear-every-app-table-except-workspaces-memberships-suppressions";
+  "yes-clear-every-app-table-except-orgs-suppressions";
 
 function isClearable(name: TableNames): name is ClearableTable {
   return !KEPT.has(name);

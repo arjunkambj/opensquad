@@ -178,7 +178,7 @@ export type WriteOutreachInput = {
   };
   goal: AgentGoal;
   tone: AgentTone;
-  /** The agent's own instructions, or the workspace default. */
+  /** The agent's own instructions, or the org default. */
   instructions?: string;
   bookingUrl?: string;
   /** 0 = first touch; 1 and up = that numbered follow-up in the thread. */

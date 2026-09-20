@@ -76,7 +76,7 @@ const CODE_FOR_UNCERTAIN: OperationErrorCode = "provider_unavailable";
 
 export const analyze = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     profileId: v.id("businessProfiles"),
     /** Already admitted and normalised by the mutation that stored it. */
     websiteUrl: v.string(),
@@ -102,7 +102,7 @@ export const analyze = internalAction({
     let scrape;
     try {
       scrape = await scrapeSite(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         url: args.websiteUrl,
         pages: ANALYSIS_PAGES,
         action: "analyze_website",
@@ -126,7 +126,7 @@ export const analyze = internalAction({
     let ai;
     try {
       ai = await runStructured(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         action: "profile_company",
         tier: "smart",
         system: WEBSITE_ANALYSIS_SYSTEM,

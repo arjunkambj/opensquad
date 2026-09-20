@@ -38,7 +38,7 @@ import { v } from "convex/values";
  */
 const REVEAL_RECONCILE_AFTER_MS = 5 * 60 * 1000;
 
-/** Due leads examined per workspace per pass. */
+/** Due leads examined per org per pass. */
 const STALLED_LEAD_SCAN = 25;
 
 export const sweepStalledRuns = internalMutation({
@@ -83,9 +83,9 @@ export const sweepStalledRuns = internalMutation({
 
       const due = await ctx.db
         .query("prospects")
-        .withIndex("by_workspaceId_and_nextActionAt", (q) =>
+        .withIndex("by_orgId_and_nextActionAt", (q) =>
           q
-            .eq("workspaceId", agent.workspaceId)
+            .eq("orgId", agent.orgId)
             .gte("nextActionAt", 0)
             .lte("nextActionAt", now),
         )
@@ -110,11 +110,11 @@ export const sweepStalledRuns = internalMutation({
       // The LEAD half of a stalled email reveal: the money half is settled
       // below through the provider's job, but a lead whose poller died would
       // stay `revealing` until someone clicked again. The mutation finds and
-      // resolves that workspace's stalled leads itself, and is safe to repeat.
+      // resolves that org's stalled leads itself, and is safe to repeat.
       await ctx.scheduler.runAfter(
         0,
         internal.leads.emailRevealState.recoverStalledReveals,
-        { workspaceId: agent.workspaceId },
+        { orgId: agent.orgId },
       );
     }
 
@@ -135,7 +135,7 @@ export const sweepStalledRuns = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.integrations.enrich.revealPoll.reconcileRevealOperation,
-        { workspaceId: hold.workspaceId, operationKey: hold.operationKey },
+        { orgId: hold.orgId, operationKey: hold.operationKey },
       );
       holdsReconciled += 1;
     }

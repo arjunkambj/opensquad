@@ -22,7 +22,7 @@
  */
 import type { Doc } from "../_generated/dataModel";
 import { internalMutation, mutation } from "../_generated/server";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   advancedLeadStage,
   boundedString,
@@ -62,7 +62,7 @@ import { v } from "convex/values";
  */
 export const setApproval = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
     approval: vLeadApproval,
     /** Stated basis; a bulk rejection carries one for every lead in it. */
@@ -76,7 +76,7 @@ export const setApproval = mutation({
     unchanged: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
@@ -102,7 +102,7 @@ export const setApproval = mutation({
     let unchanged = 0;
     for (const prospectId of new Set(args.prospectIds)) {
       const applied = await decideOne(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         prospectId,
         approval: args.approval,
         identityKey,
@@ -128,14 +128,14 @@ export const setApproval = mutation({
  */
 export const addNote = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     body: v.string(),
     requestId: v.string(),
   },
   returns: vLeadEventDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const requestId = boundedString(args.requestId, "requestId", {
       min: 1,
       max: 100,
@@ -144,11 +144,11 @@ export const addNote = mutation({
       min: 1,
       max: LEAD_EVENT_NOTE_MAX_LENGTH,
     });
-    await loadProspectForWrite(ctx, args.workspaceId, args.prospectId);
+    await loadProspectForWrite(ctx, args.orgId, args.prospectId);
     const operationKey = `lead:${args.prospectId}:note:${requestId}`;
     const prior = await findLeadEventByOperationKey(
       ctx,
-      args.workspaceId,
+      args.orgId,
       operationKey,
     );
     if (prior !== null) {
@@ -161,7 +161,7 @@ export const addNote = mutation({
       return prior;
     }
     const eventId = await appendLeadEvent(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       prospectId: args.prospectId,
       kind: "note_added",
       summary: "Note added by a team member",
@@ -221,7 +221,7 @@ export const markSendAccepted = internalMutation({
       return { applied: false };
     }
     const prospect = await ctx.db.get("prospects", conversation.prospectId);
-    if (prospect === null || prospect.workspaceId !== attempt.workspaceId) {
+    if (prospect === null || prospect.orgId !== attempt.orgId) {
       return { applied: false };
     }
     const draft = await ctx.db.get("drafts", attempt.draftId);
@@ -233,7 +233,7 @@ export const markSendAccepted = internalMutation({
       const linked = await ctx.db.get("bookings", draft.bookingId);
       if (
         linked !== null &&
-        linked.workspaceId === prospect.workspaceId &&
+        linked.orgId === prospect.orgId &&
         linked.prospectId === prospect._id &&
         linked.state === "proposed" &&
         linked.version === draft.bookingVersion
@@ -274,7 +274,7 @@ export const markSendAccepted = internalMutation({
       });
     }
     await appendLeadEvent(ctx, {
-      workspaceId: prospect.workspaceId,
+      orgId: prospect.orgId,
       prospectId: prospect._id,
       kind: "send_accepted",
       summary: `Outbound send accepted by the provider (attempt ${attempt._id})`,
@@ -283,7 +283,7 @@ export const markSendAccepted = internalMutation({
     });
     if (moved) {
       await appendLeadEvent(ctx, {
-        workspaceId: prospect.workspaceId,
+        orgId: prospect.orgId,
         prospectId: prospect._id,
         kind: booking !== null ? "booking_proposed" : "stage_changed",
         summary:
@@ -338,7 +338,7 @@ export const markReplied = internalMutation({
       return { applied: false };
     }
     const prospect = await ctx.db.get("prospects", conversation.prospectId);
-    if (prospect === null || prospect.workspaceId !== conversation.workspaceId) {
+    if (prospect === null || prospect.orgId !== conversation.orgId) {
       return { applied: false };
     }
     const messageRef = boundedString(args.messageRef, "messageRef", {
@@ -348,7 +348,7 @@ export const markReplied = internalMutation({
     const operationKey = `lead:${prospect._id}:replied:${messageRef}`;
     const prior = await findLeadEventByOperationKey(
       ctx,
-      prospect.workspaceId,
+      prospect.orgId,
       operationKey,
     );
     if (prior !== null) {
@@ -369,7 +369,7 @@ export const markReplied = internalMutation({
         : {}),
     });
     await appendLeadEvent(ctx, {
-      workspaceId: prospect.workspaceId,
+      orgId: prospect.orgId,
       prospectId: prospect._id,
       kind: "reply_received",
       summary: "Verified inbound reply recorded on the linked conversation",
@@ -377,7 +377,7 @@ export const markReplied = internalMutation({
     });
     if (moved) {
       await appendLeadEvent(ctx, {
-        workspaceId: prospect.workspaceId,
+        orgId: prospect.orgId,
         prospectId: prospect._id,
         kind: "stage_changed",
         summary: `Stage ${prospect.stage} → replied`,

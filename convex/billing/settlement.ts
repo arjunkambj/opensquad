@@ -7,7 +7,7 @@
  *   - Credits commit at the POSTED price when the provider did the work. The
  *     user is charged what the button said, not what the provider invoiced.
  *   - Provider units commit at the provider's REPORTED ACTUAL, and the rest
- *     of the worst-case reservation — workspace buckets and platform budget
+ *     of the worst-case reservation — org buckets and platform budget
  *     alike — is released.
  *   - `commit` and `release` are terminal. `markUncertain` is not: it is the
  *     one settlement reconciliation may still move, which is exactly what
@@ -294,7 +294,7 @@ export async function settlePaidCallImpl(
  */
 export const reconcilePaidCall = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     provider: vProviderKind,
     operationKey: v.string(),
     outcome: vPaidOutcome,
@@ -311,9 +311,9 @@ export const reconcilePaidCall = internalMutation({
   handler: async (ctx, args): Promise<SettleResult> => {
     const operation = await ctx.db
       .query("providerOperations")
-      .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+      .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("provider", args.provider)
           .eq("operationKey", args.operationKey),
       )

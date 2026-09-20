@@ -44,7 +44,7 @@ export type ProviderDataRef = Infer<typeof vProviderDataRef>;
  * The metered quantities (PLAN §6 "Ledger"). `credits` is the one number the
  * user sees; the rest are the hidden provider caps in the provider's own
  * units, which is why a call must pass both layers. Period keys are
- * `USAGE_PERIOD_LIFETIME` or the workspace-local day (`localDayKey`).
+ * `USAGE_PERIOD_LIFETIME` or the org-local day (`localDayKey`).
  */
 export const USAGE_METRICS = [
   "credits",
@@ -69,8 +69,8 @@ export type UsageMetric = (typeof USAGE_METRICS)[number];
 /** The non-daily period key: a bucket that never rolls over. */
 export const USAGE_PERIOD_LIFETIME = "lifetime";
 
-/** The one scope key a workspace-wide bucket uses. */
-export const USAGE_SCOPE_WORKSPACE = "workspace";
+/** The one scope key an org-wide bucket uses. */
+export const USAGE_SCOPE_ORG = "org";
 
 /**
  * §4.4 provider tool-invocation lifecycle. `requested` is recorded BEFORE

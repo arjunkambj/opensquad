@@ -136,13 +136,19 @@ import type * as lib_validators_company from "../lib/validators/company.js";
 import type * as lib_validators_inbox from "../lib/validators/inbox.js";
 import type * as lib_validators_index from "../lib/validators/index.js";
 import type * as lib_validators_leads from "../lib/validators/leads.js";
+import type * as lib_validators_orgs from "../lib/validators/orgs.js";
 import type * as lib_validators_outreach from "../lib/validators/outreach.js";
 import type * as lib_validators_shared from "../lib/validators/shared.js";
-import type * as lib_validators_workspaces from "../lib/validators/workspaces.js";
 import type * as migrations_clear from "../migrations/clear.js";
 import type * as migrations_shape from "../migrations/shape.js";
 import type * as migrations_tables from "../migrations/tables.js";
 import type * as migrations_verify from "../migrations/verify.js";
+import type * as orgs_model from "../orgs/model.js";
+import type * as orgs_mutations from "../orgs/mutations.js";
+import type * as orgs_outreachDefaults from "../orgs/outreachDefaults.js";
+import type * as orgs_queries from "../orgs/queries.js";
+import type * as orgs_secrets from "../orgs/secrets.js";
+import type * as orgs_trialGrant from "../orgs/trialGrant.js";
 import type * as outreach_approvals from "../outreach/approvals.js";
 import type * as outreach_approvalsModel from "../outreach/approvalsModel.js";
 import type * as outreach_autopilotApproval from "../outreach/autopilotApproval.js";
@@ -173,12 +179,6 @@ import type * as outreach_sendReconcile from "../outreach/sendReconcile.js";
 import type * as outreach_sendReserve from "../outreach/sendReserve.js";
 import type * as outreach_sendSweeps from "../outreach/sendSweeps.js";
 import type * as outreach_suppressions from "../outreach/suppressions.js";
-import type * as workspaces_model from "../workspaces/model.js";
-import type * as workspaces_mutations from "../workspaces/mutations.js";
-import type * as workspaces_outreachDefaults from "../workspaces/outreachDefaults.js";
-import type * as workspaces_queries from "../workspaces/queries.js";
-import type * as workspaces_secrets from "../workspaces/secrets.js";
-import type * as workspaces_trialGrant from "../workspaces/trialGrant.js";
 
 import type {
   ApiFromModules,
@@ -315,13 +315,19 @@ declare const fullApi: ApiFromModules<{
   "lib/validators/inbox": typeof lib_validators_inbox;
   "lib/validators/index": typeof lib_validators_index;
   "lib/validators/leads": typeof lib_validators_leads;
+  "lib/validators/orgs": typeof lib_validators_orgs;
   "lib/validators/outreach": typeof lib_validators_outreach;
   "lib/validators/shared": typeof lib_validators_shared;
-  "lib/validators/workspaces": typeof lib_validators_workspaces;
   "migrations/clear": typeof migrations_clear;
   "migrations/shape": typeof migrations_shape;
   "migrations/tables": typeof migrations_tables;
   "migrations/verify": typeof migrations_verify;
+  "orgs/model": typeof orgs_model;
+  "orgs/mutations": typeof orgs_mutations;
+  "orgs/outreachDefaults": typeof orgs_outreachDefaults;
+  "orgs/queries": typeof orgs_queries;
+  "orgs/secrets": typeof orgs_secrets;
+  "orgs/trialGrant": typeof orgs_trialGrant;
   "outreach/approvals": typeof outreach_approvals;
   "outreach/approvalsModel": typeof outreach_approvalsModel;
   "outreach/autopilotApproval": typeof outreach_autopilotApproval;
@@ -352,12 +358,6 @@ declare const fullApi: ApiFromModules<{
   "outreach/sendReserve": typeof outreach_sendReserve;
   "outreach/sendSweeps": typeof outreach_sendSweeps;
   "outreach/suppressions": typeof outreach_suppressions;
-  "workspaces/model": typeof workspaces_model;
-  "workspaces/mutations": typeof workspaces_mutations;
-  "workspaces/outreachDefaults": typeof workspaces_outreachDefaults;
-  "workspaces/queries": typeof workspaces_queries;
-  "workspaces/secrets": typeof workspaces_secrets;
-  "workspaces/trialGrant": typeof workspaces_trialGrant;
 }>;
 
 /**

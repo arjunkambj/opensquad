@@ -15,7 +15,7 @@
  *
  *   Optimistic concurrency — every mutation takes `expectedVersion` against
  *   the booking row (`propose` takes the LEAD's version), and every one is
- *   idempotent through the `leadEvents` (workspaceId, operationKey) index.
+ *   idempotent through the `leadEvents` (orgId, operationKey) index.
  *
  *   Lead + history stay in sync — every booking transition updates the lead's
  *   stage/next action and appends its `leadEvents` row in one transaction.
@@ -47,11 +47,11 @@ export const vListPage = v.object({
 
 export async function loadBookingForWrite(
   ctx: QueryCtx | MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   bookingId: Id<"bookings">,
 ): Promise<Doc<"bookings">> {
   const booking = await ctx.db.get("bookings", bookingId);
-  if (booking === null || booking.workspaceId !== workspaceId) {
+  if (booking === null || booking.orgId !== orgId) {
     throw domainError("NOT_FOUND", "booking not found");
   }
   return booking;
@@ -64,11 +64,11 @@ export function leadLabel(prospect: Doc<"prospects">): string {
 
 export async function loadProspect(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   prospectId: Id<"prospects">,
 ): Promise<Doc<"prospects">> {
   const prospect = await ctx.db.get("prospects", prospectId);
-  if (prospect === null || prospect.workspaceId !== workspaceId) {
+  if (prospect === null || prospect.orgId !== orgId) {
     throw domainError("NOT_FOUND", "prospect not found");
   }
   return prospect;
@@ -140,7 +140,7 @@ export async function retireLinkedDrafts(
       await ctx.db.patch("drafts", draft._id, { supersededAt: Date.now() });
     }
     await ctx.runMutation(internal.outreach.sendControls.cancelDraftParkedAttempts, {
-      workspaceId: booking.workspaceId,
+      orgId: booking.orgId,
       draftId: draft._id,
       reason,
     });

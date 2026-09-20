@@ -96,7 +96,7 @@ type SubmitResponse = { jobId?: unknown; creditsReserved?: unknown };
  */
 export const revealLeadEmails = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     leads: v.array(
       v.object({
         sourceLeadId: v.string(),
@@ -148,7 +148,7 @@ export const revealLeadEmails = internalAction({
     for (const lead of asked) {
       results.push(
         await submitOne(ctx, {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           sourceLeadId: lead.sourceLeadId,
           operationKey: lead.operationKey,
         }),
@@ -162,7 +162,7 @@ export const revealLeadEmails = internalAction({
 async function submitOne(
   ctx: ActionCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     sourceLeadId: string;
     operationKey: string;
   },
@@ -174,7 +174,7 @@ async function submitOne(
     outcome = await withCredits(
       ctx,
       {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         action: "get_email",
         operationKey: args.operationKey,
         worstCaseProviderUnits: { enrich_credits: REVEAL_CREDITS_PER_LEAD },
@@ -245,7 +245,7 @@ async function submitOne(
     // recorded receipt so the belt can still settle it.
     const recorded = await ctx.runQuery(
       internal.integrations.enrich.revealPoll.revealJobOf,
-      { workspaceId: args.workspaceId, operationKey },
+      { orgId: args.orgId, operationKey },
     );
     if (recorded === null || recorded.jobId === null) {
       return {
@@ -261,7 +261,7 @@ async function submitOne(
   await ctx.scheduler.runAfter(
     REVEAL_POLL_INTERVAL_MS,
     internal.integrations.enrich.revealPoll.driveRevealPoll,
-    { workspaceId: args.workspaceId, operationKey, jobId, attempt: 1 },
+    { orgId: args.orgId, operationKey, jobId, attempt: 1 },
   );
   return {
     status: "submitted",

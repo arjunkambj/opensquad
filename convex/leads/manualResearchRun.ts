@@ -83,7 +83,7 @@ const vManualContext = v.union(
  *  here — this lead was picked by a person, not by the planner. */
 export const manualResearchContext = internalQuery({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
   },
   returns: vManualContext,
@@ -91,7 +91,7 @@ export const manualResearchContext = internalQuery({
     const lead = await ctx.db.get("prospects", args.prospectId);
     if (
       lead === null ||
-      lead.workspaceId !== args.workspaceId ||
+      lead.orgId !== args.orgId ||
       lead.research.status !== "researching"
     ) {
       return { status: "skip" as const };
@@ -99,11 +99,11 @@ export const manualResearchContext = internalQuery({
     const agent = await ctx.db.get("agents", lead.agentId);
     const profile = await ctx.db
       .query("businessProfiles")
-      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
       .unique();
     if (agent === null || profile === null) {
       // Nothing to judge fit against; onboarding writes both long before a
-      // lead exists, so this is a broken workspace rather than a bad lead.
+      // lead exists, so this is a broken org rather than a bad lead.
       return { status: "skip" as const };
     }
     const location = [
@@ -154,7 +154,7 @@ export const manualResearchContext = internalQuery({
 /** ONE lead: read the page (once, ever, per revision), score it, write it. */
 export const runManualResearch = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     /** The claim instant; the model call's key, so a retry is never a
      *  replay of a settled generation. */
@@ -164,7 +164,7 @@ export const runManualResearch = internalAction({
   handler: async (ctx, args): Promise<{ outcome: string }> => {
     const context = await ctx.runQuery(
       internal.leads.manualResearchRun.manualResearchContext,
-      { workspaceId: args.workspaceId, prospectId: args.prospectId },
+      { orgId: args.orgId, prospectId: args.prospectId },
     );
     if (context.status === "skip") {
       await release(ctx, args.prospectId);
@@ -175,7 +175,7 @@ export const runManualResearch = internalAction({
     let sourceUrl: string | undefined;
     if (context.canonicalDomain !== undefined) {
       const site = await scrapeSite(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         url: `https://${context.canonicalDomain}`,
         pages: 1,
         action: "research_lead",
@@ -202,7 +202,7 @@ export const runManualResearch = internalAction({
     }
 
     const scored = await runStructured(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       action: "score_lead",
       tier: "fast",
       system: RESEARCH_LEAD_SYSTEM,

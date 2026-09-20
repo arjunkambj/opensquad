@@ -8,7 +8,7 @@
  * domain rows are always created explicitly (`kind: "domain"`), which is
  * deliberate: one person's opt-out cannot silently suppress a whole company.
  *
- * Unique (workspaceId, kind, normalizedValue) is enforced transactionally;
+ * Unique (orgId, kind, normalizedValue) is enforced transactionally;
  * re-adding is an idempotent no-op returning the existing row.
  */
 import { internalMutation, mutation, query } from "../_generated/server";
@@ -16,8 +16,7 @@ import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { v } from "convex/values";
 import {
-  requireWorkspaceEditor,
-  requireWorkspaceMember,
+  requireOrgMember,
 } from "../lib/auth";
 import type { AuthCtx } from "../lib/auth";
 import {
@@ -56,15 +55,15 @@ function normalizedSuppressionValue(
 
 export async function findSuppression(
   ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   kind: SuppressionKind,
   normalizedValue: string,
 ): Promise<Doc<"suppressions"> | null> {
   return await ctx.db
     .query("suppressions")
-    .withIndex("by_workspaceId_and_kind_and_normalizedValue", (q) =>
+    .withIndex("by_orgId_and_kind_and_normalizedValue", (q) =>
       q
-        .eq("workspaceId", workspaceId)
+        .eq("orgId", orgId)
         .eq("kind", kind)
         .eq("normalizedValue", normalizedValue),
     )
@@ -78,7 +77,7 @@ export async function findSuppression(
  */
 export async function matchSuppression(
   ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   normalizedEmail: string,
 ): Promise<{
   suppression: Doc<"suppressions">;
@@ -86,7 +85,7 @@ export async function matchSuppression(
 } | null> {
   const byEmail = await findSuppression(
     ctx,
-    workspaceId,
+    orgId,
     "email",
     normalizedEmail,
   );
@@ -95,7 +94,7 @@ export async function matchSuppression(
   }
   const byDomain = await findSuppression(
     ctx,
-    workspaceId,
+    orgId,
     "domain",
     domainOfNormalizedEmail(normalizedEmail),
   );
@@ -109,32 +108,32 @@ export async function matchSuppression(
 /* Public reads                                                        */
 /* ------------------------------------------------------------------ */
 
-/** All suppression rows for the workspace (bounded). */
+/** All suppression rows for the org (bounded). */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     kind: v.optional(vSuppressionKind),
     limit: v.optional(v.number()),
   },
   returns: v.array(vSuppressionDoc),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const limit = boundedLimit(args.limit);
     const kind = args.kind;
     if (kind !== undefined) {
       // Narrow scan: range over the kind prefix of the unique index.
       const rows = await ctx.db
         .query("suppressions")
-        .withIndex("by_workspaceId_and_kind_and_normalizedValue", (q) =>
-          q.eq("workspaceId", args.workspaceId).eq("kind", kind),
+        .withIndex("by_orgId_and_kind_and_normalizedValue", (q) =>
+          q.eq("orgId", args.orgId).eq("kind", kind),
         )
         .take(limit);
       return rows;
     }
     return await ctx.db
       .query("suppressions")
-      .withIndex("by_workspaceId_and_kind_and_normalizedValue", (q) =>
-        q.eq("workspaceId", args.workspaceId),
+      .withIndex("by_orgId_and_kind_and_normalizedValue", (q) =>
+        q.eq("orgId", args.orgId),
       )
       .take(limit);
   },
@@ -143,7 +142,7 @@ export const list = query({
 /** Would this recipient be blocked right now? Member-readable. */
 export const check = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     email: v.string(),
   },
   returns: v.object({
@@ -156,9 +155,9 @@ export const check = query({
     suppression: v.union(vSuppressionDoc, v.null()),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const normalized = normalizeEmailAddress(args.email, "email");
-    const match = await matchSuppression(ctx, args.workspaceId, normalized);
+    const match = await matchSuppression(ctx, args.orgId, normalized);
     if (match === null) {
       return { suppressed: false, matchedBy: null, suppression: null };
     }
@@ -175,12 +174,12 @@ export const check = query({
 /* ------------------------------------------------------------------ */
 
 /**
- * How many of a workspace's suppression rows one request will read.
+ * How many of an org's suppression rows one request will read.
  *
- * There is no (workspace, createdAt) index — the unique key indexes by value
+ * There is no (org, createdAt) index — the unique key indexes by value
  * — so newest-first ordering and substring search are both done over a
- * bounded scan. A trial workspace sends at most 30 mails a day, so its whole
- * blocklist is tens of rows; the cap exists so a pathological workspace
+ * bounded scan. A trial org sends at most 30 mails a day, so its whole
+ * blocklist is tens of rows; the cap exists so a pathological org
  * degrades honestly (`truncated`) instead of reading an unbounded table.
  */
 const SUPPRESSION_SCAN_MAX = 1000;
@@ -232,7 +231,7 @@ function isAfterCursor(
  */
 export const page = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     kind: v.optional(vSuppressionKind),
     /** Case-insensitive substring of the normalized address or domain. */
     search: v.optional(v.string()),
@@ -245,11 +244,11 @@ export const page = query({
     nextCursor: v.union(vSuppressionCursor, v.null()),
     /** Rows matching the current filter, across every page. */
     matched: v.number(),
-    /** The workspace holds more rows than one request reads. */
+    /** The org holds more rows than one request reads. */
     truncated: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const limit = Math.min(boundedLimit(args.limit), SUPPRESSION_PAGE_MAX);
     const kind = args.kind;
     const term =
@@ -261,10 +260,10 @@ export const page = query({
 
     const scanned = await ctx.db
       .query("suppressions")
-      .withIndex("by_workspaceId_and_kind_and_normalizedValue", (q) =>
+      .withIndex("by_orgId_and_kind_and_normalizedValue", (q) =>
         kind === undefined
-          ? q.eq("workspaceId", args.workspaceId)
-          : q.eq("workspaceId", args.workspaceId).eq("kind", kind),
+          ? q.eq("orgId", args.orgId)
+          : q.eq("orgId", args.orgId).eq("kind", kind),
       )
       .take(SUPPRESSION_SCAN_MAX + 1);
     const truncated = scanned.length > SUPPRESSION_SCAN_MAX;
@@ -306,7 +305,7 @@ export const page = query({
  */
 export const add = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     kind: vSuppressionKind,
     value: v.string(),
     reason: vSuppressionReason,
@@ -317,23 +316,23 @@ export const add = mutation({
     created: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const { workspace } = await requireWorkspaceEditor(ctx, args.workspaceId);
-    return await insertSuppression(ctx, workspace._id, args);
+    const { org } = await requireOrgMember(ctx, args.orgId);
+    return await insertSuppression(ctx, org._id, args);
   },
 });
 
 /** Remove a suppression (owner/operator). Rows are deleted, not archived —
- * the activity record lives on the workspace activity feed. */
+ * the activity record lives on the org activity feed. */
 export const remove = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     suppressionId: v.id("suppressions"),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const row = await ctx.db.get("suppressions", args.suppressionId);
-    if (row === null || row.workspaceId !== args.workspaceId) {
+    if (row === null || row.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "suppression not found");
     }
     await ctx.db.delete("suppressions", row._id);
@@ -343,7 +342,7 @@ export const remove = mutation({
 
 async function insertSuppression(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   args: {
     kind: SuppressionKind;
     value: string;
@@ -354,7 +353,7 @@ async function insertSuppression(
   const normalizedValue = normalizedSuppressionValue(args.kind, args.value);
   const existing = await findSuppression(
     ctx,
-    workspaceId,
+    orgId,
     args.kind,
     normalizedValue,
   );
@@ -366,12 +365,12 @@ async function insertSuppression(
       "conversations",
       args.sourceConversationId,
     );
-    if (conversation === null || conversation.workspaceId !== workspaceId) {
+    if (conversation === null || conversation.orgId !== orgId) {
       throw domainError("NOT_FOUND", "source conversation not found");
     }
   }
   const id = await ctx.db.insert("suppressions", {
-    workspaceId,
+    orgId,
     kind: args.kind,
     normalizedValue,
     reason: args.reason,
@@ -394,7 +393,7 @@ async function insertSuppression(
  */
 export const recordSuppression = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     kind: vSuppressionKind,
     value: v.string(),
     reason: vSuppressionReason,
@@ -405,10 +404,10 @@ export const recordSuppression = internalMutation({
     created: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       throw domainError("NOT_FOUND", "organization not found");
     }
-    return await insertSuppression(ctx, workspace._id, args);
+    return await insertSuppression(ctx, org._id, args);
   },
 });

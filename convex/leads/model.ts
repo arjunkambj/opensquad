@@ -42,7 +42,7 @@ export const vListPage = v.object({
 });
 
 type ListPageArgs = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   stage?: LeadStage;
   approval?: LeadApproval;
   dueRange?: { from?: number; to?: number };
@@ -56,7 +56,7 @@ type ListPageArgs = {
  * Every list mode is an exact index range — never a post-filtered page. The
  * modes and the index behind each:
  *
- *   due (`dueRange`): soonest-due first on `by_workspaceId_and_nextActionAt`.
+ *   due (`dueRange`): soonest-due first on `by_orgId_and_nextActionAt`.
  *   A lead with no due time cannot satisfy a range bound, so this mode never
  *   hides one behind a page that looks filtered — it appears in the default
  *   and `unscheduled` modes instead.
@@ -64,13 +64,13 @@ type ListPageArgs = {
  *   unscheduled: the complementary slice — leads with NO `nextActionAt`.
  *
  *   score (`topScoreFirst`): best leads first on
- *   `by_workspaceId_and_scoreKey`. `scoreKey` is the denormalised mirror of
+ *   `by_orgId_and_scoreKey`. `scoreKey` is the denormalised mirror of
  *   `research.aiScore`; unresearched leads have none and sort below, which is
  *   exactly the "scored first, the rest one click away" order of PLAN §3.
  *
  *   stage / approval: the Contacts filters, each on its own index.
  *
- *   default: the whole workspace by next-action time, most recent first.
+ *   default: the whole org by next-action time, most recent first.
  *
  * Unsupported combinations REFUSE rather than silently post-filter: the
  * schema declares an index per enabled combination, and a filter pair with no
@@ -104,8 +104,8 @@ export async function listPage(
     // slice rather than a sentinel date the reader has to know about.
     const result = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_nextActionAt", (q) =>
-        q.eq("workspaceId", args.workspaceId).lt("nextActionAt", EPOCH_MS_MIN),
+      .withIndex("by_orgId_and_nextActionAt", (q) =>
+        q.eq("orgId", args.orgId).lt("nextActionAt", EPOCH_MS_MIN),
       )
       .order("desc")
       .paginate(paginate);
@@ -135,9 +135,9 @@ export async function listPage(
     const lower = from ?? 0;
     const result = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_nextActionAt", (q) => {
+      .withIndex("by_orgId_and_nextActionAt", (q) => {
         const scoped = q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .gte("nextActionAt", lower);
         return to === undefined ? scoped : scoped.lte("nextActionAt", to);
       })
@@ -153,8 +153,8 @@ export async function listPage(
   if (args.topScoreFirst === true) {
     const result = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_scoreKey", (q) =>
-        q.eq("workspaceId", args.workspaceId),
+      .withIndex("by_orgId_and_scoreKey", (q) =>
+        q.eq("orgId", args.orgId),
       )
       .order("desc")
       .paginate(paginate);
@@ -169,8 +169,8 @@ export async function listPage(
   if (approval !== undefined) {
     const result = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_approval", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("approval", approval),
+      .withIndex("by_orgId_and_approval", (q) =>
+        q.eq("orgId", args.orgId).eq("approval", approval),
       )
       .order("desc")
       .paginate(paginate);
@@ -186,15 +186,15 @@ export async function listPage(
     stage !== undefined
       ? await ctx.db
           .query("prospects")
-          .withIndex("by_workspaceId_and_stage_and_updatedAt", (q) =>
-            q.eq("workspaceId", args.workspaceId).eq("stage", stage),
+          .withIndex("by_orgId_and_stage_and_updatedAt", (q) =>
+            q.eq("orgId", args.orgId).eq("stage", stage),
           )
           .order("desc")
           .paginate(paginate)
       : await ctx.db
           .query("prospects")
-          .withIndex("by_workspaceId_and_nextActionAt", (q) =>
-            q.eq("workspaceId", args.workspaceId),
+          .withIndex("by_orgId_and_nextActionAt", (q) =>
+            q.eq("orgId", args.orgId),
           )
           .order("desc")
           .paginate(paginate);
@@ -206,16 +206,16 @@ export async function listPage(
 }
 
 /**
- * Load a lead for a write. A missing row and a row in another workspace are
- * the same NOT_FOUND — the read must never reveal another workspace's data.
+ * Load a lead for a write. A missing row and a row in another org are
+ * the same NOT_FOUND — the read must never reveal another org's data.
  */
 export async function loadProspectForWrite(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   prospectId: Id<"prospects">,
 ): Promise<Doc<"prospects">> {
   const prospect = await ctx.db.get("prospects", prospectId);
-  if (prospect === null || prospect.workspaceId !== workspaceId) {
+  if (prospect === null || prospect.orgId !== orgId) {
     throw domainError("NOT_FOUND", "prospect not found");
   }
   return prospect;
@@ -229,7 +229,7 @@ export async function loadProspectForWrite(
 export type UpsertOutcome = "inserted" | "merged" | "unchanged";
 
 export type UpsertSourcedLeadArgs = {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   agentId: Id<"agents">;
   /** The strategy whose page this row came back on. */
   strategyId: Id<"strategies">;
@@ -247,7 +247,7 @@ export type UpsertSourcedLeadArgs = {
  * Dedupe is on the provider's row id WITHIN THE AGENT, read through
  * `by_agentId_and_sourceLeadKey` in the same transaction as the insert —
  * Convex has no unique index, so that read IS the constraint, exactly as the
- * one-agent-per-workspace and one-inbox-per-workspace rules are enforced.
+ * one-agent-per-org and one-inbox-per-org rules are enforced.
  *
  * A merge only ever ADDS: it appends the strategy, re-ranks with the higher
  * signal count and keeps the better `preRank`. It never rewrites the person's
@@ -295,7 +295,7 @@ export async function upsertSourcedLead(
       signalCount: 1,
     });
     await ctx.db.insert("prospects", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       agentId: args.agentId,
       origin,
       // Written in the SAME insert as `origin`, never alone (PLAN §7).

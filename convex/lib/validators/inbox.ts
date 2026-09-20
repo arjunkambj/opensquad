@@ -52,7 +52,7 @@ export type ConversationState = "open" | "closed" | "unassigned";
  * so connecting an inbox schedules a 30-day thread import marked `backfill`.
  *
  * The distinction is a safety gate, not a label: `handleReply` runs only on
- * `live` mail that arrived after `workspaces.connectedAt` — backfilled
+ * `live` mail that arrived after `orgs.connectedAt` — backfilled
  * history is readable in the Inbox and nothing more ("Never answer history").
  * When both paths race on the same provider message, `live` WINS and a later
  * backfill never downgrades it.
@@ -392,7 +392,7 @@ export const INBOUND_SENDER_MAX_LENGTH = 1_000;
  *   refusal — `conversations.resume` blocks on `sender_unverified` — so
  *   refusing is always the safe answer.
  *
- * The result is stored as data. It never selects a workspace or conversation
+ * The result is stored as data. It never selects an org or conversation
  * and never becomes a send recipient; at most it must MATCH an address the
  * application already resolved, and a mismatch blocks.
  */
@@ -483,12 +483,12 @@ export function outboundApplicationKey(
 }
 
 /**
- * Why a verified event could not be attributed to a workspace.
+ * Why a verified event could not be attributed to an org.
  *
  * Both are resolvable conditions, not corruption: an inbox assignment that
- * has not committed yet (or is being rotated), and two workspaces
+ * has not committed yet (or is being rotated), and two orgs
  * transiently claiming one `inboxRef`. Neither may be guessed at by the
- * callback — §8 step 2 resolves a workspace from the saved assignment alone —
+ * callback — §8 step 2 resolves an org from the saved assignment alone —
  * and neither may drop the event, because the provider will not resend an
  * `event_id` the component has already ingested.
  */

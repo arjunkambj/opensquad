@@ -158,7 +158,7 @@ export type InboxSync = typeof vInboxSync.type;
 
 export async function readInboxSync(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   connectedAt: number | undefined,
 ): Promise<InboxSync> {
   if (connectedAt === undefined) {
@@ -166,9 +166,9 @@ export async function readInboxSync(
   }
   const row = await ctx.db
     .query("providerOperations")
-    .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+    .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
       q
-        .eq("workspaceId", workspaceId)
+        .eq("orgId", orgId)
         .eq("provider", "agentmail")
         .eq("operationKey", backfillOperationKey(connectedAt)),
     )
@@ -211,28 +211,28 @@ const vStepContext = v.union(
 
 /**
  * Create (or resume) the run for this connection and schedule its first step.
- * Idempotent on `(workspace, provider, operationKey)`: a second connect at the
+ * Idempotent on `(org, provider, operationKey)`: a second connect at the
  * same `connectedAt` finds the row and schedules nothing new unless the run
  * had failed.
  */
 export const beginBackfill = internalMutation({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({ started: v.boolean(), reason: v.optional(v.string()) }),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       return { started: false, reason: "organization not found" };
     }
-    const { inboxRef, connectedAt } = workspace;
+    const { inboxRef, connectedAt } = org;
     if (inboxRef === undefined || connectedAt === undefined) {
       return { started: false, reason: "organization has no connected inbox" };
     }
     const operationKey = backfillOperationKey(connectedAt);
     const existing = await ctx.db
       .query("providerOperations")
-      .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+      .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("provider", "agentmail")
           .eq("operationKey", operationKey),
       )
@@ -251,13 +251,13 @@ export const beginBackfill = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.inbox.backfill.runBackfillStep,
-        { workspaceId: args.workspaceId },
+        { orgId: args.orgId },
       );
       return { started: true };
     }
     const now = Date.now();
     await ctx.db.insert("providerOperations", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       provider: "agentmail" as const,
       operationKey,
       requestDigest: await computeResultDigest({
@@ -273,7 +273,7 @@ export const beginBackfill = internalMutation({
       updatedAt: now,
     });
     await ctx.scheduler.runAfter(0, internal.inbox.backfill.runBackfillStep, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
     });
     return { started: true };
   },
@@ -281,24 +281,24 @@ export const beginBackfill = internalMutation({
 
 /** What the next step must do, read in one transaction. */
 export const nextStep = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vStepContext,
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
+    const org = await ctx.db.get("orgs", args.orgId);
     if (
-      workspace === null ||
-      workspace.inboxRef === undefined ||
-      workspace.connectedAt === undefined
+      org === null ||
+      org.inboxRef === undefined ||
+      org.connectedAt === undefined
     ) {
       return { run: false as const, reason: "organization has no connected inbox" };
     }
     const row = await ctx.db
       .query("providerOperations")
-      .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+      .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("provider", "agentmail")
-          .eq("operationKey", backfillOperationKey(workspace.connectedAt as number)),
+          .eq("operationKey", backfillOperationKey(org.connectedAt as number)),
       )
       .unique();
     // `uncertain` still runs: the shared provider-operation sweep can relabel
@@ -312,8 +312,8 @@ export const nextStep = internalQuery({
     return {
       run: true as const,
       operationId: row._id,
-      inboxRef: workspace.inboxRef,
-      afterMs: (workspace.connectedAt as number) - BACKFILL_WINDOW_MS,
+      inboxRef: org.inboxRef,
+      afterMs: (org.connectedAt as number) - BACKFILL_WINDOW_MS,
       ...(progress.pageToken !== undefined
         ? { pageToken: progress.pageToken }
         : {}),
@@ -328,18 +328,18 @@ export const nextStep = internalQuery({
  * a sequence of short actions each holding exactly one provider request.
  */
 export const runBackfillStep = internalAction({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const step = await ctx.runQuery(internal.inbox.backfill.nextStep, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
     });
     if (!step.run) {
       return null;
     }
     const envelope = await ctx.runQuery(
-      internal.workspaces.secrets.getEnvelope,
-      { workspaceId: args.workspaceId, provider: "agentmail" },
+      internal.orgs.secrets.getEnvelope,
+      { orgId: args.orgId, provider: "agentmail" },
     );
     if (envelope === null || envelope.status === "invalid") {
       await ctx.runMutation(internal.inbox.backfill.failBackfill, {
@@ -368,7 +368,7 @@ export const runBackfillStep = internalAction({
         }
         await ctx.runMutation(internal.inbox.backfill.recordStepFailure, {
           operationId: step.operationId,
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           code: thread.code,
           transient: TRANSIENT_CODES.has(thread.code),
           // A single thread that cannot be read is skipped rather than
@@ -378,7 +378,7 @@ export const runBackfillStep = internalAction({
         return null;
       }
       await ctx.runMutation(internal.inbox.backfill.recordThread, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         operationId: step.operationId,
         inboxRef: step.inboxRef,
         threadId: step.threadId,
@@ -409,7 +409,7 @@ export const runBackfillStep = internalAction({
       }
       await ctx.runMutation(internal.inbox.backfill.recordStepFailure, {
         operationId: step.operationId,
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         code: page.code,
         transient: TRANSIENT_CODES.has(page.code),
         skipThread: false,
@@ -417,7 +417,7 @@ export const runBackfillStep = internalAction({
       return null;
     }
     await ctx.runMutation(internal.inbox.backfill.recordThreadPage, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       operationId: step.operationId,
       threadIds: page.value.threads.map((thread) => thread.threadId),
       ...(page.value.nextPageToken !== undefined
@@ -437,7 +437,7 @@ export const runBackfillStep = internalAction({
  */
 async function continueOrFinish(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   row: Doc<"providerOperations">,
   progress: BackfillProgress,
   delayMs = 0,
@@ -451,13 +451,13 @@ async function continueOrFinish(
   await ctx.scheduler.runAfter(
     delayMs,
     internal.inbox.backfill.runBackfillStep,
-    { workspaceId },
+    { orgId },
   );
 }
 
 export const recordThreadPage = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationId: v.id("providerOperations"),
     threadIds: v.array(v.string()),
     nextPageToken: v.optional(v.string()),
@@ -485,7 +485,7 @@ export const recordThreadPage = internalMutation({
       threadsImported: previous.threadsImported,
       attempts: 0,
     };
-    await continueOrFinish(ctx, args.workspaceId, row, progress);
+    await continueOrFinish(ctx, args.orgId, row, progress);
     return null;
   },
 });
@@ -499,7 +499,7 @@ const vBackfillMessage = v.object({
 
 export const recordThread = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationId: v.id("providerOperations"),
     inboxRef: v.string(),
     threadId: v.string(),
@@ -524,7 +524,7 @@ export const recordThread = internalMutation({
       threadsImported: previous.threadsImported + 1,
       attempts: 0,
     };
-    await continueOrFinish(ctx, args.workspaceId, row, progress);
+    await continueOrFinish(ctx, args.orgId, row, progress);
     return null;
   },
 });
@@ -542,7 +542,7 @@ export const recordThread = internalMutation({
 async function importThread(
   ctx: MutationCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     inboxRef: string;
     threadId: string;
     messages: Array<{ messageId: string; timestamp?: number; from?: string }>;
@@ -559,7 +559,7 @@ async function importThread(
   const ensured = await ctx.runMutation(
     internal.inbox.unassignedQueue.ensureUnassignedConversation,
     {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       inboxRef: args.inboxRef,
       providerThreadRef: args.threadId,
       messageRef: newest?.messageId ?? args.threadId,
@@ -596,7 +596,7 @@ async function importThread(
     const fromAddress =
       message.from === undefined ? undefined : parseInboundSender(message.from);
     await upsertMessage(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       inboxRef: args.inboxRef,
       providerMessageRef: message.messageId,
       providerThreadRef: args.threadId,
@@ -615,7 +615,7 @@ async function importThread(
 
 export const recordStepFailure = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     operationId: v.id("providerOperations"),
     code: v.string(),
     transient: v.boolean(),
@@ -634,7 +634,7 @@ export const recordStepFailure = internalMutation({
         pending: previous.pending.slice(1),
         attempts: 0,
       };
-      await continueOrFinish(ctx, args.workspaceId, row, progress);
+      await continueOrFinish(ctx, args.orgId, row, progress);
       return null;
     }
     const attempts = previous.attempts + 1;
@@ -649,7 +649,7 @@ export const recordStepFailure = internalMutation({
     await ctx.scheduler.runAfter(
       BACKFILL_RETRY_DELAY_MS,
       internal.inbox.backfill.runBackfillStep,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     return null;
   },
@@ -708,7 +708,7 @@ export const sweepStalledBackfills = internalMutation({
         await ctx.scheduler.runAfter(
           0,
           internal.inbox.backfill.runBackfillStep,
-          { workspaceId: row.workspaceId },
+          { orgId: row.orgId },
         );
         resumed += 1;
       }

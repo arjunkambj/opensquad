@@ -1,17 +1,17 @@
 // The one credit number a member sees (PLAN §6 layer 1). Reads the
-// workspace's lifetime `credits` bucket and nothing else: provider-unit
+// org's lifetime `credits` bucket and nothing else: provider-unit
 // buckets, their metric names and provider names never leave the server.
 import { v } from "convex/values";
 import { internalQuery, query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   USAGE_PERIOD_LIFETIME,
-  USAGE_SCOPE_WORKSPACE,
+  USAGE_SCOPE_ORG,
   vUsageMetric,
 } from "../lib/validators";
 
 export const vCreditBalance = v.object({
-  /** Credits granted to the workspace for its lifetime. */
+  /** Credits granted to the org for its lifetime. */
   granted: v.number(),
   /** Credits still spendable: granted − billed − pending. */
   remaining: v.number(),
@@ -21,21 +21,21 @@ export const vCreditBalance = v.object({
 
 /**
  * Credit balance for the sidebar block and every paid button. `null` means
- * the workspace has no credit grant, in which case every paid call refuses.
+ * the org has no credit grant, in which case every paid call refuses.
  */
 export const balance = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.union(vCreditBalance, v.null()),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const bucket = await ctx.db
       .query("usageBuckets")
       .withIndex(
-        "by_workspaceId_and_scopeKey_and_metric_and_periodKey",
+        "by_orgId_and_scopeKey_and_metric_and_periodKey",
         (q) =>
           q
-            .eq("workspaceId", args.workspaceId)
-            .eq("scopeKey", USAGE_SCOPE_WORKSPACE)
+            .eq("orgId", args.orgId)
+            .eq("scopeKey", USAGE_SCOPE_ORG)
             .eq("metric", "credits")
             .eq("periodKey", USAGE_PERIOD_LIFETIME),
       )
@@ -53,7 +53,7 @@ export const balance = query({
 });
 
 /**
- * The operator's view of one workspace's whole allowance — every bucket, its
+ * The operator's view of one org's whole allowance — every bucket, its
  * metric and its counters.
  *
  * INTERNAL on purpose: it answers "why is this member's paid button
@@ -63,7 +63,7 @@ export const balance = query({
  * existing in the tree.
  */
 export const ledgerSnapshot = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({
     credits: v.union(vCreditBalance, v.null()),
     buckets: v.array(
@@ -81,8 +81,8 @@ export const ledgerSnapshot = internalQuery({
   handler: async (ctx, args) => {
     const buckets = await ctx.db
       .query("usageBuckets")
-      .withIndex("by_workspaceId_and_scopeKey_and_metric_and_periodKey", (q) =>
-        q.eq("workspaceId", args.workspaceId),
+      .withIndex("by_orgId_and_scopeKey_and_metric_and_periodKey", (q) =>
+        q.eq("orgId", args.orgId),
       )
       .collect();
     const creditsBucket = buckets.find(

@@ -37,7 +37,7 @@ import { v } from "convex/values";
  */
 export const CONTACTS_TOTAL_BOUND = 200;
 
-/** Strategies one workspace can hold — PLAN §3 gives an agent 3–5 plus a
+/** Strategies one org can hold — PLAN §3 gives an agent 3–5 plus a
  *  keyword one, so this is a guard rather than a page size. */
 const STRATEGY_SCAN_MAX = 50;
 
@@ -109,20 +109,20 @@ export const vLeadDetail = v.object({
   lastError: v.optional(vOperationError),
 });
 
-/** The workspace's signals by id, read once per query rather than per row. */
+/** The org's signals by id, read once per query rather than per row. */
 export async function signalTitles(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
 ): Promise<Map<string, string>> {
   const strategies = await ctx.db
     .query("strategies")
-    .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId))
+    .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
     .take(STRATEGY_SCAN_MAX);
   return new Map(strategies.map((strategy) => [strategy._id, strategy.title]));
 }
 
 /**
- * One table row. A strategy the lead names but the workspace no longer holds
+ * One table row. A strategy the lead names but the org no longer holds
  * is dropped rather than rendered as an id — a signal with no title is not a
  * signal the user can act on.
  */

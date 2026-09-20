@@ -12,7 +12,7 @@
  */
 import { internalMutation } from "../_generated/server";
 import { boundIcpGeneration, vIcpGeneration } from "../ai/generateIcp";
-import { getWorkspaceProfile } from "../company/model";
+import { getOrgProfile } from "../company/model";
 import { vOperationErrorCode } from "../lib/validators";
 import {
   boundedPainPoints,
@@ -91,7 +91,7 @@ export const finishGeneration = internalMutation({
 
     const painPoints = boundedPainPoints(generated.painPoints);
     if (painPoints.length > 0) {
-      const profile = await getWorkspaceProfile(ctx, agent.workspaceId);
+      const profile = await getOrgProfile(ctx, agent.orgId);
       if (profile !== null && profile.painPoints.trim().length === 0) {
         await ctx.db.patch("businessProfiles", profile._id, {
           painPoints,

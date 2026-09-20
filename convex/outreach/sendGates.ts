@@ -20,7 +20,7 @@ import { v } from "convex/values";
  * definitely-unsent / rejected / uncertain UI codes map off these).
  */
 export const SEND_BLOCK_CODES = [
-  "workspace_paused",
+  "org_paused",
   /** The agent is in a mode that never sends (sourcing only, paused). */
   "agent_not_sending",
   "conversation_not_open",
@@ -146,7 +146,7 @@ async function currentApproval(
 
 /**
  * Every send gate that does not depend on wall-clock window/capacity:
- * workspace/agent liveness, exact approval + context binding,
+ * org/agent liveness, exact approval + context binding,
  * takeover/closed state, suppression, inbox match, and the across-revisions
  * unresolved-attempt guard.
  *
@@ -156,20 +156,20 @@ async function currentApproval(
 export async function evaluateSendGates(
   ctx: AuthCtx,
   args: {
-    workspace: Doc<"workspaces">;
+    org: Doc<"orgs">;
     conversation: Doc<"conversations">;
     draft: Doc<"drafts">;
     agent: Doc<"agents"> | null;
     excludeAttemptId?: Id<"sendAttempts">;
   },
 ): Promise<GateResult> {
-  const { workspace, conversation, draft, agent } = args;
+  const { org, conversation, draft, agent } = args;
 
   // --- liveness ------------------------------------------------------
-  if (workspace.automationState !== "active") {
+  if (org.automationState !== "active") {
     return block(
-      "workspace_paused",
-      `organization automation is ${workspace.automationState}`,
+      "org_paused",
+      `organization automation is ${org.automationState}`,
     );
   }
   // Sourcing-only and paused agents never put mail on the wire (PLAN §9.3).
@@ -200,10 +200,10 @@ export async function evaluateSendGates(
       "no approved verdict binds this revision, payload and context version",
     );
   }
-  if (workspace.policyVersion !== draft.policyVersion) {
+  if (org.policyVersion !== draft.policyVersion) {
     return block(
       "policy_changed",
-      `organization policy is v${workspace.policyVersion}; draft was written against v${draft.policyVersion}`,
+      `organization policy is v${org.policyVersion}; draft was written against v${draft.policyVersion}`,
     );
   }
   // Revision fencing (PLAN §9.1): instructions, tone, goal, ICP or mode
@@ -226,7 +226,7 @@ export async function evaluateSendGates(
   // PLAN §9.1 makes the authority.
   if (conversation.prospectId !== undefined) {
     const lead = await ctx.db.get("prospects", conversation.prospectId);
-    if (lead !== null && lead.workspaceId === workspace._id) {
+    if (lead !== null && lead.orgId === org._id) {
       if (lead.approval === "rejected" || lead.stage === "rejected") {
         return block(
           "lead_rejected",
@@ -253,7 +253,7 @@ export async function evaluateSendGates(
   // here, because the mailed times or link would no longer be the offer.
   if (draft.bookingId !== undefined) {
     const booking = await ctx.db.get("bookings", draft.bookingId);
-    if (booking === null || booking.workspaceId !== workspace._id) {
+    if (booking === null || booking.orgId !== org._id) {
       return block(
         "booking_not_current",
         "the linked booking no longer exists in this organization",
@@ -286,40 +286,40 @@ export async function evaluateSendGates(
   }
 
   // --- inbox binding ---------------------------------------------------
-  if (workspace.inboxRef === undefined) {
+  if (org.inboxRef === undefined) {
     return block(
       "inbox_unassigned",
       "organization has no assigned sender inbox",
     );
   }
-  // The inbox must be attached by the workspace's OWN key (PLAN §9.4).
+  // The inbox must be attached by the org's OWN key (PLAN §9.4).
   // `legacy_platform_inbox` is receive-only — it still gets mail on the
   // platform route and cannot send until its owner connects a key — and
   // `invalid` is a key the provider refused at send time. Reported as
   // `inbox_unassigned` on purpose: "connect your inbox" is already the UI
   // meaning of that code, so no new block code has to be mapped.
-  if (workspace.inboxConnection !== "connected") {
+  if (org.inboxConnection !== "connected") {
     return block(
       "inbox_unassigned",
-      workspace.inboxConnection === "legacy_platform_inbox"
+      org.inboxConnection === "legacy_platform_inbox"
         ? "this organization receives on a platform inbox and cannot send until its own key is connected"
         : "the organization's mail key is not connected",
     );
   }
   if (
-    workspace.inboxRef !== draft.inboxRef ||
+    org.inboxRef !== draft.inboxRef ||
     conversation.inboxRef !== draft.inboxRef
   ) {
     return block(
       "inbox_mismatch",
-      "draft inbox no longer matches the workspace/conversation inbox",
+      "draft inbox no longer matches the org/conversation inbox",
     );
   }
 
   // --- suppression ------------------------------------------------------
   const suppression = await matchSuppression(
     ctx,
-    workspace._id,
+    org._id,
     draft.normalizedRecipient,
   );
   if (suppression !== null) {

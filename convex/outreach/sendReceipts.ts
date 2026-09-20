@@ -40,13 +40,13 @@ const vRecordReceiptResult = v.object({
 
 /**
  * Record one verified provider event. Dedupes transactionally on
- * `providerEventId` (delivery) and `(workspaceId, applicationKey)` (business
+ * `providerEventId` (delivery) and `(orgId, applicationKey)` (business
  * effect). `providerFacts` must be a bounded projection of verified fields —
  * never a message body — capped at PROVIDER_FACTS_MAX_BYTES.
  */
 export const recordProviderEvent = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
     providerEventId: v.string(),
     applicationKey: v.string(),
@@ -67,7 +67,7 @@ export const recordProviderEvent = internalMutation({
 export async function recordReceipt(
   ctx: MutationCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     inboxRef: string;
     providerEventId: string;
     applicationKey: string;
@@ -134,9 +134,9 @@ export async function recordReceipt(
   // `handled`), a third delivery must still record, not throw and wedge.
   const byKey = await ctx.db
     .query("emailEventReceipts")
-    .withIndex("by_workspaceId_and_applicationKey", (q) =>
+    .withIndex("by_orgId_and_applicationKey", (q) =>
       q
-        .eq("workspaceId", args.workspaceId)
+        .eq("orgId", args.orgId)
         .eq("applicationKey", applicationKey),
     )
     .first();
@@ -144,7 +144,7 @@ export async function recordReceipt(
 
   const now = Date.now();
   const receiptId = await ctx.db.insert("emailEventReceipts", {
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     inboxRef,
     providerEventId,
     applicationKey,
@@ -196,7 +196,7 @@ export async function recordReceipt(
   ) {
     // .collect() not .unique(): a provider anomaly could put the same
     // message ref on two attempts — unique() would throw and wedge the
-    // receipt forever. The workspace check picks our attempt out of any
+    // receipt forever. The org check picks our attempt out of any
     // such collision.
     const candidates = await ctx.db
       .query("sendAttempts")
@@ -205,7 +205,7 @@ export async function recordReceipt(
       )
       .collect();
     const attempt = candidates.find(
-      (candidate) => candidate.workspaceId === args.workspaceId,
+      (candidate) => candidate.orgId === args.orgId,
     );
     if (attempt !== undefined) {
       await applyReceiptToAttempt(ctx, receipt, attempt._id);
@@ -290,7 +290,7 @@ export async function applyReceiptToAttempt(
     const draft = await ctx.db.get("drafts", attempt.draftId);
     if (draft !== null) {
       await ctx.runMutation(internal.outreach.suppressions.recordSuppression, {
-        workspaceId: attempt.workspaceId,
+        orgId: attempt.orgId,
         kind: "email",
         value: draft.normalizedRecipient,
         reason: receipt.eventType === "message.bounced" ? "bounce" : "provider",

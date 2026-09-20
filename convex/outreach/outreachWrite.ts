@@ -58,22 +58,22 @@ function isAccountRefusal(reason: RefundReason): boolean {
 /**
  * The draft this operation key already stored, if it did.
  *
- * `createRevision` dedupes on `(workspaceId, requestId)` and the write step
+ * `createRevision` dedupes on `(orgId, requestId)` and the write step
  * passes its operation key as that request id, so a paid call that replays —
  * billed once, no object the second time — is answered from the row rather
  * than with another credit.
  */
 export const draftForOperationKey = internalQuery({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     requestId: v.string(),
   },
   returns: v.union(v.id("drafts"), v.null()),
   handler: async (ctx, args): Promise<Id<"drafts"> | null> => {
     const draft = await ctx.db
       .query("drafts")
-      .withIndex("by_workspaceId_and_requestId", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("requestId", args.requestId),
+      .withIndex("by_orgId_and_requestId", (q) =>
+        q.eq("orgId", args.orgId).eq("requestId", args.requestId),
       )
       .unique();
     return draft === null ? null : draft._id;
@@ -108,7 +108,7 @@ export const runOutreachWriteStep = internalAction({
     const operationKey = `${args.agentId}:${args.prospectId}:write:s${context.step}:r${context.revision}:a${attempt}`;
 
     const written = await runStructured(ctx, {
-      workspaceId: context.workspaceId,
+      orgId: context.orgId,
       action: "write_email",
       tier: "smart",
       system: WRITE_OUTREACH_SYSTEM,
@@ -149,7 +149,7 @@ export const runOutreachWriteStep = internalAction({
       // send; if it stored nothing, the next attempt asks under a new key.
       const existing = await ctx.runQuery(
         internal.outreach.outreachWrite.draftForOperationKey,
-        { workspaceId: context.workspaceId, requestId: operationKey },
+        { orgId: context.orgId, requestId: operationKey },
       );
       if (existing === null) {
         await fail(ctx, args, "invalid_response");

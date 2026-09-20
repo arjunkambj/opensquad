@@ -2,7 +2,7 @@
  * Per-user token buckets on every credit-spending entry point (PLAN §6
  * "Closing the ways in").
  *
- * Credits and provider caps bound what a workspace may spend in total; this
+ * Credits and provider caps bound what an org may spend in total; this
  * bounds how FAST one account may spend it, so a script cannot burn a day's
  * allowance in a second or flood the scheduler with work. The component
  * evaluates the bucket transactionally inside the caller's mutation, so a
@@ -24,8 +24,8 @@ const rateLimiter = new RateLimiter(components.rateLimiter, RATE_LIMITS);
  * Consume one token of `name` for this caller, or refuse with `RATE_LIMITED`.
  *
  * `key` is the caller's stable identity key, so the bucket is per USER rather
- * than per workspace: an invited operator's burst cannot exhaust the owner's
- * allowance, and one account cannot multiply its rate by making workspaces.
+ * than per org: an invited operator's burst cannot exhaust the owner's
+ * allowance, and one account cannot multiply its rate by making orgs.
  *
  * Call it at the TOP of a credit-spending mutation, before the reserve — a
  * refused call must never leave a reservation behind.

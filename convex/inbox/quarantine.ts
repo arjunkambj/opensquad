@@ -1,10 +1,10 @@
 /**
- * Quarantine for verified provider events no workspace can claim (P11 —
+ * Quarantine for verified provider events no org can claim (P11 —
  * `plan/integrations.md` §G3 "Unknown inboxes are quarantined",
  * architecture §4.3 and §8 step 2).
  *
- * WHY A DROP IS NOT AN OPTION HERE. `resolveWorkspaceByInbox` refuses to guess
- * a workspace: §8 step 2 resolves one from the saved inbox assignment alone,
+ * WHY A DROP IS NOT AN OPTION HERE. `resolveOrgByInbox` refuses to guess
+ * an org: §8 step 2 resolves one from the saved inbox assignment alone,
  * so zero claims and two claims both return `null`. What happened next was a
  * `console.info` and nothing else — and that loses the mail permanently. By
  * the time a callback runs, the component has already committed its `events`
@@ -15,9 +15,9 @@
  * reply vanished with one log line and no artefact anyone could replay.
  *
  * Both causes are ordinary and resolvable, not corruption: the AgentMail inbox
- * is provisioned before `conversationStaging.assignWorkspaceInbox` commits, so there is a
+ * is provisioned before `conversationStaging.assignOrgInbox` commits, so there is a
  * real window during onboarding and during any re-provision; and two
- * workspaces can transiently claim one `inboxRef` because that uniqueness is a
+ * orgs can transiently claim one `inboxRef` because that uniqueness is a
  * transactional convention, not a database constraint.
  *
  * WHAT IS STORED, AND WHAT IS NOT. Provider identifiers only — the same rule
@@ -30,7 +30,7 @@
  * replayed message is judged by today's rules rather than by a snapshot of the
  * rules in force when it was dropped.
  *
- * HOW IT GETS OUT. `conversationStaging.assignWorkspaceInbox` schedules `replayForInbox`
+ * HOW IT GETS OUT. `conversationStaging.assignOrgInbox` schedules `replayForInbox`
  * for the inbox it just assigned, so the onboarding window closes itself.
  * An operator can also drive it by hand for an inbox whose ambiguity they have
  * resolved. Replay goes through `sendReceipts.recordReceipt` and the ordinary
@@ -81,7 +81,7 @@ function clipRef(value: string, max: number = PROVIDER_REF_MAX_LENGTH): string {
 }
 
 /**
- * Hold one verified event that could not be attributed to a workspace.
+ * Hold one verified event that could not be attributed to an org.
  *
  * Deduped on `providerEventId` with `.first()` rather than `.unique()`: a
  * second row for one event is an anomaly worth surviving, not worth throwing
@@ -163,11 +163,11 @@ export type QuarantineReplayResult = typeof vReplayResult.type;
 /**
  * Replay everything held for one inbox, now that it has exactly one claimant.
  *
- * Scheduled by `conversationStaging.assignWorkspaceInbox` the moment an assignment commits,
+ * Scheduled by `conversationStaging.assignOrgInbox` the moment an assignment commits,
  * and callable by hand once an operator has resolved a double claim. It
- * re-resolves the workspace itself rather than trusting a caller's — the
+ * re-resolves the org itself rather than trusting a caller's — the
  * quarantine exists precisely because that resolution can fail, and a replay
- * into the wrong workspace would be worse than the drop it repairs.
+ * into the wrong org would be worse than the drop it repairs.
  *
  * `receivedAt` is carried over unchanged, so a message replayed after newer
  * mail has already landed on its thread is refused by `applyInboundMessage`'s
@@ -179,7 +179,7 @@ export const replayForInbox = internalMutation({
   handler: async (ctx, args): Promise<QuarantineReplayResult> => {
     const inboxRef = clipRef(args.inboxRef);
     const claims = await ctx.db
-      .query("workspaces")
+      .query("orgs")
       .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
       .collect();
     if (claims.length !== 1) {
@@ -193,7 +193,7 @@ export const replayForInbox = internalMutation({
             : ("inbox_ambiguous" as const),
       };
     }
-    const workspace = claims[0];
+    const org = claims[0];
     const rows = await ctx.db
       .query("quarantinedEmailEvents")
       .withIndex("by_inboxRef_and_state", (q) =>
@@ -205,7 +205,7 @@ export const replayForInbox = internalMutation({
     let held = 0;
     let discarded = 0;
     for (const row of rows) {
-      const outcome = await replayOne(ctx, workspace, row);
+      const outcome = await replayOne(ctx, org, row);
       if (outcome === "released") {
         released += 1;
       } else if (outcome === "discarded") {
@@ -220,7 +220,7 @@ export const replayForInbox = internalMutation({
 
 async function replayOne(
   ctx: MutationCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   row: Doc<"quarantinedEmailEvents">,
 ): Promise<"released" | "held" | "discarded"> {
   if (directionForApplicationKey(row.applicationKey) === "outbound") {
@@ -228,7 +228,7 @@ async function replayOne(
     // own timestamp, and `recordReceipt` folds it onto the matching attempt
     // (or parks it) exactly as it would have at the time.
     await recordReceipt(ctx, {
-      workspaceId: workspace._id,
+      orgId: org._id,
       inboxRef: row.inboxRef,
       providerEventId: row.providerEventId,
       applicationKey: row.applicationKey,
@@ -243,7 +243,7 @@ async function replayOne(
           ? {}
           : { timestamp: row.providerTimestamp },
     });
-    await settle(ctx, row, "released", workspace._id, "replayed as a delivery receipt");
+    await settle(ctx, row, "released", org._id, "replayed as a delivery receipt");
     return "released";
   }
 
@@ -294,7 +294,7 @@ async function replayOne(
   // the backfill imported while this row waited is MERGED and promoted to
   // `live` rather than duplicated.
   const { receipt, startsHandling } = await upsertMessage(ctx, {
-    workspaceId: workspace._id,
+    orgId: org._id,
     inboxRef: row.inboxRef,
     providerEventId: row.providerEventId,
     providerMessageRef: row.providerMessageRef,
@@ -318,7 +318,7 @@ async function replayOne(
     ctx,
     row,
     "released",
-    workspace._id,
+    org._id,
     startsHandling
       ? "replayed into inbound processing"
       : "already recorded under this organization; no second application effect",
@@ -356,7 +356,7 @@ async function settle(
   ctx: MutationCtx,
   row: Doc<"quarantinedEmailEvents">,
   state: "released" | "discarded",
-  releasedTo: Doc<"workspaces">["_id"] | undefined,
+  releasedTo: Doc<"orgs">["_id"] | undefined,
   note: string,
 ): Promise<void> {
   await ctx.db.patch("quarantinedEmailEvents", row._id, {

@@ -5,7 +5,7 @@ import { components } from "./_generated/api";
 import { agentmail } from "./integrations/agentmail";
 import {
   inboundWebhook,
-  WORKSPACE_WEBHOOK_PATH_PREFIX,
+  ORG_WEBHOOK_PATH_PREFIX,
 } from "./inbox/inboundRoute";
 
 const http = httpRouter();
@@ -27,24 +27,24 @@ function unauthorizedResponse(): Response {
 // element; runtime behavior is unchanged.
 type WebhookCtx = Parameters<typeof agentmail.handleWebhook>[0];
 
-// --- AgentMail: the per-workspace inbound route (T10) -------------------------
+// --- AgentMail: the per-org inbound route (T10) -------------------------
 // POST /agentmail/webhook/<token> — PLAN §4 step 4 / §9.4. The opaque path
-// token resolves to ONE workspace; the request is verified against that
-// workspace's own webhook secret (plus the rotated-out one during its
+// token resolves to ONE org; the request is verified against that
+// org's own webhook secret (plus the rotated-out one during its
 // ten-minute overlap), and is accepted only when the event's `inbox_id` is
-// that workspace's `inboxRef`. Unknown token or bad signature → 401; a
+// that org's `inboxRef`. Unknown token or bad signature → 401; a
 // verified event naming another inbox is quarantined. Registered as a PREFIX
 // route, so the exact legacy path below still wins for itself.
 http.route({
-  pathPrefix: WORKSPACE_WEBHOOK_PATH_PREFIX,
+  pathPrefix: ORG_WEBHOOK_PATH_PREFIX,
   method: "POST",
   handler: inboundWebhook,
 });
 
 // --- AgentMail: the legacy platform-inbox route (P05) -------------------------
-// POST /agentmail/webhook — kept mounted for workspaces still on the platform
+// POST /agentmail/webhook — kept mounted for orgs still on the platform
 // account (`inboxConnection: "legacy_platform_inbox"`, PLAN §9.4 "Legacy
-// inboxes", MIGRATION.md §4.1.6). RECEIVE-ONLY: those workspaces are refused
+// inboxes", MIGRATION.md §4.1.6). RECEIVE-ONLY: those orgs are refused
 // at the send gate and are never auto-answered. `handleWebhook` verifies the
 // svix headers over the raw body against AGENTMAIL_WEBHOOK_SECRET before any
 // state change.
@@ -53,7 +53,7 @@ http.route({
 // missing, which would answer an unsigned request with a 500 — so the absence
 // is checked here and answered 401, the same as a bad signature: an endpoint
 // that cannot verify anything must refuse, not fail. Removing this route is a
-// T50 item gated on no workspace being in the legacy state.
+// T50 item gated on no org being in the legacy state.
 http.route({
   path: "/agentmail/webhook",
   method: "POST",

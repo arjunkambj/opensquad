@@ -28,7 +28,7 @@ import { loadProspectForWrite } from "./model";
 export async function decideOne(
   ctx: MutationCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     prospectId: Id<"prospects">;
     approval: LeadApproval;
     identityKey: string;
@@ -38,13 +38,13 @@ export async function decideOne(
 ): Promise<boolean> {
   const prospect = await loadProspectForWrite(
     ctx,
-    args.workspaceId,
+    args.orgId,
     args.prospectId,
   );
   const operationKey = `lead:${args.prospectId}:approval:${args.requestId}`;
   const prior = await findLeadEventByOperationKey(
     ctx,
-    args.workspaceId,
+    args.orgId,
     operationKey,
   );
   if (prior !== null) {
@@ -89,7 +89,7 @@ export async function decideOne(
     );
   }
   await appendLeadEvent(ctx, {
-    workspaceId: prospect.workspaceId,
+    orgId: prospect.orgId,
     prospectId: prospect._id,
     kind: "approval_changed",
     summary: rejected ? "Lead rejected" : "Lead approved for outreach",
@@ -153,7 +153,7 @@ export async function cancelWorkForRejectedLead(
     await ctx.runMutation(
       internal.outreach.sendControls.cancelParkedConversationAttempts,
       {
-        workspaceId: lead.workspaceId,
+        orgId: lead.orgId,
         conversationId: conversation._id,
         reason,
       },

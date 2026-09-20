@@ -2,7 +2,7 @@
  * The reserve half of `withCredits` (PLAN §6).
  *
  * ONE transaction takes everything a paid call may cost: the action's credit
- * price, its worst-case provider units in the workspace's lifetime AND daily
+ * price, its worst-case provider units in the org's lifetime AND daily
  * buckets, and the platform budget for the same units. Concurrent callers
  * serialize on those rows, so two calls can never overspend one allowance.
  *
@@ -23,7 +23,7 @@ import {
   computeResultDigest,
   domainError,
   USAGE_PERIOD_LIFETIME,
-  USAGE_SCOPE_WORKSPACE,
+  USAGE_SCOPE_ORG,
 } from "../lib/validators";
 import type { ProviderKind } from "../lib/validators";
 import {
@@ -97,16 +97,16 @@ export type BeginResult =
       reason?: RefundReason;
     };
 
-/** How much of `metric` this workspace could still reserve in `periodKey`,
+/** How much of `metric` this org could still reserve in `periodKey`,
  *  measured against the CURRENT policy cap, which the reserve refreshes. */
 async function availableInBucket(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   metric: TrialMeteredMetric,
   periodKey: string,
   policyLimit: number,
 ): Promise<number> {
-  const bucket = await findBucket(ctx, workspaceId, metric, periodKey);
+  const bucket = await findBucket(ctx, orgId, metric, periodKey);
   if (bucket === null) {
     return policyLimit;
   }
@@ -114,21 +114,21 @@ async function availableInBucket(
 }
 
 /**
- * Has this workspace ever been BILLED for this action? The first-run-free
+ * Has this org ever been BILLED for this action? The first-run-free
  * actions of PLAN §6 are free exactly once, and a free run records a
  * commit-settled operation, so the second run is priced from the same fact.
  */
 async function actionAlreadyBilled(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   provider: ProviderKind,
   action: string,
 ): Promise<boolean> {
   const rows = await ctx.db
     .query("providerOperations")
-    .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+    .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
       q
-        .eq("workspaceId", workspaceId)
+        .eq("orgId", orgId)
         .eq("provider", provider)
         .gte("operationKey", `${action}:`)
         .lt("operationKey", `${action}:\uffff`),
@@ -145,7 +145,7 @@ async function actionAlreadyBilled(
  */
 export const beginPaidCall = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     action: vPaidAction,
     operationKey: v.string(),
     worstCaseProviderUnits: v.optional(vProviderUnits),
@@ -166,9 +166,9 @@ export const beginPaidCall = internalMutation({
     // 1. A settled — or still in-flight — operation is replayed, never re-bought.
     const existing = await ctx.db
       .query("providerOperations")
-      .withIndex("by_workspaceId_and_provider_and_operationKey", (q) =>
+      .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("provider", provider)
           .eq("operationKey", operationKey),
       )
@@ -183,25 +183,25 @@ export const beginPaidCall = internalMutation({
       return await replayOf(ctx, existing);
     }
 
-    // 2. The kill switch, before a single read of the workspace's money.
+    // 2. The kill switch, before a single read of the org's money.
     if (paidCallsPaused()) {
       return { decision: "refused", operationKey, reason: "kill_switch" };
     }
 
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       throw domainError("NOT_FOUND", "organization not found");
     }
 
-    // 3. No grant, no spend — the trial buckets are made with the workspace.
-    const creditsBucket = await findCreditsBucket(ctx, args.workspaceId);
+    // 3. No grant, no spend — the trial buckets are made with the org.
+    const creditsBucket = await findCreditsBucket(ctx, args.orgId);
     if (creditsBucket === null) {
       return { decision: "refused", operationKey, reason: "no_credit_grant" };
     }
 
     const credits =
       price.firstRunFree &&
-      !(await actionAlreadyBilled(ctx, args.workspaceId, provider, args.action))
+      !(await actionAlreadyBilled(ctx, args.orgId, provider, args.action))
         ? 0
         : price.credits;
 
@@ -214,19 +214,19 @@ export const beginPaidCall = internalMutation({
       };
     }
     const now = Date.now();
-    const dayKey = dailyPeriodKey(workspace, now);
+    const dayKey = dailyPeriodKey(org, now);
     for (const [key, quantity] of Object.entries(units)) {
       const metric = key as TrialMeteredMetric;
       const lifetime = await availableInBucket(
         ctx,
-        args.workspaceId,
+        args.orgId,
         metric,
         USAGE_PERIOD_LIFETIME,
         lifetimeMetricCap(metric),
       );
       const daily = await availableInBucket(
         ctx,
-        args.workspaceId,
+        args.orgId,
         metric,
         dayKey,
         dailyMetricCap(metric),
@@ -251,8 +251,8 @@ export const beginPaidCall = internalMutation({
     const reservationIds: Id<"usageReservations">[] = [];
     if (credits > 0) {
       const reserved = await reserveInBucket(ctx, {
-        workspaceId: args.workspaceId,
-        scopeKey: USAGE_SCOPE_WORKSPACE,
+        orgId: args.orgId,
+        scopeKey: USAGE_SCOPE_ORG,
         metric: "credits",
         periodKey: USAGE_PERIOD_LIFETIME,
         // The grant itself is the ceiling; a reserve never rewrites it.
@@ -269,8 +269,8 @@ export const beginPaidCall = internalMutation({
         [dayKey, dailyMetricCap(metric)],
       ] as const) {
         const reserved = await reserveInBucket(ctx, {
-          workspaceId: args.workspaceId,
-          scopeKey: USAGE_SCOPE_WORKSPACE,
+          orgId: args.orgId,
+          scopeKey: USAGE_SCOPE_ORG,
           metric,
           periodKey,
           limit,
@@ -285,7 +285,7 @@ export const beginPaidCall = internalMutation({
     // 6. One audit row per paid call, written BEFORE the provider is
     //    contacted, so no paid call exists without a record of it.
     const operationId = await ctx.db.insert("providerOperations", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       provider,
       operationKey,
       requestDigest,

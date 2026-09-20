@@ -13,7 +13,7 @@
  * `outreach/approvals.ts` is the human path and stays exactly as it was: it
  * authenticates an editor, writes `actor: "user"`, and can also reject. The
  * two are separate functions rather than one with a flag, because a mutation
- * that can skip `requireWorkspaceEditor` on a boolean is one refactor away
+ * that can skip `requireOrgMember` on a boolean is one refactor away
  * from skipping it by accident.
  *
  * WHAT IT CANNOT DO. It never writes `agents.mode` or `agents.autopilot` —
@@ -38,7 +38,7 @@ import { v } from "convex/values";
 const vAutopilotRefusal = v.union(
   v.literal("not_autopilot"),
   v.literal("consent_missing"),
-  v.literal("workspace_paused"),
+  v.literal("org_paused"),
   v.literal("draft_not_current"),
   v.literal("context_changed"),
   v.literal("agent_revision_changed"),
@@ -84,8 +84,8 @@ export const approveAsAutopilot = internalMutation({
       throw domainError("NOT_FOUND", "draft not found");
     }
     const conversation = await ctx.db.get("conversations", draft.conversationId);
-    const workspace = await ctx.db.get("workspaces", draft.workspaceId);
-    if (conversation === null || workspace === null) {
+    const org = await ctx.db.get("orgs", draft.orgId);
+    if (conversation === null || org === null) {
       throw domainError("NOT_FOUND", "approval context is incomplete");
     }
 
@@ -102,8 +102,8 @@ export const approveAsAutopilot = internalMutation({
     }
 
     // --- the mode matrix, at the moment of effect ------------------------
-    if (workspace.automationState !== "active") {
-      return refuse("workspace_paused");
+    if (org.automationState !== "active") {
+      return refuse("org_paused");
     }
     const agent =
       conversation.agentId === undefined
@@ -124,7 +124,7 @@ export const approveAsAutopilot = internalMutation({
       conversation.prospectId === undefined
         ? null
         : await ctx.db.get("prospects", conversation.prospectId);
-    if (lead !== null && lead.workspaceId === workspace._id) {
+    if (lead !== null && lead.orgId === org._id) {
       if (lead.approval === "rejected" || lead.stage === "rejected") {
         return refuse("lead_rejected");
       }
@@ -133,7 +133,7 @@ export const approveAsAutopilot = internalMutation({
       }
     }
     if (
-      (await matchSuppression(ctx, workspace._id, draft.normalizedRecipient)) !==
+      (await matchSuppression(ctx, org._id, draft.normalizedRecipient)) !==
       null
     ) {
       return refuse("suppressed");
@@ -149,8 +149,8 @@ export const approveAsAutopilot = internalMutation({
     const requestId = `autopilot:${draft._id}:r${draft.revision}`;
     const prior = await ctx.db
       .query("approvals")
-      .withIndex("by_workspaceId_and_requestId", (q) =>
-        q.eq("workspaceId", workspace._id).eq("requestId", requestId),
+      .withIndex("by_orgId_and_requestId", (q) =>
+        q.eq("orgId", org._id).eq("requestId", requestId),
       )
       .unique();
     if (prior !== null) {
@@ -159,7 +159,7 @@ export const approveAsAutopilot = internalMutation({
 
     const now = Date.now();
     const approvalId = await ctx.db.insert("approvals", {
-      workspaceId: workspace._id,
+      orgId: org._id,
       actor: "autopilot",
       draftId: draft._id,
       draftRevision: draft.revision,
@@ -175,7 +175,7 @@ export const approveAsAutopilot = internalMutation({
       requestId,
     });
     await recordActivityEvent(ctx, {
-      workspaceId: workspace._id,
+      orgId: org._id,
       kind: "approval_recorded",
       summary:
         `Autopilot approved draft revision ${draft.revision} for ` +
@@ -211,7 +211,7 @@ async function bookingStillOffered(
   const booking = await ctx.db.get("bookings", draft.bookingId);
   return (
     booking !== null &&
-    booking.workspaceId === draft.workspaceId &&
+    booking.orgId === draft.orgId &&
     booking.state === "proposed" &&
     booking.version === draft.bookingVersion &&
     booking.prospectId === conversation.prospectId

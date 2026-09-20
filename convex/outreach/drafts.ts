@@ -10,7 +10,7 @@
 import type { Id } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   boundedString,
@@ -19,23 +19,23 @@ import {
 } from "../lib/validators";
 import {
   findRevisionByRequestId,
-  getConversationInWorkspace,
-  getDraftInWorkspace,
+  getConversationInOrg,
+  getDraftInOrg,
   installRevision,
   vDraftDoc,
 } from "./draftsModel";
 import { v } from "convex/values";
 
-/** One draft revision; foreign or cross-workspace IDs return `NOT_FOUND`. */
+/** One draft revision; foreign or cross-org IDs return `NOT_FOUND`. */
 export const get = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
   },
   returns: vDraftDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    return await getDraftInWorkspace(ctx, args.workspaceId, args.draftId);
+    await requireOrgMember(ctx, args.orgId);
+    return await getDraftInOrg(ctx, args.orgId, args.draftId);
   },
 });
 
@@ -45,7 +45,7 @@ export const get = query({
  */
 export const listForConversation = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
@@ -56,10 +56,10 @@ export const listForConversation = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    await getConversationInWorkspace(
+    await requireOrgMember(ctx, args.orgId);
+    await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     const limit = boundedLimit(args.limit);
@@ -90,7 +90,7 @@ export const listForConversation = query({
  */
 export const revise = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     expectedRevision: v.number(),
     recipient: v.optional(v.string()),
@@ -100,24 +100,24 @@ export const revise = mutation({
   },
   returns: vDraftDoc,
   handler: async (ctx, args) => {
-    const { identityKey, workspace } = await requireWorkspaceEditor(
+    const { identityKey, org } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
     const requestId =
       args.requestId === undefined
         ? undefined
         : boundedString(args.requestId, "requestId", { min: 1, max: 100 });
 
-    const current = await getDraftInWorkspace(
+    const current = await getDraftInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.draftId,
     );
     if (requestId !== undefined) {
       const replayed = await findRevisionByRequestId(
         ctx,
-        args.workspaceId,
+        args.orgId,
         requestId,
       );
       if (replayed !== null) {
@@ -143,9 +143,9 @@ export const revise = mutation({
         `draft revision is ${current.revision}, not ${args.expectedRevision}`,
       );
     }
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       current.conversationId,
     );
     if (conversation.currentDraftId !== current._id) {
@@ -186,7 +186,7 @@ export const revise = mutation({
       const booking = await ctx.db.get("bookings", current.bookingId);
       if (
         booking !== null &&
-        booking.workspaceId === conversation.workspaceId &&
+        booking.orgId === conversation.orgId &&
         booking.state === "proposed" &&
         booking.version === current.bookingVersion &&
         booking.prospectId === conversation.prospectId
@@ -199,7 +199,7 @@ export const revise = mutation({
     }
 
     const draft = await installRevision(ctx, {
-      workspace,
+      org,
       conversation,
       agent,
       recipient,
@@ -213,7 +213,7 @@ export const revise = mutation({
     });
 
     await recordActivityEvent(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       kind: "draft_revised",
       summary: `Draft revised to revision ${draft.revision} for ${draft.normalizedRecipient}`,
       actor: identityKey,

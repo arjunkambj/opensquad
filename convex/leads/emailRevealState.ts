@@ -24,7 +24,7 @@ import { v } from "convex/values";
  */
 export const REVEAL_STALL_MS = 15 * 60 * 1000;
 
-/** Leads one recovery pass looks at per workspace. */
+/** Leads one recovery pass looks at per org. */
 const RECOVERY_SCAN_MAX = 25;
 
 /**
@@ -34,7 +34,7 @@ const RECOVERY_SCAN_MAX = 25;
  */
 export const revealTargets = internalQuery({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
   },
   returns: v.array(
@@ -49,7 +49,7 @@ export const revealTargets = internalQuery({
       const lead = await ctx.db.get("prospects", prospectId);
       if (
         lead === null ||
-        lead.workspaceId !== args.workspaceId ||
+        lead.orgId !== args.orgId ||
         lead.emailStatus !== "revealing" ||
         lead.origin.kind !== "sourced"
       ) {
@@ -71,14 +71,14 @@ export const revealTargets = internalQuery({
  */
 export const applyRevealedEmail = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     contact: vRevealedContact,
   },
   returns: v.object({ applied: v.boolean() }),
   handler: async (ctx, args) => {
     const lead = await ctx.db.get("prospects", args.prospectId);
-    if (lead === null || lead.workspaceId !== args.workspaceId) {
+    if (lead === null || lead.orgId !== args.orgId) {
       return { applied: false };
     }
     if (lead.emailStatus === "found") {
@@ -110,7 +110,7 @@ export const applyRevealedEmail = internalMutation({
         : {}),
     });
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "email_revealed",
       summary: "Work email found for this lead",
@@ -127,7 +127,7 @@ export const applyRevealedEmail = internalMutation({
 /** The provider looked and had none. Never an invented address (PLAN §7). */
 export const applyNoEmail = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
   },
   returns: v.object({ applied: v.boolean() }),
@@ -135,7 +135,7 @@ export const applyNoEmail = internalMutation({
     const lead = await ctx.db.get("prospects", args.prospectId);
     if (
       lead === null ||
-      lead.workspaceId !== args.workspaceId ||
+      lead.orgId !== args.orgId ||
       lead.emailStatus !== "revealing"
     ) {
       return { applied: false };
@@ -146,7 +146,7 @@ export const applyNoEmail = internalMutation({
       updatedAt: Date.now(),
     });
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "email_revealed",
       summary: "No work email on file for this lead",
@@ -167,7 +167,7 @@ export const applyNoEmail = internalMutation({
  */
 export const releaseReveal = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
   },
   returns: v.object({ released: v.number() }),
@@ -177,7 +177,7 @@ export const releaseReveal = internalMutation({
       const lead = await ctx.db.get("prospects", prospectId);
       if (
         lead === null ||
-        lead.workspaceId !== args.workspaceId ||
+        lead.orgId !== args.orgId ||
         lead.emailStatus !== "revealing"
       ) {
         continue;
@@ -195,21 +195,21 @@ export const releaseReveal = internalMutation({
 
 /**
  * THE lead half of PLAN §9.1's reveal recovery, for the ten-minute sweep to
- * call per workspace. The money half — asking the job what it charged — is
+ * call per org. The money half — asking the job what it charged — is
  * `integrations/enrich/revealPoll.ts#reconcileRevealOperation`, which the
  * sweep already drives; this one asks the same job what it FOUND, so a lead
  * whose poller died does not sit in `revealing` forever.
  */
 export const recoverStalledReveals = internalMutation({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({ recovered: v.number() }),
   handler: async (ctx, args) => {
     const now = Date.now();
     const due = await ctx.db
       .query("prospects")
-      .withIndex("by_workspaceId_and_nextActionAt", (q) =>
+      .withIndex("by_orgId_and_nextActionAt", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .gte("nextActionAt", 0)
           .lte("nextActionAt", now),
       )
@@ -223,7 +223,7 @@ export const recoverStalledReveals = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.leads.emailRevealRun.recoverLeadReveal,
-        { workspaceId: args.workspaceId, prospectId: lead._id },
+        { orgId: args.orgId, prospectId: lead._id },
       );
       recovered += 1;
     }

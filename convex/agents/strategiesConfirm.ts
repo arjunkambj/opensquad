@@ -15,9 +15,9 @@
  * (`finishOnboarding`, which re-checks everything it was told).
  */
 import { internalMutation, internalQuery } from "../_generated/server";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { domainError, invalid, vLeadFilters } from "../lib/validators";
-import { getWorkspaceAgent } from "./model";
+import { getOrgAgent } from "./model";
 import {
   keywordFilterLadder,
   keywordStrategyTitle,
@@ -68,11 +68,11 @@ const vConfirmContext = v.union(
  * a narrower customer than the cards showed would find nobody.
  */
 export const confirmContext = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vConfirmContext,
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       return { status: "blocked" as const, reason: "no_agent" as const };
     }
@@ -122,7 +122,7 @@ export const confirmContext = internalQuery({
  */
 export const finishOnboarding = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** Present only when the user picked keywords AND they match someone. */
     keywordStrategy: v.optional(
       v.object({
@@ -136,8 +136,8 @@ export const finishOnboarding = internalMutation({
     status: v.union(v.literal("confirmed"), v.literal("already_done")),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
@@ -161,7 +161,7 @@ export const finishOnboarding = internalMutation({
     const keyword = args.keywordStrategy;
     if (keyword !== undefined && strategyIsSelectable(keyword.matchCount)) {
       await ctx.db.insert("strategies", {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         agentId: agent._id,
         title: keywordStrategyTitle(agent.keywords),
         signalKind: "keyword",

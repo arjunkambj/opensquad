@@ -4,13 +4,13 @@
  */
 import { components } from "../_generated/api";
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   PROVIDER_REF_MAX_LENGTH,
   THREAD_BODY_MAX_LENGTH,
 } from "../lib/validators";
-import { getConversationInWorkspace } from "../outreach/draftsModel";
+import { getConversationInOrg } from "../outreach/draftsModel";
 import { sendResultCode } from "../outreach/sendGates";
 import { clip, vThreadEntry } from "./conversationsModel";
 import type { ThreadEntry } from "./conversationsModel";
@@ -25,7 +25,7 @@ import { v } from "convex/values";
  * `providerThreadRef`, then filtered to its own `inboxRef`: the component's
  * `by_thread` index is global and AgentMail thread ids are per-inbox, so the
  * inbox filter is what keeps a colliding thread id in another inbox out of
- * this workspace's feed.
+ * this org's feed.
  *
  * Outbound entries are the immutable draft revisions joined to their send
  * attempt through `sendAttempts.by_draftId` — one logical send per revision
@@ -42,7 +42,7 @@ import { v } from "convex/values";
  */
 export const thread = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     limit: v.optional(v.number()),
   },
@@ -51,10 +51,10 @@ export const thread = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const conversation = await getConversationInWorkspace(
+    await requireOrgMember(ctx, args.orgId);
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     const limit = boundedLimit(args.limit);

@@ -12,12 +12,12 @@ import { recordConversationNote } from "./conversationNotes";
 import { v } from "convex/values";
 
 /**
- * Find or create the workspace-scoped unassigned conversation for a verified
+ * Find or create the org-scoped unassigned conversation for a verified
  * inbound message that matched no existing thread (architecture §8 step 4,
- * integrations.md §G3 "unmatched known-inbox messages enter that workspace's
+ * integrations.md §G3 "unmatched known-inbox messages enter that org's
  * unassigned queue under human takeover").
  *
- * The inbox is already known to belong to this workspace — the callback
+ * The inbox is already known to belong to this org — the callback
  * resolved it from the saved assignment, never from a body or a display
  * address — so the row has a legitimate owner. What it does NOT have is a
  * lead: no prospect is guessed, no campaign is guessed, and nothing about the
@@ -35,7 +35,7 @@ import { v } from "convex/values";
  */
 export const ensureUnassignedConversation = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
     providerThreadRef: v.string(),
     /** Ingest time of the message, never the provider's own timestamp. */
@@ -58,12 +58,12 @@ export const ensureUnassignedConversation = internalMutation({
     v.object({ ok: v.literal(false), reason: v.string() }),
   ),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       return { ok: false as const, reason: "organization not found" };
     }
     // Re-check the claim inside this transaction. `.collect()` plus a
-    // workspace filter, not `.unique()`: the pair's uniqueness is
+    // org filter, not `.unique()`: the pair's uniqueness is
     // transactional and the index is global, so a foreign row must neither
     // block the claim nor be adopted. A concurrent claim is resolved by
     // returning the winner, never by throwing CONFLICT — a throw here would
@@ -78,7 +78,7 @@ export const ensureUnassignedConversation = internalMutation({
         )
         .collect()
     )
-      .filter((row) => row.workspaceId === args.workspaceId)
+      .filter((row) => row.orgId === args.orgId)
       .sort((left, right) => left._creationTime - right._creationTime);
     if (claimed.length > 0) {
       return { ok: true as const, created: false, conversation: claimed[0] };
@@ -86,7 +86,7 @@ export const ensureUnassignedConversation = internalMutation({
 
     const now = Date.now();
     const conversationId = await ctx.db.insert("conversations", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       inboxRef: args.inboxRef,
       state: "unassigned",
       // An unassigned thread is created by a live webhook event; the backfill

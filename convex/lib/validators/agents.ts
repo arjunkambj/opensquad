@@ -1,5 +1,5 @@
 /**
- * Agent validators: the one sales agent a workspace runs — its mode, status,
+ * Agent validators: the one sales agent an org runs — its mode, status,
  * onboarding step, goal, tone, ICP, run state and autopilot caps — plus the
  * search-strategy and lead-filter vocabulary the agent sources leads with.
  */

@@ -37,20 +37,20 @@ async function markLostAcknowledgement(
   const reservation = await ctx.runMutation(
     internal.billing.reservations.getByOperationKey,
     {
-      workspaceId: attempt.workspaceId,
+      orgId: attempt.orgId,
       operationKey: attempt.operationKey,
     },
   );
   if (reservation !== null && reservation.state === "reserved") {
     await ctx.runMutation(internal.billing.reservations.markUncertain, {
-      workspaceId: attempt.workspaceId,
+      orgId: attempt.orgId,
       operationKey: attempt.operationKey,
     });
   }
   const draft = await ctx.db.get("drafts", attempt.draftId);
   if (draft !== null) {
     await recordActivityEvent(ctx, {
-      workspaceId: attempt.workspaceId,
+      orgId: attempt.orgId,
       kind: "send_attempt_uncertain",
       summary: "Send attempt lost its acknowledgement — marked uncertain",
       actor: "system",
@@ -87,12 +87,12 @@ export const sweepStaleRequesting = internalMutation({
 });
 
 /**
- * Workspace-wide sweep — the ops/probe entry point. `staleAfterMs` defaults
+ * Org-wide sweep — the ops/probe entry point. `staleAfterMs` defaults
  * to the lost-acknowledgement margin; tests pass 0 to force-sweep.
  */
 export const sweepStaleAttempts = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     staleAfterMs: v.optional(v.number()),
   },
   returns: v.object({
@@ -104,9 +104,9 @@ export const sweepStaleAttempts = internalMutation({
       Date.now() - (args.staleAfterMs ?? REQUEST_STALE_SWEEP_MS);
     const stale = await ctx.db
       .query("sendAttempts")
-      .withIndex("by_workspaceId_and_state_and_updatedAt", (q) =>
+      .withIndex("by_orgId_and_state_and_updatedAt", (q) =>
         q
-          .eq("workspaceId", args.workspaceId)
+          .eq("orgId", args.orgId)
           .eq("state", "requesting")
           .lt("updatedAt", cutoff),
       )
@@ -122,7 +122,7 @@ export const sweepStaleAttempts = internalMutation({
 });
 
 /**
- * The cron belt (see `crons.ts`): workspace-agnostic sweep covering the two
+ * The cron belt (see `crons.ts`): org-agnostic sweep covering the two
  * durable wait states. `requesting` rows past the stale margin get the
  * lost-acknowledgement treatment; `reserved` rows whose recorded
  * `nextPermittedAt` passed get a fresh `dispatchAttempt` schedule — covers

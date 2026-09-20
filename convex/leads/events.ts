@@ -10,7 +10,7 @@
  *   never disagree with the row it describes. `appendLeadEvent` below is the
  *   single write path — the lead mutations and the booking mutations both go through it.
  *
- *   Idempotent by `operationKey`. `(workspaceId, operationKey)` is looked up
+ *   Idempotent by `operationKey`. `(orgId, operationKey)` is looked up
  *   in the same transaction as the insert, so a replayed mutation returns the
  *   row it already wrote instead of appending a second one. The read
  *   registers the index range in the transaction's read set — a concurrent
@@ -28,7 +28,7 @@ import { query } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { v } from "convex/values";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   boundedString,
@@ -54,12 +54,12 @@ export const vLeadEventDoc = v.object({
 
 /**
  * The full history of one lead, newest first, cursor-paginated. A prospect in
- * another workspace is NOT_FOUND — the same rule `leads.getDetail`
+ * another org is NOT_FOUND — the same rule `leads.getDetail`
  * applies to the lead itself.
  */
 export const list = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     prospectId: v.id("prospects"),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
@@ -70,9 +70,9 @@ export const list = query({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const prospect = await ctx.db.get("prospects", args.prospectId);
-    if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+    if (prospect === null || prospect.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "prospect not found");
     }
     const result = await ctx.db
@@ -99,7 +99,7 @@ export const list = query({
 
 /**
  * Append one CRM history row, idempotently. `operationKey` is unique per
- * workspace and the index is a lookup, so the read happens in the SAME
+ * org and the index is a lookup, so the read happens in the SAME
  * transaction as the insert; a replayed mutation returns the row it already
  * wrote instead of appending a second one.
  *
@@ -112,7 +112,7 @@ export const list = query({
 export async function appendLeadEvent(
   ctx: MutationCtx,
   event: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     prospectId: Id<"prospects">;
     kind: LeadEventKind;
     summary: string;
@@ -133,14 +133,14 @@ export async function appendLeadEvent(
   });
   const existing = await findLeadEventByOperationKey(
     ctx,
-    event.workspaceId,
+    event.orgId,
     operationKey,
   );
   if (existing !== null) {
     return null;
   }
   return ctx.db.insert("leadEvents", {
-    workspaceId: event.workspaceId,
+    orgId: event.orgId,
     prospectId: event.prospectId,
     kind: event.kind,
     actor: event.actor ?? { source: "workflow" as const },
@@ -161,13 +161,13 @@ export async function appendLeadEvent(
  */
 export async function findLeadEventByOperationKey(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   operationKey: string,
 ): Promise<Doc<"leadEvents"> | null> {
   return await ctx.db
     .query("leadEvents")
-    .withIndex("by_workspaceId_and_operationKey", (q) =>
-      q.eq("workspaceId", workspaceId).eq("operationKey", operationKey),
+    .withIndex("by_orgId_and_operationKey", (q) =>
+      q.eq("orgId", orgId).eq("operationKey", operationKey),
     )
     .unique();
 }

@@ -163,7 +163,7 @@ export const countLeads = internalAction({
  */
 export const findLeads = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     /** Caller's own idempotency key, e.g. `<strategyId>:<page>`. */
     operationKey: v.string(),
     filters: vLeadFilters,
@@ -202,7 +202,7 @@ export const findLeads = internalAction({
       outcome = await withCredits(
         ctx,
         {
-          workspaceId: args.workspaceId,
+          orgId: args.orgId,
           action: "find_leads",
           operationKey: args.operationKey,
           worstCaseProviderUnits: { enrich_searches: 1 },
@@ -322,7 +322,7 @@ type FindLeadsResult =
  * The cached filter catalogue every value is checked against.
  *
  * This is the one domain function reference this boundary holds, and it is
- * deliberate: the cache is a workspace-independent singleton owned by
+ * deliberate: the cache is an org-independent singleton owned by
  * `agents/filterOptions.ts`, and reading it here is what keeps the check
  * unskippable — a caller cannot pass filters that were never validated.
  */

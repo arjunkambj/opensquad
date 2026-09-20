@@ -41,7 +41,7 @@ import type {
 } from "../ai/recommendStrategies";
 import { runStructured } from "../ai/run";
 import type { RefundReason } from "../billing/paidCall";
-import { getWorkspaceProfile } from "../company/model";
+import { getOrgProfile } from "../company/model";
 import { vLeadFilters } from "../lib/validators";
 import type {
   LeadFilters,
@@ -49,7 +49,7 @@ import type {
   SignalKind,
 } from "../lib/validators";
 import { companySizeBand } from "./icpVocabulary";
-import { getWorkspaceAgent } from "./model";
+import { getOrgAgent } from "./model";
 import {
   compileCoreFilters,
   compileExcludeFilters,
@@ -94,16 +94,16 @@ const vRecommendationInput = v.union(
 
 /**
  * The profile, the ideal customer and the signal vocabulary, or `null` when
- * there is nothing to recommend from — the workspace was cleared under a
+ * there is nothing to recommend from — the org was cleared under a
  * scheduled run, or the filter catalogue has never been fetched, and either
  * way asking the model would produce filters nobody could check.
  */
 export const recommendationInput = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vRecommendationInput,
   handler: async (ctx, args) => {
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
-    const profile = await getWorkspaceProfile(ctx, args.workspaceId);
+    const agent = await getOrgAgent(ctx, args.orgId);
+    const profile = await getOrgProfile(ctx, args.orgId);
     const options = await readFilterCatalogue(ctx);
     if (agent === null || profile === null || options === null) {
       return null;
@@ -411,7 +411,7 @@ async function compileStrategies(
 
 export const recommend = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     startedAt: v.number(),
     operationKey: v.string(),
@@ -432,7 +432,7 @@ export const recommend = internalAction({
 
     const input = await ctx.runQuery(
       internal.agents.strategiesGeneration.recommendationInput,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     if (input === null) {
       return await fail("not_found");
@@ -441,7 +441,7 @@ export const recommend = internalAction({
     let ai;
     try {
       ai = await runStructured(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         action: "recommend_signals",
         tier: "smart",
         system: RECOMMEND_STRATEGIES_SYSTEM,
@@ -503,11 +503,11 @@ const vKeywordInput = v.union(
 );
 
 export const keywordInput = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vKeywordInput,
   handler: async (ctx, args) => {
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
-    const profile = await getWorkspaceProfile(ctx, args.workspaceId);
+    const agent = await getOrgAgent(ctx, args.orgId);
+    const profile = await getOrgProfile(ctx, args.orgId);
     if (agent === null || profile === null) {
       return null;
     }
@@ -536,7 +536,7 @@ export const keywordInput = internalQuery({
  */
 export const generateMore = internalAction({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     operationKey: v.string(),
   },
@@ -544,7 +544,7 @@ export const generateMore = internalAction({
   handler: async (ctx, args): Promise<null> => {
     const input = await ctx.runQuery(
       internal.agents.strategiesGeneration.keywordInput,
-      { workspaceId: args.workspaceId },
+      { orgId: args.orgId },
     );
     if (input === null) {
       return null;
@@ -552,7 +552,7 @@ export const generateMore = internalAction({
     let ai;
     try {
       ai = await runStructured(ctx, {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         action: "generate_keywords",
         tier: "smart",
         system: GENERATE_KEYWORDS_SYSTEM,

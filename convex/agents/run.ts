@@ -111,7 +111,7 @@ export async function renewRunLease(
  *
  * The read and the write are in ONE serializable transaction, which is what
  * makes "two simultaneous Run now clicks produce one run" true without a
- * unique index — the same discipline as one agent per workspace.
+ * unique index — the same discipline as one agent per org.
  */
 export async function takeRunLease(
   ctx: MutationCtx,
@@ -185,13 +185,13 @@ const vRunRequest = v.object({
  */
 export const requestRun = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
   },
   returns: vRunRequest,
   handler: async (ctx, args) => {
     const agent = await ctx.db.get("agents", args.agentId);
-    if (agent === null || agent.workspaceId !== args.workspaceId) {
+    if (agent === null || agent.orgId !== args.orgId) {
       return { started: false, reason: "not_found" as const };
     }
     if (agent.status !== "live") {

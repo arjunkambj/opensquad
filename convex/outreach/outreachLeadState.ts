@@ -138,7 +138,7 @@ export async function claimLeadForOutreach(
   });
   if (moved) {
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "stage_changed",
       summary: `Stage ${lead.stage} → ${stage}`,
@@ -219,7 +219,7 @@ export async function failOutreachStep(
   });
   if (parked) {
     await appendLeadEvent(ctx, {
-      workspaceId: lead.workspaceId,
+      orgId: lead.orgId,
       prospectId: lead._id,
       kind: "stage_changed",
       summary: PARK_REASONS[code],
@@ -262,14 +262,14 @@ export async function scheduleNextOutreachStep(
     return;
   }
   const lead = await ctx.db.get("prospects", conversation.prospectId);
-  if (lead === null || lead.workspaceId !== attempt.workspaceId) {
+  if (lead === null || lead.orgId !== attempt.orgId) {
     return;
   }
   // Replay guard: `markSendAccepted` keys its receipt on this attempt, so its
   // presence means this acceptance has already moved the ladder once.
   const prior = await findLeadEventByOperationKey(
     ctx,
-    lead.workspaceId,
+    lead.orgId,
     `lead:${lead._id}:send-accepted:${attempt._id}`,
   );
   if (prior !== null) {
@@ -286,7 +286,7 @@ export async function scheduleNextOutreachStep(
     return;
   }
   const agent = await ctx.db.get("agents", lead.agentId);
-  if (agent === null || agent.workspaceId !== lead.workspaceId) {
+  if (agent === null || agent.orgId !== lead.orgId) {
     return;
   }
 

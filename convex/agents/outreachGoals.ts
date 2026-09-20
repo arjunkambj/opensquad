@@ -21,7 +21,7 @@
  * editor's optimistic concurrency still sees the change.
  */
 import { mutation } from "../_generated/server";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   boundedString,
   COMPANY_PAIN_POINTS_MAX_LENGTH,
@@ -29,7 +29,7 @@ import {
   vAgentGoal,
   vAgentTone,
 } from "../lib/validators";
-import { getWorkspaceAgent, vAgentDoc } from "./model";
+import { getOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
 /**
@@ -38,26 +38,26 @@ import { v } from "convex/values";
  */
 export const save = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     goal: vAgentGoal,
     tone: vAgentTone,
     painPoints: v.string(),
   },
   returns: vAgentDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
 
     const painPoints = boundedString(args.painPoints, "painPoints", {
       max: COMPANY_PAIN_POINTS_MAX_LENGTH,
     });
 
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
     const profile = await ctx.db
       .query("businessProfiles")
-      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
       .unique();
     if (profile === null) {
       // The company step creates the profile, and the model writes from it —

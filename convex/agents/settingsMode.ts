@@ -17,7 +17,7 @@
  *   back always asks again.
  *
  *   A MODE THAT SENDS NEEDS AN INBOX. Review and Autopilot both put mail on
- *   the wire, so both are refused while the workspace has no connected inbox
+ *   the wire, so both are refused while the org has no connected inbox
  *   — before the mode is stored, not at the first send.
  *
  * Refusals the user can act on are RETURNED as a typed reason rather than
@@ -25,14 +25,14 @@
  * in it. Guard and validation failures are still `ConvexError`s.
  */
 import { mutation } from "../_generated/server";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   domainError,
   SENDING_AGENT_MODES,
   vAgentMode,
 } from "../lib/validators";
 import type { AgentAutopilot } from "../lib/validators";
-import { requireWorkspaceAgent, vAgentDoc } from "./model";
+import { requireOrgAgent, vAgentDoc } from "./model";
 import { patchAgent } from "./settings";
 import { v } from "convex/values";
 
@@ -41,7 +41,7 @@ import { v } from "convex/values";
  * on the screen they are looking at.
  */
 const vModeRefusal = v.union(
-  /** Review and Autopilot send; this workspace has no inbox to send from. */
+  /** Review and Autopilot send; this org has no inbox to send from. */
   v.literal("inbox_not_connected"),
   /** Autopilot was asked for without the consent the dialog collects. */
   v.literal("consent_required"),
@@ -65,7 +65,7 @@ const vModeRefusal = v.union(
  */
 export const setMode = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     agentId: v.id("agents"),
     mode: vAgentMode,
     autopilotConsent: v.optional(
@@ -82,19 +82,19 @@ export const setMode = mutation({
     v.object({ ok: v.literal(false), reason: vModeRefusal }),
   ),
   handler: async (ctx, args) => {
-    const { identityKey, workspace } = await requireWorkspaceEditor(
+    const { identityKey, org } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
-    const agent = await requireWorkspaceAgent(
+    const agent = await requireOrgAgent(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.agentId,
     );
 
     if (
       SENDING_AGENT_MODES.includes(args.mode) &&
-      workspace.inboxConnection !== "connected"
+      org.inboxConnection !== "connected"
     ) {
       return { ok: false as const, reason: "inbox_not_connected" as const };
     }

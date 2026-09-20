@@ -15,7 +15,7 @@ import { query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { MAX_SEARCH_PAGE } from "../integrations/enrich/search";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import {
   LEAD_SCORE_MAX,
   LEAD_SCORE_MIN,
@@ -28,7 +28,7 @@ import type { LeadStage } from "../lib/validators";
 import { v } from "convex/values";
 
 /**
- * How far any one count reads. A trial workspace's whole table is smaller
+ * How far any one count reads. A trial org's whole table is smaller
  * than this, so in practice `hasMore` is false everywhere — the bound is what
  * keeps a query honest if that stops being true.
  */
@@ -61,7 +61,7 @@ const vStageCounts = v.object({
  * working would be the one piece of fiction on the screen.
  */
 export const runState = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.union(
     v.null(),
     v.object({
@@ -79,10 +79,10 @@ export const runState = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const agent = await ctx.db
       .query("agents")
-      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
       .first();
     if (agent === null) {
       return null;
@@ -97,7 +97,7 @@ export const runState = query({
       ...(agent.lastRunAt !== undefined ? { lastRunAt: agent.lastRunAt } : {}),
       ...(agent.nextRunAt !== undefined ? { nextRunAt: agent.nextRunAt } : {}),
       found: await countStage(ctx, agent._id, "found"),
-      researched: await countScored(ctx, args.workspaceId, LEAD_SCORE_MIN),
+      researched: await countScored(ctx, args.orgId, LEAD_SCORE_MIN),
       needsAttention: await countStage(ctx, agent._id, "needs_attention"),
     };
   },
@@ -112,7 +112,7 @@ export const runState = query({
  * are used up, which is a different thing from a signal that found nobody.
  */
 export const byStrategy = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.array(
     v.object({
       strategyId: v.id("strategies"),
@@ -127,10 +127,10 @@ export const byStrategy = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const strategies = await ctx.db
       .query("strategies")
-      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
       .take(LEAD_COUNT_BOUND);
     return strategies
       .sort((a, b) => b.leadsFound - a.leadsFound || a.createdAt - b.createdAt)
@@ -151,12 +151,12 @@ export const byStrategy = query({
 });
 
 /**
- * Where the workspace's leads sit, and how they scored — the Dashboard's
+ * Where the org's leads sit, and how they scored — the Dashboard's
  * funnel. One bounded range per stage and per flame score; nothing is
  * post-filtered, so every number is an index range and not a scan.
  */
 export const funnel = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.object({
     bound: v.number(),
     stages: vStageCounts,
@@ -164,10 +164,10 @@ export const funnel = query({
     scores: v.array(vCount),
   }),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const agent = await ctx.db
       .query("agents")
-      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
       .first();
     const stages = {} as Record<LeadStage, Count>;
     for (const stage of LEAD_STAGES) {
@@ -178,7 +178,7 @@ export const funnel = query({
     }
     const scores: Count[] = [];
     for (let score = LEAD_SCORE_MIN; score <= LEAD_SCORE_MAX; score += 1) {
-      scores.push(await countScored(ctx, args.workspaceId, score, score));
+      scores.push(await countScored(ctx, args.orgId, score, score));
     }
     return { bound: LEAD_COUNT_BOUND, stages, scores };
   },
@@ -208,14 +208,14 @@ async function countStage(
  */
 async function countScored(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   min: number,
   max?: number,
 ): Promise<Count> {
   const rows = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_scoreKey", (q) => {
-      const scoped = q.eq("workspaceId", workspaceId).gte("scoreKey", min);
+    .withIndex("by_orgId_and_scoreKey", (q) => {
+      const scoped = q.eq("orgId", orgId).gte("scoreKey", min);
       return max === undefined ? scoped : scoped.lte("scoreKey", max);
     })
     .take(LEAD_COUNT_BOUND + 1);

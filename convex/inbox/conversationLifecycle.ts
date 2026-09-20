@@ -6,14 +6,10 @@
  * is ever inferred from message content.
  */
 import { mutation } from "../_generated/server";
-import {
-  getActiveMembership,
-  requireWorkspaceEditor,
-  requireWorkspaceMember,
-} from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedString, domainError, invalid } from "../lib/validators";
 import {
-  getConversationInWorkspace,
+  getConversationInOrg,
   vConversationDoc,
 } from "../outreach/draftsModel";
 import { recordConversationNote } from "./conversationNotes";
@@ -31,7 +27,7 @@ import { v } from "convex/values";
  */
 export const setTakeover = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
     enabled: v.boolean(),
@@ -39,13 +35,13 @@ export const setTakeover = mutation({
   },
   returns: vConversationDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     if (!args.enabled) {
@@ -91,27 +87,28 @@ export const setTakeover = mutation({
  * Assign the HUMAN who owns this thread, or clear the assignment by omitting
  * `assigneeIdentityKey`.
  *
- * The assignee must resolve to an active membership before it is stored —
- * the same rule `prospects.ownerIdentityKey` carries. An identity that is not
- * an active member is a bad argument, not a hidden row, so it is INVALID
- * rather than NOT_FOUND.
+ * The assignee is the CALLER, or nobody. Who else belongs to the
+ * organization lives with the auth provider, not in our data, so the caller's
+ * own verified identity is the only one this transaction can confirm is a
+ * member. Any other identity is a bad argument, not a hidden row, so it is
+ * INVALID rather than NOT_FOUND.
  */
 export const assignOwner = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
     assigneeIdentityKey: v.optional(v.string()),
   },
   returns: vConversationDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     const next =
@@ -121,15 +118,8 @@ export const assignOwner = mutation({
             min: 1,
             max: 300,
           });
-    if (next !== undefined) {
-      const membership = await getActiveMembership(
-        ctx,
-        args.workspaceId,
-        next,
-      );
-      if (membership === null) {
-        throw invalid("assignee must be an active member of this organization");
-      }
+    if (next !== undefined && next !== identityKey) {
+      throw invalid("a conversation can only be assigned to its caller");
     }
     if (conversation.assigneeIdentityKey === next) {
       return conversation;
@@ -157,19 +147,19 @@ export const assignOwner = mutation({
 /** Close a thread. Automation refuses a non-open conversation outright. */
 export const close = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
   },
   returns: vConversationDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     if (conversation.state === "closed") {
@@ -202,19 +192,19 @@ export const close = mutation({
  */
 export const reopen = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     expectedContextVersion: v.number(),
   },
   returns: vConversationDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(
+    const { identityKey } = await requireOrgMember(
       ctx,
-      args.workspaceId,
+      args.orgId,
     );
-    const conversation = await getConversationInWorkspace(
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     if (conversation.state === "open") {
@@ -254,22 +244,22 @@ export const reopen = mutation({
  * Clear the unread counter (§5 `markRead`).
  *
  * MEMBER-level on purpose, and the one write here that does NOT advance
- * `contextVersion`: `unreadCount` is a single shared workspace counter, and
+ * `contextVersion`: `unreadCount` is a single shared org counter, and
  * having read a thread is not a fact that invalidates a draft. Bumping the
  * version here would make every open approval stale each time someone opened
  * the inbox.
  */
 export const markRead = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
   },
   returns: vConversationDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    const conversation = await getConversationInWorkspace(
+    await requireOrgMember(ctx, args.orgId);
+    const conversation = await getConversationInOrg(
       ctx,
-      args.workspaceId,
+      args.orgId,
       args.conversationId,
     );
     if (conversation.unreadCount === 0) {

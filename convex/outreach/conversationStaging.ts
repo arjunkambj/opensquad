@@ -2,7 +2,7 @@
  * Conversation staging — a minimal internal seam over `conversations`.
  *
  * The public conversations module lives in `inbox/`. These internal-only
- * mutations exist so preflight facts can be staged, a workspace inbox bound
+ * mutations exist so preflight facts can be staged, an org inbox bound
  * and inbound-driven invalidation applied from the outreach side without
  * reaching into that domain's public surface.
  */
@@ -28,7 +28,7 @@ import { v } from "convex/values";
 export const stageConversation = internalMutation({
   args: {
     conversationId: v.optional(v.id("conversations")),
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
     providerThreadRef: v.optional(v.string()),
     prospectId: v.optional(v.id("prospects")),
@@ -64,14 +64,14 @@ export const stageConversation = internalMutation({
     const prospectId = args.prospectId;
     if (args.agentId !== undefined) {
       const agent = await ctx.db.get("agents", args.agentId);
-      if (agent === null || agent.workspaceId !== args.workspaceId) {
+      if (agent === null || agent.orgId !== args.orgId) {
         throw domainError("NOT_FOUND", "agent not found");
       }
       // The same refusal `conversations.associateProspect` makes: a thread may
       // only be bound to the agent the lead actually belongs to.
       if (prospectId !== undefined) {
         const prospect = await ctx.db.get("prospects", prospectId);
-        if (prospect === null || prospect.workspaceId !== args.workspaceId) {
+        if (prospect === null || prospect.orgId !== args.orgId) {
           throw domainError("NOT_FOUND", "prospect not found");
         }
         if (prospect.agentId !== agent._id) {
@@ -85,7 +85,7 @@ export const stageConversation = internalMutation({
 
     if (args.conversationId !== undefined) {
       const existing = await ctx.db.get("conversations", args.conversationId);
-      if (existing === null || existing.workspaceId !== args.workspaceId) {
+      if (existing === null || existing.orgId !== args.orgId) {
         throw domainError("NOT_FOUND", "conversation not found");
       }
       // The (inboxRef, providerThreadRef) pair must stay unique on patch too
@@ -148,7 +148,7 @@ export const stageConversation = internalMutation({
 
     const now = Date.now();
     const conversationId = await ctx.db.insert("conversations", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       inboxRef,
       state: args.state ?? "open",
       // A staged thread is live mail unless the caller says it came from the
@@ -235,7 +235,7 @@ export const applyInboundContext = internalMutation({
       await ctx.runMutation(
         internal.outreach.sendControls.cancelParkedConversationAttempts,
         {
-          workspaceId: conversation.workspaceId,
+          orgId: conversation.orgId,
           conversationId: conversation._id,
           reason: "inbound mail changed the conversation context",
         },
@@ -251,19 +251,19 @@ export const applyInboundContext = internalMutation({
 });
 
 /**
- * Assign the workspace's AgentMail inbox reference (internal only — the real
+ * Assign the org's AgentMail inbox reference (internal only — the real
  * inbox-assignment flow arrives with P11's onboarding/inbox work). Preflight
- * refuses dispatch when the draft's inbox differs from the workspace's.
+ * refuses dispatch when the draft's inbox differs from the org's.
  */
-export const assignWorkspaceInbox = internalMutation({
+export const assignOrgInbox = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       throw domainError("NOT_FOUND", "organization not found");
     }
     const inboxRef = boundedString(args.inboxRef, "inboxRef", {
@@ -271,22 +271,22 @@ export const assignWorkspaceInbox = internalMutation({
       max: PROVIDER_REF_MAX_LENGTH,
     });
     const holder = await ctx.db
-      .query("workspaces")
+      .query("orgs")
       .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
       .unique();
-    if (holder !== null && holder._id !== workspace._id) {
+    if (holder !== null && holder._id !== org._id) {
       throw domainError(
         "CONFLICT",
         "inbox is already assigned to another organization",
       );
     }
-    await ctx.db.patch("workspaces", workspace._id, {
+    await ctx.db.patch("orgs", org._id, {
       inboxRef,
       updatedAt: Date.now(),
     });
     // The assignment is what the quarantine was waiting for. An AgentMail
     // inbox is provisioned before this mutation commits, so a verified event
-    // can arrive in the window between the two and find no workspace to
+    // can arrive in the window between the two and find no org to
     // belong to; it is held rather than dropped, and this is the moment it
     // becomes replayable. Scheduled, not inlined: the replay reads the mail
     // component and re-drives ingest, and none of that may roll back an
@@ -337,7 +337,7 @@ export const retireConversationWork = internalMutation({
     // modules' inference circular. Nothing needs the numbers — the retiring
     // mutations record their own activity.
     await ctx.runMutation(internal.outreach.sendControls.cancelParkedConversationAttempts, {
-      workspaceId: conversation.workspaceId,
+      orgId: conversation.orgId,
       conversationId: conversation._id,
       reason,
     });

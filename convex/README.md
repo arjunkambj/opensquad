@@ -17,15 +17,15 @@ convex/
     validators/   shared.ts + one file per domain, re-exported from index.ts
   integrations/   the ONLY place that talks HTTP to a provider
     agentmail.ts  firecrawl.ts
-  workspaces/     workspace records, memberships, policy, the trial grant
+  orgs/     org records, memberships, policy, the trial grant
   billing/        credits, the usage ledger, platform budgets, `withCredits`
   company/        the business profile we are selling FOR
-  agents/         the one sales agent a workspace runs
+  agents/         the one sales agent an org runs
   leads/          the person-level lead, its events and research evidence
   outreach/       drafts, approvals, suppressions and the send boundary
   inbox/          inbound ingest, conversations, quarantine
   bookings/       the meeting lifecycle
-  activity/       the deduped workspace receipt feed
+  activity/       the deduped org receipt feed
 ```
 
 `convex/_generated/` is produced by `npx convex codegen` (integrator only) and
@@ -56,7 +56,7 @@ is committed so task branches typecheck without a deployment.
 ## Money
 
 Nothing spends money outside `billing/`. One door, `withCredits`, reserves the
-action's credit price and its worst-case provider units — in the workspace
+action's credit price and its worst-case provider units — in the org
 buckets AND the platform budget — inside one transaction, runs the work, then
 settles in one transaction. It ends in exactly one of `billed`, `refunded` or
 `uncertain`, and is idempotent by `operationKey`, so a retry of a settled
@@ -72,7 +72,7 @@ operation replays its recorded outcome instead of buying the work again.
 | `transitions.ts` | how a debit is settled: the reservation state machine |
 | `reservations.ts` | the same ledger as internal mutations, for action callers |
 | `platformBudgets.ts` | the kill switch, platform budgets, signup capacity |
-| `trialBuckets.ts` | the grant a workspace is created with |
+| `trialBuckets.ts` | the grant an org is created with |
 | `sweeps.ts` | the belts: park a lost call, commit a hold nothing reconciled |
 | `credits.ts`, `queries.ts` | the balance, the Usage tab, the waitlist state |
 

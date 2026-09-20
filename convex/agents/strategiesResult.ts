@@ -105,7 +105,7 @@ export const finishRecommendation = internalMutation({
 
     for (const strategy of args.outcome.strategies) {
       await ctx.db.insert("strategies", {
-        workspaceId: agent.workspaceId,
+        orgId: agent.orgId,
         agentId: args.agentId,
         title: strategy.title,
         signalKind: strategy.signalKind,

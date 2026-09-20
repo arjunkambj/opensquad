@@ -1,6 +1,6 @@
 /**
  * Company validators: the website-analysis status and the bounds on the
- * business profile a workspace writes during onboarding.
+ * business profile an org writes during onboarding.
  */
 import { vOperationErrorCode } from "./shared";
 import { v } from "convex/values";

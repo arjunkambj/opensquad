@@ -15,7 +15,7 @@
  */
 import { internal } from "../_generated/api";
 import { mutation, query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { boundedLimit, boundedString, domainError } from "../lib/validators";
 import { approvalFields } from "../schema";
 import { resolveDraft } from "./approvalsModel";
@@ -27,17 +27,17 @@ export const vApprovalDoc = v.object({
   ...approvalFields,
 });
 
-/** One approval row; foreign or cross-workspace IDs return `NOT_FOUND`. */
+/** One approval row; foreign or cross-org IDs return `NOT_FOUND`. */
 export const get = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     approvalId: v.id("approvals"),
   },
   returns: vApprovalDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const approval = await ctx.db.get("approvals", args.approvalId);
-    if (approval === null || approval.workspaceId !== args.workspaceId) {
+    if (approval === null || approval.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "approval not found");
     }
     return approval;
@@ -47,15 +47,15 @@ export const get = query({
 /** All verdicts recorded against one draft revision, oldest first. */
 export const listForDraft = query({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     limit: v.optional(v.number()),
   },
   returns: v.array(vApprovalDoc),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const draft = await ctx.db.get("drafts", args.draftId);
-    if (draft === null || draft.workspaceId !== args.workspaceId) {
+    if (draft === null || draft.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "draft not found");
     }
     return await ctx.db
@@ -72,7 +72,7 @@ export const listForDraft = query({
  */
 export const approve = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     requestId: v.string(),
     comment: v.optional(v.string()),
@@ -83,7 +83,7 @@ export const approve = mutation({
   }),
   handler: async (ctx, args) => {
     const result = await resolveDraft(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       draftId: args.draftId,
       requestId: args.requestId,
       verdict: "approved",
@@ -116,7 +116,7 @@ export const approve = mutation({
  */
 export const requestChanges = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     requestId: v.string(),
     comment: v.string(),
@@ -131,7 +131,7 @@ export const requestChanges = mutation({
       max: 2000,
     });
     return await resolveDraft(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       draftId: args.draftId,
       requestId: args.requestId,
       verdict: "rejected",
@@ -147,7 +147,7 @@ export const requestChanges = mutation({
  */
 export const reject = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     draftId: v.id("drafts"),
     requestId: v.string(),
     reason: v.string(),
@@ -162,7 +162,7 @@ export const reject = mutation({
       max: 2000,
     });
     return await resolveDraft(ctx, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       draftId: args.draftId,
       requestId: args.requestId,
       verdict: "rejected",

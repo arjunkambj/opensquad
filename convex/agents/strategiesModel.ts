@@ -79,17 +79,17 @@ export const STRATEGY_GENERATION_STALE_AFTER_MS = 5 * 60_000;
  * object at all — `ai/run.ts`).
  */
 export async function strategyOperationKey(args: {
-  workspaceId: Id<"workspaces">;
+  orgId: Id<"orgs">;
   purpose: "signals" | "keywords";
   startedAt: number;
 }): Promise<string> {
   const digest = await computeResultDigest({
-    workspaceId: args.workspaceId,
+    orgId: args.orgId,
     purpose: args.purpose,
     startedAt: args.startedAt,
   });
   const short = digest.slice("sha256:".length, "sha256:".length + 16);
-  return `${args.workspaceId}:${args.purpose}:${short}`;
+  return `${args.orgId}:${args.purpose}:${short}`;
 }
 
 /* ------------------------------------------------------------------ */

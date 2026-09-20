@@ -16,7 +16,7 @@
  *   Review    — automatically, once the lead is approved. The approval IS the
  *               authorisation for the 15 credits, so there is no extra cap
  *               beyond the balance and the hidden provider allowance.
- *   Autopilot — automatically, at most `autoRevealDailyCap` a workspace-local
+ *   Autopilot — automatically, at most `autoRevealDailyCap` an org-local
  *               day. `autoRevealRemainingToday` below says exactly what that
  *               counts.
  *   Sourcing only / Paused — never: the tick refuses before reaching here.
@@ -75,8 +75,8 @@ export const claimAutoReveals = internalMutation({
     if (agent === null) {
       return { started: 0 };
     }
-    const workspace = await ctx.db.get("workspaces", agent.workspaceId);
-    if (workspace === null || !agentRunsOutreach(workspace, agent)) {
+    const org = await ctx.db.get("orgs", agent.orgId);
+    if (org === null || !agentRunsOutreach(org, agent)) {
       return { started: 0 };
     }
     const limit =
@@ -85,7 +85,7 @@ export const claimAutoReveals = internalMutation({
         : boundedInt(args.limit, "limit", { min: 1, max: REVEALS_PER_PASS_MAX });
     const allowance = Math.min(
       limit,
-      await autoRevealRemainingToday(ctx, workspace, agent),
+      await autoRevealRemainingToday(ctx, org, agent),
     );
     if (allowance <= 0) {
       return { started: 0 };
@@ -93,7 +93,7 @@ export const claimAutoReveals = internalMutation({
     // Both money layers, checked before a claim rather than after: a lead
     // claimed for a call the reserve then refuses would bounce back to
     // `locked` a round trip later, for nothing.
-    if (!(await canAffordOneReveal(ctx, workspace))) {
+    if (!(await canAffordOneReveal(ctx, org))) {
       return { started: 0 };
     }
 
@@ -119,7 +119,7 @@ export const claimAutoReveals = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.leads.emailRevealRun.submitReveals,
-        { workspaceId: workspace._id, prospectIds: claimed },
+        { orgId: org._id, prospectIds: claimed },
       );
     }
     return { started: claimed.length };
@@ -133,7 +133,7 @@ export const claimAutoReveals = internalMutation({
 /**
  * How many addresses Autopilot may still find today.
  *
- * WHAT IS COUNTED, exactly: every email the WORKSPACE has found in its own
+ * WHAT IS COUNTED, exactly: every email the ORG has found in its own
  * local day, read from the usage ledger's `enrich_credits` day bucket
  * (reserved + committed + uncertain, divided by the ten provider units one
  * reveal costs). That bucket is the counter the money layer itself enforces,
@@ -150,7 +150,7 @@ export const claimAutoReveals = internalMutation({
  */
 async function autoRevealRemainingToday(
   ctx: QueryCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   agent: Doc<"agents">,
 ): Promise<number> {
   if (agent.mode !== "autopilot") {
@@ -158,9 +158,9 @@ async function autoRevealRemainingToday(
   }
   const bucket = await findBucket(
     ctx,
-    workspace._id,
+    org._id,
     "enrich_credits",
-    dailyPeriodKey(workspace, Date.now()),
+    dailyPeriodKey(org, Date.now()),
   );
   const usedUnits =
     bucket === null ? 0 : bucket.reserved + bucket.committed + bucket.uncertain;
@@ -168,20 +168,20 @@ async function autoRevealRemainingToday(
   return Math.max(0, agent.autoRevealDailyCap - revealedToday);
 }
 
-/** Can the workspace still pay for one address at all (PLAN §6, both layers)? */
+/** Can the org still pay for one address at all (PLAN §6, both layers)? */
 async function canAffordOneReveal(
   ctx: QueryCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
 ): Promise<boolean> {
-  const credits = await findCreditsBucket(ctx, workspace._id);
+  const credits = await findCreditsBucket(ctx, org._id);
   if (credits === null || bucketRemaining(credits) < ACTION_PRICES.get_email.credits) {
     return false;
   }
   const bucket = await findBucket(
     ctx,
-    workspace._id,
+    org._id,
     "enrich_credits",
-    dailyPeriodKey(workspace, Date.now()),
+    dailyPeriodKey(org, Date.now()),
   );
   // No bucket yet means the day is untouched, not unlimited — the reserve
   // will create it from the trial cap, which is more than one reveal.
@@ -205,8 +205,8 @@ async function selectRevealTargets(
   }
   const approved = await ctx.db
     .query("prospects")
-    .withIndex("by_workspaceId_and_approval", (q) =>
-      q.eq("workspaceId", agent.workspaceId).eq("approval", "approved"),
+    .withIndex("by_orgId_and_approval", (q) =>
+      q.eq("orgId", agent.orgId).eq("approval", "approved"),
     )
     .order("desc")
     .take(CANDIDATE_SCAN_MAX);

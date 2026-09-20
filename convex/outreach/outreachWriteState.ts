@@ -16,7 +16,7 @@
 import type { Doc } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import { bucketRemaining, findCreditsBucket } from "../billing/model";
-import { getWorkspaceProfile, profileIsComplete } from "../company/model";
+import { getOrgProfile, profileIsComplete } from "../company/model";
 import { ACTION_PRICES } from "../lib/limits";
 import {
   normalizeEmailAddress,
@@ -54,7 +54,7 @@ const vOutreachWriteContext = v.union(
   v.object({ status: v.literal("skip"), reason: v.string() }),
   v.object({
     status: v.literal("ready"),
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     conversationId: v.id("conversations"),
     mode: vAgentMode,
     revision: v.number(),
@@ -127,15 +127,15 @@ export const beginOutreachWrite = internalMutation({
     if (agent === null) {
       return skip("agent_missing");
     }
-    const workspace = await ctx.db.get("workspaces", agent.workspaceId);
-    if (workspace === null) {
-      return skip("workspace_missing");
+    const org = await ctx.db.get("orgs", agent.orgId);
+    if (org === null) {
+      return skip("org_missing");
     }
     // Pause, the kill switch, a disconnected inbox: nothing new starts.
-    if (!agentRunsOutreach(workspace, agent)) {
+    if (!agentRunsOutreach(org, agent)) {
       return skip("agent_not_running");
     }
-    const inboxRef = workspace.inboxRef;
+    const inboxRef = org.inboxRef;
     if (inboxRef === undefined) {
       return skip("inbox_unassigned");
     }
@@ -187,7 +187,7 @@ export const beginOutreachWrite = internalMutation({
     // Suppression is checked here so we never PAY to write to an address that
     // can never be mailed; the send gates check it again at the moment of
     // effect, which is the authority.
-    if ((await matchSuppression(ctx, workspace._id, recipient)) !== null) {
+    if ((await matchSuppression(ctx, org._id, recipient)) !== null) {
       await restLeadAfterWrite(ctx, lead);
       return skip("suppressed");
     }
@@ -195,7 +195,7 @@ export const beginOutreachWrite = internalMutation({
     // One email is one credit. Checked before the claim so an empty balance
     // costs one read a minute rather than a claim, a refused paid call and a
     // release every time round.
-    const credits = await findCreditsBucket(ctx, workspace._id);
+    const credits = await findCreditsBucket(ctx, org._id);
     if (
       credits === null ||
       bucketRemaining(credits) < ACTION_PRICES.write_email.credits
@@ -203,7 +203,7 @@ export const beginOutreachWrite = internalMutation({
       return skip("out_of_credits");
     }
 
-    const profile = await getWorkspaceProfile(ctx, workspace._id);
+    const profile = await getOrgProfile(ctx, org._id);
     if (!profileIsComplete(profile)) {
       // Nothing true to say yet. Not this lead's fault, so no attempt is
       // burned — it comes back due and waits for the profile.
@@ -212,7 +212,7 @@ export const beginOutreachWrite = internalMutation({
     }
 
     const conversation = await resolveConversation(ctx, {
-      workspace,
+      org,
       agent,
       lead,
       inboxRef,
@@ -271,12 +271,12 @@ export const beginOutreachWrite = internalMutation({
     ]
       .filter((part): part is string => part !== undefined)
       .join(", ");
-    const instructions = agent.instructions ?? workspace.defaultInstructions;
+    const instructions = agent.instructions ?? org.defaultInstructions;
 
     await claimLeadForOutreach(ctx, lead, step);
     return {
       status: "ready" as const,
-      workspaceId: workspace._id,
+      orgId: org._id,
       conversationId: conversation._id,
       mode: agent.mode,
       revision: agent.revision,

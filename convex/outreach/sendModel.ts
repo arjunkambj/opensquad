@@ -33,7 +33,7 @@ export const RECONCILE_WINDOW_MS = 23 * 60 * 60 * 1000;
 /* Loaders + helpers                                                    */
 /* ------------------------------------------------------------------ */
 type AttemptContext = {
-  workspace: Doc<"workspaces">;
+  org: Doc<"orgs">;
   conversation: Doc<"conversations">;
   draft: Doc<"drafts">;
   agent: Doc<"agents"> | null;
@@ -48,61 +48,61 @@ export async function loadAttemptContext(
     throw domainError("NOT_FOUND", "draft not found");
   }
   const conversation = await ctx.db.get("conversations", draft.conversationId);
-  const workspace = await ctx.db.get("workspaces", draft.workspaceId);
-  if (conversation === null || workspace === null) {
+  const org = await ctx.db.get("orgs", draft.orgId);
+  if (conversation === null || org === null) {
     throw domainError("NOT_FOUND", "send context is incomplete");
   }
   const agent =
     conversation.agentId === undefined
       ? null
       : await ctx.db.get("agents", conversation.agentId);
-  return { workspace, conversation, draft, agent };
+  return { org, conversation, draft, agent };
 }
 
-/** The workspace's daily send cap — the one ceiling the ledger reserves against. */
-export function effectiveSendLimit(workspace: Doc<"workspaces">): number {
-  return workspace.dailySendLimit;
+/** The org's daily send cap — the one ceiling the ledger reserves against. */
+export function effectiveSendLimit(org: Doc<"orgs">): number {
+  return org.dailySendLimit;
 }
 
 /** UTC instant of the NEXT send-window opening after `fromMs`. */
 export function nextWindowStart(
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   fromMs: number,
 ): number {
-  const status = sendWindowStatus(workspace, fromMs);
+  const status = sendWindowStatus(org, fromMs);
   if (!status.permitted) {
     return status.nextPermittedAt;
   }
   // Already inside a window — the next opening follows today's close. Find
   // the close instant in local civil time, then ask for the opening after it.
-  const parts = localDayParts(fromMs, workspace.timezone);
+  const parts = localDayParts(fromMs, org.timezone);
   const closeUtc = localCivilToUtc(
     parts.year,
     parts.month,
     parts.day,
-    workspace.sendWindow.endMinute,
-    workspace.timezone,
+    org.sendWindow.endMinute,
+    org.timezone,
   );
-  const after = sendWindowStatus(workspace, closeUtc + 60_000);
+  const after = sendWindowStatus(org, closeUtc + 60_000);
   return after.permitted ? closeUtc + 60_000 : after.nextPermittedAt;
 }
 
-/** Remaining send capacity for the workspace-local day containing `atMs`. */
+/** Remaining send capacity for the org-local day containing `atMs`. */
 export async function sendCapacity(
   ctx: MutationCtx,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
   atMs: number,
 ): Promise<{ periodKey: string; limit: number; remaining: number }> {
-  const periodKey = localDayKey(atMs, workspace.timezone);
-  const limit = effectiveSendLimit(workspace);
+  const periodKey = localDayKey(atMs, org.timezone);
+  const limit = effectiveSendLimit(org);
   const bucket = await ctx.db
     .query("usageBuckets")
     .withIndex(
-      "by_workspaceId_and_scopeKey_and_metric_and_periodKey",
+      "by_orgId_and_scopeKey_and_metric_and_periodKey",
       (q) =>
         q
-          .eq("workspaceId", workspace._id)
-          .eq("scopeKey", "workspace")
+          .eq("orgId", org._id)
+          .eq("scopeKey", "org")
           .eq("metric", "sends")
           .eq("periodKey", periodKey),
     )
@@ -123,10 +123,10 @@ export async function sendCapacity(
 export async function ensureUsageReservation(
   ctx: MutationCtx,
   attempt: Doc<"sendAttempts">,
-  workspace: Doc<"workspaces">,
+  org: Doc<"orgs">,
 ): Promise<void> {
   const now = Date.now();
-  const capacity = await sendCapacity(ctx, workspace, now);
+  const capacity = await sendCapacity(ctx, org, now);
   if (capacity.remaining < 1) {
     throw domainError(
       "CONFLICT",
@@ -134,8 +134,8 @@ export async function ensureUsageReservation(
     );
   }
   await ctx.runMutation(internal.billing.reservations.reserve, {
-    workspaceId: workspace._id,
-    scopeKey: "workspace",
+    orgId: org._id,
+    scopeKey: "org",
     metric: "sends",
     periodKey: capacity.periodKey,
     limit: capacity.limit,
@@ -155,14 +155,14 @@ export async function insertReservedAttempt(
     nextPermittedAt?: number;
   },
 ): Promise<Id<"sendAttempts">> {
-  const { draft, conversation, workspace } = args.context;
+  const { draft, conversation, org } = args.context;
   const now = Date.now();
   // The provider idempotency key is generated exactly once here and never
   // regenerated — the same key carries the initial request and every
   // reconciliation replay (G3).
   const providerIdempotencyKey = `opensquad-send-${crypto.randomUUID()}`;
   const attemptId = await ctx.db.insert("sendAttempts", {
-    workspaceId: workspace._id,
+    orgId: org._id,
     draftId: draft._id,
     approvalId: args.approval._id,
     conversationId: conversation._id,
@@ -180,7 +180,7 @@ export async function insertReservedAttempt(
       : {}),
   });
   await recordActivityEvent(ctx, {
-    workspaceId: workspace._id,
+    orgId: org._id,
     kind: "send_attempt_reserved",
     summary: `Send intent reserved for draft revision ${draft.revision} → ${draft.normalizedRecipient}`,
     actor: "workflow",

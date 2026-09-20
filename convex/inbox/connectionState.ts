@@ -3,7 +3,7 @@
  *
  * Every mutation here is the LAST step of a flow whose provider calls already
  * happened in `connectActions.ts`: the claim that makes "one inbox, one
- * workspace" true, the rotation store with its ten-minute two-secret overlap,
+ * org" true, the rotation store with its ten-minute two-secret overlap,
  * the disconnect wipe, and the 401-at-send-time demotion. They are separate
  * from the actions because they are the part that must be atomic.
  */
@@ -14,11 +14,11 @@ import type { MutationCtx } from "../_generated/server";
 import { providerId } from "../integrations/agentmailApi";
 import { boundedString, domainError } from "../lib/validators";
 import {
-  clearWorkspaceSecrets,
-  putWorkspaceSecret,
-  readWorkspaceSecret,
+  clearOrgSecrets,
+  putOrgSecret,
+  readOrgSecret,
   SECRET_ROTATION_OVERLAP_MS,
-} from "../workspaces/secrets";
+} from "../orgs/secrets";
 import {
   INBOX_DISCONNECTED_PAUSE_REASON,
   INBOX_KEY_INVALID_PAUSE_REASON,
@@ -27,9 +27,9 @@ import {
 import { v } from "convex/values";
 
 /**
- * THE uniqueness constraint (PLAN §9.4 "One inbox, one workspace").
+ * THE uniqueness constraint (PLAN §9.4 "One inbox, one org").
  *
- * One transaction: read every workspace already claiming this `inboxRef`,
+ * One transaction: read every org already claiming this `inboxRef`,
  * refuse if any of them is someone else, and otherwise write the claim, the
  * webhook id and the webhook secret together. Convex serializes mutations, so
  * two concurrent connects cannot both pass the read.
@@ -39,7 +39,7 @@ import { v } from "convex/values";
  */
 export const claimInbox = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
     webhookId: v.string(),
     webhookSecret: v.object({
@@ -53,16 +53,16 @@ export const claimInbox = internalMutation({
     v.object({ ok: v.literal(false) }),
   ),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       throw domainError("NOT_FOUND", "organization not found");
     }
     const inboxRef = providerId(args.inboxRef, "inboxRef");
     const claimants = await ctx.db
-      .query("workspaces")
+      .query("orgs")
       .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
       .collect();
-    if (claimants.some((row) => row._id !== workspace._id)) {
+    if (claimants.some((row) => row._id !== org._id)) {
       return { ok: false as const };
     }
 
@@ -71,25 +71,25 @@ export const claimInbox = internalMutation({
     // "never answer history" boundary and the backfill run's key, so a plain
     // re-connect of the same inbox must not move it.
     const connectedAt =
-      workspace.inboxRef === inboxRef && workspace.connectedAt !== undefined
-        ? workspace.connectedAt
+      org.inboxRef === inboxRef && org.connectedAt !== undefined
+        ? org.connectedAt
         : now;
     const unpause =
-      workspace.pauseReason !== undefined &&
-      OUR_PAUSE_REASONS.has(workspace.pauseReason);
-    await ctx.db.patch("workspaces", workspace._id, {
+      org.pauseReason !== undefined &&
+      OUR_PAUSE_REASONS.has(org.pauseReason);
+    await ctx.db.patch("orgs", org._id, {
       inboxRef,
       agentmailWebhookId: providerId(args.webhookId, "webhookId"),
       inboxConnection: "connected" as const,
       connectedAt,
       updatedAt: now,
-      // Only OUR pause is lifted: a workspace an operator paused stays paused.
+      // Only OUR pause is lifted: an org an operator paused stays paused.
       ...(unpause
         ? { automationState: "active" as const, pauseReason: undefined }
         : {}),
     });
-    await putWorkspaceSecret(ctx, {
-      workspaceId: workspace._id,
+    await putOrgSecret(ctx, {
+      orgId: org._id,
       provider: "agentmail_webhook",
       ciphertext: args.webhookSecret.ciphertext,
       iv: args.webhookSecret.iv,
@@ -100,7 +100,7 @@ export const claimInbox = internalMutation({
     // both consequences of the assignment and must not be lost if the calling
     // action dies right after this returns.
     await ctx.scheduler.runAfter(0, internal.inbox.backfill.beginBackfill, {
-      workspaceId: workspace._id,
+      orgId: org._id,
     });
     await ctx.scheduler.runAfter(0, internal.inbox.quarantine.replayForInbox, {
       inboxRef,
@@ -116,7 +116,7 @@ export const claimInbox = internalMutation({
  */
 export const applyRotation = internalMutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     webhookId: v.string(),
     apiKeyEnvelope: v.object({
       ciphertext: v.string(),
@@ -131,20 +131,20 @@ export const applyRotation = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       throw domainError("NOT_FOUND", "organization not found");
     }
-    await putWorkspaceSecret(ctx, {
-      workspaceId: args.workspaceId,
+    await putOrgSecret(ctx, {
+      orgId: args.orgId,
       provider: "agentmail",
       ciphertext: args.apiKeyEnvelope.ciphertext,
       iv: args.apiKeyEnvelope.iv,
       last4: args.apiKeyEnvelope.last4,
       status: "valid",
     });
-    await putWorkspaceSecret(ctx, {
-      workspaceId: args.workspaceId,
+    await putOrgSecret(ctx, {
+      orgId: args.orgId,
       provider: "agentmail_webhook",
       ciphertext: args.webhookSecret.ciphertext,
       iv: args.webhookSecret.iv,
@@ -153,9 +153,9 @@ export const applyRotation = internalMutation({
       keepPreviousFor: SECRET_ROTATION_OVERLAP_MS,
     });
     const unpause =
-      workspace.pauseReason !== undefined &&
-      OUR_PAUSE_REASONS.has(workspace.pauseReason);
-    await ctx.db.patch("workspaces", args.workspaceId, {
+      org.pauseReason !== undefined &&
+      OUR_PAUSE_REASONS.has(org.pauseReason);
+    await ctx.db.patch("orgs", args.orgId, {
       agentmailWebhookId: providerId(args.webhookId, "webhookId"),
       inboxConnection: "connected" as const,
       updatedAt: Date.now(),
@@ -165,18 +165,18 @@ export const applyRotation = internalMutation({
     });
     await ctx.scheduler.runAfter(
       SECRET_ROTATION_OVERLAP_MS,
-      internal.workspaces.secrets.closeRotationOverlap,
-      { workspaceId: args.workspaceId, provider: "agentmail_webhook" as const },
+      internal.orgs.secrets.closeRotationOverlap,
+      { orgId: args.orgId, provider: "agentmail_webhook" as const },
     );
     return null;
   },
 });
 
 export const releaseInbox = internalMutation({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await detachInbox(ctx, args.workspaceId, {
+    await detachInbox(ctx, args.orgId, {
       connection: "none",
       pauseReason: INBOX_DISCONNECTED_PAUSE_REASON,
       wipeSecrets: true,
@@ -189,35 +189,35 @@ export const releaseInbox = internalMutation({
  * A 401 from AgentMail at send time (PLAN §4 step 7): the key is marked
  * `invalid` and automation pauses with the reconnect reason. The inbox
  * assignment is KEPT — mail already in flight still belongs to this
- * workspace, and reconnecting the same inbox must stay idempotent.
+ * org, and reconnecting the same inbox must stay idempotent.
  */
 export const markInboxKeyInvalid = internalMutation({
-  args: { workspaceId: v.id("workspaces"), reason: v.string() },
+  args: { orgId: v.id("orgs"), reason: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const workspace = await ctx.db.get("workspaces", args.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null) {
       return null;
     }
-    const key = await readWorkspaceSecret(ctx, args.workspaceId, "agentmail");
+    const key = await readOrgSecret(ctx, args.orgId, "agentmail");
     if (key !== null && key.status !== "invalid") {
-      await ctx.db.patch("workspaceSecrets", key._id, {
+      await ctx.db.patch("orgSecrets", key._id, {
         status: "invalid" as const,
         updatedAt: Date.now(),
         checkedAt: Date.now(),
       });
     }
     if (
-      workspace.inboxConnection === "invalid" &&
-      workspace.automationState === "paused"
+      org.inboxConnection === "invalid" &&
+      org.automationState === "paused"
     ) {
       return null;
     }
     console.info("inbox.connection: key marked invalid", {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       reason: boundedString(args.reason, "reason", { min: 1, max: 100 }),
     });
-    await ctx.db.patch("workspaces", args.workspaceId, {
+    await ctx.db.patch("orgs", args.orgId, {
       inboxConnection: "invalid" as const,
       automationState: "paused" as const,
       pauseReason: INBOX_KEY_INVALID_PAUSE_REASON,
@@ -229,21 +229,21 @@ export const markInboxKeyInvalid = internalMutation({
 
 async function detachInbox(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   args: {
     connection: "none" | "invalid";
     pauseReason: string;
     wipeSecrets: boolean;
   },
 ): Promise<void> {
-  const workspace = await ctx.db.get("workspaces", workspaceId);
-  if (workspace === null) {
+  const org = await ctx.db.get("orgs", orgId);
+  if (org === null) {
     return;
   }
   if (args.wipeSecrets) {
-    await clearWorkspaceSecrets(ctx, workspaceId);
+    await clearOrgSecrets(ctx, orgId);
   }
-  await ctx.db.patch("workspaces", workspaceId, {
+  await ctx.db.patch("orgs", orgId, {
     inboxConnection: args.connection,
     inboxRef: undefined,
     agentmailWebhookId: undefined,

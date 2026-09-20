@@ -12,7 +12,7 @@
  */
 import { internal } from "../_generated/api";
 import { mutation } from "../_generated/server";
-import { requireWorkspaceEditor } from "../lib/auth";
+import { requireOrgMember } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
 import { checkPublicHttpUrl } from "../lib/urlSafety";
 import {
@@ -30,7 +30,7 @@ import {
 import {
   ANALYSIS_STALE_AFTER_MS,
   analysisOperationKeys,
-  getWorkspaceProfile,
+  getOrgProfile,
 } from "./model";
 import { vBusinessProfileDoc } from "./queries";
 import { v } from "convex/values";
@@ -46,7 +46,7 @@ import { v } from "convex/values";
  */
 export const update = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     expectedVersion: v.number(),
     websiteUrl: v.optional(v.string()),
     companyName: v.string(),
@@ -58,7 +58,7 @@ export const update = mutation({
   },
   returns: vBusinessProfileDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
 
     const websiteUrl =
       args.websiteUrl === undefined
@@ -86,7 +86,7 @@ export const update = mutation({
       max: COMPANY_PAIN_POINTS_MAX_LENGTH,
     });
 
-    const existing = await getWorkspaceProfile(ctx, args.workspaceId);
+    const existing = await getOrgProfile(ctx, args.orgId);
 
     const now = Date.now();
     if (existing === null) {
@@ -97,7 +97,7 @@ export const update = mutation({
         );
       }
       const id = await ctx.db.insert("businessProfiles", {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         ...(websiteUrl !== undefined ? { websiteUrl } : {}),
         companyName,
         industry,
@@ -177,12 +177,12 @@ export const update = mutation({
  */
 export const startAnalysis = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     websiteUrl: v.string(),
   },
   returns: v.object({ startedAt: v.number() }),
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     // Before the reserve, so a refused caller leaves nothing behind.
     await requireRateLimit(ctx, "analyzeWebsite", identityKey);
 
@@ -194,7 +194,7 @@ export const startAnalysis = mutation({
     }
     const websiteUrl = admitted.url.url;
 
-    const existing = await getWorkspaceProfile(ctx, args.workspaceId);
+    const existing = await getOrgProfile(ctx, args.orgId);
     const now = Date.now();
     if (
       existing !== null &&
@@ -212,7 +212,7 @@ export const startAnalysis = mutation({
       existing.analysisStatus.state === "ready" &&
       existing.websiteUrl === websiteUrl;
     const keys = await analysisOperationKeys({
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       websiteUrl,
       startedAt: now,
       fresh,
@@ -222,7 +222,7 @@ export const startAnalysis = mutation({
     let profileId;
     if (existing === null) {
       profileId = await ctx.db.insert("businessProfiles", {
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         websiteUrl,
         // Empty until the analysis answers. The form shows its own analyzing
         // state meanwhile, never blank fields presented as a result.
@@ -248,7 +248,7 @@ export const startAnalysis = mutation({
     }
 
     await ctx.scheduler.runAfter(0, internal.company.actions.analyze, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       profileId,
       websiteUrl,
       startedAt: now,

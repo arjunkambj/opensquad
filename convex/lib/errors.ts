@@ -26,18 +26,23 @@ export const DOMAIN_ERROR_CODES = [
   "CONFLICT",
   "INVALID",
   /* --- the ways in (PLAN §6 "Closing the ways in") -------------------- */
-  /** The account's email is not verified, so it cannot create a workspace. */
+  /** The account's email is not verified, so it cannot create an org. */
   "EMAIL_NOT_VERIFIED",
   /** The identity provider marks the account as restricted. */
   "ACCOUNT_RESTRICTED",
-  /** `MAX_TRIAL_WORKSPACES` is reached — new signups see the waitlist state. */
+  /**
+   * The caller's token names no active organization, so there is no tenant to
+   * act in. The client resolves it by selecting one, it is not a dead end.
+   */
+  "NO_ACTIVE_ORG",
+  /** `MAX_TRIAL_ORGS` is reached — new signups see the waitlist state. */
   "TRIAL_CAPACITY_REACHED",
   /* --- money (PLAN §6) ------------------------------------------------ */
-  /** The workspace holds no credit grant at all; every paid call refuses. */
+  /** The org holds no credit grant at all; every paid call refuses. */
   "NO_CREDIT_GRANT",
   /** Layer 1: the visible credit balance cannot cover this action. */
   "INSUFFICIENT_CREDITS",
-  /** Layer 2: a hidden per-workspace provider cap is exhausted. */
+  /** Layer 2: a hidden per-org provider cap is exhausted. */
   "TRIAL_LIMIT_REACHED",
   /** The kill switch is on: no paid call runs anywhere. */
   "PLATFORM_PAUSED",

@@ -50,7 +50,7 @@ const vBeginResult = v.union(
     action: v.literal("dispatch"),
     sendAttemptId: v.id("sendAttempts"),
     /** Whose key the request is made with — there is no platform key. */
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     inboxRef: v.string(),
     providerIdempotencyKey: v.string(),
     endpointOperation: v.union(v.literal("send"), v.literal("reply")),
@@ -102,9 +102,9 @@ export const beginDispatch = internalMutation({
     }
 
     const context = await loadAttemptContext(ctx, attempt.draftId);
-    const { workspace, conversation, draft } = context;
+    const { org, conversation, draft } = context;
     const gate = await evaluateSendGates(ctx, {
-      workspace,
+      org,
       conversation,
       draft,
       agent: context.agent,
@@ -120,18 +120,18 @@ export const beginDispatch = internalMutation({
       const reservation = await ctx.runMutation(
         internal.billing.reservations.getByOperationKey,
         {
-          workspaceId: workspace._id,
+          orgId: org._id,
           operationKey: attempt.operationKey,
         },
       );
       if (reservation !== null && reservation.state === "reserved") {
         await ctx.runMutation(internal.billing.reservations.release, {
-          workspaceId: workspace._id,
+          orgId: org._id,
           operationKey: attempt.operationKey,
         });
       }
       await recordActivityEvent(ctx, {
-        workspaceId: workspace._id,
+        orgId: org._id,
         kind: "send_attempt_cancelled",
         summary: `Send cancelled at dispatch gate (${code}): ${reason}`,
         actor: "workflow",
@@ -145,7 +145,7 @@ export const beginDispatch = internalMutation({
     }
 
     const now = Date.now();
-    const window = sendWindowStatus(workspace, now);
+    const window = sendWindowStatus(org, now);
     if (!window.permitted) {
       await ctx.db.patch("sendAttempts", attempt._id, {
         nextPermittedAt: window.nextPermittedAt,
@@ -166,7 +166,7 @@ export const beginDispatch = internalMutation({
     let reservation: Doc<"usageReservations"> | null = await ctx.runMutation(
       internal.billing.reservations.getByOperationKey,
       {
-        workspaceId: workspace._id,
+        orgId: org._id,
         operationKey: attempt.operationKey,
       },
     );
@@ -177,19 +177,19 @@ export const beginDispatch = internalMutation({
       const heldBucket = await ctx.db.get("usageBuckets", reservation.bucketId);
       if (
         heldBucket !== null &&
-        heldBucket.periodKey !== localDayKey(now, workspace.timezone)
+        heldBucket.periodKey !== localDayKey(now, org.timezone)
       ) {
         await ctx.runMutation(internal.billing.reservations.release, {
-          workspaceId: workspace._id,
+          orgId: org._id,
           operationKey: attempt.operationKey,
         });
         reservation = null;
       }
     }
     if (reservation === null) {
-      const capacity = await sendCapacity(ctx, workspace, now);
+      const capacity = await sendCapacity(ctx, org, now);
       if (capacity.remaining < 1) {
-        const nextPermittedAt = nextWindowStart(workspace, now);
+        const nextPermittedAt = nextWindowStart(org, now);
         await ctx.db.patch("sendAttempts", attempt._id, {
           nextPermittedAt,
           updatedAt: now,
@@ -205,7 +205,7 @@ export const beginDispatch = internalMutation({
           reason: "send_limit_reached",
         };
       }
-      await ensureUsageReservation(ctx, attempt, workspace);
+      await ensureUsageReservation(ctx, attempt, org);
     } else if (reservation.state !== "reserved") {
       return {
         action: "blocked" as const,
@@ -229,7 +229,7 @@ export const beginDispatch = internalMutation({
       { sendAttemptId: attempt._id },
     );
     await recordActivityEvent(ctx, {
-      workspaceId: workspace._id,
+      orgId: org._id,
       kind: "send_attempt_dispatched",
       summary: `Dispatching draft revision ${draft.revision} to provider`,
       actor: "workflow",
@@ -239,7 +239,7 @@ export const beginDispatch = internalMutation({
     return {
       action: "dispatch" as const,
       sendAttemptId: attempt._id,
-      workspaceId: workspace._id,
+      orgId: org._id,
       inboxRef: draft.inboxRef,
       providerIdempotencyKey: attempt.providerIdempotencyKey,
       endpointOperation: attempt.endpointOperation,

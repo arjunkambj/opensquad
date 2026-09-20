@@ -23,8 +23,8 @@
  */
 import { internal } from "../_generated/api";
 import { mutation, query } from "../_generated/server";
-import { getWorkspaceProfile, profileIsComplete } from "../company/model";
-import { requireWorkspaceEditor, requireWorkspaceMember } from "../lib/auth";
+import { getOrgProfile, profileIsComplete } from "../company/model";
+import { requireOrgMember } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
 import { domainError, invalid, vAgentIcp } from "../lib/validators";
 import {
@@ -35,7 +35,7 @@ import {
   sameIcp,
 } from "./icpModel";
 import { EMPTY_ICP_OPTION_LISTS, readIcpOptionLists } from "./icpVocabulary";
-import { getWorkspaceAgent, vAgentDoc } from "./model";
+import { getOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
 /* ------------------------------------------------------------------ */
@@ -70,10 +70,10 @@ const vIcpOptions = v.object({
  * country names, kinds of organisation). Company sizes are our own bands.
  */
 export const options = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: vIcpOptions,
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
     const lists = await readIcpOptionLists(ctx);
     return lists === null
       ? { ...EMPTY_ICP_OPTION_LISTS, ready: false }
@@ -118,13 +118,13 @@ const vStartGenerationResult = v.union(
  */
 export const startGeneration = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     reason: vGenerationReason,
   },
   returns: vStartGenerationResult,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       throw domainError("NOT_FOUND", "this organization has no agent yet");
     }
@@ -153,7 +153,7 @@ export const startGeneration = mutation({
     }
 
     // Everything downstream reads the profile, and dot 1 is what fills it.
-    const profile = await getWorkspaceProfile(ctx, args.workspaceId);
+    const profile = await getOrgProfile(ctx, args.orgId);
     if (!profileIsComplete(profile)) {
       throw invalid(
         "the company profile needs a name, industry, description and at least one key feature",
@@ -172,11 +172,11 @@ export const startGeneration = mutation({
       updatedAt: now,
     });
     await ctx.scheduler.runAfter(0, internal.agents.icpGeneration.generate, {
-      workspaceId: args.workspaceId,
+      orgId: args.orgId,
       agentId: agent._id,
       startedAt: now,
       operationKey: await icpOperationKey({
-        workspaceId: args.workspaceId,
+        orgId: args.orgId,
         startedAt: now,
       }),
     });
@@ -200,13 +200,13 @@ export const startGeneration = mutation({
  */
 export const updateIcp = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     icp: vAgentIcp,
   },
   returns: vAgentDoc,
   handler: async (ctx, args) => {
-    await requireWorkspaceEditor(ctx, args.workspaceId);
-    const agent = await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       throw domainError("NOT_FOUND", "this organization has no agent yet");
     }

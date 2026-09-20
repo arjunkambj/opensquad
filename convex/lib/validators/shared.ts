@@ -411,18 +411,18 @@ export type SendWindowStatus =
   | { permitted: false; localDayKey: string; nextPermittedAt: number };
 
 /**
- * Evaluate the workspace's IANA send window at `atMs`. When outside the
+ * Evaluate the org's IANA send window at `atMs`. When outside the
  * window, returns the next UTC instant the window opens (§8.2 — the caller
  * waits durably, then re-runs the whole preflight).
  */
 export function sendWindowStatus(
-  workspace: {
+  org: {
     timezone: string;
     sendWindow: { weekdays: number[]; startMinute: number; endMinute: number };
   },
   atMs: number,
 ): SendWindowStatus {
-  const { timezone, sendWindow } = workspace;
+  const { timezone, sendWindow } = org;
   const todayKey = localDayKey(atMs, timezone);
   const now = localDayParts(atMs, timezone);
   const withinToday =
@@ -432,7 +432,7 @@ export function sendWindowStatus(
   if (withinToday) {
     return { permitted: true, localDayKey: todayKey };
   }
-  // Scan civil days forward from "today" in the workspace timezone. Weekday
+  // Scan civil days forward from "today" in the org timezone. Weekday
   // is a property of the civil date, so it is timezone-independent.
   for (let offset = 0; offset <= 8; offset++) {
     const civil = new Date(

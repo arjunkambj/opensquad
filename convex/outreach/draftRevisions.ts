@@ -52,7 +52,7 @@ export const createRevision = internalMutation({
     if (requestId !== undefined) {
       const replayed = await findRevisionByRequestId(
         ctx,
-        conversation.workspaceId,
+        conversation.orgId,
         requestId,
       );
       if (replayed !== null) {
@@ -78,8 +78,8 @@ export const createRevision = internalMutation({
         args.bookingVersion,
       );
     }
-    const workspace = await ctx.db.get("workspaces", conversation.workspaceId);
-    if (workspace === null) {
+    const org = await ctx.db.get("orgs", conversation.orgId);
+    if (org === null) {
       throw domainError("NOT_FOUND", "organization not found");
     }
     const agent =
@@ -87,7 +87,7 @@ export const createRevision = internalMutation({
         ? null
         : await ctx.db.get("agents", conversation.agentId);
     const draft = await installRevision(ctx, {
-      workspace,
+      org,
       conversation,
       agent,
       recipient: args.recipient,
@@ -105,7 +105,7 @@ export const createRevision = internalMutation({
         : {}),
     });
     await recordActivityEvent(ctx, {
-      workspaceId: workspace._id,
+      orgId: org._id,
       kind: "draft_created",
       summary: `Draft revision ${draft.revision} proposed for ${draft.normalizedRecipient}`,
       actor: "workflow",

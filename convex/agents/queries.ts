@@ -1,15 +1,15 @@
-/** Member-guarded reads of the workspace's agent. */
+/** Member-guarded reads of the org's agent. */
 import { query } from "../_generated/server";
-import { requireWorkspaceMember } from "../lib/auth";
-import { getWorkspaceAgent, vAgentDoc } from "./model";
+import { requireOrgMember } from "../lib/auth";
+import { getOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
-/** The workspace's agent. `null` is the pre-onboarding state, not an error. */
+/** The org's agent. `null` is the pre-onboarding state, not an error. */
 export const get = query({
-  args: { workspaceId: v.id("workspaces") },
+  args: { orgId: v.id("orgs") },
   returns: v.union(vAgentDoc, v.null()),
   handler: async (ctx, args) => {
-    await requireWorkspaceMember(ctx, args.workspaceId);
-    return await getWorkspaceAgent(ctx, args.workspaceId);
+    await requireOrgMember(ctx, args.orgId);
+    return await getOrgAgent(ctx, args.orgId);
   },
 });

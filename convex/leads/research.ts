@@ -64,7 +64,7 @@ const vResearchContext = v.union(
   v.object({ status: v.literal("skip") }),
   v.object({
     status: v.literal("ready"),
-    workspaceId: v.id("workspaces"),
+    orgId: v.id("orgs"),
     revision: v.number(),
     /** Failures so far; the attempt about to run is this plus one. */
     attempts: v.number(),
@@ -105,7 +105,7 @@ export const researchContext = internalQuery({
     }
     const profile = await ctx.db
       .query("businessProfiles")
-      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", agent.workspaceId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", agent.orgId))
       .unique();
     if (profile === null) {
       // Nothing to judge fit against. Onboarding writes the profile long
@@ -132,7 +132,7 @@ export const researchContext = internalQuery({
       .join(", ");
     return {
       status: "ready" as const,
-      workspaceId: agent.workspaceId,
+      orgId: agent.orgId,
       revision: agent.revision,
       attempts: lead.lastError?.attempts ?? 0,
       signalCount:
@@ -209,7 +209,7 @@ export const runResearchStep = internalAction({
     let sourceUrl: string | undefined;
     if (context.canonicalDomain !== undefined) {
       const site = await scrapeSite(ctx, {
-        workspaceId: context.workspaceId,
+        orgId: context.orgId,
         url: `https://${context.canonicalDomain}`,
         pages: 1,
         action: "research_lead",
@@ -236,7 +236,7 @@ export const runResearchStep = internalAction({
     }
 
     const scored = await runStructured(ctx, {
-      workspaceId: context.workspaceId,
+      orgId: context.orgId,
       action: "score_lead",
       tier: "fast",
       system: RESEARCH_LEAD_SYSTEM,

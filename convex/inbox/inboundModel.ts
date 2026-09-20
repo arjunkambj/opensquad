@@ -99,17 +99,17 @@ export async function settleReceipt(
 
 /**
  * Resolve `(inboxRef, providerThreadRef)` to a conversation in the receipt's
- * OWN workspace.
+ * OWN org.
  *
  * This follows `sendOutcome.linkConversationThread`, not `conversationStaging.stageConversation`:
  * the pair's uniqueness is a transactional convention, not a database
- * constraint, and `by_inboxRef_and_providerThreadRef` is not workspace-scoped.
+ * constraint, and `by_inboxRef_and_providerThreadRef` is not org-scoped.
  * `.unique()` would throw on an already-violated pair and wedge the receipt
- * forever, and a row belonging to another workspace must neither block this
- * match nor have its id quoted into this workspace's feed — hence `.collect()`
- * then an explicit workspace filter.
+ * forever, and a row belonging to another org must neither block this
+ * match nor have its id quoted into this org's feed — hence `.collect()`
+ * then an explicit org filter.
  *
- * More than one in-workspace row is an anomaly, not a crash: the earliest
+ * More than one in-org row is an anomaly, not a crash: the earliest
  * row wins deterministically and the caller records the ambiguity on the
  * receipt.
  */
@@ -133,7 +133,7 @@ export async function matchConversation(
     )
     .collect();
   const owned = rows
-    .filter((row) => row.workspaceId === receipt.workspaceId)
+    .filter((row) => row.orgId === receipt.orgId)
     .sort((left, right) => left._creationTime - right._creationTime);
   if (owned.length === 0) {
     return { conversation: null, ambiguous: false };

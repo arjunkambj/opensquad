@@ -13,9 +13,9 @@
  *   there — a screen that renders "200+" is telling the truth, one that
  *   renders a silently truncated 200 is not.
  *
- *   EVERY WINDOW IS THE WORKSPACE'S. `from`/`to` arrive as instants the
- *   caller derived in the workspace's IANA zone, and the daily buckets of
- *   `activitySeries` are cut with `localDayKey(…, workspace.timezone)`. A
+ *   EVERY WINDOW IS THE ORG'S. `from`/`to` arrive as instants the
+ *   caller derived in the org's IANA zone, and the daily buckets of
+ *   `activitySeries` are cut with `localDayKey(…, org.timezone)`. A
  *   dashboard bucketed by the browser's midnight would head one day and
  *   count another's rows.
  *
@@ -28,7 +28,7 @@ import { assertEpochMs, invalid, localDayKey } from "../lib/validators";
 import { v } from "convex/values";
 
 /**
- * How many rows any one range read may touch. A trial workspace's whole
+ * How many rows any one range read may touch. A trial org's whole
  * window is smaller than this, so `hasMore` is false in practice — the bound
  * is what keeps the screen honest once that stops being true.
  */
@@ -58,7 +58,7 @@ export type Range = { from: number; to: number };
 
 /** The arguments every windowed dashboard query takes, declared once. */
 export const vRange = {
-  workspaceId: v.id("workspaces"),
+  orgId: v.id("orgs"),
   from: v.number(),
   to: v.number(),
 };
@@ -126,7 +126,7 @@ export type DayBucket = {
  * Every local day from `from` to `to` inclusive, in order, with the three
  * series counted into it.
  *
- * Days are cut with `localDayKey` in the WORKSPACE's zone. The axis is walked
+ * Days are cut with `localDayKey` in the ORG's zone. The axis is walked
  * in TWELVE-hour steps, not twenty-four: every local day is at least 23 hours
  * long, so a half-day step lands in each one at least once and a spring-
  * forward day can never be stepped over and left out of the axis — which

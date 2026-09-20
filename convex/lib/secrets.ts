@@ -32,7 +32,7 @@ const AES_KEY_BYTES = 32;
 /** GCM's standard 96-bit nonce — fresh per encryption, never reused. */
 const GCM_IV_BYTES = 12;
 
-/** How much of a key a connected workspace may show (PLAN §4). */
+/** How much of a key a connected org may show (PLAN §4). */
 export const SECRET_LAST4_LENGTH = 4;
 
 /** Longest provider secret this module will wrap. */

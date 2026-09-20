@@ -1,16 +1,16 @@
 /**
  * Platform-wide circuit breakers (PLAN §6): the kill switch, the per-provider
- * budgets that bound OUR bill whatever any one workspace does, and the signup
+ * budgets that bound OUR bill whatever any one org does, and the signup
  * capacity that stops new trials before they exist.
  *
  * A `platformBudgets` row is `{ provider, periodKey, limit, used }`, unique
  * per (provider, periodKey) and created lazily from the deployment env the
  * first time that period is debited. The credit wrapper debits it in the SAME
- * transaction as the workspace buckets, so the worst case per day is a number
+ * transaction as the org buckets, so the worst case per day is a number
  * we chose rather than a function of how many people sign up.
  *
  * Periods are UTC on purpose: a platform budget is our invoice, not any one
- * workspace's local day. A settle recomputes the period from the operation's
+ * org's local day. A settle recomputes the period from the operation's
  * own `createdAt`, so a refund after midnight credits the period that was
  * actually debited.
  */
@@ -18,8 +18,8 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { domainError } from "../lib/validators";
 import {
-  MAX_TRIAL_WORKSPACES_DEFAULT,
-  MAX_TRIAL_WORKSPACES_ENV,
+  MAX_TRIAL_ORGS_DEFAULT,
+  MAX_TRIAL_ORGS_ENV,
   PLATFORM_BUDGETS,
   PLATFORM_PAUSED_ENV,
   readBooleanEnv,
@@ -164,22 +164,22 @@ function platformCapacityError(metric: TrialMeteredMetric) {
 /* Signup capacity                                                     */
 /* ------------------------------------------------------------------ */
 
-export function maxTrialWorkspaces(): number {
-  return readIntEnv(MAX_TRIAL_WORKSPACES_ENV, MAX_TRIAL_WORKSPACES_DEFAULT);
+export function maxTrialOrgs(): number {
+  return readIntEnv(MAX_TRIAL_ORGS_ENV, MAX_TRIAL_ORGS_DEFAULT);
 }
 
 /**
- * Is there room for one more trial workspace?
+ * Is there room for one more trial org?
  *
  * Reads at most `max + 1` rows and answers a boolean: the exact number of
  * tenants is not something a signed-out visitor — or a member — gets to
  * learn from the waitlist screen.
  */
 export async function trialCapacityOpen(ctx: QueryCtx): Promise<boolean> {
-  const max = maxTrialWorkspaces();
+  const max = maxTrialOrgs();
   if (max === 0) {
     return false;
   }
-  const rows = await ctx.db.query("workspaces").take(max + 1);
+  const rows = await ctx.db.query("orgs").take(max + 1);
   return rows.length <= max;
 }

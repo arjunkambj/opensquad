@@ -182,7 +182,7 @@ export const LEAD_SCORE_MIN = 1;
 export const LEAD_SCORE_MAX = 3;
 
 /**
- * The denormalised value behind `prospects.by_workspaceId_and_scoreKey`.
+ * The denormalised value behind `prospects.by_orgId_and_scoreKey`.
  *
  * Convex indexes a top-level field, and `aiScore` lives inside a union
  * member, so the sortable score is stored beside `research` as `scoreKey`.
@@ -328,7 +328,7 @@ export function normalizeCanonicalDomain(
 
 /**
  * Append-only lead history kinds. Unlike `activityEvents.kind` — a bounded
- * string feeding a workspace receipts timeline — this is a closed union,
+ * string feeding an org receipts timeline — this is a closed union,
  * because a lead event is the audit record a stage change, an approval and a
  * booking transition are proved by.
  */

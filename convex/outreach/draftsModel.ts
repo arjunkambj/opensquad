@@ -42,25 +42,25 @@ export const vDraftDoc = v.object({
   ...draftFields,
 });
 
-export async function getConversationInWorkspace(
+export async function getConversationInOrg(
   ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   conversationId: Id<"conversations">,
 ): Promise<Doc<"conversations">> {
   const conversation = await ctx.db.get("conversations", conversationId);
-  if (conversation === null || conversation.workspaceId !== workspaceId) {
+  if (conversation === null || conversation.orgId !== orgId) {
     throw domainError("NOT_FOUND", "conversation not found");
   }
   return conversation;
 }
 
-export async function getDraftInWorkspace(
+export async function getDraftInOrg(
   ctx: AuthCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   draftId: Id<"drafts">,
 ): Promise<Doc<"drafts">> {
   const draft = await ctx.db.get("drafts", draftId);
-  if (draft === null || draft.workspaceId !== workspaceId) {
+  if (draft === null || draft.orgId !== orgId) {
     throw domainError("NOT_FOUND", "draft not found");
   }
   return draft;
@@ -78,7 +78,7 @@ function endpointFor(replyToMessageRef: string | undefined): EndpointOperation {
 export async function installRevision(
   ctx: MutationCtx,
   args: {
-    workspace: Doc<"workspaces">;
+    org: Doc<"orgs">;
     conversation: Doc<"conversations">;
     agent: Doc<"agents"> | null;
     recipient: string;
@@ -149,7 +149,7 @@ export async function installRevision(
     });
   }
   const draftId = await ctx.db.insert("drafts", {
-    workspaceId: args.workspace._id,
+    orgId: args.org._id,
     conversationId: args.conversation._id,
     inboxRef: args.conversation.inboxRef,
     revision,
@@ -167,7 +167,7 @@ export async function installRevision(
     // A draft with no agent behind it is written under revision 0, which no
     // live agent ever carries — so it can never pass a revision check.
     agentRevision: args.agent?.revision ?? 0,
-    policyVersion: args.workspace.policyVersion,
+    policyVersion: args.org.policyVersion,
     state: "current",
     evidenceIds,
     createdBy: args.createdBy,
@@ -194,7 +194,7 @@ export async function installRevision(
   // revision can never legally dispatch now — retire it in the same
   // transaction so its stale wake cannot block the corrected send.
   await ctx.runMutation(internal.outreach.sendControls.cancelParkedConversationAttempts, {
-    workspaceId: args.workspace._id,
+    orgId: args.org._id,
     conversationId: args.conversation._id,
     reason: `revision ${revision} superseded the draft it was authorized against`,
   });
@@ -204,7 +204,7 @@ export async function installRevision(
 
 /**
  * Prove a draft may carry a `bookingId`/`bookingVersion` link (§4.3): the
- * booking lives in this workspace, is still `proposed`, is still the version
+ * booking lives in this org, is still `proposed`, is still the version
  * the content was written against, and belongs to the lead this conversation
  * is bound to. The same check re-runs at approval and at dispatch, so a
  * booking that moved on between draft and send can never be mailed.
@@ -216,7 +216,7 @@ export async function assertBookingLink(
   bookingVersion: number,
 ): Promise<void> {
   const booking = await ctx.db.get("bookings", bookingId);
-  if (booking === null || booking.workspaceId !== conversation.workspaceId) {
+  if (booking === null || booking.orgId !== conversation.orgId) {
     throw domainError("NOT_FOUND", "booking not found");
   }
   if (booking.state !== "proposed") {
@@ -245,13 +245,13 @@ export async function assertBookingLink(
 /** Request-id replay: a committed revision returns itself. */
 export async function findRevisionByRequestId(
   ctx: MutationCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   requestId: string,
 ): Promise<Doc<"drafts"> | null> {
   return await ctx.db
     .query("drafts")
-    .withIndex("by_workspaceId_and_requestId", (q) =>
-      q.eq("workspaceId", workspaceId).eq("requestId", requestId),
+    .withIndex("by_orgId_and_requestId", (q) =>
+      q.eq("orgId", orgId).eq("requestId", requestId),
     )
     .unique();
 }

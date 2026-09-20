@@ -131,13 +131,13 @@ export async function reduceReservation(
 /** Every reservation an operation holds — one per bucket it debited. */
 export async function listReservationsByKey(
   ctx: QueryCtx,
-  workspaceId: Id<"workspaces">,
+  orgId: Id<"orgs">,
   operationKey: string,
 ): Promise<Doc<"usageReservations">[]> {
   return await ctx.db
     .query("usageReservations")
-    .withIndex("by_workspaceId_and_operationKey_and_bucketId", (q) =>
-      q.eq("workspaceId", workspaceId).eq("operationKey", operationKey),
+    .withIndex("by_orgId_and_operationKey_and_bucketId", (q) =>
+      q.eq("orgId", orgId).eq("operationKey", operationKey),
     )
     .collect();
 }
@@ -158,7 +158,7 @@ export async function listReservationsByKey(
 export async function settleReservationsByKey(
   ctx: MutationCtx,
   args: {
-    workspaceId: Id<"workspaces">;
+    orgId: Id<"orgs">;
     operationKey: string;
     target: UsageReservationState;
     providerReference?: string;
@@ -170,7 +170,7 @@ export async function settleReservationsByKey(
   });
   const reservations = await listReservationsByKey(
     ctx,
-    args.workspaceId,
+    args.orgId,
     operationKey,
   );
   if (reservations.length === 0) {
