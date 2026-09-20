@@ -53,8 +53,8 @@ function parkedReason(lead: ParkedLead): string {
   if (lead.stageReason !== undefined && lead.stageReason.length > 0) {
     return lead.stageReason
   }
-  if (lead.lastError !== undefined) {
-    return OPERATION_ERROR_COPY[lead.lastError.code]
+  if (lead.lastErrorCode !== undefined) {
+    return OPERATION_ERROR_COPY[lead.lastErrorCode]
   }
   return "This lead needs a look before the agent works it again."
 }

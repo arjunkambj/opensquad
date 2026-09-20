@@ -29,43 +29,52 @@ import {
   domainError,
   invalid,
   LEAD_EVENT_NOTE_MAX_LENGTH,
+  MAX_LIST_LIMIT,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
   vLeadApproval,
   vLeadStage,
 } from "../lib/validators";
+import { decideOne } from "./approval";
 import {
   appendLeadEvent,
   findLeadEventByOperationKey,
   vLeadEventDoc,
 } from "./events";
-import { loadProspectForWrite, reread, vProspectDoc } from "./model";
+import { loadProspectForWrite } from "./model";
 import { v } from "convex/values";
 
 /**
- * "Yes, contact this person" — or "no, never".
+ * "Yes, contact this person" — or "no, never". One lead or a selection.
  *
  * This authorises finding the address and drafting; it sends nothing. The
  * email itself is approved separately, per draft, in `approvals`.
  *
- * Rejecting also moves the lead to the `rejected` stage and clears
- * `nextActionAt`, so the state machine stops offering it work. Per PLAN §9.1
- * a rejection stops only what has NOT started and never refunds by itself:
- * cancelling queued steps and superseding open drafts belongs to the outreach
- * loop (T40), which owns those rows.
+ * Rejecting also moves the lead to the `rejected` stage, clears
+ * `nextActionAt` so the state machine stops offering it work, and retires the
+ * outreach it had queued (`leads/approval.ts`). Per PLAN §9.1 it never
+ * refunds by itself: a reveal already in flight still bills, and its address
+ * is still stored.
  *
- * `requestId` dedupes through the lead-event index, so a double-clicked
- * Approve records one decision and returns it.
+ * `requestId` dedupes per lead through the lead-event index, so a
+ * double-clicked Approve — or a retried bulk action — records one decision
+ * each. The same requestId carrying a different verdict for a lead is a
+ * CONFLICT.
  */
 export const setApproval = mutation({
   args: {
     workspaceId: v.id("workspaces"),
-    prospectId: v.id("prospects"),
+    prospectIds: v.array(v.id("prospects")),
     approval: vLeadApproval,
-    /** Required on a rejection: a refusal always states its basis. */
+    /** Stated basis; a bulk rejection carries one for every lead in it. */
     reason: v.optional(v.string()),
     requestId: v.string(),
   },
-  returns: vProspectDoc,
+  returns: v.object({
+    /** Leads whose decision this call recorded. */
+    decided: v.number(),
+    /** Leads already carrying that decision — a no-op, not a new event. */
+    unchanged: v.number(),
+  }),
   handler: async (ctx, args) => {
     const { identityKey } = await requireWorkspaceEditor(ctx, args.workspaceId);
     const requestId = boundedString(args.requestId, "requestId", {
@@ -75,6 +84,12 @@ export const setApproval = mutation({
     if (args.approval === "pending") {
       throw invalid("approval cannot be set back to pending");
     }
+    if (args.prospectIds.length === 0) {
+      throw invalid("prospectIds must name at least one lead");
+    }
+    if (args.prospectIds.length > MAX_LIST_LIMIT) {
+      throw invalid(`at most ${MAX_LIST_LIMIT} leads can be decided at once`);
+    }
     const reason =
       args.reason === undefined
         ? undefined
@@ -82,59 +97,25 @@ export const setApproval = mutation({
             min: 1,
             max: PROSPECT_STAGE_REASON_MAX_LENGTH,
           });
-    const prospect = await loadProspectForWrite(
-      ctx,
-      args.workspaceId,
-      args.prospectId,
-    );
-    const operationKey = `lead:${args.prospectId}:approval:${requestId}`;
-    const prior = await findLeadEventByOperationKey(
-      ctx,
-      args.workspaceId,
-      operationKey,
-    );
-    if (prior !== null) {
-      if (prior.details?.toApproval !== args.approval) {
-        throw domainError(
-          "CONFLICT",
-          `requestId ${requestId} already recorded a different decision`,
-        );
-      }
-      return prospect;
-    }
-    if (prospect.approval === args.approval) {
-      // Already decided the same way — a deliberate no-op, not a new event.
-      return prospect;
-    }
 
-    const now = Date.now();
-    const rejected = args.approval === "rejected";
-    await ctx.db.patch("prospects", prospect._id, {
-      approval: args.approval,
-      approvedBy: "user",
-      updatedAt: now,
-      ...(reason !== undefined ? { stageReason: reason } : {}),
-      // A rejected lead leaves the pipeline and stops being due for work.
-      ...(rejected ? { stage: "rejected" as const, nextActionAt: undefined } : {}),
-    });
-    await appendLeadEvent(ctx, {
-      workspaceId: prospect.workspaceId,
-      prospectId: prospect._id,
-      kind: "approval_changed",
-      summary: rejected ? "Lead rejected" : "Lead approved for outreach",
-      operationKey,
-      actor: { source: "human", identityKey },
-      ...(rejected && prospect.stage !== "rejected"
-        ? { fromStage: prospect.stage, toStage: "rejected" as const }
-        : {}),
-      details: {
-        fromApproval: prospect.approval,
-        toApproval: args.approval,
-        approvalActor: "user",
+    let decided = 0;
+    let unchanged = 0;
+    for (const prospectId of new Set(args.prospectIds)) {
+      const applied = await decideOne(ctx, {
+        workspaceId: args.workspaceId,
+        prospectId,
+        approval: args.approval,
+        identityKey,
+        requestId,
         ...(reason !== undefined ? { reason } : {}),
-      },
-    });
-    return reread(ctx, prospect._id);
+      });
+      if (applied) {
+        decided += 1;
+      } else {
+        unchanged += 1;
+      }
+    }
+    return { decided, unchanged };
   },
 });
 
