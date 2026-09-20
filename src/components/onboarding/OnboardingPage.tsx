@@ -296,19 +296,9 @@ function AgentFlow({ workspaceId }: { workspaceId: Id<"workspaces"> }) {
     return <Navigate replace to="/dashboard" />
   }
 
+  // Every step but `done` has a screen, and the registry's type says so — a
+  // step added without one fails the build rather than reaching a user.
   const entry = ONBOARDING_STEP_REGISTRY[agent.onboardingStep]
-  if (entry === undefined) {
-    return (
-      <SetupFrame>
-        <ErrorState
-          description="This part of setup isn't available in your version of the app yet. Reload to pick up the latest one."
-          onRetry={() => window.location.reload()}
-          retryLabel="Reload"
-          title="We can't open this step"
-        />
-      </SetupFrame>
-    )
-  }
 
   const move = async (step: OnboardingStep) => {
     setMoving(true)

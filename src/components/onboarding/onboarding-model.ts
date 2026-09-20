@@ -20,6 +20,9 @@ import {
   OutreachGoalsStep,
   OutreachInboxStep,
 } from "@/components/onboarding/steps/outreach/OutreachSteps"
+import { KeywordsStep } from "@/components/onboarding/steps/signals/KeywordsStep"
+import { ReviewStep } from "@/components/onboarding/steps/signals/ReviewStep"
+import { StrategiesStep } from "@/components/onboarding/steps/signals/StrategiesStep"
 
 /* ------------------------------------------------------------------ */
 /* Where a step sits in the four dots                                   */
@@ -63,14 +66,17 @@ export type OnboardingStepEntry = {
 }
 
 /**
- * The screens that exist today.
+ * Every screen in setup.
  *
- * Deliberately PARTIAL: dots 2, 3 and 4 are separate tasks, and an
- * unregistered step renders the shared error state rather than a screen that
- * pretends to work. It becomes total when the last dot lands.
+ * TOTAL on purpose, now that the last dot has landed: the type is every
+ * `OnboardingStep` except `done`, which is not a screen but the state the
+ * `/onboarding` guard redirects away from. Adding a step to
+ * `ONBOARDING_STEPS` without a screen for it now fails the build, which is
+ * the only moment anyone would notice.
  */
-export const ONBOARDING_STEP_REGISTRY: Partial<
-  Record<OnboardingStep, OnboardingStepEntry>
+export const ONBOARDING_STEP_REGISTRY: Record<
+  Exclude<OnboardingStep, "done">,
+  OnboardingStepEntry
 > = {
   company: { dot: 1, stepInDot: 1, stepsInDot: 1, Component: CompanyStep },
   icp_job_titles: {
@@ -102,6 +108,24 @@ export const ONBOARDING_STEP_REGISTRY: Partial<
     stepInDot: 2,
     stepsInDot: 2,
     Component: OutreachGoalsStep,
+  },
+  signals_strategies: {
+    dot: 4,
+    stepInDot: 1,
+    stepsInDot: 3,
+    Component: StrategiesStep,
+  },
+  signals_keywords: {
+    dot: 4,
+    stepInDot: 2,
+    stepsInDot: 3,
+    Component: KeywordsStep,
+  },
+  signals_review: {
+    dot: 4,
+    stepInDot: 3,
+    stepsInDot: 3,
+    Component: ReviewStep,
   },
 }
 
