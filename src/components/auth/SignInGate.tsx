@@ -2,7 +2,7 @@ import { useUser } from "@hexclave/react"
 import { Navigate, useNavigate, useSearch } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { SignInForm } from "@/components/auth/SignInForm"
-import { Spinner } from "@/components/ui/spinner"
+import { SignInSkeleton } from "@/components/auth/SignInSkeleton"
 
 export function SignInGate() {
   const user = useUser()
@@ -23,9 +23,9 @@ export function SignInGate() {
     // there to setup when onboarding is not finished, so this is one
     // destination rather than two.
     return after_auth_return_to === undefined ? (
-      <Navigate to="/dashboard" replace />
+      <Navigate to="/overview" replace />
     ) : (
-      <Spinner className="mx-auto" />
+      <SignInSkeleton label="Taking you back" />
     )
   }
 

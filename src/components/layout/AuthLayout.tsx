@@ -33,7 +33,7 @@ function AuthPanel() {
         alt=""
         className="absolute inset-0 size-full object-cover object-right-bottom"
         loading="eager"
-        src="/marketing/hero-landscape.png"
+        src="/marketing/backgrounds/forest-peach.webp"
       />
       <div
         aria-hidden="true"

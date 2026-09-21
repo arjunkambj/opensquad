@@ -17,7 +17,7 @@ export const Route = createFileRoute("/sign-in")({
   // `<Link to="/sign-in">` demand a `search` prop.
   validateSearch: (search): { after_auth_return_to?: string } => ({
     // Hexclave appends this when it bounces a signed-out user here, e.g.
-    // `/sign-in?after_auth_return_to=/dashboard`. An already-signed-in visitor
+    // `/sign-in?after_auth_return_to=/overview`. An already-signed-in visitor
     // should honor it rather than land on the default destination.
     after_auth_return_to: internalPath(search.after_auth_return_to),
   }),

@@ -202,21 +202,21 @@ export function SignInForm() {
 
       {step === "email" ? (
         <div className="flex flex-col gap-4">
-          <Button
-            className="border-border bg-background text-foreground shadow-button-lift hover:bg-background hover:shadow-button-lift-hover"
-            type="button"
-            variant="outline"
-            size="lg"
-            disabled={isGoogleLoading}
-            onClick={() => void handleGoogleSignIn()}
-          >
-            {isGoogleLoading ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <GoogleMark className="size-4" data-icon="inline-start" />
-            )}
-            {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
-          </Button>
+          <div className="flex flex-col rounded-2xl shadow-button-lift">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isGoogleLoading}
+              onClick={() => void handleGoogleSignIn()}
+            >
+              {isGoogleLoading ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <GoogleMark className="size-4" data-icon="inline-start" />
+              )}
+              {isGoogleLoading ? "Redirecting..." : "Continue with Google"}
+            </Button>
+          </div>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
@@ -231,7 +231,7 @@ export function SignInForm() {
           >
             <TabsList
               aria-label="Email sign-in method"
-              className="w-full group-data-horizontal/tabs:h-9"
+              className="w-full"
             >
               <TabsTrigger value="code">Email code</TabsTrigger>
               <TabsTrigger value="password">Password</TabsTrigger>
@@ -250,7 +250,7 @@ export function SignInForm() {
             }}
           >
             <div className="flex flex-col gap-3">
-              <InputGroup className="h-9">
+              <InputGroup>
                 <InputGroupAddon>
                   <HugeiconsIcon icon={Mail01Icon} strokeWidth={2} />
                 </InputGroupAddon>
@@ -266,7 +266,7 @@ export function SignInForm() {
               </InputGroup>
 
               {authMethod === "password" ? (
-                <InputGroup className="h-9">
+                <InputGroup>
                   <InputGroupAddon>
                     <HugeiconsIcon icon={LockPasswordIcon} strokeWidth={2} />
                   </InputGroupAddon>
@@ -313,7 +313,6 @@ export function SignInForm() {
 
             <Button
               type="submit"
-              size="lg"
               disabled={isSubmitting}
               className="w-full"
             >
@@ -329,7 +328,7 @@ export function SignInForm() {
           </form>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-5 pt-1">
+        <div className="flex flex-col items-center gap-4">
           <p className="text-center text-sm font-light text-muted-foreground">
             Enter the 6-character code from your email
           </p>
@@ -347,10 +346,17 @@ export function SignInForm() {
             </InputOTPGroup>
           </InputOTP>
           {isVerifying ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner className="size-3.5" />
+            <p
+              aria-live="polite"
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              role="status"
+            >
+              <span
+                aria-hidden="true"
+                className="size-1.5 animate-pulse rounded-full bg-primary"
+              />
               Verifying...
-            </div>
+            </p>
           ) : null}
           <div className="flex flex-col items-center gap-2 text-sm">
             <p className="text-xs text-muted-foreground">
@@ -365,7 +371,7 @@ export function SignInForm() {
                 onClick={() => void handleSendMagicLink("resend")}
                 className="inline-flex items-center gap-1.5 font-medium disabled:opacity-60"
               >
-                {isEmailLoading ? <Spinner className="size-3.5" /> : null}
+                {isEmailLoading ? <Spinner data-icon="inline-start" /> : null}
                 {isEmailLoading ? "Sending..." : "Resend code"}
               </button>
               <span className="text-muted-foreground">|</span>
