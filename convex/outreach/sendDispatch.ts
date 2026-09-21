@@ -247,7 +247,17 @@ export const beginDispatch = internalMutation({
       payloadHash: attempt.payloadHash,
       payload: {
         to: draft.normalizedRecipient,
-        ...(draft.subject.length > 0 ? { subject: draft.subject } : {}),
+        // NO `subject` ON A REPLY. The recorded provider contract
+        // (`plan/spikes.md`, "Sending") declares the reply body as
+        // `Omit<SendMessageRequest, "subject">` — the reply endpoint keeps the
+        // thread's own subject and does not take one. Sending an undeclared
+        // field risks a 400 from a strict validator on the one endpoint this
+        // application has never exercised live, and it buys nothing. Both the
+        // dispatch and the reconcile replay build the payload the same way, so
+        // a replay stays byte-identical and the idempotency key still matches.
+        ...(attempt.endpointOperation !== "reply" && draft.subject.length > 0
+          ? { subject: draft.subject }
+          : {}),
         text: draft.body,
       },
     };

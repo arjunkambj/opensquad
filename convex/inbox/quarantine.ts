@@ -254,6 +254,20 @@ export const replayForInbox = internalMutation({
         q.eq("inboxRef", inboxRef).eq("state", "quarantined"),
       )
       .take(QUARANTINE_REPLAY_LIMIT);
+    // Rows are keyed on the reference the EVENT carried, and inbox references
+    // are addresses: one held under a different case names the same inbox and
+    // would otherwise sit `quarantined` for good, because this range is exact.
+    const normalized = inboxRef.trim().toLowerCase();
+    if (normalized !== inboxRef && rows.length < QUARANTINE_REPLAY_LIMIT) {
+      rows.push(
+        ...(await ctx.db
+          .query("quarantinedEmailEvents")
+          .withIndex("by_inboxRef_and_state", (q) =>
+            q.eq("inboxRef", normalized).eq("state", "quarantined"),
+          )
+          .take(QUARANTINE_REPLAY_LIMIT - rows.length)),
+      );
+    }
 
     let released = 0;
     let held = 0;

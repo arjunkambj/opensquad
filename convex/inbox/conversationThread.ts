@@ -8,6 +8,7 @@ import { requireOrgMember } from "../lib/auth";
 import {
   boundedLimit,
   PROVIDER_REF_MAX_LENGTH,
+  sameInboxRef,
   THREAD_BODY_MAX_LENGTH,
 } from "../lib/validators";
 import { getConversationInOrg } from "../outreach/draftsModel";
@@ -66,7 +67,11 @@ export const thread = query({
         { threadId: conversation.providerThreadRef },
       )) as Array<Record<string, unknown>>;
       for (const row of inbound) {
-        if (row.inboxId !== conversation.inboxRef) {
+        // `sameInboxRef`, not `!==`: provider inbox ids are addresses, and the
+        // reply path already reads its stored message through that comparison
+        // (`repliesRun.readStoredMessage`). An exact match here would classify
+        // a reply and then fail to render it in its own thread.
+        if (!sameInboxRef(row.inboxId, conversation.inboxRef)) {
           continue;
         }
         const messageRef = clip(row.messageId, PROVIDER_REF_MAX_LENGTH);

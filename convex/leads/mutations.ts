@@ -31,10 +31,10 @@ import {
   LEAD_EVENT_NOTE_MAX_LENGTH,
   MAX_LIST_LIMIT,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
-  sameInboxRef,
   vLeadApproval,
   vLeadStage,
 } from "../lib/validators";
+import { isOwnMailbox } from "../inbox/mailboxIdentity";
 import { decideOne } from "./approval";
 import {
   appendLeadEvent,
@@ -344,16 +344,17 @@ export const markReplied = internalMutation({
       return { applied: false };
     }
     // OUR OWN ECHO IS NOT A REPLY. A verified inbound whose sender is the
-    // org's own inbox — a copy of our send landing back in the mailbox — would
-    // otherwise stamp `lastReplyAt`, clear `nextActionAt` and advance the lead
-    // to `replied`, which takes it out of outreach selection for good on the
-    // strength of a message we wrote. Inbox refs ARE addresses, so the
-    // comparison is case-insensitive; it is only made for the message this
-    // call is about, because `lastInboundFrom` describes that one alone.
+    // org's own mailbox — a copy of our send landing back in the mailbox —
+    // would otherwise stamp `lastReplyAt`, clear `nextActionAt` and advance
+    // the lead to `replied`, which takes it out of outreach selection for good
+    // on the strength of a message we wrote. `isOwnMailbox` compares the
+    // stored ADDRESS and the stored inbox id, both case-insensitively; the
+    // check is only made for the message this call is about, because
+    // `lastInboundFrom` describes that one alone.
     const org = await ctx.db.get("orgs", conversation.orgId);
     if (
       conversation.lastInboundMessageRef === args.messageRef &&
-      sameInboxRef(conversation.lastInboundFrom, org?.inboxRef)
+      isOwnMailbox(org, conversation.lastInboundFrom)
     ) {
       return { applied: false };
     }

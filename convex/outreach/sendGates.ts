@@ -12,6 +12,7 @@ import {
   SENDING_AGENT_MODES,
   UNRESOLVED_ATTEMPT_STATES,
 } from "../lib/validators";
+import { carriesOptOutLine } from "./draftsModel";
 import { matchSuppression } from "./suppressions";
 import { v } from "convex/values";
 
@@ -49,6 +50,8 @@ export const SEND_BLOCK_CODES = [
   /** §4.3 (P19): the draft offers a booking proposal whose linked booking is
    *  no longer `proposed` at the recorded version — the offer changed. */
   "booking_not_current",
+  /** PLAN §12: the stored body carries no opt-out line. */
+  "missing_opt_out",
 ] as const;
 
 export type SendBlockCode = (typeof SEND_BLOCK_CODES)[number];
@@ -172,8 +175,23 @@ export async function evaluateSendGates(
       `organization automation is ${org.automationState}`,
     );
   }
-  // Sourcing-only and paused agents never put mail on the wire (PLAN §9.3).
-  if (agent !== null && !SENDING_AGENT_MODES.includes(agent.mode)) {
+  // Sourcing-only and paused agents never put mail on the wire (PLAN §9.3) —
+  // AND NEITHER DOES A THREAD WITH NO AGENT AT ALL.
+  //
+  // `agent !== null &&` skipped this check and the revision check below
+  // whenever the conversation carried no `agentId`, which is the one case the
+  // draft writer prepares for: `installRevision` stores `agentRevision: 0`
+  // precisely "so it can never pass a revision check". Both gates then passed,
+  // so an unassociated thread — the unassigned queue, a proposal drafted on a
+  // thread never bound to an agent — was sendable with nothing standing
+  // behind it. Failing closed is what the two files together always intended.
+  if (agent === null) {
+    return block(
+      "agent_not_sending",
+      "this conversation has no agent, so no sending mode authorizes it",
+    );
+  }
+  if (!SENDING_AGENT_MODES.includes(agent.mode)) {
     return block("agent_not_sending", `agent mode is ${agent.mode}`);
   }
 
@@ -209,7 +227,7 @@ export async function evaluateSendGates(
   // Revision fencing (PLAN §9.1): instructions, tone, goal, ICP or mode
   // changed after this text was written, so the text is no longer what the
   // agent would say.
-  if (agent !== null && agent.revision !== draft.agentRevision) {
+  if (agent.revision !== draft.agentRevision) {
     return block(
       "agent_revision_changed",
       `agent is at revision ${agent.revision}; draft was written against ${draft.agentRevision}`,
@@ -313,6 +331,20 @@ export async function evaluateSendGates(
     return block(
       "inbox_mismatch",
       "draft inbox no longer matches the org/conversation inbox",
+    );
+  }
+
+  // --- the opt-out line (PLAN §12) ---------------------------------------
+  // `installRevision` puts it on every draft row it writes, so this can only
+  // fire for a row written before that was true. It is a gate rather than a
+  // repair because dispatch sends `draft.body` VERBATIM and the approval binds
+  // `payloadHash`: changing the body here would send something nobody approved
+  // and break the hash that proves what they did. Refusing is the honest
+  // answer, and one edit (which re-installs the line) clears it.
+  if (!carriesOptOutLine(draft.body)) {
+    return block(
+      "missing_opt_out",
+      "this draft carries no opt-out line — edit it once and it will be added",
     );
   }
 

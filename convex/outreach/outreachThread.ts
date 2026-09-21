@@ -106,38 +106,61 @@ export async function resolveConversation(
  * Read from acknowledged send attempts rather than from the draft history: a
  * draft is a proposal, and a superseded or never-approved one was never seen
  * by the recipient. The last acknowledged message is also what a follow-up
- * threads onto, so the provider keeps it in one conversation.
+ * threads onto, so the provider keeps it in one conversation — and the FIRST
+ * one carries the subject the whole thread has worn since it started.
  */
 export async function sentThread(
   ctx: MutationCtx,
   conversation: Doc<"conversations">,
 ): Promise<SentThread> {
-  const attempts = await ctx.db
+  // RANGED ON `acknowledged`, NOT ON THE WHOLE HISTORY.
+  //
+  // Reading the OLDEST page of every attempt and filtering it here meant
+  // cancelled retries, parked reservations and definitively-failed rows
+  // consumed the window: in a thread with any churn the page ran out before
+  // the recent sends, so the follow-up threaded onto an OLD message (or lost
+  // the parent entirely and started a new thread), and the prompt was handed a
+  // stale transcript. `by_conversationId_and_state` answers the question the
+  // function is actually asking — only an acknowledged send was ever seen by
+  // the recipient — so the page cannot be filled by rows that do not count.
+  //
+  // Two reads, because two different ends of the thread matter: the NEWEST
+  // sends are the transcript and the parent to reply to, and the OLDEST one
+  // carries the subject the thread has had since it started.
+  const recent = await ctx.db
     .query("sendAttempts")
-    .withIndex("by_conversationId_and_createdAt", (q) =>
-      q.eq("conversationId", conversation._id),
+    .withIndex("by_conversationId_and_state", (q) =>
+      q.eq("conversationId", conversation._id).eq("state", "acknowledged"),
     )
-    .order("asc")
-    .take(THREAD_MESSAGE_MAX * 4);
+    .order("desc")
+    .take(THREAD_MESSAGE_MAX);
   const messages: { subject: string; body: string }[] = [];
   let lastMessageRef: string | undefined;
-  for (const attempt of attempts) {
-    if (attempt.state !== "acknowledged") {
-      continue;
-    }
-    const draft = await ctx.db.get("drafts", attempt.draftId);
-    if (draft === null) {
-      continue;
-    }
-    messages.push({ subject: draft.subject, body: draft.body });
-    if (attempt.providerMessageRef !== undefined) {
+  // `recent` is newest first: the first row carrying a provider reference is
+  // the message a reply must thread onto.
+  for (const attempt of recent) {
+    if (lastMessageRef === undefined && attempt.providerMessageRef !== undefined) {
       lastMessageRef = attempt.providerMessageRef;
     }
+    const draft = await ctx.db.get("drafts", attempt.draftId);
+    if (draft !== null) {
+      messages.push({ subject: draft.subject, body: draft.body });
+    }
   }
-  const trimmed = messages.slice(-THREAD_MESSAGE_MAX);
+  messages.reverse();
+  const first = await ctx.db
+    .query("sendAttempts")
+    .withIndex("by_conversationId_and_state", (q) =>
+      q.eq("conversationId", conversation._id).eq("state", "acknowledged"),
+    )
+    .order("asc")
+    .first();
+  const opening =
+    first === null ? null : await ctx.db.get("drafts", first.draftId);
+  const subject = opening?.subject ?? messages[0]?.subject;
   return {
-    messages: trimmed,
-    ...(messages[0] !== undefined ? { subject: messages[0].subject } : {}),
+    messages,
+    ...(subject !== undefined ? { subject } : {}),
     ...(lastMessageRef !== undefined ? { lastMessageRef } : {}),
   };
 }

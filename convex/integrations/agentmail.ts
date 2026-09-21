@@ -141,7 +141,10 @@ async function noteUnauthorized(
   orgId: Id<"orgs">,
   result: SendAttemptResult,
 ): Promise<void> {
-  if (result.outcome !== "rejected" || result.httpStatus !== 401) {
+  // A 401 is now classified `retryable` rather than `rejected` — the request
+  // was not processed and the same email may go out once the key is fixed —
+  // so this reads the STATUS, which is the fact it was always about.
+  if (result.outcome === "accepted" || result.httpStatus !== 401) {
     return;
   }
   await ctx.runMutation(internal.inbox.connectionState.markInboxKeyInvalid, {
@@ -206,6 +209,23 @@ const vSendAttemptResult = v.union(
     outcome: v.literal("rejected"),
     httpStatus: v.number(),
     providerError: v.string(),
+  }),
+  v.object({
+    // The provider did NOT process this request, and saying so again later
+    // may well work: rate limiting, and a key that was invalid at this
+    // instant. Distinct from `rejected`, which forecloses the draft forever,
+    // and from `uncertain`, which blocks the conversation until a human
+    // reconciles it (PLAN §9.1: 429/5xx retried with capped back-off, an
+    // invalid key pauses the agent with nothing dropped).
+    outcome: v.literal("retryable"),
+    reason: v.union(
+      v.literal("rate_limited"),
+      v.literal("unauthorized"),
+    ),
+    httpStatus: v.number(),
+    /** Honoured from `Retry-After` when the provider sent one, in ms. */
+    retryAfterMs: v.optional(v.number()),
+    detail: v.string(),
   }),
   v.object({
     outcome: v.literal("uncertain"),
@@ -293,12 +313,21 @@ async function performSingleSendRequest(args: {
     // Aborted/timed-out or network-failed request: it may or may not have
     // reached AgentMail. Never resend from here.
     const isTimeout = controller.signal.aborted;
+    // The thrown error's own text is logged, never returned: it names the
+    // provider's host and can carry its wording, and this value is stored on
+    // the attempt and shown in the activity feed.
+    console.info("agentmail.send transport failure", {
+      reason: isTimeout ? "timeout" : "transport_error",
+      detail:
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
     return {
       outcome: "uncertain",
       reason: isTimeout ? "timeout" : "transport_error",
       httpStatus: response?.status,
-      detail:
-        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      detail: isTimeout
+        ? "The mail provider did not answer in time, so it is not known whether this email was sent."
+        : "We could not reach the mail provider, so it is not known whether this email was sent.",
     };
   } finally {
     clearTimeout(timer);
@@ -310,11 +339,12 @@ async function performSingleSendRequest(args: {
     // for this key — an earlier request arrived. What it holds and whether it
     // delivered is unknown to us here: uncertain, investigate via provider
     // reads; never resolve by minting a fresh key.
+    logProviderRefusal(response.status, responseText);
     return {
       outcome: "uncertain",
       reason: "idempotency_conflict",
       httpStatus: response.status,
-      detail: truncateResponseBody(responseText),
+      detail: sendFailureMessage(response.status),
     };
   }
 
@@ -322,20 +352,47 @@ async function performSingleSendRequest(args: {
     // A 5xx is not a definitive refusal — the provider may have accepted the
     // message before failing. Per architecture §8.8 this is never a
     // "definitively safe retry"; it is uncertain.
+    logProviderRefusal(response.status, responseText);
     return {
       outcome: "uncertain",
       reason: "http_5xx",
       httpStatus: response.status,
-      detail: truncateResponseBody(responseText),
+      detail: sendFailureMessage(response.status),
+    };
+  }
+
+  if (response.status === 429 || response.status === 401) {
+    // NOT TERMINAL, AND NOT UNCERTAIN.
+    //
+    // A 429 means the provider declined to process this request at all, and a
+    // 401 means it declined the credentials — in both cases no mail was sent,
+    // and in both cases the same request may succeed later (the rate window
+    // moves; a rotating key is stored seconds afterwards). Folding them into
+    // "definitively refused" recorded the attempt `definitively_failed`, and
+    // `sendReserve` then refuses every further attempt on that draft revision
+    // — so an approved email was lost to a burst or to a key rotation and
+    // could only be sent by editing the draft. PLAN §9.1 says the opposite:
+    // 429/5xx are retried with capped back-off, and an invalid key pauses the
+    // agent with NOTHING dropped.
+    logProviderRefusal(response.status, responseText);
+    return {
+      outcome: "retryable",
+      reason: response.status === 429 ? "rate_limited" : "unauthorized",
+      httpStatus: response.status,
+      ...(response.status === 429
+        ? retryAfterMs(response.headers.get("retry-after"))
+        : {}),
+      detail: sendFailureMessage(response.status),
     };
   }
 
   if (!response.ok) {
     // Remaining 4xx: the provider definitively refused this request.
+    logProviderRefusal(response.status, responseText);
     return {
       outcome: "rejected",
       httpStatus: response.status,
-      providerError: truncateResponseBody(responseText),
+      providerError: sendFailureMessage(response.status),
     };
   }
 
@@ -349,7 +406,8 @@ async function performSingleSendRequest(args: {
       outcome: "uncertain",
       reason: "malformed_response",
       httpStatus: response.status,
-      detail: "2xx response body was not valid JSON",
+      detail:
+        "The mail provider's answer could not be read, so it is not known whether this email was sent.",
     };
   }
   if (!isSendAcceptedBody(body)) {
@@ -357,7 +415,8 @@ async function performSingleSendRequest(args: {
       outcome: "uncertain",
       reason: "malformed_response",
       httpStatus: response.status,
-      detail: "2xx response lacked a non-empty message_id/thread_id",
+      detail:
+        "The mail provider accepted this email without returning its identifiers, so it is not known whether it was sent.",
     };
   }
   return {
@@ -381,11 +440,84 @@ function isSendAcceptedBody(
   );
 }
 
-function truncateResponseBody(text: string): string {
-  return text.length > PROVIDER_ERROR_BODY_LIMIT
-    ? `${text.slice(0, PROVIDER_ERROR_BODY_LIMIT)}…[truncated]`
-    : text;
+/**
+ * The provider's own words, to the SERVER LOG and nowhere else.
+ *
+ * PLAN §6 and `convex/README.md`: provider error text never leaves
+ * `integrations/`. It used to be returned as `providerError`/`detail`, stored
+ * verbatim on `sendAttempts.error.message` and copied into
+ * `activityEvents.summary` — which `activity/queries.ts` returns to the
+ * client, so the provider's name and wording reached the screen. The status is
+ * mapped to OUR sentence instead, and the body is logged here for an operator.
+ */
+function logProviderRefusal(status: number, text: string): void {
+  console.info("agentmail.send refused", {
+    status,
+    body:
+      text.length > PROVIDER_ERROR_BODY_LIMIT
+        ? `${text.slice(0, PROVIDER_ERROR_BODY_LIMIT)}…[truncated]`
+        : text,
+  });
 }
+
+/**
+ * OUR sentence for a provider status, white-label and safe to store.
+ *
+ * Deliberately says what happened to the EMAIL, because that is what the
+ * activity feed and the thread are about — and never names the provider.
+ */
+function sendFailureMessage(status: number): string {
+  if (status === 401) {
+    // Classified `retryable`: the key may be mid-rotation, and reconnecting
+    // unpauses the organization, at which point this email goes out.
+    return "The mail key was refused, so this email was not sent. Reconnect the inbox and it will be retried.";
+  }
+  if (status === 403) {
+    // A definitive refusal, not a retryable one: the key is real and simply
+    // may not use this inbox, which no amount of waiting changes.
+    return "The connected mail key is not allowed to send from this inbox, so this email was not sent.";
+  }
+  if (status === 404) {
+    return "The sending inbox or the message being replied to no longer exists, so this email was not sent.";
+  }
+  if (status === 409) {
+    return "An earlier attempt to send this email already reached the mail provider; what it did with it is being checked.";
+  }
+  if (status === 422 || status === 400) {
+    return "The mail provider refused this email's contents. Edit the draft and try again.";
+  }
+  if (status === 429) {
+    return "The mail provider is rate limiting this account, so this email was not sent yet. It will be retried.";
+  }
+  if (status >= 500) {
+    return "The mail provider had a problem, so it is not known whether this email was sent.";
+  }
+  return "The mail provider refused this email.";
+}
+
+/**
+ * `Retry-After` as milliseconds, honoured when the provider sends one.
+ *
+ * Both documented forms are accepted (delay-seconds and an HTTP date), and an
+ * absurd value is clamped rather than trusted: a header saying "come back in a
+ * week" must not park an approved email for a week.
+ */
+function retryAfterMs(header: string | null): { retryAfterMs?: number } {
+  if (header === null) {
+    return {};
+  }
+  const seconds = Number(header.trim());
+  const ms = Number.isFinite(seconds)
+    ? seconds * 1000
+    : Date.parse(header) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return {};
+  }
+  return { retryAfterMs: Math.min(ms, RETRY_AFTER_MAX_MS) };
+}
+
+/** The longest back-off a provider header may ask for. */
+const RETRY_AFTER_MAX_MS = 60 * 60 * 1000;
 
 function stripUndefined(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;
@@ -632,6 +764,81 @@ export const lookupProviderMessage = internalAction({
 });
 
 /**
+ * The full inbound message, fetched from the provider with the ORG's own key.
+ *
+ * WHY THE WEBHOOK PAYLOAD IS NOT ENOUGH. The provider documents that a payload
+ * over 1 MB omits `text` and `html` entirely and tells integrators to fetch
+ * the message after receiving the webhook; the REST `Message` also carries
+ * `headers`, which the delivery envelope is not guaranteed to. So a large
+ * reply used to reach classification with an empty body
+ * (`failed:no_message_text`), an HTML-only reply the same way, an unsubscribe
+ * phrase in an omitted body was never seen, and every header-based bounce and
+ * auto-reply rule quietly fell back to phrase matching.
+ *
+ * Read-only and free: the provider meters sends, not reads (PLAN §6), so this
+ * is NOT a paid call and the free rule path stays free — an unsubscribe is
+ * still honoured with the org at zero credits and the kill switch on.
+ *
+ * Returns OUR vocabulary only: a bounded projection or a mapped failure code.
+ * Provider wording never leaves this module (PLAN §6, `convex/README.md`).
+ */
+export const fetchInboundMessage = internalAction({
+  args: {
+    orgId: v.id("orgs"),
+    inboxId: v.string(),
+    messageId: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      ok: v.literal(true),
+      message: v.object({
+        subject: v.optional(v.string()),
+        from: v.optional(v.string()),
+        preview: v.optional(v.string()),
+        text: v.optional(v.string()),
+        extractedText: v.optional(v.string()),
+        html: v.optional(v.string()),
+        extractedHtml: v.optional(v.string()),
+        headers: v.optional(v.record(v.string(), v.string())),
+      }),
+    }),
+    v.object({ ok: v.literal(false), code: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    let apiKey: string;
+    try {
+      apiKey = await orgApiKey(ctx, args.orgId);
+    } catch {
+      // No key, or one the provider already refused. That is a connection
+      // fact the banner already carries; here it is simply "no body to read".
+      return { ok: false as const, code: "no_key" };
+    }
+    const result = await getMessage(apiKey, args.inboxId, args.messageId);
+    if (!result.ok) {
+      return { ok: false as const, code: result.code };
+    }
+    const message = result.value;
+    return {
+      ok: true as const,
+      message: {
+        ...(message.subject !== undefined ? { subject: message.subject } : {}),
+        ...(message.from !== undefined ? { from: message.from } : {}),
+        ...(message.preview !== undefined ? { preview: message.preview } : {}),
+        ...(message.text !== undefined ? { text: message.text } : {}),
+        ...(message.extractedText !== undefined
+          ? { extractedText: message.extractedText }
+          : {}),
+        ...(message.html !== undefined ? { html: message.html } : {}),
+        ...(message.extractedHtml !== undefined
+          ? { extractedHtml: message.extractedHtml }
+          : {}),
+        ...(message.headers !== undefined ? { headers: message.headers } : {}),
+      },
+    };
+  },
+});
+
+/**
  * DEV-ONLY diagnostic reader for the live P05 probe. Projects the
  * component's inbound-message mirror and inbox cache down to provider IDs so
  * the probe can verify webhook ingest/dedupe without exposing addresses or
@@ -699,6 +906,37 @@ function extractEventIndexFields(event: unknown): {
   return extractEventIds(event);
 }
 
+/**
+ * The provider's own timestamp for an event, read from the sub-object that
+ * carries it.
+ *
+ * One payload key per event type (`plan/spikes.md` "Webhook delivery
+ * envelope"), and the envelope itself carries no top-level `timestamp` — so
+ * the keys are tried in the same order `extractEventIds` tries them, and the
+ * envelope is read only as a last resort in case a future event type puts it
+ * there.
+ */
+function eventPayloadTimestamp(
+  event: Record<string, unknown> | null,
+): number | undefined {
+  for (const key of [
+    "message",
+    "send",
+    "delivery",
+    "bounce",
+    "complaint",
+    "reject",
+    "open",
+  ]) {
+    const payload = asRecord(event?.[key]);
+    const timestamp = numberField(payload, "timestamp");
+    if (timestamp !== undefined) {
+      return timestamp;
+    }
+  }
+  return numberField(event, "timestamp");
+}
+
 /* ------------------------------------------------------------------ */
 /* Callback totality helpers                                           */
 /* ------------------------------------------------------------------ */
@@ -738,15 +976,124 @@ function providerRef(
  * A key for an envelope that carried no identifier of its own — a digest of
  * the envelope itself, so a provider resend of the same payload dedupes onto
  * the row it already wrote. Never throws (the rule at the top of this
- * section): a payload that cannot be serialized degrades to a clock read,
- * which records the event at the cost of deduping it.
+ * section).
+ *
+ * THE FALLBACK IS DETERMINISTIC TOO. A clock read here would mint a DIFFERENT
+ * key for each delivery of one event, which is precisely the duplication this
+ * digest exists to prevent: the quarantine dedupes on `providerEventId`, so
+ * two deliveries would leave two rows and the scheme would silently stop
+ * working exactly when the payload is at its strangest. When canonical JSON or
+ * the hash refuses the value, the seed falls back to a bounded, order-stable
+ * description of the envelope's own shape — the same value for the same
+ * payload, every time — matching the route-side twin in `inboundRoute.ts`,
+ * which seeds from the `svix-id` or a digest of the raw body and never from
+ * the clock.
  */
 async function envelopeDigest(event: unknown): Promise<string> {
   try {
     return await sha256Hex(canonicalJson(event));
   } catch {
-    return `at-${Date.now()}`;
+    // Nothing here may throw, so every step is guarded in turn.
+    try {
+      return await sha256Hex(describeEnvelope(event));
+    } catch {
+      return `shape:${describeEnvelope(event).slice(0, 100)}`;
+    }
   }
+}
+
+/** Longest shape description `describeEnvelope` produces. */
+const ENVELOPE_SHAPE_MAX_LENGTH = 400;
+
+/**
+ * A stable, bounded description of a value `canonicalJson` could not
+ * serialize: its type, and — for an object — its own keys in sorted order with
+ * each value's type. It identifies the delivery well enough to dedupe a
+ * resend, and it is a pure function of the payload, never of the clock.
+ */
+function describeEnvelope(event: unknown): string {
+  const describe = (value: unknown, depth: number): string => {
+    if (value === null) return "null";
+    if (Array.isArray(value)) {
+      return depth === 0
+        ? `array(${value.length})`
+        : `[${value.map((entry) => describe(entry, depth - 1)).join(",")}]`;
+    }
+    if (typeof value !== "object") {
+      return typeof value === "string"
+        ? `string(${value.length})`
+        : String(typeof value);
+    }
+    if (depth === 0) {
+      return "object";
+    }
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(
+        (key) =>
+          `${key}:${describe((value as Record<string, unknown>)[key], depth - 1)}`,
+      )
+      .join(",")}}`;
+  };
+  return describe(event, 3).slice(0, ENVELOPE_SHAPE_MAX_LENGTH);
+}
+
+/**
+ * Hold a verified event whose envelope named no inbox, no message or no event
+ * id — the shared body of both callbacks' "we could not key this" branch.
+ *
+ * `providerEventId` is the quarantine's dedupe key, so a minted one has to be
+ * unique PER EVENT: seeded from the message or the inbox — values every event
+ * for that mailbox shares — distinct events would collide on one row and every
+ * one after the first would be dropped. A digest of the envelope is the only
+ * seed that identifies THIS delivery while still deduping a resend of it, and
+ * it is the same key the route-side twin mints (`inboundRoute.ts`).
+ *
+ * The row is evidence, not a replayable event: `quarantine.replayOne`
+ * recognises `event_unparseable` and the minted refs, and never replays them.
+ */
+async function quarantineUnparseableEvent(
+  ctx: MutationCtx,
+  args: {
+    /** Whatever the callback was handed — the seed for the minted keys. */
+    event: unknown;
+    eventId: string | undefined;
+    inboxRef: string | undefined;
+    messageRef: string | undefined;
+    threadRef?: string;
+    eventType: string | undefined;
+    providerTimestamp?: number;
+    note: string;
+  },
+): Promise<void> {
+  const seed =
+    args.eventId === undefined ? await envelopeDigest(args.event) : args.eventId;
+  // The message and inbox stand-ins are labels on the row rather than keys, so
+  // they may lean on whatever the envelope did carry.
+  const refSeed = args.messageRef ?? args.inboxRef ?? seed;
+  const inboxRef = args.inboxRef ?? syntheticRef("inbox", refSeed);
+  const messageRef = args.messageRef ?? syntheticRef("message", refSeed);
+  const eventType = args.eventType ?? "unknown";
+  await recordQuarantinedEvent(ctx, {
+    inboxRef,
+    providerEventId: args.eventId ?? syntheticRef("event", seed),
+    // The key states which half of the mail path the row belongs to, and
+    // `recordReceipt` derives `direction` from exactly this prefix.
+    applicationKey:
+      eventType === "message.received"
+        ? inboundApplicationKey(inboxRef, messageRef)
+        : outboundApplicationKey(messageRef, eventType),
+    providerMessageRef: messageRef,
+    ...(args.threadRef !== undefined
+      ? { providerThreadRef: args.threadRef }
+      : {}),
+    eventType,
+    reason: "event_unparseable",
+    ...(args.providerTimestamp !== undefined
+      ? { providerTimestamp: args.providerTimestamp }
+      : {}),
+    note: args.note,
+  });
 }
 
 /**
@@ -771,10 +1118,23 @@ async function resolveOrgByInbox(
   | { org: Doc<"orgs"> }
   | { org: null; reason: QuarantineReason }
 > {
-  const rows = await ctx.db
+  let rows = await ctx.db
     .query("orgs")
     .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
     .collect();
+  const normalized = inboxRef.trim().toLowerCase();
+  if (rows.length === 0 && normalized !== inboxRef) {
+    // Inbox references are ADDRESSES, and the provider may echo a different
+    // case than the connection stored (`sameInboxRef`, and the route's own
+    // binding). An index lookup is exact, so the normalized form is tried
+    // before the event is called unassigned — otherwise a difference in case
+    // quarantines a perfectly ordinary message under a reference no
+    // assignment matches, and nothing can ever replay it.
+    rows = await ctx.db
+      .query("orgs")
+      .withIndex("by_inboxRef", (q) => q.eq("inboxRef", normalized))
+      .collect();
+  }
   if (rows.length === 0) {
     console.info(`${context}: event for unassigned inbox`, { inboxRef });
     return { org: null, reason: "inbox_unassigned" };
@@ -833,7 +1193,15 @@ export const onEvent = internalMutation({
     if (eventType === "message.received") {
       return null;
     }
-    const payloadTimestamp = numberField(event, "timestamp");
+    // THE TIMESTAMP IS IN THE SUB-OBJECT, NOT THE ENVELOPE. `plan/spikes.md`
+    // records the delivery envelope as `{ type, event_type, event_id }` plus
+    // ONE payload key per event type (`send` / `delivery` / `bounce` /
+    // `complaint` / `reject`), and the provider's own `timestamp` lives inside
+    // that payload. Read from the envelope it was always `undefined`, so
+    // `applyReceiptToAttempt`'s "delivery facts advance only forward" guard
+    // was ordering by local arrival — which is exactly the order a re-delivery
+    // scrambles.
+    const payloadTimestamp = eventPayloadTimestamp(event);
     if (
       eventId === undefined ||
       eventType === undefined ||
@@ -856,26 +1224,13 @@ export const onEvent = internalMutation({
       // A digest of the envelope is the only seed that identifies THIS
       // delivery, and it still dedupes a provider resend of it onto the same
       // row — the same key the route-side twin mints (`inboundRoute.ts`).
-      const seed =
-        eventId === undefined ? await envelopeDigest(args.event) : eventId;
-      const eventRef = eventId ?? syntheticRef("event", seed);
-      // The message and inbox stand-ins are labels on the row rather than
-      // keys, so they may lean on whatever the envelope did carry.
-      const refSeed = messageRef ?? inboxRef ?? seed;
-      const quarantinedType = eventType ?? "unknown";
-      const quarantinedMessageRef =
-        messageRef ?? syntheticRef("message", refSeed);
-      await recordQuarantinedEvent(ctx, {
-        inboxRef: inboxRef ?? syntheticRef("inbox", refSeed),
-        providerEventId: eventRef,
-        applicationKey: outboundApplicationKey(
-          quarantinedMessageRef,
-          quarantinedType,
-        ),
-        providerMessageRef: quarantinedMessageRef,
-        ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
-        eventType: quarantinedType,
-        reason: "event_unparseable",
+      await quarantineUnparseableEvent(ctx, {
+        event: args.event,
+        eventId,
+        inboxRef,
+        messageRef,
+        ...(threadRef !== undefined ? { threadRef } : {}),
+        eventType,
         ...(payloadTimestamp !== undefined
           ? { providerTimestamp: payloadTimestamp }
           : {}),
@@ -966,24 +1321,79 @@ export const onMessageReceived = internalMutation({
   args: { message: v.any(), thread: v.optional(v.any()), eventId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    await recordInboundMessage(ctx, {
+      message: args.message,
+      eventId: args.eventId,
+    });
+    return null;
+  },
+});
+
+/**
+ * Record ONE verified inbound message and start its handling — the body both
+ * inbound paths share.
+ *
+ * The component's `message.received` callback is one caller. The other is
+ * `inbox/inboundRoute.ts`, which takes the provider's `message.received.spam`
+ * / `.blocked` / `.unauthenticated` variants on the app's own verified route:
+ * the installed component's `events.eventType` validator rejects those three,
+ * so handing them to it would 500 the webhook and make the provider retry
+ * forever (spikes §4). Routing them here instead is what lets them be
+ * subscribed to at all — and `deliveryClass` is what keeps them readable
+ * without being answerable.
+ *
+ * Obeys the same rule as the callback it was extracted from: it never throws.
+ */
+export async function recordInboundMessage(
+  ctx: MutationCtx,
+  args: {
+    /** The provider's own `Message` object, unvalidated. */
+    message: unknown;
+    eventId: string;
+    /**
+     * How the provider flagged this delivery, for the variants that carry one.
+     * Absent for an ordinary `message.received`.
+     */
+    deliveryClass?: "spam" | "blocked" | "unauthenticated";
+  },
+): Promise<void> {
+  {
     const message = asRecord(args.message);
     const eventId = providerRef(args.eventId, 200);
     const inboxRef = providerRef(stringField(message, "inbox_id"));
     const threadRef = providerRef(stringField(message, "thread_id"));
     const messageRef = providerRef(stringField(message, "message_id"));
     // Provider IDs only — never log addresses or bodies.
-    console.info("agentmail.onMessageReceived", {
+    console.info("agentmail.recordInboundMessage", {
       eventId: args.eventId,
       inboxRef,
       threadRef,
       messageRef,
+      deliveryClass: args.deliveryClass,
     });
     if (
       eventId === undefined ||
       inboxRef === undefined ||
       messageRef === undefined
     ) {
-      return null;
+      // HELD, NOT DROPPED — and this is the one event type that carries a
+      // customer's mail. Returning here lost it for good: the component has
+      // already committed its `events` row and marked the `event_id`
+      // ingested, so the provider never resends, the Workpool does not retry
+      // mutations, and there is no receipt for the drain to find. A row keyed
+      // on identifiers minted from the envelope itself is at least evidence
+      // that a verified message arrived, which is what `onEvent` already does
+      // for every other event type.
+      await quarantineUnparseableEvent(ctx, {
+        event: args.message,
+        eventId,
+        inboxRef,
+        messageRef,
+        ...(threadRef !== undefined ? { threadRef } : {}),
+        eventType: "message.received",
+        note: "verified inbound message carried no usable inbox, message or event id",
+      });
+      return;
     }
     const applicationKey = inboundApplicationKey(inboxRef, messageRef);
     if (applicationKey.length > APPLICATION_KEY_MAX_LENGTH) {
@@ -991,7 +1401,7 @@ export const onMessageReceived = internalMutation({
         "agentmail.onMessageReceived: application key exceeds its bound",
         { eventId },
       );
-      return null;
+      return;
     }
     const resolved = await resolveOrgByInbox(
       ctx,
@@ -1016,7 +1426,7 @@ export const onMessageReceived = internalMutation({
         eventType: "message.received",
         reason: resolved.reason,
       });
-      return null;
+      return;
     }
     const org = resolved.org;
     // The only projection of the payload that survives this function. The
@@ -1052,6 +1462,12 @@ export const onMessageReceived = internalMutation({
         ...(fromAddress !== undefined ? { fromAddress } : {}),
         optOutSignal: optOut.signal,
         ...(optOut.rule !== undefined ? { optOutRule: optOut.rule } : {}),
+        // Recorded as a FACT, not a filter: a flagged or unauthenticated
+        // delivery is stored and readable exactly like any other, and the
+        // history gate is what refuses to let automation answer it.
+        ...(args.deliveryClass !== undefined
+          ? { deliveryClass: args.deliveryClass }
+          : {}),
       },
     });
     // `startsHandling` is false for every duplicate — the same provider event
@@ -1060,7 +1476,7 @@ export const onMessageReceived = internalMutation({
     // not run again: this is the application-effect dedupe, and it sits above
     // every write P11 makes to a conversation.
     if (!startsHandling) {
-      return null;
+      return;
     }
     // Scheduled, not inlined. The schedule commits with the receipt insert, so
     // a throw in the business path cannot roll back the row that makes the
@@ -1068,6 +1484,5 @@ export const onMessageReceived = internalMutation({
     await ctx.scheduler.runAfter(0, internal.inbox.inbound.applyInboundMessage, {
       receiptId: receipt._id,
     });
-    return null;
-  },
-});
+  }
+}

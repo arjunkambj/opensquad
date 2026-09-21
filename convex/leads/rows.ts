@@ -5,7 +5,7 @@
  * lead-data provider's own row id, and PLAN §4's white-label rule keeps it —
  * like every provider name — server-side. So the table row and the drawer
  * detail are projections declared here, once, and every query in this domain
- * returns one of them rather than `vProspectDoc`.
+ * returns one of them rather than the stored document.
  *
  * The row is also deliberately LEAN: the research summary and score reason are
  * paragraphs, and a 50-row page does not need fifty of them. The row carries

@@ -91,6 +91,9 @@ export const handleInboundReply = internalMutation({
       org,
       receipt,
       fromAddress: facts.fromAddress,
+      ...(facts.deliveryClass !== undefined
+        ? { deliveryClass: facts.deliveryClass }
+        : {}),
     });
     if (!history.handle) {
       return { outcome: `skipped:${history.blockedBy}` };

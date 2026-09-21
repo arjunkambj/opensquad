@@ -103,8 +103,11 @@ export type WriteTarget = {
  * here the same way.
  *
  * A lead that has REPLIED is in neither: `lastReplyAt` excludes it, and the
- * reply also cleared its due time. The send mutation re-checks the same fact
- * at the moment of effect, which is the authority (PLAN §9.1).
+ * reply also cleared its due time. The ONE exception is a lead the reply flow
+ * itself rescheduled — "not now, try again in two weeks" — which comes back
+ * through the due range when that date arrives (`replyFollowUpDue`). The send
+ * mutation re-checks the same facts at the moment of effect, which is the
+ * authority (PLAN §9.1).
  */
 export async function selectWriteTargets(
   ctx: QueryCtx,
@@ -123,9 +126,15 @@ export async function selectWriteTargets(
       return;
     }
     const step = outreachStepOf(lead);
-    if (step > 0 && followUpDelayMs(agent, step) === null) {
+    if (
+      step > 0 &&
+      followUpDelayMs(agent, step) === null &&
+      !replyFollowUpDue(lead)
+    ) {
       // The ladder is spent: this lead has had every follow-up the agent is
-      // configured to send, and it rests.
+      // configured to send, and it rests. A lead that REPLIED "not now" and
+      // asked to be contacted again is not on that ladder — the ladder counts
+      // unanswered follow-ups, and this one is the answer's own request.
       return;
     }
     seen.add(lead._id);
@@ -186,10 +195,45 @@ function writable(lead: Doc<"prospects">, agent: Doc<"agents">): boolean {
     lead.research.status === "researched" &&
     lead.emailStatus === "found" &&
     lead.email !== undefined &&
-    lead.lastReplyAt === undefined &&
-    (lead.stage === "researched" ||
-      lead.stage === "queued" ||
-      lead.stage === "contacted")
+    (replyFollowUpDue(lead)
+      ? true
+      : lead.lastReplyAt === undefined &&
+        (lead.stage === "researched" ||
+          lead.stage === "queued" ||
+          lead.stage === "contacted"))
+  );
+}
+
+/**
+ * Has this lead been deliberately rescheduled after a reply, and come round?
+ *
+ * "NOT NOW" HAD NO SELECTION PATH AT ALL. A reply classified `not_now` or
+ * `ooo` stamps `prospects.nextActionAt` — the "another look in about N days"
+ * the thread note promises — but `markReplied` sets `lastReplyAt` on every
+ * verified reply, and `writable` above excluded any lead carrying one. The
+ * date was rendered in Contacts and selected nothing, ever; worse, those dead
+ * dates sit in the due index and every tick paged past them.
+ *
+ * The three facts together are what make it a deliberate reawakening rather
+ * than "a replied lead":
+ *
+ * - `lastReplyAt` is set, so this is a thread the lead answered;
+ * - the stage is exactly `replied` — a lead that has since been closed,
+ *   rejected, or moved on to a meeting is not reawakened by an old date;
+ * - `nextActionAt` is present, and ONLY `repliesLead.scheduleLeadFollowUp`
+ *   puts one on a replied lead. `markReplied` clears it on every inbound, so a
+ *   NEWER reply cancels the reawakening automatically — nobody has to
+ *   remember to.
+ *
+ * It grants one message. `outreachLeadState.scheduleNextOutreachStep` refuses
+ * to extend the ladder for a lead with `lastReplyAt`, so after that send the
+ * lead rests until it replies again or a person acts.
+ */
+export function replyFollowUpDue(lead: Doc<"prospects">): boolean {
+  return (
+    lead.lastReplyAt !== undefined &&
+    lead.stage === "replied" &&
+    lead.nextActionAt !== undefined
   );
 }
 

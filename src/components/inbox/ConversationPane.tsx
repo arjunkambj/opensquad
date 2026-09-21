@@ -27,6 +27,12 @@ import { Button } from "@/components/ui/button"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import { useEscapeToParent } from "@/hooks/use-queue-navigation"
 
+/** Retries a failed read-clear gets before the badge is left alone. */
+const MARK_READ_MAX_RETRIES = 3
+
+/** Base delay between those retries; it grows with each failure. */
+const MARK_READ_RETRY_MS = 2_000
+
 export function ConversationPane({
   conversationId,
 }: {
@@ -55,8 +61,24 @@ export function ConversationPane({
   // thread is open must clear too — but it remembers what it already cleared
   // for this thread, so the re-render its own write causes does not call the
   // mutation a second time.
+  //
+  // MARKED CLEARED ONLY ONCE THE WRITE LANDS. Recording it before the call
+  // meant a transient failure — a dropped socket, a moment offline — left the
+  // guard saying "already cleared" for a thread whose badge was still lit,
+  // and nothing tried again until a NEW reply arrived. Now the ref is written
+  // in the `then`, a failure schedules a bounded retry, and an attempt in
+  // flight is tracked separately so the retry cannot double-fire.
   const unread = detail?.conversation.unreadCount ?? 0
   const cleared = useRef<{ conversationId: string; count: number } | null>(null)
+  const clearing = useRef(false)
+  const failures = useRef(0)
+  const [clearAttempt, setClearAttempt] = useState(0)
+  useEffect(() => {
+    // A different thread is a different clear: forget both the success and
+    // the failures of the last one.
+    cleared.current = null
+    failures.current = 0
+  }, [conversationId])
   useEffect(() => {
     if (orgId === undefined) {
       return
@@ -65,15 +87,45 @@ export function ConversationPane({
       // Cleared — including by our own write. Forgetting what we cleared is
       // what lets the NEXT reply on this open thread clear too.
       cleared.current = null
+      failures.current = 0
       return
     }
     const last = cleared.current
     if (last !== null && last.conversationId === conversationId && last.count >= unread) {
       return
     }
-    cleared.current = { conversationId, count: unread }
-    void markRead({ orgId, conversationId }).catch(() => undefined)
-  }, [orgId, conversationId, unread, markRead])
+    if (clearing.current) {
+      return
+    }
+    clearing.current = true
+    let retry: ReturnType<typeof setTimeout> | undefined
+    void markRead({ orgId, conversationId })
+      .then(() => {
+        cleared.current = { conversationId, count: unread }
+        failures.current = 0
+      })
+      .catch(() => {
+        // Nothing is recorded as cleared, so the next render of this effect
+        // is free to try again — and a bounded retry makes sure there IS a
+        // next render even if nothing else changes. Three tries, backing off,
+        // then the badge simply stays until the user does something else:
+        // a stuck badge is a small wrong, and a retry loop is a bigger one.
+        failures.current += 1
+        if (failures.current <= MARK_READ_MAX_RETRIES) {
+          retry = setTimeout(() => {
+            setClearAttempt((attempt) => attempt + 1)
+          }, MARK_READ_RETRY_MS * failures.current)
+        }
+      })
+      .finally(() => {
+        clearing.current = false
+      })
+    return () => {
+      if (retry !== undefined) {
+        clearTimeout(retry)
+      }
+    }
+  }, [orgId, conversationId, unread, markRead, clearAttempt])
 
   if (orgId === undefined || detail === undefined) {
     return (

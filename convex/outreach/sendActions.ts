@@ -38,6 +38,15 @@ export const vDispatchOutcome = v.union(
     reason: v.string(),
   }),
   v.object({
+    // The provider declined to process the request (rate limit, refused key).
+    // Nothing was sent, the attempt is parked `reserved` with a wake, and the
+    // draft stays sendable — distinct from `definitively_failed`, which
+    // forecloses the payload forever.
+    outcome: v.literal("retry_scheduled"),
+    sendAttemptId: v.id("sendAttempts"),
+    reason: v.string(),
+  }),
+  v.object({
     outcome: v.literal("preflight_refused"),
     code: v.string(),
     reason: v.string(),
@@ -114,20 +123,7 @@ async function executeAttemptDispatch(
   // it lands `uncertain` (the reconcile path treats its identical catch the
   // same way): a false-uncertain costs a human review, a false-rejected can
   // double-send.
-  let result:
-    | {
-        outcome: "accepted";
-        messageId: string;
-        threadId: string;
-        httpStatus?: number;
-      }
-    | { outcome: "rejected"; httpStatus?: number; providerError: string }
-    | {
-        outcome: "uncertain";
-        providerError: string;
-        httpStatus?: number;
-        reason?: string;
-      };
+  let result: TransportOutcome;
   try {
     if (begin.endpointOperation === "reply") {
       const call = await ctx.runAction(
@@ -175,6 +171,17 @@ async function executeAttemptDispatch(
       reason: result.providerError,
     };
   }
+  if (result.outcome === "retryable") {
+    // `recordSendOutcome` has already parked the attempt and armed its wake
+    // (or, once the retry window is spent, settled it). Reported distinctly so
+    // a journaled caller never reads "failed" for an email still on its way.
+    const parked = recorded.attempt.state === "reserved";
+    return {
+      outcome: parked ? "retry_scheduled" : "definitively_failed",
+      sendAttemptId,
+      reason: result.providerError,
+    };
+  }
   if (result.outcome === "rejected") {
     // Provider refusal OR a provably pre-request failure — both land as
     // `definitively_failed`; sendResultCode still distinguishes them for UI.
@@ -205,18 +212,33 @@ function thrownCode(error: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * What the ledger accepts. `retryable` is carried through unchanged — the
+ * decision of WHEN to try again belongs to `recordSendOutcome`, which is the
+ * transaction that can schedule the wake atomically with the state change.
+ */
+export type TransportOutcome =
+  | { outcome: "accepted"; messageId: string; threadId: string; httpStatus?: number }
+  | { outcome: "rejected"; httpStatus?: number; providerError: string }
+  | {
+      outcome: "retryable";
+      providerError: string;
+      httpStatus?: number;
+      reason?: string;
+      retryAfterMs?: number;
+    }
+  | { outcome: "uncertain"; providerError: string; httpStatus?: number; reason?: string };
+
 export function transportToOutcome(call: {
-  outcome: "accepted" | "rejected" | "uncertain";
+  outcome: "accepted" | "rejected" | "retryable" | "uncertain";
   messageId?: string;
   threadId?: string;
   httpStatus?: number;
   providerError?: string;
   reason?: string;
   detail?: string;
-}):
-  | { outcome: "accepted"; messageId: string; threadId: string; httpStatus?: number }
-  | { outcome: "rejected"; httpStatus?: number; providerError: string }
-  | { outcome: "uncertain"; providerError: string; httpStatus?: number; reason?: string } {
+  retryAfterMs?: number;
+}): TransportOutcome {
   if (call.outcome === "accepted") {
     return {
       outcome: "accepted",
@@ -230,6 +252,15 @@ export function transportToOutcome(call: {
       outcome: "rejected",
       httpStatus: call.httpStatus,
       providerError: call.providerError ?? "provider rejected the request",
+    };
+  }
+  if (call.outcome === "retryable") {
+    return {
+      outcome: "retryable",
+      providerError: call.detail ?? call.providerError ?? "the mail provider would not take this email yet",
+      httpStatus: call.httpStatus,
+      reason: call.reason,
+      retryAfterMs: call.retryAfterMs,
     };
   }
   return {

@@ -91,19 +91,34 @@ export async function replyOperationKey(args: {
   return `${REPLY_REQUEST_PREFIX}${args.conversationId}:${digest}:r${args.agentRevision}`;
 }
 
-/** How many of one conversation's send attempts are scanned. */
+/**
+ * How many of one conversation's send attempts are scanned PER STATE.
+ *
+ * Per state, not over the whole thread: the states are read through
+ * `by_conversationId_and_state`, so a thread whose history is mostly cancelled
+ * retries cannot push the live attempts out of the window. A single
+ * conversation holding more than this many attempts in ONE live state is not a
+ * thread the ceiling can still be reasoned about, and the count saturates
+ * safely above the limit either way.
+ */
 const ATTEMPT_SCAN_MAX = 32;
 
 /**
- * Attempt states that will never become a reply on this thread: the send was
- * abandoned before it left, so nothing was said. Every OTHER state —
- * `reserved`, `requesting`, `uncertain`, `acknowledged` — either is a reply
- * or is one dispatch away from being one, and counts.
+ * Attempt states that ARE, or are about to be, a reply the recipient sees.
+ *
+ * Read as an explicit list rather than as "everything except cancelled and
+ * definitively_failed", because it is ranged on the state index: the two
+ * abandoned states are simply never queried. `reserved` and `requesting` count
+ * for the reason the ceiling exists — three inbounds arriving inside one
+ * send's lifetime would each see zero replies, and each would buy a model call
+ * and send — and `uncertain` counts because it may well have been delivered.
  */
-const NOT_A_REPLY: ReadonlySet<Doc<"sendAttempts">["state"]> = new Set([
-  "cancelled",
-  "definitively_failed",
-]);
+const LIVE_REPLY_STATES: readonly Doc<"sendAttempts">["state"][] = [
+  "reserved",
+  "requesting",
+  "uncertain",
+  "acknowledged",
+];
 
 /**
  * Automatic replies already MADE — or already under way — on this thread.
@@ -122,24 +137,35 @@ const NOT_A_REPLY: ReadonlySet<Doc<"sendAttempts">["state"]> = new Set([
  * attempt is what says whether the reply flow wrote it, because a `reply:`
  * request id is the one thing the first touch and its follow-ups never carry.
  * Deduped by that request id, so the retries of one answer count once.
+ *
+ * RANGED PER STATE, AND ONE READ PER DRAFT. Reading the newest N attempts of
+ * the whole conversation could lose both real answers behind a wall of
+ * cancelled retries — the ceiling would then fail to trip on exactly the
+ * thread that churned most — so the four live states are ranged directly on
+ * `by_conversationId_and_state` and the abandoned ones are never read at all.
+ * Drafts are then looked up once EACH rather than once per attempt: retries of
+ * one answer share its draft, and this runs inside a mutation where every
+ * read is on the critical path.
  */
 export async function automaticReplyCount(
   ctx: MutationCtx,
   conversation: Doc<"conversations">,
 ): Promise<number> {
-  const attempts = await ctx.db
-    .query("sendAttempts")
-    .withIndex("by_conversationId_and_createdAt", (q) =>
-      q.eq("conversationId", conversation._id),
-    )
-    .order("desc")
-    .take(ATTEMPT_SCAN_MAX);
-  const keys = new Set<string>();
-  for (const attempt of attempts) {
-    if (NOT_A_REPLY.has(attempt.state)) {
-      continue;
+  const draftIds = new Set<Id<"drafts">>();
+  for (const state of LIVE_REPLY_STATES) {
+    const attempts = await ctx.db
+      .query("sendAttempts")
+      .withIndex("by_conversationId_and_state", (q) =>
+        q.eq("conversationId", conversation._id).eq("state", state),
+      )
+      .take(ATTEMPT_SCAN_MAX);
+    for (const attempt of attempts) {
+      draftIds.add(attempt.draftId);
     }
-    const draft = await ctx.db.get("drafts", attempt.draftId);
+  }
+  const keys = new Set<string>();
+  for (const draftId of draftIds) {
+    const draft = await ctx.db.get("drafts", draftId);
     const requestId = draft?.requestId;
     if (requestId !== undefined && requestId.startsWith(REPLY_REQUEST_PREFIX)) {
       keys.add(requestId);

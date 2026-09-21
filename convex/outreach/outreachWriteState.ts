@@ -36,7 +36,7 @@ import {
   releaseLeadClaim,
   restLeadAfterWrite,
 } from "./outreachLeadState";
-import { agentRunsOutreach } from "./outreachPlan";
+import { agentRunsOutreach, replyFollowUpDue } from "./outreachPlan";
 import {
   personalisationHooks,
   resolveConversation,
@@ -149,12 +149,18 @@ export const beginOutreachWrite = internalMutation({
     if (lead.nextActionAt !== undefined && lead.nextActionAt > now) {
       return skip("not_due");
     }
+    // A reply normally ends outreach for a lead. The exception, and the only
+    // one, is the lead the reply flow itself rescheduled: `not_now` / `ooo`
+    // stamped a date, that date has come round, and no newer reply has
+    // cleared it (`replyFollowUpDue`). Re-read here at claim time, not trusted
+    // from the tick's selection.
+    const reawakened = replyFollowUpDue(lead);
     if (
       lead.approval !== "approved" ||
       lead.stage === "rejected" ||
       lead.stage === "closed_lost" ||
       lead.stage === "needs_attention" ||
-      lead.lastReplyAt !== undefined
+      (lead.lastReplyAt !== undefined && !reawakened)
     ) {
       return skip("lead_not_writable");
     }
@@ -170,7 +176,9 @@ export const beginOutreachWrite = internalMutation({
     if (step !== args.step) {
       return skip("step_changed");
     }
-    if (step > 0 && followUpDelayMs(agent, step) === null) {
+    if (step > 0 && followUpDelayMs(agent, step) === null && !reawakened) {
+      // The ladder counts UNANSWERED follow-ups; a lead that answered and
+      // asked to be contacted later is not on it.
       return skip("follow_ups_exhausted");
     }
 

@@ -10,7 +10,7 @@
  */
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
-import { mutation } from "../_generated/server";
+import { internalMutation, mutation } from "../_generated/server";
 import { resolveOutboundRecipient } from "../inbox/conversationsModel";
 import { appendLeadEvent, findLeadEventByOperationKey } from "../leads/events";
 import { requireOrgMember } from "../lib/auth";
@@ -165,6 +165,134 @@ export const propose = mutation({
       throw domainError("NOT_FOUND", "booking not found after insert");
     }
     return booking;
+  },
+});
+
+/**
+ * Record the proposal a REPLY produced, so the meeting the lead asked about
+ * exists as a row and not only as a stage.
+ *
+ * `repliesDecide` moved the lead to `meeting_proposed` when the model read the
+ * reply as asking for a call, and wrote a note — but created nothing in
+ * `bookings`, so the booking-link gate, the dashboard's proposed/booked split
+ * and every proposal linkage had nothing to read. This is the writer for that
+ * case, and it is deliberately the narrowest one in the file:
+ *
+ * - only a `booking_link` proposal, from the AGENT'S OWN configured booking
+ *   URL. A `slots` proposal names specific future times, and the only honest
+ *   source for those is a person or a calendar — a model must never invent
+ *   them, so a thread whose agent has no booking link records no booking at
+ *   all rather than a made-up one;
+ * - `proposed`, always. `meeting_booked` has exactly one writer and it is the
+ *   user's click (PLAN §9.5), and this does not touch `prospects.stage` at
+ *   all — `advanceLead` owns that, in the caller's transaction;
+ * - one active booking per lead, read in this same transaction, and idempotent
+ *   through the `leadEvents` operation key, so a re-driven reply step records
+ *   the proposal it already recorded.
+ */
+export const recordAgentProposal = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    prospectId: v.id("prospects"),
+    conversationId: v.id("conversations"),
+    /** The agent's configured booking link — the only proposal it may make. */
+    bookingUrl: v.string(),
+    /** The reply step's own key, so a replay records nothing twice. */
+    operationKey: v.string(),
+  },
+  returns: v.object({
+    recorded: v.boolean(),
+    reason: v.optional(v.string()),
+    bookingId: v.optional(v.id("bookings")),
+  }),
+  handler: async (ctx, args) => {
+    const prior = await findLeadEventByOperationKey(
+      ctx,
+      args.orgId,
+      args.operationKey,
+    );
+    if (prior !== null) {
+      return {
+        recorded: false as const,
+        reason: "replayed",
+        ...(prior.bookingId !== undefined ? { bookingId: prior.bookingId } : {}),
+      };
+    }
+    const prospect = await ctx.db.get("prospects", args.prospectId);
+    if (prospect === null || prospect.orgId !== args.orgId) {
+      return { recorded: false as const, reason: "lead_missing" };
+    }
+    if (TERMINAL_LEAD_STAGES.includes(prospect.stage)) {
+      return { recorded: false as const, reason: "lead_terminal" };
+    }
+    // At most one ACTIVE booking per lead — the same read the member-facing
+    // `propose` does, in the same transaction as the insert. A lead who
+    // already has a proposal or a confirmed meeting keeps it: this path is a
+    // classification, and it never overwrites a record a person made.
+    for (const state of ["proposed", "confirmed"] as const) {
+      const active = await ctx.db
+        .query("bookings")
+        .withIndex("by_prospectId_and_state", (q) =>
+          q.eq("prospectId", prospect._id).eq("state", state),
+        )
+        .first();
+      if (active !== null) {
+        return {
+          recorded: false as const,
+          reason: `already_${state}`,
+          bookingId: active._id,
+        };
+      }
+    }
+    let proposal;
+    try {
+      // The URL is normalized and refused if it is not a public http(s) link,
+      // exactly as it would be from the member-facing path.
+      proposal = assertBookingProposal(
+        { kind: "booking_link" as const, url: args.bookingUrl },
+        { now: Date.now() },
+      );
+    } catch {
+      return { recorded: false as const, reason: "booking_url_invalid" };
+    }
+    const conversation = await ctx.db.get("conversations", args.conversationId);
+    if (
+      conversation === null ||
+      conversation.orgId !== args.orgId ||
+      conversation.prospectId !== prospect._id
+    ) {
+      return { recorded: false as const, reason: "conversation_mismatch" };
+    }
+    const now = Date.now();
+    const bookingId = await ctx.db.insert("bookings", {
+      orgId: args.orgId,
+      prospectId: prospect._id,
+      // No human is acting, so the agent is named the way every other
+      // machine actor on a record is (`approvals.approverIdentityKey`'s
+      // `autopilot:<agentId>`): a booking must always say who it belongs to,
+      // and inventing a member would be worse than saying "the agent".
+      ownerIdentityKey:
+        conversation.agentId === undefined
+          ? "agent"
+          : `agent:${conversation.agentId}`,
+      state: "proposed",
+      version: 1,
+      proposal,
+      conversationId: conversation._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch("prospects", prospect._id, { updatedAt: now });
+    await appendLeadEvent(ctx, {
+      orgId: args.orgId,
+      prospectId: prospect._id,
+      kind: "booking_proposed",
+      summary: `Booking link proposal recorded for ${leadLabel(prospect)} from their reply`,
+      operationKey: args.operationKey,
+      bookingId,
+      actor: { source: "workflow" },
+    });
+    return { recorded: true as const, bookingId };
   },
 });
 

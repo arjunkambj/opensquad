@@ -19,6 +19,7 @@ import {
   releaseLeadClaim,
   restLeadAfterWrite,
 } from "./outreachLeadState";
+import { replyFollowUpDue } from "./outreachPlan";
 import { v } from "convex/values";
 
 const vInstallResult = v.union(
@@ -73,8 +74,12 @@ export const installOutreachDraft = internalMutation({
     if (
       lead.approval !== "approved" ||
       lead.stage === "rejected" ||
-      lead.lastReplyAt !== undefined
+      (lead.lastReplyAt !== undefined && !replyFollowUpDue(lead))
     ) {
+      // A reply that landed while this text was being written retires it —
+      // unless the lead is the one the reply flow rescheduled on purpose, in
+      // which case its due date is still standing (the claim moved it out to
+      // the stall window, and a NEWER reply would have cleared it entirely).
       await restLeadAfterWrite(ctx, lead);
       return { installed: false as const, reason: "lead_not_writable" };
     }

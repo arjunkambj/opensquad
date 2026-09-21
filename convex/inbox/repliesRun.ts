@@ -55,7 +55,11 @@ export const runReplyHandling = internalAction({
   handler: async (ctx, args): Promise<RunReplyResult> => {
     const context: ReplyContext = await ctx.runMutation(
       internal.inbox.repliesContext.beginReplyHandling,
-      { conversationId: args.conversationId, messageRef: args.messageRef },
+      {
+        conversationId: args.conversationId,
+        messageRef: args.messageRef,
+        mode: args.mode,
+      },
     );
     if (context.status === "skip") {
       return { outcome: `skipped:${context.reason}` };
@@ -63,7 +67,8 @@ export const runReplyHandling = internalAction({
 
     /* ---------- free, and never blocked by money ------------------- */
 
-    const stored = await readStoredMessage(ctx, {
+    const stored = await readMessage(ctx, {
+      orgId: context.orgId,
       providerThreadRef: context.providerThreadRef,
       inboxRef: context.inboxRef,
       messageRef: args.messageRef,
@@ -158,7 +163,11 @@ export const runReplyHandling = internalAction({
       // did, and this run has nothing left to do.
       const settled: ReplyContext = await ctx.runMutation(
         internal.inbox.repliesContext.beginReplyHandling,
-        { conversationId: args.conversationId, messageRef: args.messageRef },
+        {
+          conversationId: args.conversationId,
+          messageRef: args.messageRef,
+          mode: args.mode,
+        },
       );
       if (settled.status === "skip") {
         return { outcome: `replayed:${settled.reason}` };
@@ -206,6 +215,84 @@ export const runReplyHandling = internalAction({
  * counts, so a clear unsubscribe is honoured even when the body cannot be
  * read.
  */
+/**
+ * The message this step reads: the stored row, completed from the provider
+ * when the stored row cannot answer.
+ *
+ * TWO THINGS THE WEBHOOK PAYLOAD DOES NOT GUARANTEE. The provider omits
+ * `text`/`html` from a payload over 1 MB and documents that you should fetch
+ * the full message after a webhook, and the delivery envelope is not
+ * guaranteed to carry `headers` at all — which is what the bounce and
+ * auto-reply rules read before they fall back to phrase lists. So a stored row
+ * with no body, or with no headers, is completed by ONE read with the org's
+ * own key (`integrations/agentmail.fetchInboundMessage`).
+ *
+ * FREE, AND BEFORE THE MONEY. The provider meters sends, not reads, so this
+ * sits above the one paid call exactly like the rules do: an unsubscribe in a
+ * 2 MB reply is honoured with the org at zero credits.
+ *
+ * A failure degrades rather than ending the step: the stored row still counts,
+ * and so does the receipt's own opt-out verdict.
+ */
+async function readMessage(
+  ctx: ActionCtx,
+  args: {
+    orgId: Id<"orgs">;
+    providerThreadRef: string | undefined;
+    inboxRef: string;
+    messageRef: string;
+  },
+): Promise<InboundMessageText | null> {
+  const stored = await readStoredMessage(ctx, args);
+  if (
+    stored !== null &&
+    stored.body.trim() !== "" &&
+    Object.keys(stored.headers).length > 0
+  ) {
+    return stored;
+  }
+  let fetched;
+  try {
+    fetched = await ctx.runAction(
+      internal.integrations.agentmail.fetchInboundMessage,
+      {
+        orgId: args.orgId,
+        inboxId: args.inboxRef,
+        messageId: args.messageRef,
+      },
+    );
+  } catch {
+    return stored;
+  }
+  if (!fetched.ok) {
+    // Mapped code only — provider wording never leaves `integrations/`.
+    console.info("inbox.repliesRun: full message read failed", {
+      code: fetched.code,
+    });
+    return stored;
+  }
+  // The same projection the stored row goes through, so there is one reader
+  // and one set of fallbacks (`readInboundMessageText`).
+  const complete = readInboundMessageText(fetched.message);
+  if (stored === null) {
+    return complete;
+  }
+  // The stored row is the record of what arrived; the fetch only FILLS what it
+  // could not answer. A body the store already had is never replaced.
+  return {
+    ...stored,
+    body: stored.body.trim() === "" ? complete.body : stored.body,
+    headers:
+      Object.keys(stored.headers).length > 0 ? stored.headers : complete.headers,
+    ...(stored.subject === undefined && complete.subject !== undefined
+      ? { subject: complete.subject }
+      : {}),
+    ...(stored.fromAddress === undefined && complete.fromAddress !== undefined
+      ? { fromAddress: complete.fromAddress }
+      : {}),
+  };
+}
+
 async function readStoredMessage(
   ctx: ActionCtx,
   args: {

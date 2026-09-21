@@ -94,7 +94,43 @@ function readHeaders(raw: unknown): Record<string, string> {
   return headers;
 }
 
-/** One stored inbound row, projected to what the rules and the prompt read. */
+/**
+ * Markup a body may be wrapped in, reduced to the words a rule reads.
+ *
+ * Plenty of real replies — most mail clients' default, in fact — carry only
+ * `html`. Reading `text`, `extracted_text` and `preview` alone left those
+ * messages with an empty body: no unsubscribe phrase was ever seen in one, and
+ * classification ended on `failed:no_message_text` for a message we hold in
+ * full. This is deliberately not an HTML parser: script and style blocks are
+ * dropped, the tags that end a line become newlines, every other tag is
+ * removed and the handful of entities that appear in prose are decoded. It
+ * produces text to MATCH PHRASES IN, never markup to render.
+ */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|tr|li|h[1-6])\s*>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t ]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * One stored inbound row, projected to what the rules and the prompt read.
+ *
+ * The row may be the mail component's own (`raw` holds the provider's message
+ * object) or the projection `repliesRun` builds from a full REST fetch — both
+ * carry the same field names, so there is one reader rather than two.
+ */
 export function readInboundMessageText(row: unknown): InboundMessageText {
   if (row === null || typeof row !== "object" || Array.isArray(row)) {
     return { body: "", headers: {} };
@@ -102,14 +138,26 @@ export function readInboundMessageText(row: unknown): InboundMessageText {
   const source = row as Record<string, unknown>;
   const extracted = readString(source, "extractedText");
   const text = readString(source, "text");
+  // Order of preference: what the provider extracted, then the plain text with
+  // its quoted history cut off, then the HTML reduced to words, then the
+  // preview. The HTML arms sit ABOVE `preview` because a preview is one
+  // truncated line and an opt-out sentence is usually not in it.
+  const html = readString(source, "extractedHtml") ?? readString(source, "html");
   const body =
     extracted ??
-    (text === undefined ? (readString(source, "preview") ?? "") : stripQuotedReply(text));
+    (text !== undefined
+      ? stripQuotedReply(text)
+      : html !== undefined
+        ? stripQuotedReply(htmlToText(html))
+        : (readString(source, "preview") ?? ""));
   const subject = readString(source, "subject");
   const fromAddress = parseInboundSender(source.from);
   return {
     body: body.slice(0, THREAD_BODY_MAX_LENGTH),
-    headers: readHeaders(source.raw),
+    // The component stores the provider's own object under `raw`; a fetched
+    // message carries its headers directly. Neither is guaranteed to have
+    // them, and an empty map simply means the header rules do not fire.
+    headers: readHeaders(source.raw ?? source),
     ...(subject === undefined ? {} : { subject }),
     ...(fromAddress === undefined ? {} : { fromAddress }),
   };

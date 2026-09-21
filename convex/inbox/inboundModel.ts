@@ -30,7 +30,23 @@ export type InboundFacts = {
   optOutSignal: OptOutSignal;
   /** Which rule fired — a rule NAME, never a slice of the message. */
   optOutRule?: string;
+  /**
+   * How the PROVIDER flagged this delivery, for the three inbound variants
+   * that arrive under their own event type (`inbox/inboundRoute.ts`). Absent
+   * for an ordinary `message.received`. Read from the event type, never from
+   * the payload, and it can only ever make the history gate refuse.
+   */
+  deliveryClass?: InboundDeliveryClass;
 };
+
+/** The provider's own verdict on a delivery it did not accept plainly. */
+export type InboundDeliveryClass = "spam" | "blocked" | "unauthenticated";
+
+const INBOUND_DELIVERY_CLASSES: readonly InboundDeliveryClass[] = [
+  "spam",
+  "blocked",
+  "unauthenticated",
+];
 
 export function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFacts {
   // `providerFacts` is `v.record(v.string(), v.any())`, so read it as
@@ -40,10 +56,16 @@ export function readInboundFacts(receipt: Doc<"emailEventReceipts">): InboundFac
   const fromAddress = stored.fromAddress;
   const rawSignal = stored.optOutSignal;
   const rule = stored.optOutRule;
+  const rawClass = stored.deliveryClass;
+  const deliveryClass =
+    typeof rawClass === "string"
+      ? INBOUND_DELIVERY_CLASSES.find((candidate) => candidate === rawClass)
+      : undefined;
   return {
     ...(typeof fromAddress === "string" && fromAddress.length > 0
       ? { fromAddress }
       : {}),
+    ...(deliveryClass !== undefined ? { deliveryClass } : {}),
     // A receipt written before the opt-out rule existed, or by any other
     // path, carries no verdict. `none` is the only safe default: it can never
     // manufacture a suppression, only fail to stop one, and the next message

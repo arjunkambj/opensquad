@@ -20,14 +20,30 @@ import { effectiveSendLimit, nextWindowStart } from "./sendModel";
 import { v } from "convex/values";
 
 /**
- * Dry-run the send preflight for a draft (member-readable). Reports the
- * first blocking gate and the send-window state — the same checks
- * `beginDispatch` will enforce, so the UI can show an honest "why not yet".
+ * Dry-run the send preflight for a draft (member-readable). Reports the first
+ * blocking refusal — the attempt ledger, then the gates, then the window and
+ * the daily allowance, in the order `reserveSendIntent` and `beginDispatch`
+ * apply them — so `permitted` means the boundary would accept it, not merely
+ * that the gates would.
+ *
+ * `unresolved_attempt` (a live attempt on a SIBLING revision of the same
+ * conversation) is not repeated here: `evaluateSendGates` already returns it,
+ * and this mirrors only the refusals that live outside the shared gate.
  */
 export const preflight = query({
   args: {
     orgId: v.id("orgs"),
     draftId: v.id("drafts"),
+    /**
+     * The caller's clock. A Convex query must not read the wall clock
+     * (`convex_rules.txt`): it is not re-run because time passed, so a window
+     * or daily-allowance verdict computed inside the query could be served
+     * from a cached result taken on the other side of the boundary —
+     * "outside your sending hours" left on screen for an hour after the
+     * window opened. The client passes a coarse, slowly-changing instant,
+     * which keeps the subscription stable and the answer fresh.
+     */
+    now: v.number(),
   },
   returns: v.object({
     permitted: v.boolean(),
@@ -63,6 +79,53 @@ export const preflight = query({
         createdAt: attempt.createdAt,
       }));
 
+    // THE ATTEMPT LEDGER, MIRRORED — this is a preview of what dispatch will
+    // do, and `reserveSendIntent` refuses on the attempt history BEFORE it
+    // looks at any gate. Leaving those refusals out made `permitted: true` a
+    // promise the boundary would break: an already-sent draft reported
+    // sendable, and the button offered a second send of the same mail.
+    // Reported with the same codes the reservation uses, so the screen says
+    // exactly what dispatch will say.
+    if (attempts.some((attempt) => attempt.state === "acknowledged")) {
+      return {
+        permitted: false,
+        code: "already_sent",
+        reason: "draft revision already sent",
+        attempts: attemptsView,
+      };
+    }
+    if (
+      attempts.some(
+        (attempt) =>
+          attempt.state === "reserved" || attempt.state === "requesting",
+      )
+    ) {
+      return {
+        permitted: false,
+        code: "attempt_in_flight",
+        reason: "a send for this revision is already under way",
+        attempts: attemptsView,
+      };
+    }
+    if (attempts.some((attempt) => attempt.state === "uncertain")) {
+      return {
+        permitted: false,
+        code: "attempt_uncertain",
+        reason:
+          "an earlier attempt for this revision is still uncertain — reconcile it before sending again",
+        attempts: attemptsView,
+      };
+    }
+    if (attempts.some((attempt) => attempt.state === "definitively_failed")) {
+      return {
+        permitted: false,
+        code: "attempt_failed",
+        reason:
+          "this exact payload was already definitively refused — a corrected draft revision is required",
+        attempts: attemptsView,
+      };
+    }
+
     const conversation = await ctx.db.get(
       "conversations",
       draft.conversationId,
@@ -94,7 +157,7 @@ export const preflight = query({
         attempts: attemptsView,
       };
     }
-    const window = sendWindowStatus(org, Date.now());
+    const window = sendWindowStatus(org, args.now);
     if (!window.permitted) {
       return {
         permitted: false,
@@ -104,7 +167,7 @@ export const preflight = query({
         attempts: attemptsView,
       };
     }
-    const periodKey = localDayKey(Date.now(), org.timezone);
+    const periodKey = localDayKey(args.now, org.timezone);
     const limit = effectiveSendLimit(org);
     const bucket = await ctx.db
       .query("usageBuckets")
@@ -127,7 +190,7 @@ export const preflight = query({
         permitted: false,
         code: "send_limit_reached",
         reason: `daily send allowance exhausted (${used}/${limit})`,
-        nextPermittedAt: nextWindowStart(org, Date.now()),
+        nextPermittedAt: nextWindowStart(org, args.now),
         attempts: attemptsView,
       };
     }

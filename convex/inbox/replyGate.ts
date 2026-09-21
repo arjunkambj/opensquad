@@ -23,10 +23,12 @@
  */
 import type { Doc } from "../_generated/dataModel";
 import type { AuthCtx } from "../lib/auth";
-import { parseInboundSender, SENDING_AGENT_MODES } from "../lib/validators";
+import { sameInboxRef, SENDING_AGENT_MODES } from "../lib/validators";
 import type { OptOutSignal } from "../lib/validators";
 import { matchSuppression } from "../outreach/suppressions";
 import { resolveOutboundRecipient } from "./conversationsModel";
+import type { InboundDeliveryClass } from "./inboundModel";
+import { isOwnMailbox } from "./mailboxIdentity";
 import { v } from "convex/values";
 
 /**
@@ -40,6 +42,8 @@ import { v } from "convex/values";
  * preflight speak one vocabulary.
  */
 export const REPLY_GATE_BLOCK_CODES = [
+  /** The message was written by this organization's own mailbox. */
+  "sender_is_us",
   "opt_out_explicit",
   "opt_out_ambiguous",
   "conversation_unassigned",
@@ -61,6 +65,7 @@ export const REPLY_GATE_BLOCK_CODES = [
 export type ReplyGateBlockCode = (typeof REPLY_GATE_BLOCK_CODES)[number];
 
 export const vReplyGateBlockCode = v.union(
+  v.literal("sender_is_us"),
   v.literal("opt_out_explicit"),
   v.literal("opt_out_ambiguous"),
   v.literal("conversation_unassigned"),
@@ -162,7 +167,10 @@ export async function evaluateReplyAutomation(
   if (org.inboxConnection !== "connected") {
     return blocked("inbox_unassigned");
   }
-  if (org.inboxRef !== conversation.inboxRef) {
+  // Through the ONE helper, like every other inbox-reference comparison:
+  // provider inbox ids are addresses and a row whose id differs only in case
+  // names the same inbox (`sameInboxRef`).
+  if (!sameInboxRef(org.inboxRef, conversation.inboxRef)) {
     return blocked("inbox_mismatch");
   }
   const { recipient } = await resolveOutboundRecipient(ctx, conversation);
@@ -202,6 +210,11 @@ export async function evaluateReplyAutomation(
  * - `sender_is_us` — our own inbox address. An echo is not a reply.
  * - `sender_unverified` — the `From` header did not name exactly one address,
  *   so there is nobody to attribute the message to.
+ * - `delivery_unverified` — the provider flagged the delivery itself as spam,
+ *   blocked or unauthenticated (`inbox/inboundRoute.ts` ingests those three
+ *   variants so they are not lost). They are readable in the Inbox and never
+ *   answered: an unauthenticated delivery is exactly the one a forged `From`
+ *   arrives on, and the whole answer gate downstream trusts that header.
  */
 export const REPLY_HISTORY_BLOCK_CODES = [
   "message_superseded",
@@ -211,6 +224,7 @@ export const REPLY_HISTORY_BLOCK_CODES = [
   "thread_not_ours",
   "sender_is_us",
   "sender_unverified",
+  "delivery_unverified",
 ] as const;
 
 export type ReplyHistoryBlockCode = (typeof REPLY_HISTORY_BLOCK_CODES)[number];
@@ -223,6 +237,7 @@ export const vReplyHistoryBlockCode = v.union(
   v.literal("thread_not_ours"),
   v.literal("sender_is_us"),
   v.literal("sender_unverified"),
+  v.literal("delivery_unverified"),
 );
 
 export const vReplyHistoryVerdict = v.union(
@@ -288,6 +303,8 @@ export async function evaluateReplyHistory(
     org: Doc<"orgs">;
     receipt: Doc<"emailEventReceipts">;
     fromAddress: string | undefined;
+    /** The provider's flag on this delivery, when it carried one. */
+    deliveryClass?: InboundDeliveryClass;
   },
 ): Promise<ReplyHistoryVerdict> {
   const blocked = (blockedBy: ReplyHistoryBlockCode): ReplyHistoryVerdict => ({
@@ -311,6 +328,12 @@ export async function evaluateReplyHistory(
   if (receipt.source !== "live") {
     return blocked("not_live_source");
   }
+  // A delivery the provider itself would not vouch for. Recorded, shown, and
+  // never taken further by automation — the checks below all rest on a `From`
+  // header, which is the one thing an unauthenticated delivery does not prove.
+  if (args.deliveryClass !== undefined) {
+    return blocked("delivery_unverified");
+  }
   const connectedAt = org.connectedAt;
   if (connectedAt === undefined || receipt.receivedAt <= connectedAt) {
     return blocked("before_connection");
@@ -324,12 +347,11 @@ export async function evaluateReplyHistory(
   if (args.fromAddress === undefined) {
     return blocked("sender_unverified");
   }
-  // AgentMail inbox ids ARE addresses (`integrations/agentmailApi.ts`), so
-  // the org's own inbox is the one address a reply may never come from.
-  // Parsed rather than trusted: a ref that does not normalize simply fails to
-  // match, which can only ever let a message through to the other checks.
-  const ourAddress = parseInboundSender(org.inboxRef);
-  if (ourAddress !== undefined && ourAddress === args.fromAddress) {
+  // The org's own mailbox is the one address a reply may never come from.
+  // `isOwnMailbox` compares the stored ADDRESS and the stored id, both
+  // case-insensitively, so the check holds whether or not the provider's
+  // inbox id happens to be the address (`inbox/mailboxIdentity.ts`).
+  if (isOwnMailbox(org, args.fromAddress)) {
     return blocked("sender_is_us");
   }
   return { handle: true };

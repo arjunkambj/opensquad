@@ -41,6 +41,12 @@ export const claimInbox = internalMutation({
   args: {
     orgId: v.id("orgs"),
     inboxRef: v.string(),
+    /**
+     * The mailbox address the provider reported for this inbox (`Inbox.email`).
+     * Separate from the id by the provider's own contract, so it is stored
+     * rather than inferred — `inbox/mailboxIdentity.ts` is what reads it.
+     */
+    inboxAddress: v.optional(v.string()),
     webhookId: v.string(),
     webhookSecret: v.object({
       ciphertext: v.string(),
@@ -77,8 +83,15 @@ export const claimInbox = internalMutation({
     const unpause =
       org.pauseReason !== undefined &&
       OUR_PAUSE_REASONS.has(org.pauseReason);
+    const inboxAddress =
+      args.inboxAddress === undefined
+        ? undefined
+        : providerId(args.inboxAddress, "inboxAddress");
     await ctx.db.patch("orgs", org._id, {
       inboxRef,
+      // Written whenever the provider gave one, and never cleared by a
+      // reconnect that did not: a stale address is worse than the fallback.
+      ...(inboxAddress !== undefined ? { inboxAddress } : {}),
       agentmailWebhookId: providerId(args.webhookId, "webhookId"),
       inboxConnection: "connected" as const,
       connectedAt,
@@ -118,6 +131,8 @@ export const applyRotation = internalMutation({
   args: {
     orgId: v.id("orgs"),
     webhookId: v.string(),
+    /** Refreshed from the rotation's own inbox lookup, when it reported one. */
+    inboxAddress: v.optional(v.string()),
     apiKeyEnvelope: v.object({
       ciphertext: v.string(),
       iv: v.string(),
@@ -158,6 +173,9 @@ export const applyRotation = internalMutation({
     await ctx.db.patch("orgs", args.orgId, {
       agentmailWebhookId: providerId(args.webhookId, "webhookId"),
       inboxConnection: "connected" as const,
+      ...(args.inboxAddress === undefined
+        ? {}
+        : { inboxAddress: providerId(args.inboxAddress, "inboxAddress") }),
       updatedAt: Date.now(),
       ...(unpause
         ? { automationState: "active" as const, pauseReason: undefined }
@@ -204,13 +222,25 @@ export const clearWebhookRegistration = internalMutation({
 });
 
 export const releaseInbox = internalMutation({
-  args: { orgId: v.id("orgs") },
+  args: {
+    orgId: v.id("orgs"),
+    /**
+     * Keep `agentmailWebhookId` although the inbox is being released: the
+     * provider still holds that registration and it could not be deleted, so
+     * the id is the only local record that something is still posting at this
+     * deployment — and the next connect's `registerOrgWebhook` reclaims
+     * exactly it. Clearing it would leave the orphan with nothing pointing
+     * at it at all.
+     */
+    keepWebhookRegistration: v.optional(v.boolean()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     await detachInbox(ctx, args.orgId, {
       connection: "none",
       pauseReason: INBOX_DISCONNECTED_PAUSE_REASON,
       wipeSecrets: true,
+      keepWebhookRegistration: args.keepWebhookRegistration === true,
     });
     return null;
   },
@@ -265,6 +295,7 @@ async function detachInbox(
     connection: "none" | "invalid";
     pauseReason: string;
     wipeSecrets: boolean;
+    keepWebhookRegistration?: boolean;
   },
 ): Promise<void> {
   const org = await ctx.db.get("orgs", orgId);
@@ -277,7 +308,10 @@ async function detachInbox(
   await ctx.db.patch("orgs", orgId, {
     inboxConnection: args.connection,
     inboxRef: undefined,
-    agentmailWebhookId: undefined,
+    inboxAddress: undefined,
+    ...(args.keepWebhookRegistration === true
+      ? {}
+      : { agentmailWebhookId: undefined }),
     connectedAt: undefined,
     automationState: "paused" as const,
     pauseReason: args.pauseReason,

@@ -27,15 +27,33 @@
  *
  * ROTATION. During the ten-minute overlap the previous webhook secret is
  * accepted too, so an event signed mid-swap is not lost.
+ *
+ * THE THREE VARIANTS THAT DO NOT GO TO THE COMPONENT. The provider delivers
+ * spam, blocked and unauthenticated mail under their own event types, and the
+ * installed component's `events.eventType` validator accepts none of them — so
+ * handing one over would throw inside it, 500 this route and make the provider
+ * retry that event forever. They are subscribed to anyway, because legitimate
+ * senders routinely omit authentication headers and the provider's own thread
+ * listing hides all three, so not subscribing means never seeing those replies
+ * at all. This route files them itself, through the same single message
+ * writer, and the history gate refuses to let automation ANSWER them.
  */
 import { internal } from "../_generated/api";
 import { httpAction, internalMutation, internalQuery } from "../_generated/server";
-import { agentmailForWebhookSecret } from "../integrations/agentmail";
-import { extractEventIds } from "../integrations/agentmailApi";
+import {
+  agentmailForWebhookSecret,
+  recordInboundMessage,
+} from "../integrations/agentmail";
+import {
+  deliveryClassOf,
+  extractEventIds,
+  routedReceivedEventType,
+} from "../integrations/agentmailApi";
 import { decryptSecret } from "../lib/secrets";
 import {
   inboundApplicationKey,
   outboundApplicationKey,
+  sameInboxRef,
   sha256Hex,
   vQuarantineReason,
   WEBHOOK_TOKEN_LENGTH,
@@ -80,7 +98,18 @@ const vWebhookTarget = v.object({
  * is open. Internal: the envelopes are decrypted by the HTTP action.
  */
 export const resolveWebhookTarget = internalQuery({
-  args: { token: v.string() },
+  args: {
+    token: v.string(),
+    /**
+     * The request's arrival time, passed in rather than read here: a Convex
+     * query must not read the wall clock (`convex_rules.txt`) — it is not
+     * re-run merely because time advances, so a rotation overlap decided from
+     * a clock read inside the query could be answered from a cached result
+     * taken before or after the window closed. The HTTP action reads the
+     * clock once and hands it down.
+     */
+    at: v.number(),
+  },
   returns: v.union(vWebhookTarget, v.null()),
   handler: async (ctx, args) => {
     const org = await ctx.db
@@ -104,7 +133,7 @@ export const resolveWebhookTarget = internalQuery({
         secrets: [],
       };
     }
-    const envelope = envelopeOf(row, Date.now());
+    const envelope = envelopeOf(row, args.at);
     return {
       orgId: org._id,
       ...(org.inboxRef !== undefined
@@ -171,6 +200,40 @@ export const quarantineForeignEvent = internalMutation({
 });
 
 /**
+ * Ingest one of the inbound variants the component cannot store.
+ *
+ * `message.received.spam`, `.blocked` and `.unauthenticated` are separate
+ * event types on the provider's side, and the installed component's
+ * `events.eventType` validator accepts none of them — handing one to
+ * `handleWebhook` throws inside the component, the HTTP action 500s, and the
+ * provider retries that event forever (spikes §4). So the route verified the
+ * signature and the inbox binding itself, and files the message through the
+ * same single writer the ordinary callback uses. Dedupe is unchanged: it is
+ * `emailEventReceipts` (provider event id AND application key), not the
+ * component's own ledger.
+ */
+export const ingestRoutedInboundMessage = internalMutation({
+  args: {
+    message: v.any(),
+    eventId: v.string(),
+    deliveryClass: v.union(
+      v.literal("spam"),
+      v.literal("blocked"),
+      v.literal("unauthenticated"),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await recordInboundMessage(ctx, {
+      message: args.message,
+      eventId: args.eventId,
+      deliveryClass: args.deliveryClass,
+    });
+    return null;
+  },
+});
+
+/**
  * The route itself. Mounted by `convex/http.ts` as a POST prefix route, so the
  * legacy exact path `/agentmail/webhook` keeps its own handler.
  */
@@ -184,7 +247,7 @@ export const inboundWebhook = httpAction(async (ctx, request) => {
   }
   const target = await ctx.runQuery(
     internal.inbox.inboundRoute.resolveWebhookTarget,
-    { token },
+    { token, at: Date.now() },
   );
   if (target === null || target.secrets.length === 0) {
     // Unknown token, or an org holding no webhook secret: there is
@@ -223,10 +286,16 @@ export const inboundWebhook = httpAction(async (ctx, request) => {
   const eventId = typeof record.event_id === "string" ? record.event_id : "";
   const eventType =
     typeof record.event_type === "string" ? record.event_type : "";
+  // `sameInboxRef`, not `!==`. The binding is still exactly as strict — the
+  // event must name THIS route's inbox — but inbox references are addresses
+  // and the rest of the codebase treats them case-insensitively. Comparing
+  // exactly here quarantined a perfectly ordinary event under a reference no
+  // assignment matches, so `quarantine.replayForInbox` (which ranges on the
+  // org's own stored reference) could never release it.
   if (
     ids.inboxId === undefined ||
     target.inboxRef === undefined ||
-    ids.inboxId !== target.inboxRef
+    !sameInboxRef(ids.inboxId, target.inboxRef)
   ) {
     // Provider identifiers only — never addresses or bodies.
     console.info("inbox.inboundRoute: event inbox does not match this route", {
@@ -262,9 +331,29 @@ export const inboundWebhook = httpAction(async (ctx, request) => {
     return held();
   }
 
-  // Verified AND bound to this org's inbox. The component re-verifies,
-  // dedupes on `event_id`, stores the inbound message and dispatches the
-  // app-side callbacks — unchanged behaviour, per-request credentials.
+  // Verified AND bound to this org's inbox — but not every inbound event may
+  // be handed to the component. The three `message.received.*` variants are
+  // event types its `events.eventType` validator rejects, so passing one on
+  // would throw inside it, 500 this action and make the provider retry the
+  // event forever. They are ingested here instead, through the same single
+  // message writer, and answered by nobody (`delivery_unverified`).
+  const routed = routedReceivedEventType(eventType);
+  if (routed !== undefined) {
+    const envelope = event as { message?: unknown };
+    await ctx.runMutation(
+      internal.inbox.inboundRoute.ingestRoutedInboundMessage,
+      {
+        message: envelope.message ?? null,
+        // The provider's event id when it sent one, else the delivery's own
+        // `svix-id` — the same seed the quarantine keys mint from, so a
+        // resend still dedupes rather than landing twice.
+        eventId: eventId !== "" ? eventId : headers["svix-id"],
+        deliveryClass: deliveryClassOf(routed),
+      },
+    );
+    return held();
+  }
+
   const client = agentmailForWebhookSecret(verifiedSecret);
   return await client.handleWebhook(
     {

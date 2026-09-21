@@ -37,17 +37,17 @@ export const THREAD_PAGE_LIMIT = 25;
 export const THREAD_MESSAGE_PAGE_LIMIT = 100;
 
 /**
- * The webhook event types we subscribe to — EXACTLY the seven the installed
- * component's `vEventType` union accepts.
+ * The event types the installed component may be handed — EXACTLY the seven
+ * its `vEventType` union accepts.
  *
- * Widening this list is a live hazard, not a feature flag (spikes §6): the
- * component's `events.eventType` column is typed with that union and Convex
- * validates inserts, so a `message.opened` or any `message.received.*` variant
- * makes `handleEvent` throw, the HTTP action 500s, and the provider retries the
- * event forever. Open tracking is out of this build for that reason, and
- * nothing sets `orgs.opensObserved`.
+ * Handing it anything else is a live hazard, not a feature flag (spikes §4):
+ * the component's `events.eventType` column is typed with that union and
+ * Convex validates inserts, so a `message.opened` or any `message.received.*`
+ * variant makes `handleEvent` throw, the HTTP action 500s, and the provider
+ * retries the event forever. Open tracking is out of this build for that
+ * reason, and nothing sets `orgs.opensObserved`.
  */
-export const AGENTMAIL_WEBHOOK_EVENT_TYPES = [
+export const AGENTMAIL_COMPONENT_EVENT_TYPES = [
   "message.received",
   "message.sent",
   "message.delivered",
@@ -57,8 +57,66 @@ export const AGENTMAIL_WEBHOOK_EVENT_TYPES = [
   "domain.verified",
 ] as const;
 
+/**
+ * The three inbound variants the provider sends under their OWN event type
+ * rather than as `message.received` (spikes §4, `EventType`).
+ *
+ * They matter because legitimate senders routinely omit authentication
+ * headers, and the provider's thread listing excludes all three by default —
+ * so a real reply can be flagged and then never seen at all. They are
+ * subscribed to, and `inbox/inboundRoute.ts` takes them on the app's OWN
+ * verified route instead of passing them to the component, which would 500 on
+ * them. What they may then DO is deliberately narrow: they are recorded and
+ * readable in the Inbox, and `evaluateReplyHistory` refuses to let automation
+ * answer them (`delivery_unverified`) — a flagged or unauthenticated message
+ * is exactly the one a spoofed `From` would arrive on, so a person decides.
+ */
+export const AGENTMAIL_ROUTED_RECEIVED_EVENT_TYPES = [
+  "message.received.spam",
+  "message.received.blocked",
+  "message.received.unauthenticated",
+] as const;
+
+/** Everything a connect or rotate registers the webhook for. */
+export const AGENTMAIL_WEBHOOK_EVENT_TYPES = [
+  ...AGENTMAIL_COMPONENT_EVENT_TYPES,
+  ...AGENTMAIL_ROUTED_RECEIVED_EVENT_TYPES,
+] as const;
+
 export type AgentMailWebhookEventType =
   (typeof AGENTMAIL_WEBHOOK_EVENT_TYPES)[number];
+
+export type AgentMailRoutedReceivedEventType =
+  (typeof AGENTMAIL_ROUTED_RECEIVED_EVENT_TYPES)[number];
+
+/**
+ * Is this an inbound event the component cannot store, which the route must
+ * therefore ingest itself?
+ */
+export function routedReceivedEventType(
+  eventType: string,
+): AgentMailRoutedReceivedEventType | undefined {
+  return AGENTMAIL_ROUTED_RECEIVED_EVENT_TYPES.find(
+    (candidate) => candidate === eventType,
+  );
+}
+
+/**
+ * How a routed inbound message was flagged, as one short word stored on the
+ * receipt. Derived from the event type, never from the payload.
+ */
+export function deliveryClassOf(
+  eventType: AgentMailRoutedReceivedEventType,
+): "spam" | "blocked" | "unauthenticated" {
+  switch (eventType) {
+    case "message.received.spam":
+      return "spam";
+    case "message.received.blocked":
+      return "blocked";
+    case "message.received.unauthenticated":
+      return "unauthenticated";
+  }
+}
 
 /**
  * Mapped failure vocabulary. `unauthorized` is the one the connection state
@@ -479,8 +537,19 @@ export type AgentMailMessage = {
   timestamp?: number;
   from?: string;
   subject?: string;
+  preview?: string;
   text?: string;
   extractedText?: string;
+  /** Present when the sender wrote HTML — often the ONLY body they wrote. */
+  html?: string;
+  extractedHtml?: string;
+  /**
+   * RFC 5322 headers, when the provider returned them. Optional on the REST
+   * Message and not something a webhook payload is guaranteed to carry, which
+   * is why the bounce and auto-reply rules that read them degrade to phrase
+   * matching rather than assuming they are there.
+   */
+  headers?: Record<string, string>;
 };
 
 function parseThreadRef(value: unknown): AgentMailThreadRef | null {
@@ -509,8 +578,12 @@ function parseMessage(value: unknown): AgentMailMessage | null {
   const timestamp = readTimestamp(record, "timestamp");
   const from = readString(record, "from");
   const subject = readString(record, "subject");
+  const preview = readString(record, "preview");
   const text = readString(record, "text");
   const extractedText = readString(record, "extracted_text");
+  const html = readString(record, "html");
+  const extractedHtml = readString(record, "extracted_html");
+  const headers = readHeaders(record);
   return {
     messageId,
     threadId,
@@ -518,10 +591,34 @@ function parseMessage(value: unknown): AgentMailMessage | null {
     ...(timestamp !== undefined ? { timestamp } : {}),
     ...(from !== undefined ? { from } : {}),
     ...(subject !== undefined ? { subject } : {}),
+    ...(preview !== undefined ? { preview } : {}),
     ...(text !== undefined ? { text } : {}),
     ...(extractedText !== undefined ? { extractedText } : {}),
+    ...(html !== undefined ? { html } : {}),
+    ...(extractedHtml !== undefined ? { extractedHtml } : {}),
+    ...(headers !== undefined ? { headers } : {}),
   };
 }
+
+/** Header names lower-cased, values bounded; anything unexpected is dropped. */
+function readHeaders(
+  record: Record<string, unknown> | null,
+): Record<string, string> | undefined {
+  const raw = record?.headers;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string") {
+      headers[name.toLowerCase()] = value.slice(0, HEADER_VALUE_MAX_LENGTH);
+    }
+  }
+  return Object.keys(headers).length === 0 ? undefined : headers;
+}
+
+/** How much of one header value is kept — the rules read prefixes only. */
+const HEADER_VALUE_MAX_LENGTH = 500;
 
 /**
  * `GET /v0/inboxes/{id}/threads` — one page of the backfill.

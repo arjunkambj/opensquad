@@ -27,8 +27,26 @@ import {
   PROVIDER_REF_MAX_LENGTH,
 } from "../lib/validators";
 import type { EndpointOperation } from "../lib/validators";
+import { withOptOutLine } from "../ai/writeOutreach";
 import { conversationFields, draftFields } from "../schema";
 import { v } from "convex/values";
+
+/**
+ * How long the opt-out line itself is, measured from the one helper rather
+ * than restated. `withOptOutLine("")` is the separator plus the sentence.
+ */
+const OPT_OUT_TAIL_LENGTH = withOptOutLine("").length;
+
+/**
+ * Does this body already carry the opt-out line?
+ *
+ * Asked of `withOptOutLine` rather than by matching the sentence a second
+ * time: that function returns its input unchanged (trimmed) exactly when the
+ * line is already there, so there is still ONE definition of what the line is.
+ */
+export function carriesOptOutLine(body: string): boolean {
+  return withOptOutLine(body) === body.trimEnd();
+}
 
 export const vConversationDoc = v.object({
   _id: v.id("conversations"),
@@ -99,10 +117,30 @@ export async function installRevision(
     min: 1,
     max: DRAFT_SUBJECT_MAX_LENGTH,
   });
-  const body = boundedString(args.body, "body", {
+  // THE OPT-OUT LINE, AT THE POINT OF EFFECT (PLAN §12: "every outbound email
+  // carries an opt-out line").
+  //
+  // `withOptOutLine` was applied at GENERATION time only, and two reachable
+  // writers never went through generation: the human edit path
+  // (`drafts.revise`, which can simply delete the line) and the
+  // member-callable `bookings.draftProposal`. `installRevision` is the single
+  // writer of a draft row and the place `payloadHash` is computed, so
+  // enforcing it here means the stored body — the exact bytes dispatch sends —
+  // always carries the line, whoever wrote it and however they edited it. The
+  // helper is idempotent, so a body that already has one keeps exactly one.
+  //
+  // When the line does not fit, the MESSAGE is trimmed, never the line.
+  const written = boundedString(args.body, "body", {
     min: 1,
     max: DRAFT_BODY_MAX_LENGTH,
   });
+  const withLine = withOptOutLine(written);
+  const body =
+    withLine.length <= DRAFT_BODY_MAX_LENGTH
+      ? withLine
+      : withOptOutLine(
+          written.slice(0, DRAFT_BODY_MAX_LENGTH - OPT_OUT_TAIL_LENGTH),
+        );
   if (args.evidenceIds.length > DRAFT_EVIDENCE_MAX_ITEMS) {
     throw invalid(
       `evidenceIds allows at most ${DRAFT_EVIDENCE_MAX_ITEMS} entries`,

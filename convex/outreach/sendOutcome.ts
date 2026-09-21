@@ -31,12 +31,48 @@ const vOutcomeArg = v.union(
     providerError: v.string(),
   }),
   v.object({
+    // The provider refused to PROCESS the request — rate limiting, or a key
+    // it would not accept at that instant. No mail was sent and the same
+    // request may succeed later, so the attempt goes back to `reserved` with
+    // a wake instead of being foreclosed (PLAN §9.1).
+    outcome: v.literal("retryable"),
+    providerError: v.string(),
+    httpStatus: v.optional(v.number()),
+    reason: v.optional(v.string()),
+    retryAfterMs: v.optional(v.number()),
+  }),
+  v.object({
     outcome: v.literal("uncertain"),
     providerError: v.string(),
     httpStatus: v.optional(v.number()),
     reason: v.optional(v.string()),
   }),
 );
+
+/**
+ * How long one attempt may keep retrying a refusal that never reached the
+ * mail. Past this the attempt is settled `definitively_failed` — the ledger
+ * has to reach a terminal state, and an email nobody has managed to send in
+ * six hours is one a person should see rather than one a loop keeps pushing.
+ */
+const SEND_RETRY_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * PLAN §9.1's capped back-off ladder (5 min → 30 min → 4 h), derived from how
+ * long this attempt has already been alive rather than from a counter: the row
+ * carries no retry count, and elapsed time answers the same question without
+ * one. A provider `Retry-After` always wins — it is the provider telling us
+ * exactly when it will listen again.
+ */
+function retryDelayMs(elapsedMs: number): number {
+  if (elapsedMs < 5 * 60 * 1000) {
+    return 5 * 60 * 1000;
+  }
+  if (elapsedMs < 35 * 60 * 1000) {
+    return 30 * 60 * 1000;
+  }
+  return 4 * 60 * 60 * 1000;
+}
 
 const vRecordResult = v.object({
   attempt: vSendAttemptDoc,
@@ -344,6 +380,101 @@ export const recordSendOutcome = internalMutation({
         dedupeKey: `sendattempt:${attempt._id}:acknowledged`,
         conversationId: attempt.conversationId,
       });
+    } else if (args.result.outcome === "retryable") {
+      // NOTHING WAS SENT, AND THE DRAFT IS NOT FORECLOSED.
+      //
+      // `definitively_failed` is a verdict on the PAYLOAD — `sendReserve`
+      // refuses every later attempt on that revision — so recording a 429 or
+      // a rotation-window 401 there meant an approved email could never go
+      // out again without being rewritten. The attempt goes back to
+      // `reserved` with a wake instead, keeping its usage reservation and its
+      // idempotency key (never regenerated), and `dispatchAttempt` re-runs
+      // every gate when it fires. The `reserved` + `nextPermittedAt` shape is
+      // the one the stale-attempt sweep already re-drives, so a lost schedule
+      // costs one cron interval rather than the email.
+      const message = args.result.providerError.slice(0, 500);
+      if (attempt.state === "uncertain") {
+        // A RECONCILE REPLAY THAT WAS RATE LIMITED PROVES NOTHING about the
+        // original request, which may well have been delivered. The attempt
+        // stays `uncertain` — its capacity stays held and its ask stays open —
+        // and only the recorded reason is refreshed. Un-parking it here would
+        // let a later dispatch send a second copy of mail already out.
+        await ctx.db.patch("sendAttempts", attempt._id, {
+          error: {
+            message,
+            at: now,
+            ...(args.result.httpStatus !== undefined
+              ? { httpStatus: args.result.httpStatus }
+              : {}),
+            reason: args.result.reason ?? "retryable",
+          },
+          updatedAt: now,
+        });
+        const unchanged = await ctx.db.get("sendAttempts", attempt._id);
+        if (unchanged === null) {
+          throw domainError("NOT_FOUND", "send attempt not found after update");
+        }
+        return { attempt: unchanged, replayed: false };
+      }
+      const elapsed = now - attempt.createdAt;
+      const delay = args.result.retryAfterMs ?? retryDelayMs(elapsed);
+      if (elapsed + delay > SEND_RETRY_WINDOW_MS) {
+        // The window is spent. Settled terminally so the ledger closes and a
+        // person sees it, with OUR sentence on the row.
+        await ctx.db.patch("sendAttempts", attempt._id, {
+          state: "definitively_failed",
+          error: {
+            message,
+            at: now,
+            ...(args.result.httpStatus !== undefined
+              ? { httpStatus: args.result.httpStatus }
+              : {}),
+            reason: `${args.result.reason ?? "retryable"}_exhausted`,
+          },
+          updatedAt: now,
+        });
+        await settle("released");
+        await recordActivityEvent(ctx, {
+          orgId: attempt.orgId,
+          kind: "send_attempt_failed",
+          summary: `Send gave up after repeated refusals: ${message.slice(0, 200)}`,
+          actor: "workflow",
+          dedupeKey: `sendattempt:${attempt._id}:failed`,
+          conversationId: attempt.conversationId,
+        });
+      } else {
+        const nextPermittedAt = now + delay;
+        await ctx.db.patch("sendAttempts", attempt._id, {
+          state: "reserved",
+          nextPermittedAt,
+          requestStartedAt: undefined,
+          error: {
+            message,
+            at: now,
+            ...(args.result.httpStatus !== undefined
+              ? { httpStatus: args.result.httpStatus }
+              : {}),
+            reason: args.result.reason ?? "retryable",
+          },
+          updatedAt: now,
+        });
+        // Scheduled inside this transaction, like every other durable wake on
+        // this path: the re-drive can never be lost between the write and a
+        // caller-side schedule.
+        await ctx.scheduler.runAfter(
+          delay,
+          internal.outreach.sendActions.dispatchAttempt,
+          { sendAttemptId: attempt._id },
+        );
+        await recordActivityEvent(ctx, {
+          orgId: attempt.orgId,
+          kind: "send_attempt_dispatched",
+          summary: `Send will be retried: ${message.slice(0, 200)}`,
+          actor: "workflow",
+          dedupeKey: `sendattempt:${attempt._id}:retry:${nextPermittedAt}`,
+          conversationId: attempt.conversationId,
+        });
+      }
     } else if (args.result.outcome === "rejected") {
       // Provider error text is unbounded input — truncate, never refuse to
       // record the outcome (a throw here strands the attempt in `requesting`).

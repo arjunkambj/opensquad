@@ -9,6 +9,7 @@
  * withdraws the approval ask rather than changing an approved email.
  */
 import { useQuery } from "convex/react"
+import { useEffect, useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../../convex/_generated/api"
 import type { Doc, Id } from "../../../../convex/_generated/dataModel"
@@ -40,9 +41,16 @@ export function ReplyCard({
     api.outreach.approvals.listForDraft,
     draftId === undefined ? "skip" : { orgId, draftId },
   )
+  // The preflight's window and daily-allowance answers depend on the time, and
+  // a Convex query may not read the clock itself — it is not re-run because
+  // time passed. So the clock comes from here, rounded to the minute: the
+  // argument only changes once a minute, which keeps the subscription stable
+  // while "it is outside your sending hours" stops being true within a minute
+  // of the window opening.
+  const now = useMinuteClock()
   const preflight = useQuery(
     api.outreach.sendPreflight.preflight,
-    draftId === undefined ? "skip" : { orgId, draftId },
+    draftId === undefined ? "skip" : { orgId, draftId, now },
   )
 
   if (draftId === undefined) {
@@ -138,4 +146,20 @@ function LoadedReply({
       </CardContent>
     </Card>
   )
+}
+
+/** The current minute, as an epoch millisecond value that changes once a
+ *  minute — a stable query argument rather than a per-render one. */
+function useMinuteClock(): number {
+  const minute = (): number => Math.floor(Date.now() / 60_000) * 60_000
+  const [now, setNow] = useState(minute)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(minute())
+    }, 15_000)
+    return () => {
+      clearInterval(timer)
+    }
+  }, [])
+  return now
 }

@@ -14,6 +14,7 @@ import type { TakeoverReason } from "../lib/validators";
 import { recordConversationNote } from "./conversationNotes";
 import { resolveOutboundRecipient } from "./conversationsModel";
 import type { InboundFacts } from "./inboundModel";
+import { isOwnMailbox } from "./mailboxIdentity";
 import { mergeConversationSource } from "./model";
 import { scheduleReplyHandling } from "./repliesModel";
 import {
@@ -63,6 +64,37 @@ export async function applyToConversation(
   conversation: Doc<"conversations">;
   replyWork: ReplyGateVerdict;
 }> {
+  // 0. OUR OWN MAIL IS NOT AN INBOUND EVENT — and this has to be decided
+  //    BEFORE step 1, not after it.
+  //
+  //    PLAN §9.4 puts the "never answer history" gate in front of everything,
+  //    and `evaluateReplyHistory` does refuse an echo (`sender_is_us`) — but
+  //    it only runs in `handleInboundReply`, which is scheduled at the END of
+  //    this function. By then ingest has already bumped `contextVersion` and
+  //    the unread count, superseded this thread's unsent drafts and cancelled
+  //    its parked follow-ups: a Review draft an operator was about to approve
+  //    is gone, the queued follow-up is retired and the Inbox counts our own
+  //    message as a reply. `markReplied` skips echoes, so the LEAD was safe;
+  //    the thread was not.
+  //
+  //    The check is the one definition of "is this our mailbox"
+  //    (`mailboxIdentity.isOwnMailbox`): the stored address and the stored
+  //    inbox id, compared case-insensitively. It can only ever refuse — an
+  //    unknown or unparseable sender is not us — so no real reply is lost by
+  //    it, and the message stays fully recorded either way: the receipt is
+  //    settled `handled` by the caller and the message is readable in the
+  //    thread through the mail component's own row.
+  const owner = await ctx.db.get("orgs", conversation.orgId);
+  if (isOwnMailbox(owner, facts.fromAddress)) {
+    await mergeConversationSource(ctx, conversation, receipt.source);
+    const unchanged =
+      (await ctx.db.get("conversations", conversation._id)) ?? conversation;
+    return {
+      conversation: unchanged,
+      replyWork: { start: false, blockedBy: "sender_is_us" },
+    };
+  }
+
   // 1. Version bump, approval invalidation, parked follow-up cancellation.
   await ctx.runMutation(internal.outreach.conversationStaging.applyInboundContext, {
     conversationId: conversation._id,

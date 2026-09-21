@@ -51,6 +51,7 @@ export async function retireConversationDrafts(
     .take(CONVERSATION_SCAN_MAX);
   const now = Date.now();
   let superseded = 0;
+  let clearsCurrent = false;
   for (const draft of open) {
     if (!(await draftIsUnsent(ctx, draft._id))) {
       continue;
@@ -59,7 +60,24 @@ export async function retireConversationDrafts(
       state: "superseded",
       supersededAt: now,
     });
+    if (conversation.currentDraftId === draft._id) {
+      clearsCurrent = true;
+    }
     superseded += 1;
+  }
+  if (clearsCurrent) {
+    // THE POINTER MOVES WITH THE DRAFT. `conversations.currentDraftId` is what
+    // the thread pane renders and what "Approve & send" acts on, and leaving
+    // it on a superseded row showed stale text under a live button —
+    // `approvals.approve` then threw CONFLICT, and `inboxList.awaitingApproval`
+    // (which does check `draft.state`) disagreed with the pane about the very
+    // same thread. Cleared here, in the same transaction that superseded it:
+    // a Convex patch with `undefined` removes the field, and the next
+    // `installRevision` sets it again.
+    await ctx.db.patch("conversations", conversation._id, {
+      currentDraftId: undefined,
+      updatedAt: now,
+    });
   }
   await ctx.runMutation(
     internal.outreach.sendControls.cancelParkedConversationAttempts,

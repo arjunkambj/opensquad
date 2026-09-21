@@ -120,14 +120,20 @@ export async function closeLeadLost(
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
 /**
- * Record when this lead is worth another look.
+ * Record when this lead is worth another look — and it is now a date that
+ * SELECTS the lead, not one that is merely displayed.
  *
- * Honest about what it does NOT do: `prospects.lastReplyAt` permanently
- * excludes a replied lead from every outreach selection range
- * (`outreachPlan.ts`), so nothing schedules a mail off this timestamp. It is
- * the date the Contacts view and the operator read — the "come back to this
- * in March" the reply asked for — and the hand-off asks for the sweep that
- * would act on it.
+ * `prospects.lastReplyAt` used to exclude a replied lead from every outreach
+ * selection range, so this timestamp scheduled nothing: the thread note
+ * promised "another look in about N days" and nothing ever looked.
+ * `outreachPlan.replyFollowUpDue` is the reader — a lead at stage `replied`
+ * whose `nextActionAt` has come round is due for exactly one more message,
+ * and a NEWER reply clears the date (`markReplied`) so the promise is
+ * withdrawn the moment the lead writes again.
+ *
+ * It is only ever a reschedule, never a resurrection: a closed, rejected or
+ * suppressed lead is refused by the selection, the claim and the send gates
+ * in turn.
  */
 export async function scheduleLeadFollowUp(
   ctx: MutationCtx,

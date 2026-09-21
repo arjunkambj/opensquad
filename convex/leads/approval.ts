@@ -21,6 +21,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { LeadApproval } from "../lib/validators";
 import { domainError } from "../lib/validators";
+import { draftIsUnsent } from "../outreach/outreachLeadState";
 import { appendLeadEvent, findLeadEventByOperationKey } from "./events";
 import { loadProspectForWrite } from "./model";
 
@@ -140,13 +141,34 @@ export async function cancelWorkForRejectedLead(
         q.eq("conversationId", conversation._id).eq("state", "current"),
       )
       .take(CONVERSATION_SCAN_MAX);
+    let clearsCurrent = false;
     for (const draft of open) {
+      // SENT MAIL IS UNTOUCHED (PLAN §9.1). A draft stays `current` after it
+      // has gone out — nothing supersedes it until the next revision — so
+      // superseding every `current` row flipped already-sent mail to
+      // `superseded`, rewriting the record of what was actually sent to this
+      // person. `draftIsUnsent` is the same guard `retireConversationDrafts`
+      // applies, and a rejection is not a stronger claim than a reply.
+      if (!(await draftIsUnsent(ctx, draft._id))) {
+        continue;
+      }
       // `state` and `supersededAt` move together — see `vDraftState`.
       await ctx.db.patch("drafts", draft._id, {
         state: "superseded",
         supersededAt: now,
       });
+      if (conversation.currentDraftId === draft._id) {
+        clearsCurrent = true;
+      }
       draftsSuperseded += 1;
+    }
+    if (clearsCurrent) {
+      // The thread pane renders whatever `currentDraftId` names; leaving it on
+      // a superseded draft shows stale text under a live Approve & send.
+      await ctx.db.patch("conversations", conversation._id, {
+        currentDraftId: undefined,
+        updatedAt: now,
+      });
     }
     // Pre-dispatch intents only: the send boundary owns the distinction, and
     // a request that already left us is never retracted here.

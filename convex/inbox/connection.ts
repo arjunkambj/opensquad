@@ -92,7 +92,7 @@ export function mapProviderFailure(code: AgentMailErrorCode): {
 /* Reads                                                               */
 /* ------------------------------------------------------------------ */
 
-const vConnectionOwner = v.object({
+const vConnectionMember = v.object({
   orgId: v.id("orgs"),
   webhookToken: v.string(),
   inboxConnection: vInboxConnection,
@@ -102,13 +102,26 @@ const vConnectionOwner = v.object({
 });
 
 /**
- * Owner guard for the connect actions. An action cannot read the database, so
- * the guard runs here and returns only the fields the flow needs — never the
- * whole org document, which carries the webhook token's siblings.
+ * MEMBER guard for the connect actions — and it is named for what it does.
+ *
+ * It used to be called the owner guard, which was a claim the server cannot
+ * make: the tenant is the Hexclave organization, we keep no member records and
+ * no roles of our own, and the token carries the ACTIVE organization but not
+ * the caller's role in it (PLAN §4, `convex/lib/auth.ts`). So every member of
+ * the active organization may connect, rotate and disconnect the sending
+ * inbox, exactly as they may use the rest of the product. A client-side
+ * "only the owner can do this" is cosmetic and must not be written as though
+ * this function enforced it; a real restriction needs a role claim in the
+ * token or a keyed lookup at the auth provider, which is an owner decision
+ * recorded in `plan/followups.md`.
+ *
+ * An action cannot read the database, so the guard runs here and returns only
+ * the fields the flow needs — never the whole org document, which carries the
+ * webhook token's siblings.
  */
-export const requireConnectionOwner = internalQuery({
+export const requireConnectionMember = internalQuery({
   args: { orgId: v.id("orgs") },
-  returns: vConnectionOwner,
+  returns: vConnectionMember,
   handler: async (ctx, args) => {
     const { org } = await requireOrgMember(ctx, args.orgId);
     return {
@@ -190,15 +203,15 @@ export const getInboxConnection = query({
     );
     const summary = summariseSecret(key);
     const eventAt = await lastInboundAt(ctx, org._id);
+    const inboxAddress = org.inboxAddress ?? org.inboxRef;
     return {
       connection: org.inboxConnection,
       status: summary.status,
       ...(summary.last4 !== undefined ? { last4: summary.last4 } : {}),
-      // AgentMail inbox ids ARE mailbox addresses, so the reference is the
-      // address; nothing else about the inbox is stored.
-      ...(org.inboxRef !== undefined
-        ? { inboxAddress: org.inboxRef }
-        : {}),
+      // The provider reports the inbox id and the mailbox address as separate
+      // fields, so the address is what connect stored — falling back to the
+      // reference only for a connection made before that was persisted.
+      ...(inboxAddress !== undefined ? { inboxAddress } : {}),
       ...(eventAt !== undefined ? { lastEventAt: eventAt } : {}),
       sync: await readInboxSync(ctx, org._id, org.connectedAt),
       ...(org.connectedAt !== undefined

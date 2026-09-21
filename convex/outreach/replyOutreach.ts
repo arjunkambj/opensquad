@@ -52,6 +52,8 @@ const vReplyRefusal = v.union(
   v.literal("association_missing"),
   v.literal("recipient_unknown"),
   v.literal("reply_target_unknown"),
+  /** A newer inbound landed while this answer was being written. */
+  v.literal("reply_target_superseded"),
   v.literal("suppressed"),
   v.literal("lead_rejected"),
 );
@@ -164,6 +166,18 @@ export const draftAndSendReply = internalMutation({
       args.replyToMessageRef ?? conversation.lastInboundMessageRef;
     if (replyToMessageRef === undefined) {
       return refuse("reply_target_unknown");
+    }
+    // AND IT MUST STILL BE THE LATEST INBOUND.
+    //
+    // The caller checked that at decision time, minutes and one paid model
+    // call ago. A second reply arriving in between makes this answer a reply
+    // to a message the thread has moved past: it would be drafted against the
+    // superseded text, and the send gates would not catch it — they compare
+    // `draft.createdAt` against the reply time, and this draft is NEWER than
+    // both. Checked here, in the transaction that inserts the draft, which is
+    // the only place the two facts can be read together.
+    if (conversation.lastInboundMessageRef !== replyToMessageRef) {
+      return refuse("reply_target_superseded");
     }
 
     const draft = await ctx.runMutation(

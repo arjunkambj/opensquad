@@ -14,8 +14,11 @@
  * derived from the org id, so connecting twice returns the inbox and the
  * webhook that already exist instead of making duplicates.
  *
- * Every action here is owner-guarded through `connection.requireConnectionOwner`
- * — an action cannot read the database, so the guard is a query it runs first.
+ * Every action here is guarded through `connection.requireConnectionMember` —
+ * an action cannot read the database, so the guard is a query it runs first.
+ * It is a MEMBER guard, not an owner one: the token carries the active
+ * organization and no role, and we keep no member records of our own, so every
+ * member of the organization may change the sending inbox (PLAN §4).
  */
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -111,7 +114,18 @@ async function registerOrgWebhook(
   if (registered.ok && !matches(registered.value)) {
     // `client_id` returned the org's PREVIOUS registration, pointing at a
     // different inbox or a stale URL. Replace it rather than leave mail going
-    // to the wrong route; the id is free again once it is deleted.
+    // to the wrong route.
+    //
+    // AND IT IS SAFE WHETHER OR NOT THE DELETE FREES THE `client_id`. The
+    // provider documents only that a repeated create returns the ORIGINAL
+    // resource; whether the mapping survives a delete is not stated. If it
+    // does not, the second create registers a fresh webhook and we are done.
+    // If it does, the second create hands back the same mismatched resource —
+    // and the `matches` check below sees that, takes it down and returns
+    // `stale_registration` instead of storing a dead registration. Neither
+    // branch binds the org to something the provider no longer has, and
+    // `deleteWebhook` treats a 404 as success, so the second removal of one
+    // id is a no-op rather than an error.
     await remove(registered.value.webhookId);
     registered = await createWebhook(apiKey, request);
   }
@@ -232,7 +246,7 @@ export const verifyAndStoreKey = action({
   returns: vVerifyResult,
   handler: async (ctx, args): Promise<typeof vVerifyResult.type> => {
     await limitConnectCalls(ctx);
-    await ctx.runQuery(internal.inbox.connection.requireConnectionOwner, {
+    await ctx.runQuery(internal.inbox.connection.requireConnectionMember, {
       orgId: args.orgId,
     });
     if (!isSecretStorageConfigured()) {
@@ -303,7 +317,7 @@ export const connectInbox = action({
   handler: async (ctx, args): Promise<typeof vConnectResult.type> => {
     await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
-      internal.inbox.connection.requireConnectionOwner,
+      internal.inbox.connection.requireConnectionMember,
       { orgId: args.orgId },
     );
     const siteUrl = env.CONVEX_SITE_URL;
@@ -334,17 +348,13 @@ export const connectInbox = action({
     if (args.inboxId !== undefined) {
       const wanted = providerId(args.inboxId, "inboxId");
       const found = await findInbox(apiKey, wanted);
-      if (found === "unavailable") {
-        return failure(
-          "provider_unavailable",
-          agentmailFailureMessage("provider_unavailable"),
-        );
-      }
-      if (found === null) {
-        return failure(
-          "inbox_not_visible_to_key",
-          "That inbox is not on the account this key belongs to.",
-        );
+      if (!found.found) {
+        return "failure" in found
+          ? mapProviderFailure(found.failure)
+          : failure(
+              "inbox_not_visible_to_key",
+              "That inbox is not on the account this key belongs to.",
+            );
       }
       inboxRef = found.inboxId;
       inboxAddress = found.address;
@@ -391,6 +401,10 @@ export const connectInbox = action({
     const claim = await ctx.runMutation(internal.inbox.connectionState.claimInbox, {
       orgId: args.orgId,
       inboxRef,
+      // The provider reports the id and the mailbox address as separate
+      // fields; both are stored so nothing downstream has to assume they are
+      // the same string (`inbox/mailboxIdentity.ts`).
+      inboxAddress,
       webhookId: registered.webhook.webhookId,
       webhookSecret: {
         ciphertext: secret.ciphertext,
@@ -400,8 +414,9 @@ export const connectInbox = action({
     });
     if (!claim.ok) {
       // Lost the race (or the inbox belongs to someone else): take the
-      // webhook this action registered back down.
-      await deleteWebhook(apiKey, registered.webhook.webhookId);
+      // webhook this action registered back down. Retried, because one left
+      // standing posts every event at a URL that will refuse it forever.
+      await deleteWebhookWithRetry(apiKey, registered.webhook.webhookId);
       return failure(
         "inbox_claimed_elsewhere",
         "That inbox is connected to another organization.",
@@ -411,11 +426,23 @@ export const connectInbox = action({
   },
 });
 
-/** Find one inbox on the key's account, paging a bounded number of times. */
+/**
+ * Find one inbox on the key's account, paging a bounded number of times.
+ *
+ * A failed listing carries the provider's MAPPED code rather than collapsing
+ * to "unavailable": a key the provider refused is a different answer for the
+ * user ("that key was refused") than a provider that is down ("try again
+ * shortly"), and both callers map it through `mapProviderFailure` so the
+ * white-label rule still holds — a code travels, never provider wording.
+ */
 async function findInbox(
   apiKey: string,
   inboxId: string,
-): Promise<{ inboxId: string; address: string } | null | "unavailable"> {
+): Promise<
+  | { found: true; inboxId: string; address: string }
+  | { found: false }
+  | { found: false; failure: AgentMailErrorCode }
+> {
   let pageToken: string | undefined;
   for (let page = 0; page < INBOX_LOOKUP_MAX_PAGES; page += 1) {
     const listed = await listInboxes(apiKey, {
@@ -423,25 +450,80 @@ async function findInbox(
       ...(pageToken !== undefined ? { pageToken } : {}),
     });
     if (!listed.ok) {
-      return "unavailable";
+      return { found: false as const, failure: listed.code };
     }
     const match = listed.value.inboxes.find(
       (inbox) => inbox.inboxId === inboxId,
     );
     if (match !== undefined) {
-      return { inboxId: match.inboxId, address: match.address };
+      return {
+        found: true as const,
+        inboxId: match.inboxId,
+        address: match.address,
+      };
     }
     if (listed.value.nextPageToken === undefined) {
-      return null;
+      return { found: false as const };
     }
     pageToken = listed.value.nextPageToken;
   }
-  return null;
+  return { found: false as const };
 }
 
 /* ------------------------------------------------------------------ */
 /* Step 7 — rotate and disconnect                                      */
 /* ------------------------------------------------------------------ */
+
+/** Attempts a best-effort webhook delete gets before it is given up on. */
+const WEBHOOK_DELETE_ATTEMPTS = 3;
+
+/** Pause between those attempts. Short — the caller is a user waiting. */
+const WEBHOOK_DELETE_RETRY_MS = 400;
+
+/**
+ * Take a webhook down, retrying the failures a retry can fix.
+ *
+ * A REGISTRATION WE CANNOT DELETE KEEPS FIRING. The provider goes on posting
+ * every inbound event to a URL that answers 401 once the secret is gone, and
+ * Svix retries each one — so a "best effort" that gave up after a single
+ * timeout left a permanent, invisible retry loop on the user's own account.
+ * `not_found` counts as success: the registration is gone either way.
+ *
+ * Only transient codes are retried; a key the provider refuses will refuse the
+ * next attempt identically, and there is nothing to wait for.
+ */
+async function deleteWebhookWithRetry(
+  apiKey: string,
+  webhookId: string,
+): Promise<{ deleted: boolean; code?: AgentMailErrorCode }> {
+  let last: AgentMailErrorCode | undefined;
+  for (let attempt = 0; attempt < WEBHOOK_DELETE_ATTEMPTS; attempt += 1) {
+    const removed = await deleteWebhook(apiKey, webhookId);
+    if (removed.ok) {
+      return { deleted: true };
+    }
+    last = removed.code;
+    if (
+      removed.code !== "timeout" &&
+      removed.code !== "transport_error" &&
+      removed.code !== "provider_unavailable" &&
+      removed.code !== "rate_limited"
+    ) {
+      break;
+    }
+    if (attempt + 1 < WEBHOOK_DELETE_ATTEMPTS) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, WEBHOOK_DELETE_RETRY_MS * (attempt + 1)),
+      );
+    }
+  }
+  // Provider identifiers and OUR mapped code only — never provider wording.
+  console.info("inbox.connectActions: webhook still registered at provider", {
+    webhookId,
+    code: last,
+  });
+  return { deleted: false, ...(last !== undefined ? { code: last } : {}) };
+}
 
 /**
  * Rotate the API key, in PLAN §9.4's order: verify the new key → register the
@@ -454,14 +536,24 @@ async function findInbox(
  */
 export const rotateKey = action({
   args: { orgId: v.id("orgs"), apiKey: v.string() },
-  returns: v.union(v.object({ ok: v.literal(true) }), vFailure),
+  returns: v.union(
+    v.object({
+      ok: v.literal(true),
+      /** A previous registration the provider still holds — see below. */
+      orphanedWebhookId: v.optional(v.string()),
+    }),
+    vFailure,
+  ),
   handler: async (
     ctx,
     args,
-  ): Promise<{ ok: true } | { ok: false; code: InboxConnectErrorCode; message: string }> => {
+  ): Promise<
+    | { ok: true; orphanedWebhookId?: string }
+    | { ok: false; code: InboxConnectErrorCode; message: string }
+  > => {
     await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
-      internal.inbox.connection.requireConnectionOwner,
+      internal.inbox.connection.requireConnectionMember,
       { orgId: args.orgId },
     );
     if (owner.inboxRef === undefined) {
@@ -476,17 +568,13 @@ export const rotateKey = action({
     }
     const apiKey = boundedString(args.apiKey, "apiKey", { min: 8, max: 512 });
     const found = await findInbox(apiKey, owner.inboxRef);
-    if (found === "unavailable") {
-      return failure(
-        "provider_unavailable",
-        agentmailFailureMessage("provider_unavailable"),
-      );
-    }
-    if (found === null) {
-      return failure(
-        "inbox_not_visible_to_key",
-        "That key cannot see this organization's inbox. Disconnect first if you are moving to a different mailbox.",
-      );
+    if (!found.found) {
+      return "failure" in found
+        ? mapProviderFailure(found.failure)
+        : failure(
+            "inbox_not_visible_to_key",
+            "That key cannot see this organization's inbox. Disconnect first if you are moving to a different mailbox.",
+          );
     }
     const webhookUrl = `${siteUrl.replace(/\/+$/, "")}/agentmail/webhook/${owner.webhookToken}`;
     // The same replace-if-mismatched registration connect uses: the
@@ -518,6 +606,7 @@ export const rotateKey = action({
     await ctx.runMutation(internal.inbox.connectionState.applyRotation, {
       orgId: args.orgId,
       webhookId: registered.webhook.webhookId,
+      inboxAddress: found.address,
       apiKeyEnvelope: {
         ciphertext: key.ciphertext,
         iv: key.iv,
@@ -530,18 +619,25 @@ export const rotateKey = action({
       },
     });
 
-    if (
-      owner.agentmailWebhookId !== undefined &&
-      owner.agentmailWebhookId !== registered.webhook.webhookId &&
-      previous !== null
-    ) {
-      // Best effort, and deliberately after the store: a failure here leaves a
-      // stale webhook on the provider, which is recoverable; failing before
-      // the store would leave us unable to verify anything at all.
-      await deleteWebhook(
-        await decryptSecret(previous),
-        owner.agentmailWebhookId,
-      );
+    const stale = owner.agentmailWebhookId;
+    if (stale !== undefined && stale !== registered.webhook.webhookId) {
+      // Deliberately after the store: a failure here leaves a stale webhook on
+      // the provider, which is recoverable; failing before the store would
+      // leave us unable to verify anything at all.
+      //
+      // It is NOT "best effort" in the sense of one try, though. A surviving
+      // registration points at this same URL and delivers a SECOND copy of
+      // every event — verified for as long as the rotation overlap is open,
+      // then 401 and retried by the provider for good. So the delete is
+      // retried, and an orphan that outlives the retries is reported and
+      // logged rather than forgotten.
+      const removed =
+        previous === null
+          ? { deleted: false }
+          : await deleteWebhookWithRetry(await decryptSecret(previous), stale);
+      if (!removed.deleted) {
+        return { ok: true as const, orphanedWebhookId: stale };
+      }
     }
     return { ok: true as const };
   },
@@ -554,37 +650,68 @@ export const rotateKey = action({
  */
 export const disconnectInbox = action({
   args: { orgId: v.id("orgs") },
-  returns: v.object({ ok: v.literal(true), webhookDeleted: v.boolean() }),
+  returns: v.object({
+    ok: v.literal(true),
+    webhookDeleted: v.boolean(),
+    /**
+     * The registration that is STILL live on the provider, when the delete
+     * could not be made. It keeps posting every inbound event at a URL that
+     * now answers 401, and only the account's owner can take it down — so the
+     * id is reported rather than forgotten, and the org keeps its local
+     * record of it so a later reconnect reclaims it.
+     */
+    orphanedWebhookId: v.optional(v.string()),
+  }),
   handler: async (
     ctx,
     args,
-  ): Promise<{ ok: true; webhookDeleted: boolean }> => {
+  ): Promise<{
+    ok: true;
+    webhookDeleted: boolean;
+    orphanedWebhookId?: string;
+  }> => {
     await limitConnectCalls(ctx);
     const owner = await ctx.runQuery(
-      internal.inbox.connection.requireConnectionOwner,
+      internal.inbox.connection.requireConnectionMember,
       { orgId: args.orgId },
     );
+    const webhookId = owner.agentmailWebhookId;
     let webhookDeleted = false;
-    if (owner.agentmailWebhookId !== undefined) {
+    if (webhookId !== undefined) {
       const envelope = await ctx.runQuery(
         internal.orgs.secrets.getEnvelope,
         { orgId: args.orgId, provider: "agentmail" as const },
       );
       if (envelope !== null) {
-        const removed = await deleteWebhook(
+        const removed = await deleteWebhookWithRetry(
           await decryptSecret(envelope),
-          owner.agentmailWebhookId,
+          webhookId,
         );
-        webhookDeleted = removed.ok;
+        webhookDeleted = removed.deleted;
+      } else {
+        // No key to delete it with — and after this mutation there never will
+        // be one. Logged with provider identifiers only.
+        console.info(
+          "inbox.connectActions: disconnect left a webhook with no key to delete it",
+          { webhookId },
+        );
       }
     }
-    // The local state is cleared whether or not the provider answered: the
-    // user asked to disconnect, and a stale webhook can only deliver events
-    // this deployment will refuse.
+    const orphaned = webhookId !== undefined && !webhookDeleted;
+    // The local state is cleared whether or not the provider answered — the
+    // user asked to disconnect — EXCEPT the webhook id when the registration
+    // survived. Keeping it is the only durable record that something is still
+    // pointed at this deployment, and `registerOrgWebhook` reclaims exactly
+    // that registration (same deterministic `client_id`) on the next connect.
     await ctx.runMutation(internal.inbox.connectionState.releaseInbox, {
       orgId: args.orgId,
+      keepWebhookRegistration: orphaned,
     });
-    return { ok: true as const, webhookDeleted };
+    return {
+      ok: true as const,
+      webhookDeleted,
+      ...(orphaned ? { orphanedWebhookId: webhookId } : {}),
+    };
   },
 });
 

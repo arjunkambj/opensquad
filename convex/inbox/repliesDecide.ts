@@ -14,7 +14,9 @@
  * `meeting_booked` is written by one click and nothing else.
  */
 import { internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
 import {
   boundReplyBody,
   boundResumeDays,
@@ -133,10 +135,21 @@ export const applyReplyDecision = internalMutation({
         operationKey: key("meeting-proposed"),
       });
       if (moved.stage === "meeting_proposed") {
+        // A stage with no row behind it is not a proposal: the booking-link
+        // gate, the dashboard's proposed/booked split and every proposal
+        // linkage read `bookings`, and this branch used to write none. The
+        // writer is deliberately narrow — a `proposed` row carrying the
+        // AGENT'S OWN booking link, never invented times, and never
+        // `meeting_booked`, which only the user's click writes (PLAN §9.5).
+        const recorded = await recordProposedBooking(ctx, conversation, lead, {
+          operationKey: key("booking-proposed"),
+        });
         await noteOnThread(
           ctx,
           conversation,
-          "They asked about a time, so the lead moved to Meeting proposed. It counts as booked only when you press Mark as booked.",
+          recorded
+            ? "They asked about a time, so the lead moved to Meeting proposed and your booking link is recorded as the proposal. It counts as booked only when you press Mark as booked."
+            : "They asked about a time, so the lead moved to Meeting proposed. It counts as booked only when you press Mark as booked.",
         );
       }
     }
@@ -194,6 +207,51 @@ export const applyReplyDecision = internalMutation({
     return { outcome: sent.queued ? "drafted" : "answered" };
   },
 });
+
+/**
+ * Record the `bookings` row behind a `meeting_proposed` stage, when there is
+ * an honest proposal to record.
+ *
+ * There is one exactly when the agent has a booking link configured. A model
+ * reading "how about Tuesday?" has not agreed a time, and the slots form of a
+ * proposal names specific future intervals — inventing those would put times
+ * in the pipeline that nobody offered. So an agent with no booking link moves
+ * the stage and records no booking, which is the truth: the lead asked, and
+ * there is nothing yet to send them.
+ */
+async function recordProposedBooking(
+  ctx: MutationCtx,
+  conversation: Doc<"conversations">,
+  lead: Doc<"prospects">,
+  args: { operationKey: string },
+): Promise<boolean> {
+  if (conversation.agentId === undefined) {
+    return false;
+  }
+  const agent = await ctx.db.get("agents", conversation.agentId);
+  const bookingUrl = agent?.bookingUrl;
+  if (
+    agent === null ||
+    agent.orgId !== conversation.orgId ||
+    bookingUrl === undefined ||
+    bookingUrl.trim() === ""
+  ) {
+    return false;
+  }
+  const recorded = await ctx.runMutation(
+    internal.bookings.proposals.recordAgentProposal,
+    {
+      orgId: conversation.orgId,
+      prospectId: lead._id,
+      conversationId: conversation._id,
+      bookingUrl,
+      operationKey: args.operationKey,
+    },
+  );
+  // A replay, an already-live booking and a refused URL all mean "no new
+  // proposal was recorded"; only a row created here changes what the note says.
+  return recorded.recorded;
+}
 
 /* ------------------------------------------------------------------ */
 /* When the step cannot finish                                         */

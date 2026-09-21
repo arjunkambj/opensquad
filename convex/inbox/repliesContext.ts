@@ -22,8 +22,14 @@ import { v } from "convex/values";
 import { resolveOutboundRecipient } from "./conversationsModel";
 import { readInboundFacts } from "./inboundModel";
 import { leadOfConversation } from "./repliesLead";
-import { findInboundReceipt, replyOperationKey } from "./repliesModel";
-import { evaluateReplyHistory } from "./replyGate";
+import {
+  findInboundReceipt,
+  replyOperationKey,
+  vReplyHandlingMode,
+} from "./repliesModel";
+import type { ReplyHandlingMode } from "./repliesModel";
+import { evaluateReplyAnswerGate, evaluateReplyHistory } from "./replyGate";
+import type { ReplyGateBlockCode } from "./replyGate";
 
 /** Our own sent mail carried into the prompt, oldest first. */
 const THREAD_MESSAGE_MAX = 6;
@@ -80,6 +86,28 @@ type ReplyBrief = NonNullable<
 >;
 
 /**
+ * Gate refusals that are the REASON for a mode rather than an objection to it.
+ *
+ * `classify_only` is entered from exactly two places: an agent that is not in
+ * a sending mode, and the two-reply ceiling, which hands the thread to a
+ * person (`human_takeover`) in the same transaction that chooses the mode. A
+ * re-read would find both and refuse to classify the message it was told to
+ * classify. The sender check is tolerated with them because a message from a
+ * colleague on cc is still worth naming in the Inbox when nothing will be
+ * answered anyway.
+ */
+const CLASSIFY_ONLY_TOLERATED: ReadonlySet<ReplyGateBlockCode> =
+  new Set<ReplyGateBlockCode>([
+    "agent_not_sending",
+    "human_takeover",
+    "sender_contact_mismatch",
+  ]);
+
+function tolerated(mode: ReplyHandlingMode): ReadonlySet<ReplyGateBlockCode> {
+  return mode === "classify_only" ? CLASSIFY_ONLY_TOLERATED : new Set();
+}
+
+/**
  * Re-read every gate and assemble the prompt's facts, in one transaction.
  *
  * The gates are read AGAIN here rather than trusted from the dispatch: a
@@ -90,6 +118,14 @@ export const beginReplyHandling = internalMutation({
   args: {
     conversationId: v.id("conversations"),
     messageRef: v.string(),
+    /**
+     * How far the dispatch decided this message may be taken. It is what says
+     * WHICH gates must still hold here: `answer` has to satisfy the whole
+     * answer gate again, `classify_only` everything except the two blockers
+     * that put it in that mode, and `free_only` nothing at all — the free
+     * rules run for an org at zero credits with the kill switch on.
+     */
+    mode: vReplyHandlingMode,
   },
   returns: vReplyContext,
   handler: async (ctx, args): Promise<ReplyContext> => {
@@ -111,9 +147,39 @@ export const beginReplyHandling = internalMutation({
       org,
       receipt,
       fromAddress: facts.fromAddress,
+      ...(facts.deliveryClass !== undefined
+        ? { deliveryClass: facts.deliveryClass }
+        : {}),
     });
     if (!history.handle) {
       return { status: "skip" as const, reason: history.blockedBy };
+    }
+    // THE WHOLE GATE, not only the history half.
+    //
+    // `replyGate.evaluateReplyAutomation` promises that every later path to
+    // model work re-runs it before dispatch, "because a takeover, a close, an
+    // org pause or a suppression can land in between, and a stale wake must
+    // then spend nothing". Re-running only `evaluateReplyHistory` did not keep
+    // that promise: none of those four changes the history verdict, so the
+    // paid classification went ahead and only the later DRAFT step refused —
+    // after the credit was spent.
+    //
+    // The tolerated blockers are the ones that DEFINE the mode rather than
+    // contradict it: `classify_only` exists precisely because the agent is not
+    // sending, or because the ceiling handed the thread to a person a moment
+    // ago (PLAN §9.3's "shown, never answered" still shows what the reply
+    // was). Everything else — closed, unassigned, org paused, suppressed,
+    // opted out, association gone — stops the spend.
+    if (args.mode !== "free_only") {
+      const gate = await evaluateReplyAnswerGate(
+        ctx,
+        conversation,
+        facts.optOutSignal,
+        facts.fromAddress,
+      );
+      if (!gate.start && !tolerated(args.mode).has(gate.blockedBy)) {
+        return { status: "skip" as const, reason: gate.blockedBy };
+      }
     }
     const { recipient } = await resolveOutboundRecipient(ctx, conversation);
 

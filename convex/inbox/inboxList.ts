@@ -12,13 +12,16 @@
  *
  * - `received` — `lastInboundAt > 0`, newest reply first. A pure range, no
  *   predicate: a thread is "received" exactly when a reply has landed on it.
- * - `interested` — the same range, narrowed to `lastDisposition` values that
- *   mean interest. THE FILTER READS THE CONVERSATION ROW, not the lead's
- *   stage: `conversations.lastDisposition` is the only interest fact stored
- *   on the row itself, and joining `prospects.stage` would mean a point read
- *   per candidate and a post-filtered page. See the hand-off note — when the
- *   reply half starts writing a stage-derived flag onto the conversation, the
- *   predicate below is the one place that changes.
+ * - `interested` — the same range, narrowed by `isInterestedThread`: the
+ *   thread's own `lastDisposition`, OR the linked lead standing at
+ *   `interested` / `meeting_proposed` / `meeting_booked`. It has to read the
+ *   lead, because `applyDisposition` overwrites `lastDisposition` on every
+ *   classified inbound — so a thread whose meeting is booked leaves the pill
+ *   the moment a later message is classified `question`, which is the exact
+ *   opposite of what the pill is for. That is one point read per candidate row
+ *   and a page that can come back shorter than its limit; the alternative is a
+ *   pill that loses the hottest threads. A stage-derived flag written onto the
+ *   conversation row would make it a pure range again (hand-off note).
  * - `unread` — the same range, narrowed to `unreadCount > 0`. The counter is
  *   only ever raised by `applyInboundContext`, so every unread thread has an
  *   inbound message and the range can never hide one.
@@ -53,7 +56,7 @@ import {
   vMessageSource,
   vReplyDisposition,
 } from "../lib/validators";
-import type { ReplyDisposition } from "../lib/validators";
+import type { LeadStage, ReplyDisposition } from "../lib/validators";
 import { v } from "convex/values";
 
 /** The four slices of reference 24, in the order the screen renders them. */
@@ -75,10 +78,54 @@ export type InboxPill = (typeof INBOX_PILLS)[number];
 
 /**
  * Dispositions that mean the lead showed interest. `interested` is the
- * classifier's own word for it; there is no meeting disposition, so a booked
- * meeting reaches this pill through the lead stage, not through here.
+ * classifier's own word for it, and there is no meeting disposition at all.
  */
 const INTERESTED_DISPOSITIONS: readonly ReplyDisposition[] = ["interested"];
+
+/**
+ * Lead stages that mean this thread is hot, whatever the last message was
+ * classified as.
+ *
+ * THE DISPOSITION ALONE LOSES THE BEST THREADS. `applyDisposition` overwrites
+ * `lastDisposition` on EVERY classified inbound, so a lead who said yes and
+ * then asked one logistics question — classified `question` — dropped straight
+ * out of this pill, and so did every thread whose meeting is already proposed
+ * or booked. The comment that used to sit here claimed a booked meeting
+ * reached the pill "through the lead stage"; nothing read the lead stage.
+ * Now it does.
+ */
+const INTERESTED_LEAD_STAGES: ReadonlySet<LeadStage> = new Set<LeadStage>([
+  "interested",
+  "meeting_proposed",
+  "meeting_booked",
+]);
+
+/**
+ * Is this a thread the Interested pill should hold?
+ *
+ * The disposition is checked first because it needs no second read; the lead
+ * is only loaded for a thread the disposition did not already claim.
+ */
+async function isInterestedThread(
+  ctx: QueryCtx,
+  conversation: Doc<"conversations">,
+): Promise<boolean> {
+  if (
+    conversation.lastDisposition !== undefined &&
+    INTERESTED_DISPOSITIONS.includes(conversation.lastDisposition)
+  ) {
+    return true;
+  }
+  if (conversation.prospectId === undefined) {
+    return false;
+  }
+  const lead = await ctx.db.get("prospects", conversation.prospectId);
+  return (
+    lead !== null &&
+    lead.orgId === conversation.orgId &&
+    INTERESTED_LEAD_STAGES.has(lead.stage)
+  );
+}
 
 /** How many company matches a search reads before it stops. */
 const SEARCH_LEAD_BOUND = 25;
@@ -214,13 +261,11 @@ function pillRange(
     )
     .order("desc");
   if (pill === "interested") {
-    return ranged.filter((q) =>
-      q.or(
-        ...INTERESTED_DISPOSITIONS.map((disposition) =>
-          q.eq(q.field("lastDisposition"), disposition),
-        ),
-      ),
-    );
+    // No index-level filter: "interested" is a fact of the thread OR of its
+    // lead, and an index range cannot join to `prospects`. The range is the
+    // superset (every thread with an inbound) and `isInterestedThread` decides
+    // each row — which is what the list already does for `awaitingApproval`.
+    return ranged;
   }
   if (pill === "unread") {
     return ranged.filter((q) => q.gt(q.field("unreadCount"), 0));
@@ -242,12 +287,8 @@ function matchesPill(
   if (pill === "unread") {
     return conversation.unreadCount > 0;
   }
-  if (pill === "interested") {
-    return (
-      conversation.lastDisposition !== undefined &&
-      INTERESTED_DISPOSITIONS.includes(conversation.lastDisposition)
-    );
-  }
+  // `interested` is not decided here: it needs the lead row, so both paths ask
+  // `isInterestedThread` instead (the one definition).
   return true;
 }
 
@@ -315,7 +356,8 @@ export const list = query({
         for (const thread of threads) {
           if (
             thread.orgId === args.orgId &&
-            matchesPill(thread, pill)
+            matchesPill(thread, pill) &&
+            (pill !== "interested" || (await isInterestedThread(ctx, thread)))
           ) {
             found.push(thread);
           }
@@ -348,17 +390,34 @@ export const list = query({
     const counted = await pillRange(ctx, args.orgId, pill).take(
       MAX_LIST_LIMIT + 1,
     );
+    // The Interested pill is the one slice whose predicate needs the LEAD, so
+    // it is applied after the page rather than inside the range. Paging is
+    // unaffected — the cursor still walks the underlying range — and both the
+    // page and the bounded count go through the same one definition, so the
+    // list and the number above it can never disagree.
+    const inPill = async (
+      conversation: Doc<"conversations">,
+    ): Promise<boolean> =>
+      pill !== "interested" || (await isInterestedThread(ctx, conversation));
     const items: InboxRow[] = [];
     for (const conversation of page.page) {
-      items.push(await toInboxRow(ctx, conversation));
+      if (await inPill(conversation)) {
+        items.push(await toInboxRow(ctx, conversation));
+      }
+    }
+    let countValue = 0;
+    for (const conversation of counted) {
+      if (await inPill(conversation)) {
+        countValue += 1;
+      }
     }
     return {
       items,
       cursor: page.isDone ? null : page.continueCursor,
       hasMore: !page.isDone,
       count: {
-        value: Math.min(counted.length, MAX_LIST_LIMIT),
-        hasMore: counted.length > MAX_LIST_LIMIT,
+        value: Math.min(countValue, MAX_LIST_LIMIT),
+        hasMore: countValue > MAX_LIST_LIMIT,
         bound: MAX_LIST_LIMIT,
       },
       searched: false,
