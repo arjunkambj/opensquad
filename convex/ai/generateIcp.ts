@@ -16,6 +16,7 @@
  * never a guarantee.
  */
 import { COMPANY_PAIN_POINTS_MAX_LENGTH } from "../lib/validators";
+import { PLAIN_VOICE_RULES } from "./voice";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
@@ -175,11 +176,19 @@ export const ICP_GENERATION_SYSTEM = [
   `- excludeKeywords: up to ${ICP_EXCLUDE_KEYWORDS_MAX} named competitors or`,
   "  words that mark a bad fit, one short phrase each. Free text. Name only",
   "  competitors you can infer from the profile; do not guess at random brands.",
-  "- painPoints: the two or three problems this company's customers have, in",
-  `  the customer's own plain words, at most ${COMPANY_PAIN_POINTS_MAX_LENGTH}`,
-  "  characters. No marketing language.",
+  "- painPoints: the two or three problems this company's customers have, as",
+  "  one string of short sentences, at most",
+  `  ${COMPANY_PAIN_POINTS_MAX_LENGTH} characters. Write them in the`,
+  "  customer's own voice, first person, the way they'd actually say it on a",
+  "  call: specific, a bit informal, one problem per sentence. Name the real",
+  "  tool, task or moment where it hurts. Good: \"We're babysitting Meta ads",
+  "  every morning and still missing when a campaign tanks overnight.\" Bad:",
+  "  \"We spend too much time manually managing ad campaigns.\" No marketing",
+  "  language and no mention of this company or its product.",
   "- Write in the language of the company profile, except for the closed",
   "  lists, which are copied exactly as given.",
+  "",
+  ...PLAIN_VOICE_RULES,
 ].join("\n");
 
 /** The user half of the call: the profile and the vocabularies, and nothing

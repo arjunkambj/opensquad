@@ -3,7 +3,7 @@
  * boundary (PLAN §3 steps 4 and 6, PLAN §6 layer 1 "Find leads: 2 credits").
  *
  * `countLeads` is free: it validates a strategy's filters and asks how many
- * people match, which is what makes the recommender's relax/tighten pass
+ * people match, which is what makes the recommender's relax pass
  * cost nothing. It never touches the credit wrapper — but it does respect the
  * kill switch, because a paused platform makes no provider calls at all.
  *

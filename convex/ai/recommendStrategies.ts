@@ -30,6 +30,7 @@ import {
 } from "../lib/validators";
 import type { SignalKind } from "../lib/validators";
 import { shortlistAllowedValues } from "./generateIcp";
+import { PLAIN_VOICE_RULES } from "./voice";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
@@ -461,12 +462,15 @@ export const RECOMMEND_STRATEGIES_SYSTEM = [
   `  \`values\` only, using only these keys: ${EXCLUDE_FILTER_KEYS.join(", ")}.`,
   "  Use it for words that mark a bad fit, not to re-state the ideal customer.",
   `- title: the card label the user reads, at most ${STRATEGY_TITLE_MAX_LENGTH}`,
-  "  characters. Plain words about the company being targeted — \"Companies",
-  "  hiring marketers right now\" — never a filter name, a number of results,",
-  "  or the word \"filter\".",
+  "  characters. Say it the way a salesperson would describe the audience to",
+  "  a colleague: short, plain, specific. \"Growing teams hiring their first",
+  "  performance marketer\", not \"Fast-growing companies facing greater",
+  "  acquisition pressure\". Never a filter name, a number of results, or the",
+  "  word \"filter\".",
   "- rationale: ONE sentence saying why this signal means they are worth",
   `  contacting now, at most ${STRATEGY_RATIONALE_MAX_LENGTH} characters, in`,
-  "  the second person (\"They are hiring …, so …\").",
+  "  the second person (\"They're hiring …, so …\"). Name the concrete",
+  "  reason, not a trend.",
   "- recommended: true for the strategies you would switch on for this user.",
   "  Mark the core_icp one true, and be honest about the rest — a weak signal",
   "  marked true wastes the user's first run.",
@@ -476,6 +480,8 @@ export const RECOMMEND_STRATEGIES_SYSTEM = [
   "  two or three words each, no hashtags, no duplicates.",
   "- Write in the language of the company profile, except for filter keys and",
   "  allowed values, which are copied exactly as given.",
+  "",
+  ...PLAIN_VOICE_RULES,
 ].join("\n");
 
 export const GENERATE_KEYWORDS_SYSTEM = [

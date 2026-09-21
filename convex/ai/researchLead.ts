@@ -22,6 +22,7 @@ import {
   LEAD_SCORE_REASON_MAX_LENGTH,
   LEAD_SUMMARY_MAX_LENGTH,
 } from "../lib/validators";
+import { PLAIN_VOICE_RULES } from "./voice";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
@@ -80,6 +81,10 @@ export const RESEARCH_LEAD_SYSTEM = [
   "  fact. No flattery, no questions, no invented detail. Return an empty",
   "  list rather than a hook you cannot support.",
   "- Write plainly, in the third person, with no greeting and no sign-off.",
+  "  Write it like a colleague's quick notes: facts first, no adjectives the",
+  "  page didn't earn, no \"appears to be\" or \"is well-positioned to\".",
+  "",
+  ...PLAIN_VOICE_RULES,
 ].join("\n");
 
 export type ResearchLeadInput = {

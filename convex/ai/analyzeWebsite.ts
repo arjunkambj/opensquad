@@ -18,6 +18,7 @@ import {
   COMPANY_LIST_ITEM_MAX_LENGTH,
   COMPANY_NAME_MAX_LENGTH,
 } from "../lib/validators";
+import { PLAIN_VOICE_RULES } from "./voice";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
@@ -94,16 +95,22 @@ export const WEBSITE_ANALYSIS_SYSTEM = [
   '  company SELLS in. Use "Other" only when none of the others fits.',
   "- description: what the company does and why a buyer would choose it, in",
   `  two or three plain sentences, at most ${WEBSITE_ANALYSIS_DESCRIPTION_MAX}`,
-  "  characters. Write it as the company would, not as a review of the site.",
+  "  characters. Write it as the company would explain itself to a friend,",
+  "  not as its homepage headline and not as a review of the site. Say who",
+  "  it's for and what it actually does; drop the adjectives.",
   `- keyFeatures: ${WEBSITE_ANALYSIS_FEATURES_MIN} to ${WEBSITE_ANALYSIS_FEATURES_MAX}`,
   "  concrete capabilities a buyer cares about, one short phrase each, at most",
   `  ${WEBSITE_ANALYSIS_FEATURE_MAX} characters. No marketing adjectives on`,
-  "  their own; each line must say something the product actually does.",
+  "  their own; each line must say something the product actually does, in",
+  "  plain words (\"Sends invoices from Stripe data\", not \"Seamless billing",
+  "  automation\").",
   `- socialProof: up to ${WEBSITE_ANALYSIS_PROOFS_MAX} named customers, results,`,
   "  metrics or credentials stated on the site, one short phrase each. Return",
   "  an empty list when the site states none — an invented proof is worse than",
   "  no proof.",
   "- Write in the language of the website.",
+  "",
+  ...PLAIN_VOICE_RULES,
 ].join("\n");
 
 /** The user half of the call: the pages, and nothing about how to answer. */

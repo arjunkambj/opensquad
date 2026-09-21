@@ -17,9 +17,14 @@
  *      something nobody asked for;
  *   3. every surviving strategy is COUNTED, for free, so the cards on
  *      reference 09 show a real number and never an estimate;
- *   4. a strategy that matches too few or absurdly many gets ONE automatic
- *      relax or tighten pass — in plain code, so it costs another free count
- *      and no credits at all.
+ *   4. a strategy that matches too few gets ONE automatic relax pass — in
+ *      plain code, so it costs another free count and no credits at all. A
+ *      broad strategy is shown at its real count and never re-counted: a run
+ *      buys 75 rows of it at most, and a second count of a huge audience is
+ *      the slowest request this step can make;
+ *   5. counts are independent provider calls, so they all run at once, and
+ *      the core one — which needs nothing from the model — runs WHILE the
+ *      model is answering.
  */
 import { internal } from "../_generated/api";
 import { internalAction, internalQuery } from "../_generated/server";
@@ -63,8 +68,6 @@ import {
   readFilterCatalogue,
   relaxFilters,
   STRATEGY_MIN_USEFUL_MATCHES,
-  STRATEGY_TOO_MANY_MATCHES,
-  tightenFilters,
 } from "./strategiesModel";
 import type { CompiledStrategy } from "./strategiesResult";
 import { v } from "convex/values";
@@ -198,12 +201,13 @@ async function countOf(
 }
 
 /**
- * ONE automatic pass over a counted strategy (PLAN §3 step 4).
+ * ONE automatic relax pass over a strategy that matched too few people
+ * (PLAN §3 step 4).
  *
- * Widening and narrowing are both plain edits of the filter set, so the pass
- * spends nothing: one more free count decides whether the edit was an
- * improvement, and a pass that made things worse is discarded rather than
- * stored. Nothing here asks the model a second time.
+ * Widening is a plain edit of the filter set, so the pass spends nothing: one
+ * more free count decides whether the edit was an improvement, and a pass that
+ * made things worse is discarded rather than stored. Nothing here asks the
+ * model a second time. A strategy with enough matches costs no second count.
  */
 async function adjustOnce(
   ctx: ActionCtx,
@@ -224,12 +228,10 @@ async function adjustOnce(
     matchCount: args.matchCount,
     matchCountIsApproximate: args.matchCountIsApproximate,
   };
-  const candidate =
-    args.matchCount < STRATEGY_MIN_USEFUL_MATCHES
-      ? relaxFilters(args.filters, args.roleFilters)
-      : args.matchCount > STRATEGY_TOO_MANY_MATCHES
-        ? tightenFilters(args.filters)
-        : null;
+  if (args.matchCount >= STRATEGY_MIN_USEFUL_MATCHES) {
+    return keep;
+  }
+  const candidate = relaxFilters(args.filters, args.roleFilters);
   if (candidate === null) {
     return keep;
   }
@@ -240,11 +242,7 @@ async function adjustOnce(
   if (!counted.ok) {
     return keep;
   }
-  const better =
-    args.matchCount < STRATEGY_MIN_USEFUL_MATCHES
-      ? counted.count > args.matchCount
-      : counted.count > 0 && counted.count < args.matchCount;
-  return better
+  return counted.count > args.matchCount
     ? {
         filters: candidate,
         matchCount: counted.count,
@@ -278,55 +276,123 @@ function coreStrategyOf(
   };
 }
 
+type CoreCounted =
+  | {
+      ok: true;
+      filters: LeadFilters;
+      matchCount: number;
+      matchCountIsApproximate: boolean;
+    }
+  | { ok: false; code: OperationErrorCode };
+
+/**
+ * Check, count and (if thin) relax the core strategy. It is the one that must
+ * exist, and it needs nothing from the model — so `recommend` starts it before
+ * the model call and the two run side by side. Never rejects: a thrown count
+ * is reported as a code, so a promise nobody awaits yet cannot go unhandled.
+ */
+async function countCore(
+  ctx: ActionCtx,
+  context: RecommendationContext,
+): Promise<CoreCounted> {
+  const { coreFilters, excludeFilters, roleFilters } = context;
+  try {
+    if (!(await accepted(ctx, coreFilters, excludeFilters))) {
+      // The ideal customer itself does not survive the filter builder, which
+      // is a stale catalogue rather than a bad answer from the model.
+      return { ok: false, code: "provider_unavailable" };
+    }
+    const coreCount = await countOf(ctx, coreFilters, excludeFilters);
+    if (!coreCount.ok) {
+      return { ok: false, code: coreCount.code };
+    }
+    const adjusted = await adjustOnce(ctx, {
+      filters: coreFilters,
+      excludeFilters,
+      matchCount: coreCount.count,
+      matchCountIsApproximate: coreCount.isApproximate,
+      roleFilters,
+    });
+    return { ok: true, ...adjusted };
+  } catch {
+    return { ok: false, code: "provider_unavailable" };
+  }
+}
+
+/** One signal strategy, checked and counted — or `null` for "no card". */
+async function compileSignalStrategy(
+  ctx: ActionCtx,
+  context: RecommendationContext,
+  strategy: RecommendedStrategy,
+  signalFilters: LeadFilters,
+): Promise<CompiledStrategy | null> {
+  const { coreFilters, excludeFilters, roleFilters } = context;
+  try {
+    const filters = mergeFilters(coreFilters, signalFilters);
+    const excludes = mergeExcludeFilters(
+      excludeFilters,
+      entriesToExcludeFilters(strategy.excludeFilters),
+    );
+    const checked = (await accepted(ctx, filters, excludes))
+      ? excludes
+      : (await accepted(ctx, filters, excludeFilters))
+        ? excludeFilters
+        : null;
+    if (checked === null) {
+      return null;
+    }
+    const count = await countOf(ctx, filters, checked);
+    if (!count.ok) {
+      // No real count, so no card: a made-up number is worse than one card
+      // fewer (PLAN §2).
+      return null;
+    }
+    const adjusted = await adjustOnce(ctx, {
+      filters,
+      excludeFilters: checked,
+      matchCount: count.count,
+      matchCountIsApproximate: count.isApproximate,
+      roleFilters,
+    });
+    return {
+      title: strategy.title,
+      signalKind: strategy.signalKind,
+      rationale: strategy.rationale,
+      filters: adjusted.filters,
+      excludeFilters: checked,
+      matchCount: adjusted.matchCount,
+      matchCountIsApproximate: adjusted.matchCountIsApproximate,
+      recommended: strategy.recommended,
+    };
+  } catch {
+    // One card that could not be counted never costs the others theirs.
+    return null;
+  }
+}
+
 /**
  * Compile, check and count every strategy — the whole of PLAN §3 steps 3–4
  * after the model has answered.
  *
- * The core strategy is built first and separately: it is the one that must
- * exist, and if IT cannot be counted there is nothing to show the user, so
- * the run fails rather than presenting an empty screen.
+ * The core strategy arrives already in flight (`countCore`): if IT cannot be
+ * counted there is nothing to show the user, so the run fails rather than
+ * presenting an empty screen. Which signal strategies get a card is decided
+ * first, in order and with no network, so counting them all at once changes
+ * how long the step takes and nothing about what it shows.
  */
 async function compileStrategies(
   ctx: ActionCtx,
   args: {
     context: RecommendationContext;
+    core: Promise<CoreCounted>;
     strategies: readonly RecommendedStrategy[];
   },
 ): Promise<
   { ok: true; strategies: CompiledStrategy[] } | { ok: false; code: OperationErrorCode }
 > {
-  const { coreFilters, excludeFilters, roleFilters } = args.context;
-  if (!(await accepted(ctx, coreFilters, excludeFilters))) {
-    // The ideal customer itself does not survive the filter builder, which is
-    // a stale catalogue rather than a bad answer from the model.
-    return { ok: false, code: "provider_unavailable" };
-  }
-  const coreCount = await countOf(ctx, coreFilters, excludeFilters);
-  if (!coreCount.ok) {
-    return { ok: false, code: coreCount.code };
-  }
-  const core = coreStrategyOf(args.strategies);
-  const adjustedCore = await adjustOnce(ctx, {
-    filters: coreFilters,
-    excludeFilters,
-    matchCount: coreCount.count,
-    matchCountIsApproximate: coreCount.isApproximate,
-    roleFilters,
-  });
-  const compiled: CompiledStrategy[] = [
-    {
-      title: core.title,
-      signalKind: "core_icp",
-      rationale: core.rationale,
-      filters: adjustedCore.filters,
-      excludeFilters,
-      matchCount: adjustedCore.matchCount,
-      matchCountIsApproximate: adjustedCore.matchCountIsApproximate,
-      recommended: true,
-    },
-  ];
-
   const used = new Set<SignalKind>(["core_icp", "keyword"]);
+  const wanted: { strategy: RecommendedStrategy; signalFilters: LeadFilters }[] =
+    [];
   for (const strategy of args.strategies) {
     if (used.has(strategy.signalKind) || strategy.title.length === 0) {
       continue;
@@ -341,45 +407,38 @@ async function compileStrategies(
       continue;
     }
     used.add(strategy.signalKind);
-
-    const filters = mergeFilters(coreFilters, signalFilters);
-    const excludes = mergeExcludeFilters(
-      excludeFilters,
-      entriesToExcludeFilters(strategy.excludeFilters),
-    );
-    const checked = (await accepted(ctx, filters, excludes))
-      ? excludes
-      : (await accepted(ctx, filters, excludeFilters))
-        ? excludeFilters
-        : null;
-    if (checked === null) {
-      continue;
-    }
-    const count = await countOf(ctx, filters, checked);
-    if (!count.ok) {
-      // No real count, so no card: a made-up number is worse than one card
-      // fewer (PLAN §2).
-      continue;
-    }
-    const adjusted = await adjustOnce(ctx, {
-      filters,
-      excludeFilters: checked,
-      matchCount: count.count,
-      matchCountIsApproximate: count.isApproximate,
-      roleFilters,
-    });
-    compiled.push({
-      title: strategy.title,
-      signalKind: strategy.signalKind,
-      rationale: strategy.rationale,
-      filters: adjusted.filters,
-      excludeFilters: checked,
-      matchCount: adjusted.matchCount,
-      matchCountIsApproximate: adjusted.matchCountIsApproximate,
-      recommended: strategy.recommended,
-    });
+    wanted.push({ strategy, signalFilters });
   }
-  return { ok: true, strategies: compiled };
+
+  const [coreCounted, signals] = await Promise.all([
+    args.core,
+    Promise.all(
+      wanted.map(({ strategy, signalFilters }) =>
+        compileSignalStrategy(ctx, args.context, strategy, signalFilters),
+      ),
+    ),
+  ]);
+  if (!coreCounted.ok) {
+    return { ok: false, code: coreCounted.code };
+  }
+
+  const core = coreStrategyOf(args.strategies);
+  return {
+    ok: true,
+    strategies: [
+      {
+        title: core.title,
+        signalKind: "core_icp",
+        rationale: core.rationale,
+        filters: coreCounted.filters,
+        excludeFilters: args.context.excludeFilters,
+        matchCount: coreCounted.matchCount,
+        matchCountIsApproximate: coreCounted.matchCountIsApproximate,
+        recommended: true,
+      },
+      ...signals.filter((compiled) => compiled !== null),
+    ],
+  };
 }
 
 export const recommend = internalAction({
@@ -411,6 +470,15 @@ export const recommend = internalAction({
       return await fail("not_found");
     }
 
+    const context: RecommendationContext = {
+      coreFilters: input.coreFilters,
+      excludeFilters: input.excludeFilters,
+      roleFilters: input.roleFilters,
+    };
+    // Started now, awaited after the model: the two do not depend on each
+    // other, and the core count is the slowest request of the step.
+    const core = countCore(ctx, context);
+
     let ai;
     try {
       ai = await runStructured(ctx, {
@@ -437,11 +505,8 @@ export const recommend = internalAction({
 
     const bounded = boundStrategyRecommendation(ai.result.object);
     const compiled = await compileStrategies(ctx, {
-      context: {
-        coreFilters: input.coreFilters,
-        excludeFilters: input.excludeFilters,
-        roleFilters: input.roleFilters,
-      },
+      context,
+      core,
       strategies: bounded.strategies,
     });
     if (!compiled.ok) {

@@ -42,16 +42,6 @@ import { companySizeBand, excludeProfileOption } from "./icpVocabulary";
  */
 export const STRATEGY_MIN_USEFUL_MATCHES = 25;
 
-/**
- * More matches than this and the signal has stopped meaning anything — the
- * agent would be contacting an undifferentiated market. Above it, the tighten
- * pass runs. Well below the provider's own 500,000 cap on purpose.
- */
-export const STRATEGY_TOO_MANY_MATCHES = 200_000;
-
-/** What one tighten pass multiplies a numeric signal minimum by. */
-export const STRATEGY_TIGHTEN_FACTOR = 5;
-
 /** A strategy may be switched on only when it actually matches someone. */
 export function strategyIsSelectable(matchCount: number): boolean {
   return matchCount > 0;
@@ -577,36 +567,6 @@ export function relaxFilters(
     // anywhere", which is not a signal and not what the user described.
     return without(filters, ["jobFunction"]);
   }
-  return null;
-}
-
-/**
- * The single narrowing move for a strategy that matches an undifferentiated
- * market, or `null` when there is none.
- *
- * Only the SIGNAL half is ever tightened. The core half is the customer the
- * user described on dot 2, and narrowing it here would quietly overrule an
- * answer they gave us.
- */
-export function tightenFilters(filters: LeadFilters): LeadFilters | null {
-  for (const [key, value] of Object.entries(filters)) {
-    const spec = signalFilterSpec(key);
-    if (spec?.kind !== "atLeast" || typeof value !== "number") {
-      continue;
-    }
-    // Every stored minimum is greater than zero (`entriesToSignalFilters`),
-    // so multiplying always raises the bar.
-    return { ...filters, [key]: value * STRATEGY_TIGHTEN_FACTOR };
-  }
-  // A values signal is an OR across its list, so the list is its width — but
-  // there is no honest way to cut it here. Halving it kept "the first half",
-  // which is only a tightening if the model wrote its values best-first, and
-  // nothing asks it to or checks that it did: the cut would as easily drop
-  // the tool the user's customers actually run and leave the ones they do
-  // not, while the card goes on promising the same thing. A card that names
-  // its real, large count is the honest form of a broad signal; the user can
-  // switch it off. A flag has no smaller form than `true` either, so a
-  // strategy whose only signal is a list or a flag is left as it is.
   return null;
 }
 
