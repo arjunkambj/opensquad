@@ -7,6 +7,7 @@ import type { OperationErrorCode } from "../../../convex/lib/validators"
 import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import type { RunState } from "./RunStateStrip"
 
 type Signals = FunctionReturnType<typeof api.leads.counts.byStrategy>
@@ -59,20 +60,30 @@ export function NoLeadsState({
     )
   }
 
-  if (run.running) {
-    return (
-      <EmptyState
-        variant="plain"
-        icon={Target02Icon}
-        title="Finding your first leads…"
-        description="The agent is searching your signals right now. Rows appear here as they land — nothing to do but wait."
-      />
-    )
-  }
-
   const enabled = signals.filter((signal) => signal.enabled)
   const empty = enabled.filter((signal) => signal.leadsFound === 0)
   const searched = enabled.some((signal) => signal.lastRunAt !== undefined)
+  // A live agent with healthy signals that have never run is about to search:
+  // that wait reads as progress, not as a dead end.
+  const queued =
+    enabled.length > 0 &&
+    !searched &&
+    enabled.every((signal) => signal.parkedReason === undefined)
+
+  if (run.running || queued) {
+    return (
+      <EmptyState
+        variant="plain"
+        illustration={<Spinner className="size-8 text-muted-foreground" />}
+        title="Finding your first leads…"
+        description={
+          run.running
+            ? "The agent is searching your signals right now. Rows appear here as they land — nothing to do but wait."
+            : "The agent is about to search your signals. Rows appear here as they land — nothing to do but wait."
+        }
+      />
+    )
+  }
 
   return (
     <EmptyState
@@ -93,13 +104,17 @@ export function NoLeadsState({
             : "Your signals have matches, but no search has run for them yet. Leads land here after the agent's next run."
       }
       action={
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex w-md max-w-full flex-col items-center gap-3">
           {empty.length === 0 ? null : (
-            <ul className="flex flex-col gap-1 text-left text-xs text-muted-foreground">
+            <ul className="flex w-full flex-col gap-2 text-left text-xs">
               {empty.map((signal) => (
-                <li key={signal.strategyId}>
-                  <span className="text-foreground">{signal.title}</span> —{" "}
-                  {signalOutcome(signal)}
+                <li key={signal.strategyId} className="flex flex-col">
+                  <span className="truncate text-foreground">
+                    {signal.title}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {signalOutcome(signal)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -148,7 +163,7 @@ function signalOutcome(signal: Signals[number]): string {
   if (signal.matchCount === 0) {
     return "no matches at all"
   }
-  const matches = `${signal.matchCountIsApproximate ? "about " : ""}${signal.matchCount} ${signal.matchCount === 1 ? "match" : "matches"}`
+  const matches = `${signal.matchCountIsApproximate ? "about " : ""}${signal.matchCount.toLocaleString()} ${signal.matchCount === 1 ? "match" : "matches"}`
   if (signal.lastRunAt === undefined) {
     return `${matches}, not searched yet`
   }
