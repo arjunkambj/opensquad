@@ -7,7 +7,7 @@ import type { Id } from "../../../convex/_generated/dataModel"
 import { formatInstant, formatWaited } from "@/lib/presentation"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import type { RunState } from "./agent-model"
@@ -18,11 +18,14 @@ export function AgentRunPanel({
   agentId,
   timezone,
   runState,
+  now,
 }: {
   orgId: Id<"orgs">
   agentId: Id<"agents">
   timezone: string
   runState: RunState | undefined
+  /** The page's shared clock, so "last run" ages without a render-time `Date.now()`. */
+  now: number
 }) {
   const runNow = useMutation(api.agents.settingsRun.runNow)
   const [requesting, setRequesting] = useState(false)
@@ -49,33 +52,43 @@ export function AgentRunPanel({
     }
   }
 
-  const status = () => {
-    if (runState === undefined) {
-      return "Reading the agent's run state…"
-    }
+  const status = (state: RunState) => {
     if (running) {
-      return runState.startedAt === undefined
-        ? "Running now."
-        : `Running now — started ${formatWaited(runState.startedAt)}.`
+      return state.startedAt === undefined
+        ? "Running now"
+        : `Running now · started ${formatWaited(state.startedAt, now)}`
     }
     const last =
-      runState.lastRunAt === undefined
-        ? "It has not run yet."
-        : `Last run ${formatWaited(runState.lastRunAt)}.`
+      state.lastRunAt === undefined
+        ? "Not run yet"
+        : `Last run ${formatWaited(state.lastRunAt, now)}`
     const next =
-      runState.nextRunAt === undefined
-        ? runState.status === "live"
-          ? " No next run is scheduled — start one here."
-          : " It starts running once setup is finished."
-        : ` Next run ${formatInstant(runState.nextRunAt, timezone)}.`
-    return `${last}${next}`
+      state.nextRunAt === undefined
+        ? state.status === "live"
+          ? "nothing scheduled"
+          : "starts after setup"
+        : `next ${formatInstant(state.nextRunAt, timezone)}`
+    return `${last} · ${next}`
   }
 
   return (
-    <Card size="sm">
-      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-2">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm text-foreground">{status()}</p>
+          {runState === undefined ? (
+            <div className="flex h-5 items-center">
+              <Skeleton shape="full" className="h-3.5 w-56 max-w-full" />
+            </div>
+          ) : (
+            <p className="flex items-center gap-2 text-sm text-foreground">
+              {running ? (
+                <span
+                  aria-hidden="true"
+                  className="size-2 shrink-0 animate-pulse rounded-full bg-primary"
+                />
+              ) : null}
+              {status(runState)}
+            </p>
+          )}
           {runState !== undefined && runState.needsAttention.count > 0 ? (
             <p className="text-xs text-muted-foreground">
               {runState.needsAttention.count} lead
@@ -85,7 +98,6 @@ export function AgentRunPanel({
           <FormError message={error} />
         </div>
         <Button
-          size="sm"
           disabled={requesting || running || runState === undefined}
           onClick={() => void start()}
         >
@@ -100,7 +112,6 @@ export function AgentRunPanel({
           )}
           Run now
         </Button>
-      </CardContent>
-    </Card>
+    </div>
   )
 }

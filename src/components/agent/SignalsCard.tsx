@@ -3,14 +3,9 @@ import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { Chip } from "@/components/kit/Chip"
-import { EmptyState, FormError, LoadingState } from "@/components/states/states"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { TableFrame } from "@/components/kit/PageSection"
+import { TableSkeleton } from "@/components/states/skeletons"
+import { EmptyState, FormError } from "@/components/states/states"
 import {
   Table,
   TableBody,
@@ -19,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Toggle } from "@/components/ui/toggle"
+import { Switch } from "@/components/ui/switch"
 import type { StrategyRow } from "./agent-model"
 import { agentErrorCopy, SIGNAL_KIND_LABEL } from "./agent-model"
 
@@ -51,27 +46,17 @@ export function SignalsCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Signals</CardTitle>
-        <CardDescription>
-          What the agent searches for, and how many people each search has
-          found. Switching one off takes effect on the next run.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <FormError message={error} />
-        {strategies === undefined ? (
-          <LoadingState
-            title="Loading signals"
-            description="Reading this agent's searches."
-          />
-        ) : strategies.length === 0 ? (
-          <EmptyState
-            title="No signals yet"
-            description="Setup proposes the first signals from your website and the people you want to reach."
-          />
-        ) : (
+    <div className="flex flex-col gap-3">
+      <FormError message={error} />
+      {strategies === undefined ? (
+        <TableSkeleton rows={5} columns={5} />
+      ) : strategies.length === 0 ? (
+        <EmptyState
+          title="No signals yet"
+          description="Setup proposes the first signals from your website and the people you want to reach."
+        />
+      ) : (
+        <TableFrame>
           <Table>
             <TableHeader>
               <TableRow>
@@ -84,8 +69,11 @@ export function SignalsCard({
             </TableHeader>
             <TableBody>
               {strategies.map((row) => (
-                <TableRow key={row.strategyId}>
-                  <TableCell>
+                <TableRow
+                  key={row.strategyId}
+                  data-dimmed={!row.enabled}
+                >
+                  <TableCell className="whitespace-normal">
                     <div className="flex min-w-0 flex-col">
                       <span className="font-medium text-foreground">
                         {row.title}
@@ -108,7 +96,7 @@ export function SignalsCard({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Chip>{SIGNAL_KIND_LABEL[row.signalKind]}</Chip>
+                    <Chip variant="accent">{SIGNAL_KIND_LABEL[row.signalKind]}</Chip>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {row.matchCountIsApproximate ? "About " : ""}
@@ -118,23 +106,19 @@ export function SignalsCard({
                     {row.leadsFound.toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Toggle
-                      variant="outline"
-                      size="sm"
+                    <Switch
                       aria-label={`Use the ${row.title} signal`}
-                      pressed={row.enabled}
+                      checked={row.enabled}
                       disabled={pendingId === row.strategyId}
-                      onPressedChange={() => void toggle(row)}
-                    >
-                      {row.enabled ? "On" : "Off"}
-                    </Toggle>
+                      onCheckedChange={() => void toggle(row)}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        )}
-      </CardContent>
-    </Card>
+        </TableFrame>
+      )}
+    </div>
   )
 }

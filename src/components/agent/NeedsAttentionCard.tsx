@@ -6,13 +6,15 @@ import type { Id } from "../../../convex/_generated/dataModel"
 import { formatWaited } from "@/lib/presentation"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
+import { Chip } from "@/components/kit/Chip"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { agentErrorCopy, OPERATION_ERROR_COPY } from "./agent-model"
 
 const PARKED_SHOWN = 5
@@ -43,8 +45,11 @@ function parkedReason(lead: ParkedLead): string {
 
 export function NeedsAttentionCard({
   orgId,
+  now,
 }: {
   orgId: Id<"orgs">
+  /** The page's shared clock, so "stopped" ages without a render-time `Date.now()`. */
+  now: number
 }) {
   const page = useQuery(api.leads.queries.list, {
     orgId,
@@ -75,50 +80,58 @@ export function NeedsAttentionCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Needs you</CardTitle>
-        <CardDescription>
-          The agent retried these and stopped. Retry puts one back in the queue
-          and wakes the agent.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+    <section className="flex flex-col gap-4">
+      <header className="flex items-center gap-2">
+        <h2 className="text-sm font-medium text-foreground">Needs you</h2>
+        <Chip variant="destructive" className="px-2 py-0.5">
+          {page.hasMore ? `${page.items.length}+` : page.items.length}
+        </Chip>
+        <span className="text-xs text-muted-foreground">
+          Your agent gave up on these. Retry queues one again.
+        </span>
+      </header>
         <FormError message={error} />
-        <ul className="flex flex-col gap-2">
-          {page.items.map((lead) => (
-            <li
-              key={lead._id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3"
-            >
-              <div className="flex min-w-0 flex-col">
-                <span className="text-sm font-medium text-foreground">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Lead</TableHead>
+              <TableHead>Why it stopped</TableHead>
+              <TableHead>Stopped</TableHead>
+              <TableHead>
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {page.items.map((lead) => (
+              <TableRow key={lead._id}>
+                <TableCell className="font-medium text-foreground">
                   {leadName(lead)}
-                </span>
-                <span className="text-xs text-muted-foreground">
+                </TableCell>
+                <TableCell className="whitespace-normal text-muted-foreground">
                   {parkedReason(lead)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Stopped {formatWaited(lead.updatedAt)}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pendingId === lead._id}
-                onClick={() => void retry(lead)}
-              >
-                Retry
-              </Button>
-            </li>
-          ))}
-        </ul>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatWaited(lead.updatedAt, now)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    disabled={pendingId === lead._id}
+                    onClick={() => void retry(lead)}
+                  >
+                    Retry
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
         {page.hasMore ? (
           <p className="text-xs text-muted-foreground">
-            More are waiting in Contacts, under the "Needs attention" stage.
+            More are waiting in Leads, under the "Needs attention" stage.
           </p>
         ) : null}
-      </CardContent>
-    </Card>
+    </section>
   )
 }

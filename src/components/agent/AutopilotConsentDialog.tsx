@@ -51,14 +51,16 @@ export function AutopilotConsentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <HugeiconsIcon
-              icon={Alert02Icon}
-              strokeWidth={2}
-              className="size-4 text-muted-foreground"
-              aria-hidden="true"
-            />
-            Let the agent work on its own
+          <DialogTitle className="flex items-center">
+            <span className="flex items-center gap-2">
+              <HugeiconsIcon
+                icon={Alert02Icon}
+                strokeWidth={2}
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              Let the agent work on its own
+            </span>
           </DialogTitle>
           <DialogDescription>
             On Autopilot the agent stops asking you first. This is exactly what

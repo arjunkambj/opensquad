@@ -12,20 +12,13 @@ import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import type { AgentDoc } from "./agent-model"
-import { agentErrorCopy, followUpSummary } from "./agent-model"
+import { agentErrorCopy } from "./agent-model"
 
 /**
  * The follow-up ladders offered. A free-form list of days would be a second
@@ -47,7 +40,7 @@ function choiceIdOf(days: readonly number[]): string {
   )
 }
 
-export function OutreachDetailsCard({ agent }: { agent: AgentDoc }) {
+export function OutreachDetailsForm({ agent }: { agent: AgentDoc }) {
   const setBookingUrl = useMutation(api.agents.settings.setBookingUrl)
   const setFollowUpDays = useMutation(api.agents.settings.setFollowUpDays)
   const stored = agent.bookingUrl ?? ""
@@ -103,30 +96,21 @@ export function OutreachDetailsCard({ agent }: { agent: AgentDoc }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Meetings and follow-ups</CardTitle>
-        <CardDescription>
-          What the agent offers when someone wants to talk, and how long it
-          keeps trying when nobody answers.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
         <Field>
           <FieldLabel htmlFor="agent-booking-url">Booking link</FieldLabel>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <Input
               id="agent-booking-url"
               type="url"
               inputMode="url"
-              className="max-w-md"
+              className="min-w-0 flex-1"
               disabled={saving !== null}
               value={draft}
               placeholder="https://cal.com/you/30min"
               onChange={(event) => setDraft(event.target.value)}
             />
             <Button
-              size="sm"
               variant="outline"
               disabled={draft === stored || saving !== null}
               onClick={() => void saveBooking()}
@@ -138,8 +122,7 @@ export function OutreachDetailsCard({ agent }: { agent: AgentDoc }) {
             </Button>
           </div>
           <FieldDescription>
-            Leave it empty and the agent proposes times in words instead. A
-            meeting only counts once you mark it as booked.
+            Optional. Without it, the agent suggests times.
           </FieldDescription>
         </Field>
 
@@ -147,7 +130,6 @@ export function OutreachDetailsCard({ agent }: { agent: AgentDoc }) {
           <FieldLabel htmlFor="agent-follow-ups">Follow-ups</FieldLabel>
           <NativeSelect
             id="agent-follow-ups"
-            className="max-w-md"
             disabled={saving !== null}
             value={currentChoice}
             onChange={(event) => void saveFollowUps(event.target.value)}
@@ -166,12 +148,11 @@ export function OutreachDetailsCard({ agent }: { agent: AgentDoc }) {
             ))}
           </NativeSelect>
           <FieldDescription>
-            {followUpSummary(agent.followUpDays)} A reply stops them.
+            A reply stops follow-ups.
           </FieldDescription>
         </Field>
 
         <FormError message={error} />
-      </CardContent>
-    </Card>
+    </div>
   )
 }

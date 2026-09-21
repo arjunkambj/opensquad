@@ -98,7 +98,7 @@ export function AgentModeMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={saving}
-          render={<Button variant="outline" size="sm" />}
+          render={<Button variant="outline" />}
         >
           {MODE_LABEL[agent.mode]}
           <HugeiconsIcon
@@ -112,15 +112,17 @@ export function AgentModeMenu({
             <DropdownMenuItem
               key={mode}
               onClick={() => choose(mode)}
-              className="flex-col items-start gap-0.5"
+              className="flex-col items-start"
             >
-              <span className="font-medium text-foreground">
-                {MODE_LABEL[mode]}
-                {mode === agent.mode ? " · current" : ""}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {MODE_DESCRIPTION[mode]}
-              </span>
+              <div className="flex flex-col items-start gap-0.5">
+                <span className="font-medium text-foreground">
+                  {MODE_LABEL[mode]}
+                  {mode === agent.mode ? " · current" : ""}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {MODE_DESCRIPTION[mode]}
+                </span>
+              </div>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

@@ -75,11 +75,11 @@ export function AgentNameField({
         }}
         className="max-w-md"
       />
-      <Button size="sm" disabled={saving} onClick={submit}>
+      <Button disabled={saving} onClick={submit}>
         {saving ? <Spinner data-icon="inline-start" /> : null}
         Save
       </Button>
-      <Button size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
+      <Button variant="ghost" disabled={saving} onClick={onCancel}>
         Cancel
       </Button>
     </div>

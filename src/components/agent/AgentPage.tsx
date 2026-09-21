@@ -1,18 +1,18 @@
 import { Link } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
-import { InboxConnectionBanner } from "@/components/inbox-connection/InboxConnectionBanner"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
-import { EmptyState, LoadingState } from "@/components/states/states"
+import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import { useMinuteClock } from "@/hooks/use-minute-clock"
+import { AgentActivity } from "./AgentActivity"
 import { AgentCard } from "./AgentCard"
+import { AgentFunnelRow } from "./AgentFunnelRow"
+import { AgentPageSkeleton } from "./AgentPageSkeleton"
 import { AgentRunPanel } from "./AgentRunPanel"
-import { InstructionsCard } from "./InstructionsCard"
+import { InstructionsDialog } from "./InstructionsDialog"
 import { NeedsAttentionCard } from "./NeedsAttentionCard"
-import { OutreachDetailsCard } from "./OutreachDetailsCard"
-import { SignalsCard } from "./SignalsCard"
 import { agentFunnel } from "./agent-model"
 
 export function AgentPage() {
@@ -27,31 +27,23 @@ export function AgentPage() {
     api.leads.counts.runState,
     orgId === undefined ? "skip" : { orgId, now },
   )
-  const strategies = useQuery(api.leads.counts.byStrategy, skip)
   const counts = useQuery(api.leads.counts.funnel, skip)
 
   const header = (
     <DashboardPageTitle
-      title="Agent"
-      description="Who it looks for, how much it may do on its own, and what it has been up to."
+      title="Autopilot"
+      description="How your agent works, and what it has done."
     />
   )
 
-  if (current.status === "loading" || agent === undefined) {
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <LoadingState
-          title="Loading your agent"
-          description="Reading this organization's agent."
-        />
-      </div>
-    )
+  if (current.status === "loading") {
+    return <AgentPageSkeleton />
   }
 
   // This cannot normally reach here — the `_org` gate sends a caller with no
   // organization row to setup — but an honest state is cheaper than an
-  // assertion.
+  // assertion. Checked BEFORE the agent: with no organization the agent query
+  // is skipped, so waiting on it would be a skeleton that never resolves.
   if (org === undefined || orgId === undefined) {
     return (
       <div className="flex flex-col gap-6">
@@ -63,6 +55,10 @@ export function AgentPage() {
         />
       </div>
     )
+  }
+
+  if (agent === undefined) {
+    return <AgentPageSkeleton />
   }
 
   if (agent === null || agent.status === "draft") {
@@ -80,23 +76,29 @@ export function AgentPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {header}
-      <InboxConnectionBanner orgId={orgId} />
+      <DashboardPageTitle
+        title="Autopilot"
+        description="How your agent works, and what it has done."
+        actions={<InstructionsDialog agent={agent} />}
+      />
       <AgentCard
         agent={agent}
         org={org}
+        runPanel={
+          <AgentRunPanel
+            orgId={orgId}
+            agentId={agent._id}
+            timezone={org.timezone}
+            runState={runState ?? undefined}
+            now={now}
+          />
+        }
+      />
+      <AgentFunnelRow
         funnel={counts === undefined ? undefined : agentFunnel(counts)}
       />
-      <AgentRunPanel
-        orgId={orgId}
-        agentId={agent._id}
-        timezone={org.timezone}
-        runState={runState ?? undefined}
-      />
-      <NeedsAttentionCard orgId={orgId} />
-      <SignalsCard orgId={orgId} strategies={strategies} />
-      <InstructionsCard agent={agent} />
-      <OutreachDetailsCard agent={agent} />
+      <NeedsAttentionCard orgId={orgId} now={now} />
+      <AgentActivity orgId={orgId} timezone={org.timezone} />
     </div>
   )
 }

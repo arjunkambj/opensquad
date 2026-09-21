@@ -1,75 +1,65 @@
-import { Skeleton } from "@/components/ui/skeleton"
+import {
+  FavouriteIcon,
+  InboxIcon,
+  MailSend01Icon,
+} from "@hugeicons/core-free-icons"
+import { StatCard } from "@/components/kit/StatCard"
 import { boundedCount } from "@/lib/bounded-count"
 import type { AgentFunnel } from "./agent-model"
 import { ratePercent } from "./agent-model"
 
-function Figure({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint: string
-}) {
-  return (
-    <div className="flex min-w-24 flex-col gap-1">
-      <p className="text-xs tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      <p className="font-display text-2xl leading-none font-semibold text-foreground tabular-nums">
-        {value}
-      </p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
-    </div>
-  )
-}
-
+/** The outreach funnel as three figures, each with the rate from the step before. */
 export function AgentFunnelRow({ funnel }: { funnel: AgentFunnel | undefined }) {
-  if (funnel === undefined) {
-    return (
-      <div className="flex flex-wrap gap-8">
-        {["Contacted", "Replied", "Interested"].map((label) => (
-          <div key={label} className="flex min-w-24 flex-col gap-1">
-            <p className="text-xs tracking-wide text-muted-foreground uppercase">
-              {label}
-            </p>
-            <Skeleton className="h-6 w-16 rounded-lg bg-foreground/10" />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  const bounded = (value: number) => boundedCount(value, funnel.bounded)
-  const contactedShare = ratePercent(funnel.contacted, funnel.total)
-  const replyShare = ratePercent(funnel.replied, funnel.contacted)
-  const interestShare = ratePercent(funnel.interested, funnel.replied)
+  const loading = funnel === undefined
+  const bounded = (value: number) =>
+    funnel === undefined ? "" : boundedCount(value, funnel.bounded)
+  const contactedShare =
+    funnel === undefined ? null : ratePercent(funnel.contacted, funnel.total)
+  const replyShare =
+    funnel === undefined ? null : ratePercent(funnel.replied, funnel.contacted)
+  const interestShare =
+    funnel === undefined ? null : ratePercent(funnel.interested, funnel.replied)
 
   return (
-    <div className="flex flex-wrap gap-8">
-      <Figure
+    <div className="grid gap-4 sm:grid-cols-3">
+      <StatCard
         label="Contacted"
-        value={`${bounded(funnel.contacted)} / ${bounded(funnel.total)}`}
-        hint={
-          contactedShare === null
-            ? "No leads yet"
-            : `${contactedShare}% of leads found`
+        icon={MailSend01Icon}
+        loading={loading}
+        value={funnel === undefined ? "" : bounded(funnel.contacted)}
+        sublabel={
+          funnel === undefined
+            ? undefined
+            : contactedShare === null
+              ? "No leads yet"
+              : `${contactedShare}% of ${bounded(funnel.total)} leads found`
         }
       />
-      <Figure
+      <StatCard
         label="Replied"
-        value={bounded(funnel.replied)}
+        icon={InboxIcon}
+        loading={loading}
+        value={funnel === undefined ? "" : bounded(funnel.replied)}
         // A rate over nobody is unknown, not zero.
-        hint={replyShare === null ? "— reply rate" : `${replyShare}% reply rate`}
+        sublabel={
+          loading
+            ? undefined
+            : replyShare === null
+              ? "No reply rate yet"
+              : `${replyShare}% reply rate`
+        }
       />
-      <Figure
+      <StatCard
         label="Interested"
-        value={bounded(funnel.interested)}
-        hint={
-          interestShare === null
-            ? "— of replies"
-            : `${interestShare}% of replies`
+        icon={FavouriteIcon}
+        loading={loading}
+        value={funnel === undefined ? "" : bounded(funnel.interested)}
+        sublabel={
+          loading
+            ? undefined
+            : interestShare === null
+              ? "None yet"
+              : `${interestShare}% of replies`
         }
       />
     </div>

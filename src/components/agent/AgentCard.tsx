@@ -1,19 +1,19 @@
 /**
- * The agent card (reference 21): the name, the mode, the funnel, and a footer
+ * The agent card (reference 21): the name, the mode, its run state, and a footer
  * naming the inbox it sends from and the day it was created.
  *
  * The reference's "Open" button is absent — this page IS the agent, so there
  * is nowhere for it to lead — and so is its "n / m running agents" counter: a
  * org runs exactly one agent (PLAN §2).
  */
-import { MoreHorizontalCircle01Icon } from "@hugeicons/core-free-icons"
+import { MoreHorizontalCircle01Icon, Robot01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation } from "convex/react"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { api } from "../../../convex/_generated/api"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+import { FramedPanel } from "@/components/kit/FramedPanel"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,20 +21,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { OrgView } from "@/lib/org-view"
-import { AgentFunnelRow } from "./AgentFunnelRow"
 import { AgentModeMenu } from "./AgentModeMenu"
 import { AgentNameField } from "./AgentNameField"
 import { agentErrorCopy, formatDay } from "./agent-model"
-import type { AgentDoc, AgentFunnel } from "./agent-model"
+import type { AgentDoc } from "./agent-model"
 
 export function AgentCard({
   agent,
   org,
-  funnel,
+  runPanel,
 }: {
   agent: AgentDoc
   org: OrgView
-  funnel: AgentFunnel | undefined
+  /** When it last ran, when it runs next, and the Run now control. */
+  runPanel: ReactNode
 }) {
   const rename = useMutation(api.agents.settings.rename)
   const setMode = useMutation(api.agents.settingsMode.setMode)
@@ -81,31 +81,16 @@ export function AgentCard({
     agent.autopilot.revision !== agent.revision
 
   return (
-    <Card>
-      <CardHeader className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <AgentNameField
-            name={agent.name}
-            editing={editingName}
-            saving={saving}
-            onStartEditing={() => setEditingName(true)}
-            onCancel={() => setEditingName(false)}
-            onSave={(name) => void save(name)}
-          />
-          <AgentModeMenu
-            agent={agent}
-            dailySendLimit={org.dailySendLimit}
-          />
-        </div>
+    <FramedPanel
+      title="Agent"
+      icon={Robot01Icon}
+      action={
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Agent actions"
-            render={<Button variant="ghost" size="icon-sm" />}
+            render={<Button variant="ghost" size="icon-xs" />}
           >
-            <HugeiconsIcon
-              icon={MoreHorizontalCircle01Icon}
-              strokeWidth={2}
-            />
+            <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={() => setEditingName(true)}>
@@ -119,27 +104,38 @@ export function AgentCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-3">
-        <AgentFunnelRow funnel={funnel} />
-        {consentOutdated ? (
-          <p className="text-xs text-muted-foreground">
-            Your instructions changed after you authorised Autopilot. It is
-            still on, and it is now working from the new wording.
+      }
+      bodyClassName="gap-3"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <AgentNameField
+            name={agent.name}
+            editing={editingName}
+            saving={saving}
+            onStartEditing={() => setEditingName(true)}
+            onCancel={() => setEditingName(false)}
+            onSave={(name) => void save(name)}
+          />
+          <p className="truncate text-xs text-muted-foreground">
+            {org.inboxRef === undefined
+              ? "No inbox connected"
+              : `Sends from ${org.inboxRef}`}
+            {" · "}Created {formatDay(agent.createdAt, org.timezone)}
           </p>
-        ) : null}
-        <FormError message={error} />
-      </CardContent>
+        </div>
+        <AgentModeMenu agent={agent} dailySendLimit={org.dailySendLimit} />
+      </div>
 
-      <CardFooter className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-4 text-xs text-muted-foreground">
-        <span>
-          {org.inboxRef === undefined
-            ? "No sending inbox connected"
-            : `Sends from ${org.inboxRef}`}
-        </span>
-        <span>Created {formatDay(agent.createdAt, org.timezone)}</span>
-      </CardFooter>
-    </Card>
+      {runPanel}
+
+      {consentOutdated ? (
+        <p className="text-xs text-muted-foreground">
+          Your instructions changed after you turned on Autopilot. It is now
+          working from the new wording.
+        </p>
+      ) : null}
+      <FormError message={error} />
+    </FramedPanel>
   )
 }

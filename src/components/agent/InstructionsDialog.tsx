@@ -1,4 +1,6 @@
 /** Save explicitly: each revision invalidates existing drafts. Empty instructions use the org default. */
+import { QuillWrite02Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { Link } from "@tanstack/react-router"
@@ -7,12 +9,14 @@ import { api } from "../../../convex/_generated/api"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Field, FieldDescription } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,7 +24,8 @@ import { toast } from "@/components/ui/toast"
 import { agentErrorCopy } from "./agent-model"
 import type { AgentDoc } from "./agent-model"
 
-export function InstructionsCard({ agent }: { agent: AgentDoc }) {
+export function InstructionsDialog({ agent }: { agent: AgentDoc }) {
+  const [open, setOpen] = useState(false)
   const setInstructions = useMutation(api.agents.settings.setInstructions)
   const stored = agent.instructions ?? ""
   const [draft, setDraft] = useState(stored)
@@ -52,6 +57,7 @@ export function InstructionsCard({ agent }: { agent: AgentDoc }) {
       setDraft(saved)
       setSyncedWith(saved)
       toast.add({ title: "Instructions saved", type: "success" })
+      setOpen(false)
     } catch (cause) {
       setError(agentErrorCopy(cause, "Could not save the instructions."))
     } finally {
@@ -60,15 +66,35 @@ export function InstructionsCard({ agent }: { agent: AgentDoc }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Instructions</CardTitle>
-        <CardDescription>
-          What this agent should say and avoid. Saving replaces any email it
-          has written but not sent, so the next one follows the new wording.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+    <>
+      <Button
+        variant="outline"
+        onClick={() => {
+          // Reopening starts from what is saved: an edit abandoned with Cancel
+          // must not come back looking like unsaved work.
+          setDraft(stored)
+          setSyncedWith(stored)
+          setError(null)
+          setOpen(true)
+        }}
+      >
+        <HugeiconsIcon
+          icon={QuillWrite02Icon}
+          strokeWidth={2}
+          data-icon="inline-start"
+          aria-hidden="true"
+        />
+        Instructions
+      </Button>
+      <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
+      <DialogContent className="sm:max-w-xl">
+      <DialogHeader>
+        <DialogTitle>Instructions</DialogTitle>
+        <DialogDescription>
+          What your agent should say and avoid.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="flex flex-col gap-3">
         <Field>
           <Textarea
             id="agent-instructions"
@@ -81,25 +107,26 @@ export function InstructionsCard({ agent }: { agent: AgentDoc }) {
             onChange={(event) => setDraft(event.target.value)}
           />
           <FieldDescription>
-            Leave this empty to use the organization default from{" "}
+            Empty uses your{" "}
             <Link to="/settings" search={{ tab: "outreach" }}>
-              Settings → Outreach
+              default instructions
             </Link>
-            . Anything written here overrides it for this agent.
+            .
           </FieldDescription>
         </Field>
         <FormError message={error} />
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            disabled={!dirty || saving}
-            onClick={() => void save()}
-          >
-            {saving ? <Spinner data-icon="inline-start" /> : null}
-            Save instructions
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <DialogFooter>
+        <DialogClose render={<Button variant="outline" disabled={saving} />}>
+          Cancel
+        </DialogClose>
+        <Button disabled={!dirty || saving} onClick={() => void save()}>
+          {saving ? <Spinner data-icon="inline-start" /> : null}
+          Save
+        </Button>
+      </DialogFooter>
+      </DialogContent>
+      </Dialog>
+    </>
   )
 }
