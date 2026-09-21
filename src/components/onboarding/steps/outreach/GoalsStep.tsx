@@ -3,8 +3,11 @@ import { useState } from "react"
 import type { ReactNode } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import { RadioCard } from "@/components/kit/RadioCard"
-import { EmptyState, FormError, LoadingState } from "@/components/states/states"
+import { TextLine } from "@/components/onboarding/OnboardingSkeleton"
+import { SkeletonRegion } from "@/components/states/skeletons"
+import { EmptyState, FormError } from "@/components/states/states"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { errorMessage } from "@/lib/convex-error"
 import type { AgentGoal, AgentTone, OutreachStepProps } from "./outreach-step-model"
@@ -22,6 +25,8 @@ export function GoalsStep({
   agent,
   goNext,
   goBack,
+  moving,
+  moveError,
 }: OutreachStepProps) {
   const profile = useQuery(api.company.queries.get, { orgId })
   const save = useMutation(api.agents.outreachGoals.save)
@@ -55,33 +60,29 @@ export function GoalsStep({
     <OutreachStepShell
       step={2}
       title="Goals"
-      description="We build your outreach around what you want from it and what your buyers actually struggle with."
+      description="What you want from outreach, and how it sounds."
       onPrevious={goBack}
       onNext={() => {
         void submit()
       }}
-      nextDisabled={!ready || saving}
-      nextLoading={saving}
+      nextDisabled={!ready || saving || moving}
+      nextHint={profile === null ? "Save your company profile first." : null}
+      nextLoading={saving || moving}
+      moveError={moveError}
     >
       {children}
     </OutreachStepShell>
   )
 
   if (profile === undefined) {
-    return shell(
-      <LoadingState
-        title="Reading your company profile"
-        description="Pulling in the pain points from your ICP."
-      />,
-      false,
-    )
+    return shell(<GoalsSkeleton />, false)
   }
 
   if (profile === null) {
     return shell(
       <EmptyState
         title="Your company profile is not saved yet"
-        description="Go back to the company step and save it — the outreach is written from it."
+        description="Go back to the company step and save it."
       />,
       false,
     )
@@ -107,7 +108,7 @@ export function GoalsStep({
         </FieldDescription>
       </Field>
 
-      <fieldset className="flex flex-col gap-2">
+      <fieldset className="flex flex-col gap-3">
         <legend className="mb-2 text-sm font-medium text-foreground">
           Campaign goal
         </legend>
@@ -127,11 +128,11 @@ export function GoalsStep({
         ))}
       </fieldset>
 
-      <fieldset className="flex flex-col gap-2">
+      <fieldset className="flex flex-col gap-3">
         <legend className="mb-2 text-sm font-medium text-foreground">
           Message tone
         </legend>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           {TONE_OPTIONS.map((option) => (
             <RadioCard
               key={option.value}
@@ -152,5 +153,48 @@ export function GoalsStep({
       <FormError message={error} />
     </div>,
     true,
+  )
+}
+
+/** Mirrors the form below: the pain-points field, then the goal and tone choices. */
+function GoalsSkeleton() {
+  return (
+    <SkeletonRegion label="Reading your company profile" className="gap-8">
+      <div className="flex flex-col gap-2">
+        <TextLine className="w-40" />
+        <Skeleton className="h-16 w-full" />
+        <TextLine className="w-80" />
+      </div>
+      {/* The real legends sit outside the fieldset's flex flow, 8px above the cards. */}
+      <div>
+        <TextLine className="mb-2 w-28" />
+        <div className="flex flex-col gap-3">
+          {GOAL_OPTIONS.map((option) => (
+            <RadioCardSkeleton key={option.value} />
+          ))}
+        </div>
+      </div>
+      <div>
+        <TextLine className="mb-2 w-28" />
+        <div className="grid gap-3 sm:grid-cols-3">
+          {TONE_OPTIONS.map((option) => (
+            <RadioCardSkeleton key={option.value} />
+          ))}
+        </div>
+      </div>
+    </SkeletonRegion>
+  )
+}
+
+/** `RadioCard`'s own box, so the real cards land at the same height. */
+function RadioCardSkeleton() {
+  return (
+    <div className="flex items-start gap-3 rounded-lg bg-muted/60 px-4 py-3">
+      <Skeleton shape="full" className="mt-0.5 size-4 shrink-0" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <TextLine className="w-24" />
+        <TextLine className="w-3/4" />
+      </div>
+    </div>
   )
 }

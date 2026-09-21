@@ -1,7 +1,6 @@
 import { Alert02Icon, Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IcpSaveState } from "@/components/onboarding/steps/icp/use-icp-draft"
-import { Spinner } from "@/components/ui/spinner"
 
 export function IcpSaveStatus({ state }: { state: IcpSaveState }) {
   return (
@@ -12,7 +11,6 @@ export function IcpSaveStatus({ state }: { state: IcpSaveState }) {
     >
       {state === "saving" ? (
         <>
-          <Spinner className="size-3" />
           Saving…
         </>
       ) : null}

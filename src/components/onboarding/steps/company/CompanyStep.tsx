@@ -2,15 +2,17 @@ import { useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import { ACTION_PRICES } from "../../../../../convex/lib/prices"
-import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
 import { AnalysisFailurePanel } from "@/components/kit/AnalysisFailurePanel"
 import { CompanyProfileForm } from "@/components/kit/CompanyProfileForm"
 import { OnboardingShell } from "@/components/kit/OnboardingShell"
 import { WebsiteAnalyzeField } from "@/components/kit/WebsiteAnalyzeField"
 import Logo from "@/components/layout/Logo"
+import { onboardingStageLabel } from "@/components/onboarding/onboarding-stages"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
+import { ProfilePanel } from "@/components/onboarding/steps/company/ProfilePanel"
 import { FormError } from "@/components/states/states"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Field, FieldLabel } from "@/components/ui/field"
+import { Switch } from "@/components/ui/switch"
 import {
   analysisFailureCopy,
   startAnalysisCopy,
@@ -98,6 +100,11 @@ export function CompanyStep({
           : null
 
   const runAnalysis = async () => {
+    // No address, no analysis: Retry reaches here too, and the field may have
+    // been cleared since the run it is retrying.
+    if (website.trim() === "") {
+      return
+    }
     setStartError(null)
     setWebsiteTyped(false)
     try {
@@ -157,80 +164,63 @@ export function CompanyStep({
     }
   }
 
+  // Nothing answers at the stored address, so reading it again cannot work:
+  // Retry waits for a different one. An empty field has nothing to read at all.
+  const retryBlocked =
+    website.trim() === "" ||
+    (status.state === "failed" &&
+      status.code === "not_found" &&
+      sameWebsite(website, profile?.websiteUrl))
+
   const complete = companyFormIsComplete(form)
+  const savedName = hasProfile && profile.companyName.trim() !== ""
+  // The switch is only a way in before any profile exists; once there is one
+  // the form is already on screen.
+  const canSkip = !analyzed && !savedName && !analyzing
+  // Next reads the site whenever there is an address it has not drafted from
+  // yet — the first visit, a failed read, or an address changed after a draft.
+  const needsAnalysis =
+    !manual &&
+    website.trim() !== "" &&
+    !(showForm && sameWebsite(website, profile?.websiteUrl))
+  const nextBlocked = needsAnalysis
+    ? blockedReason !== null || retryBlocked
+    : !showForm || !complete
+
+  const onNext = () => {
+    if (needsAnalysis) {
+      void runAnalysis()
+      return
+    }
+    void (async () => {
+      setAdvancing(true)
+      if (await saveProfile()) {
+        goNext()
+      }
+      // Released in the same turn as `goNext` set `moving`, so the two
+      // locks hand over in one render and the button is never live in
+      // between. A refused move clears `moving` and reports its own
+      // error, and the screen comes back with Next pressable again.
+      setAdvancing(false)
+    })()
+  }
 
   return (
     <OnboardingShell
-      badge={
-        analyzed ? (
-          <AiGeneratedBadge label="Written from your website" />
-        ) : null
-      }
-      currentDot={progress.dot}
-      description="We read your website and write the profile your agent sells from. Every line stays yours to edit."
-      dotCount={progress.dotCount}
-      logo={<Logo markClassName="size-8" />}
-      nextDisabled={!complete || analyzing || moving || saving || advancing}
-      nextLoading={saving || moving || advancing}
-      onNext={() => {
-        void (async () => {
-          setAdvancing(true)
-          if (await saveProfile()) {
-            goNext()
+      aside={
+        <ProfilePanel
+          // Only a real analysis earns the "written from your website" badge:
+          // a profile typed in by hand keeps the form without the claim.
+          state={
+            analyzing
+              ? "reading"
+              : !showForm
+                ? "empty"
+                : analyzed
+                  ? "ready"
+                  : "manual"
           }
-          // Released in the same turn as `goNext` set `moving`, so the two
-          // locks hand over in one render and the button is never live in
-          // between. A refused move clears `moving` and reports its own
-          // error, and the screen comes back with Next pressable again.
-          setAdvancing(false)
-        })()
-      }}
-      step={progress.step}
-      stepCount={progress.stepCount}
-      stepperLabel="Setup progress"
-      title="Create your first outreach agent"
-    >
-      <div className="flex flex-col gap-6">
-        <WebsiteAnalyzeField
-          analyzing={analyzing}
-          blockedReason={blockedReason}
-          intent={
-            analyzed && sameWebsite(website, profile?.websiteUrl)
-              ? "regenerate"
-              : "analyze"
-          }
-          onAnalyze={() => void runAnalysis()}
-          onChange={(next) => {
-            setWebsiteTyped(true)
-            setWebsite(next)
-          }}
-          price={price}
-          value={website}
-          {...(showForm || analyzing
-            ? {}
-            : { onSkip: () => setManual(true) })}
-        />
-
-        {startError !== null ? (
-          <AnalysisFailurePanel
-            message={startError}
-            onRetry={() => void runAnalysis()}
-            {...(showForm ? {} : { onFillManually: () => setManual(true) })}
-          />
-        ) : null}
-
-        {status.state === "failed" ? (
-          <AnalysisFailurePanel
-            message={analysisFailureCopy(status.code)}
-            onRetry={() => void runAnalysis()}
-            retryDisabled={blockedReason !== null}
-            {...(showForm ? {} : { onFillManually: () => setManual(true) })}
-          />
-        ) : null}
-
-        {analyzing && !showForm ? <AnalyzingSkeleton /> : null}
-
-        {showForm ? (
+        >
           <CompanyProfileForm
             disabled={analyzing}
             onChange={(patch) => {
@@ -239,34 +229,84 @@ export function CompanyStep({
             }}
             value={form}
           />
+        </ProfilePanel>
+      }
+      currentDot={progress.dot}
+      stageLabel={onboardingStageLabel(progress.dot)}
+      description={
+        manual && canSkip
+          ? "Tell us what you sell."
+          : "We'll draft your profile from your website."
+      }
+      dotCount={progress.dotCount}
+      logo={<Logo markClassName="size-8" />}
+      nextDisabled={nextBlocked || analyzing || moving || saving || advancing}
+      nextHint={
+        showForm && !needsAnalysis && !complete
+          ? "Add a name, industry, description and one key feature."
+          : null
+      }
+      nextLoading={analyzing || saving || moving || advancing}
+      onNext={onNext}
+      step={progress.step}
+      stepCount={progress.stepCount}
+      stepperLabel="Setup progress"
+      title="Create your first outreach agent"
+    >
+      <div className="flex flex-col gap-8">
+        {manual && canSkip ? null : (
+          <WebsiteAnalyzeField
+            analyzing={analyzing}
+            blockedReason={blockedReason}
+            intent={
+              analyzed && sameWebsite(website, profile?.websiteUrl)
+                ? "regenerate"
+                : "analyze"
+            }
+            onAnalyze={onNext}
+            onChange={(next) => {
+              setWebsiteTyped(true)
+              setWebsite(next)
+            }}
+            price={price}
+            value={website}
+            withButton={false}
+          />
+        )}
+
+        {canSkip ? (
+          <Field orientation="horizontal">
+            <Switch
+              checked={manual}
+              id="company-no-website"
+              onCheckedChange={setManual}
+            />
+            <FieldLabel htmlFor="company-no-website">
+              I don&rsquo;t have a website
+            </FieldLabel>
+          </Field>
+        ) : null}
+
+        {startError !== null ? (
+          <AnalysisFailurePanel
+            message={startError}
+            onRetry={() => void runAnalysis()}
+            retryDisabled={website.trim() === ""}
+            {...(showForm ? {} : { onFillManually: () => setManual(true) })}
+          />
+        ) : null}
+
+        {status.state === "failed" ? (
+          <AnalysisFailurePanel
+            message={analysisFailureCopy(status.code)}
+            onRetry={() => void runAnalysis()}
+            retryDisabled={blockedReason !== null || retryBlocked}
+            {...(showForm ? {} : { onFillManually: () => setManual(true) })}
+          />
         ) : null}
 
         <FormError message={saveError ?? moveError} />
-        {showForm && !complete ? (
-          <p className="text-sm text-muted-foreground">
-            Add a company name, an industry, a description and at least one key
-            feature to continue.
-          </p>
-        ) : null}
       </div>
     </OnboardingShell>
-  )
-}
-
-function AnalyzingSkeleton() {
-  return (
-    <div
-      aria-live="polite"
-      className="flex flex-col gap-5"
-      role="status"
-    >
-      <span className="sr-only">Reading your website</span>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Skeleton className="h-16 rounded-2xl" />
-        <Skeleton className="h-16 rounded-2xl" />
-      </div>
-      <Skeleton className="h-32 rounded-2xl" />
-      <Skeleton className="h-28 rounded-2xl" />
-    </div>
   )
 }

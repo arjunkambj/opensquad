@@ -44,7 +44,7 @@ export function IcpChipGroup({
   selected,
   onChange,
   catalogue,
-  addLabel = "Add",
+  addLabel = "Add more",
   searchPlaceholder = "Search",
   maxCount,
   disabled = false,
@@ -101,9 +101,13 @@ export function IcpChipGroup({
           open={isOpen}
         >
           <PopoverTrigger
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-dashed border-border px-4 text-sm text-muted-foreground outline-none transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
             disabled={disabled}
-            type="button"
+            render={
+              <button
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-4 text-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+                type="button"
+              />
+            }
           >
             <HugeiconsIcon
               aria-hidden="true"

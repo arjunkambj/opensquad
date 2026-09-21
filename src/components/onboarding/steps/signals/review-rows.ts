@@ -7,7 +7,7 @@ import {
   Target01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons"
-import type { ReviewAccordionRow } from "@/components/kit/ReviewAccordion"
+import type { IconSvgElement } from "@hugeicons/react"
 import {
   companySizeBand,
   excludeProfileOption,
@@ -29,10 +29,6 @@ export type ReviewSource = {
   keywords: string[]
 }
 
-function readBack(values: readonly string[], empty: string): string {
-  return values.length === 0 ? empty : values.join(", ")
-}
-
 function optionTitle(
   options: readonly { value: string; title: string }[],
   value: string,
@@ -40,9 +36,23 @@ function optionTitle(
   return options.find((option) => option.value === value)?.title ?? value
 }
 
-export type ReviewRow = Omit<ReviewAccordionRow, "content"> & {
+export type ReviewRow = {
+  id: string
+  icon: IconSvgElement
+  label: string
+  /** Shown as chips. */
+  values: string[]
+  /** Said instead of chips when there are none. */
+  empty: string
+  /** Muted line under the chips for the secondary filters. */
+  note?: string
   step: OnboardingStep
+  /** Tooltip on Edit. */
   hint: string
+}
+
+function anyOr(values: readonly string[], empty: string): string {
+  return values.length === 0 ? empty : values.join(", ")
 }
 
 export function buildReviewRows(source: ReviewSource): ReviewRow[] {
@@ -58,7 +68,10 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
       id: "company",
       icon: Building01Icon,
       label: "What you sell",
-      summary: `${source.companyName} — ${source.industry}`,
+      values: [source.companyName, source.industry].filter(
+        (value) => value.trim() !== "",
+      ),
+      empty: "Not filled in",
       step: "company",
       hint: "Your agent writes from this profile, so it is worth being accurate.",
     },
@@ -66,7 +79,8 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
       id: "job-titles",
       icon: UserGroupIcon,
       label: "Job roles",
-      summary: readBack(source.icp.jobTitles, "Anyone at a matching company"),
+      values: source.icp.jobTitles,
+      empty: "Anyone at a matching company",
       step: "icp_job_titles",
       hint: "The titles your agent looks for. Similar ones are matched automatically.",
     },
@@ -74,11 +88,12 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
       id: "company-filters",
       icon: FilterHorizontalIcon,
       label: "Companies",
-      summary: [
-        readBack(source.icp.industries, "All industries"),
-        readBack(sizes, "Any size"),
-        readBack(source.icp.companyTypes, "Any kind of organisation"),
-        readBack(source.icp.locations, "Worldwide"),
+      values: source.icp.industries,
+      empty: "All industries",
+      note: [
+        anyOr(sizes, "Any size"),
+        anyOr(source.icp.companyTypes, "Any kind of organisation"),
+        anyOr(source.icp.locations, "Worldwide"),
       ].join(" · "),
       step: "icp_company_filters",
       hint: "The companies those people work at.",
@@ -86,11 +101,9 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
     {
       id: "exclusions",
       icon: BlockedIcon,
-      label: "Left out",
-      summary: readBack(
-        [...exclusions, ...source.icp.excludeKeywords],
-        "Nobody is excluded",
-      ),
+      label: "Excluded",
+      values: [...exclusions, ...source.icp.excludeKeywords],
+      empty: "Nobody is excluded",
       step: "icp_exclusions",
       hint: "The people and companies your agent skips, whatever else matches.",
     },
@@ -98,10 +111,11 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
       id: "goal",
       icon: Target01Icon,
       label: "Goal and tone",
-      summary: `${optionTitle(GOAL_OPTIONS, source.goal)} · ${optionTitle(
-        TONE_OPTIONS,
-        source.tone,
-      )}`,
+      values: [
+        optionTitle(GOAL_OPTIONS, source.goal),
+        optionTitle(TONE_OPTIONS, source.tone),
+      ],
+      empty: "Not set",
       step: "outreach_goals",
       hint: "What the outreach is for, and how it reads.",
     },
@@ -109,7 +123,8 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
       id: "signals",
       icon: SparklesIcon,
       label: "Signals",
-      summary: readBack(source.signals, "No signals switched on yet"),
+      values: source.signals,
+      empty: "No signals switched on yet",
       step: "signals_strategies",
       hint: "The searches your agent runs, in the order it found them.",
     },
@@ -117,10 +132,8 @@ export function buildReviewRows(source: ReviewSource): ReviewRow[] {
       id: "keywords",
       icon: Tag01Icon,
       label: "Keywords",
-      summary: readBack(
-        source.keywords,
-        "None — your agent won't watch for topics",
-      ),
+      values: source.keywords,
+      empty: "None",
       step: "signals_keywords",
       hint: "Words your agent watches for on people's own profiles.",
     },

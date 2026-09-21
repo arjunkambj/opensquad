@@ -19,7 +19,7 @@ export function SignalsFailurePanel({
 }: SignalsFailurePanelProps) {
   return (
     <div
-      className="flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
+      className="flex flex-col gap-3 rounded-lg bg-destructive/5 px-4 py-3"
       role="alert"
     >
       <div className="flex items-start gap-2">
@@ -45,7 +45,6 @@ export function SignalsFailurePanel({
         <Button
           disabled={retryDisabled || retryBlockedReason !== null}
           onClick={onRetry}
-          size="sm"
           type="button"
           variant="outline"
         >

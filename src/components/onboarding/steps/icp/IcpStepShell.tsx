@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
 import { OnboardingShell } from "@/components/kit/OnboardingShell"
 import Logo from "@/components/layout/Logo"
+import { onboardingStageLabel } from "@/components/onboarding/onboarding-stages"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { icpFailureCopy } from "@/components/onboarding/steps/icp/icp-copy"
 import { IcpFailurePanel } from "@/components/onboarding/steps/icp/IcpFailurePanel"
@@ -12,6 +13,7 @@ import { IcpSaveStatus } from "@/components/onboarding/steps/icp/IcpSaveStatus"
 import type { IcpDraftHandle } from "@/components/onboarding/steps/icp/use-icp-draft"
 import { useIcpGeneration } from "@/components/onboarding/steps/icp/use-icp-generation"
 import type { IcpRunReason } from "@/components/onboarding/steps/icp/use-icp-generation"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { FormError } from "@/components/states/states"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -30,6 +32,8 @@ export type IcpStepShellProps = Pick<
   description: ReactNode
   nextDisabled?: boolean
   hint?: ReactNode
+  /** Stands in for `children` while a run is drafting them. Defaults to a chip row. */
+  skeleton?: ReactNode
   children: ReactNode
 }
 
@@ -46,6 +50,7 @@ export function IcpStepShell({
   description,
   nextDisabled = false,
   hint,
+  skeleton,
   children,
 }: IcpStepShellProps) {
   const generation = useIcpGeneration(orgId, agent)
@@ -91,10 +96,12 @@ export function IcpStepShell({
         view.state === "ready" ? <AiGeneratedBadge label="AI-generated" /> : null
       }
       currentDot={progress.dot}
+      stageLabel={onboardingStageLabel(progress.dot)}
       description={description}
       dotCount={progress.dotCount}
       logo={<Logo markClassName="size-8" />}
       nextDisabled={nextDisabled || generating || moving || leaving}
+      nextHint={nextDisabled && !generating ? hint : null}
       nextLoading={leaving || moving}
       onNext={() => {
         move(goNext)
@@ -112,7 +119,7 @@ export function IcpStepShell({
             previousDisabled: moving || leaving,
           })}
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-8">
         {generation.refusal !== null ? (
           <IcpFailurePanel
             message={generation.refusal.message}
@@ -144,14 +151,11 @@ export function IcpStepShell({
           />
         ) : null}
 
-        {generating ? <GeneratingChips /> : children}
+        {generating ? (skeleton ?? <GeneratingChips />) : children}
 
         <FormError message={draft.saveError ?? moveError} />
-        {hint !== undefined && nextDisabled ? (
-          <p className="text-sm text-muted-foreground">{hint}</p>
-        ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <IcpSaveStatus state={draft.saveState} />
           {showRegenerate ? (
             <IcpRegenerateControl
@@ -172,17 +176,15 @@ export function IcpStepShell({
 
 function GeneratingChips() {
   return (
-    <div aria-live="polite" className="flex flex-col gap-4" role="status">
-      <span className="sr-only">Describing your ideal customer</span>
-      <div className="flex flex-wrap gap-2">
-        <Skeleton className="h-9 w-56 rounded-full" />
-        <Skeleton className="h-9 w-40 rounded-full" />
-        <Skeleton className="h-9 w-48 rounded-full" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Skeleton className="h-9 w-36 rounded-full" />
-        <Skeleton className="h-9 w-52 rounded-full" />
-      </div>
-    </div>
+    <SkeletonRegion
+      label="Suggesting who to target"
+      className="flex-row flex-wrap gap-2"
+    >
+      <Skeleton shape="lg" className="h-8 w-40" />
+      <Skeleton shape="lg" className="h-8 w-28" />
+      <Skeleton shape="lg" className="h-8 w-36" />
+      <Skeleton shape="lg" className="h-8 w-24" />
+      <Skeleton shape="lg" className="h-8 w-32" />
+    </SkeletonRegion>
   )
 }

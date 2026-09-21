@@ -1,3 +1,4 @@
+import { Hint } from "@/components/kit/Hint"
 import { Button } from "@/components/ui/button"
 
 export type IcpRegenerateControlProps = {
@@ -23,19 +24,15 @@ export function IcpRegenerateControl({
       : "This run is free, and only counts once it works.")
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <Hint content={note}>
       <Button
         disabled={disabled || blockedReason !== null}
         onClick={onRun}
-        size="sm"
         type="button"
-        variant="outline"
+        variant="ghost"
       >
         {label}
       </Button>
-      <p className="max-w-xs text-right text-xs text-muted-foreground">
-        {note}
-      </p>
-    </div>
+    </Hint>
   )
 }

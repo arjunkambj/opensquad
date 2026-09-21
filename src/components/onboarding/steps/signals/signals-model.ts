@@ -35,6 +35,9 @@ export type SignalsGenerationView =
 
 export function signalsGenerationView(
   status: GenerationStatus | null,
+  /** The caller's ticking clock. A lost run never writes again, so only a
+   *  clock that moves turns a spinner into a way out. */
+  now: number,
 ): SignalsGenerationView {
   if (status === null) {
     return { state: "never" }
@@ -43,7 +46,7 @@ export function signalsGenerationView(
     case "idle":
       return { state: "never" }
     case "generating":
-      return Date.now() - status.startedAt > STRATEGY_GENERATION_STALE_AFTER_MS
+      return now - status.startedAt > STRATEGY_GENERATION_STALE_AFTER_MS
         ? { state: "stalled" }
         : { state: "generating" }
     case "ready":

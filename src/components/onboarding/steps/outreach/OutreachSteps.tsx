@@ -11,6 +11,8 @@ export function OutreachInboxStep(props: OnboardingStepProps) {
       agent={props.agent}
       goNext={props.goNext}
       goBack={props.goBack ?? stayHere}
+      moving={props.moving}
+      moveError={props.moveError}
     />
   )
 }
@@ -22,6 +24,8 @@ export function OutreachGoalsStep(props: OnboardingStepProps) {
       agent={props.agent}
       goNext={props.goNext}
       goBack={props.goBack ?? stayHere}
+      moving={props.moving}
+      moveError={props.moveError}
     />
   )
 }

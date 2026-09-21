@@ -4,12 +4,16 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation, useQuery } from "convex/react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
+import { Hint } from "@/components/kit/Hint"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { KeywordCard } from "@/components/onboarding/steps/signals/KeywordCard"
 import { KEYWORDS_GENERATION_CREDITS } from "@/components/onboarding/steps/signals/signals-model"
 import { SignalsStepShell } from "@/components/onboarding/steps/signals/SignalsStepShell"
 import { useMountedRef } from "@/hooks/use-mounted"
+import { TextLine } from "@/components/onboarding/OnboardingSkeleton"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 
 /** New suggestions are the completion signal; stop waiting if the scheduled generation never returns. */
@@ -133,7 +137,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
 
   return (
     <SignalsStepShell
-      description="We'll watch for people writing about these, and add the ones that match your ideal customer."
+      description="Topics we watch for on your leads' profiles."
       error={error}
       moveError={moveError}
       nextDisabled={moving || leaving}
@@ -141,11 +145,10 @@ export function KeywordsStep(props: OnboardingStepProps) {
       onNext={goNext}
       progress={progress}
       secondaryAction={
-        keywords.length === 0 ? (
+        overview !== undefined && keywords.length === 0 ? (
           <Button
             disabled={moving || leaving}
             onClick={skip}
-            size="cta"
             type="button"
             variant="ghost"
           >
@@ -153,44 +156,73 @@ export function KeywordsStep(props: OnboardingStepProps) {
           </Button>
         ) : undefined
       }
-      title="Now, which keywords should we track?"
+      title="Keywords to track"
       {...(goBack === undefined
         ? {}
         : { onPrevious: goBack, previousDisabled: moving || leaving })}
     >
-      <KeywordCard
-        action={
-          <div className="flex flex-col items-end gap-1">
-            <Button
-              disabled={generating || blockedReason !== null}
-              onClick={askForMore}
-              size="sm"
-              type="button"
-              variant="ghost"
+      {overview === undefined ? (
+        <KeywordsSkeleton />
+      ) : (
+        <KeywordCard
+          action={
+            <Hint
+              content={
+                blockedReason ??
+                `Costs ${KEYWORDS_GENERATION_CREDITS} credits each time.`
+              }
             >
-              {generating ? (
-                <Spinner className="size-3.5" />
-              ) : (
-                <HugeiconsIcon
-                  aria-hidden="true"
-                  data-icon="inline-start"
-                  icon={RefreshIcon}
-                  strokeWidth={2}
-                />
-              )}
-              Generate more
-            </Button>
-            <p className="max-w-xs text-right text-xs text-muted-foreground">
-              {blockedReason ??
-                `Costs ${KEYWORDS_GENERATION_CREDITS} credits each time.`}
-            </p>
-          </div>
-        }
-        disabled={overview === undefined || moving || leaving}
-        keywords={keywords}
-        onChange={save}
-        suggestions={suggestions}
-      />
+              <Button
+                disabled={generating || blockedReason !== null}
+                onClick={askForMore}
+                type="button"
+                variant="ghost"
+              >
+                {generating ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <HugeiconsIcon
+                    aria-hidden="true"
+                    data-icon="inline-start"
+                    icon={RefreshIcon}
+                    strokeWidth={2}
+                  />
+                )}
+                Generate more
+              </Button>
+            </Hint>
+          }
+          disabled={moving || leaving}
+          keywords={keywords}
+          onChange={save}
+          suggestions={suggestions}
+        />
+      )}
     </SignalsStepShell>
+  )
+}
+
+/** Mirrors `KeywordCard`: the chosen keywords, then the suggestion label, its action and chips. */
+function KeywordsSkeleton() {
+  return (
+    <SkeletonRegion label="Loading your keywords" className="gap-4">
+      <div className="flex flex-wrap gap-2">
+        <Skeleton shape="lg" className="h-8 w-32" />
+        <Skeleton shape="lg" className="h-8 w-40" />
+        <Skeleton shape="lg" className="h-8 w-28" />
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <TextLine size="xs" className="w-40" />
+          <Skeleton shape="xl" className="h-8 w-32" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Skeleton shape="lg" className="h-8 w-28" />
+          <Skeleton shape="lg" className="h-8 w-36" />
+          <Skeleton shape="lg" className="h-8 w-24" />
+          <Skeleton shape="lg" className="h-8 w-32" />
+        </div>
+      </div>
+    </SkeletonRegion>
   )
 }

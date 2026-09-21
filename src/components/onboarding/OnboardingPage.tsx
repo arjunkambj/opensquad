@@ -1,20 +1,10 @@
 import { Suspense } from "react"
+import { OnboardingSkeleton } from "@/components/onboarding/OnboardingSkeleton"
 import { SetupFlow } from "@/components/onboarding/SetupFlow"
-import { SetupFrame } from "@/components/onboarding/SetupFrame"
-import { LoadingState } from "@/components/states/states"
 
 export function OnboardingPage() {
   return (
-    <Suspense
-      fallback={
-        <SetupFrame>
-          <LoadingState
-            description="One moment while we check your account."
-            title="Opening setup"
-          />
-        </SetupFrame>
-      }
-    >
+    <Suspense fallback={<OnboardingSkeleton label="Opening setup" />}>
       <SetupFlow />
     </Suspense>
   )

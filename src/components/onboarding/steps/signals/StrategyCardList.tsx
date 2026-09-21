@@ -6,6 +6,8 @@ import {
   matchCountLabel,
   strategyIsSelectable,
 } from "@/components/onboarding/steps/signals/signals-model"
+import { TextLine } from "@/components/onboarding/OnboardingSkeleton"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 
 type StrategyCard = FunctionReturnType<
@@ -48,7 +50,7 @@ export function StrategyCardList({
               ? {}
               : {
                   description:
-                    "Nobody matches this right now, so we've left it switched off.",
+                    "No matches right now.",
                 })}
           />
         )
@@ -57,15 +59,24 @@ export function StrategyCardList({
   )
 }
 
+/** Each row is `CheckCard`'s own box — checkbox, title, count, info button — so the cards land in place. */
 export function StrategyCardSkeletons({ rows = 4 }: { rows?: number }) {
+  const widths = ["w-48", "w-40", "w-56", "w-36"]
   return (
-    <div aria-live="polite" className="flex flex-col gap-3" role="status">
-      <span className="sr-only">
-        Working out which signals are worth tracking
-      </span>
+    <SkeletonRegion label="Finding signals" className="gap-3">
       {Array.from({ length: rows }, (_, index) => (
-        <Skeleton className="h-[58px] w-full rounded-2xl" key={index} />
+        <div
+          className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3"
+          key={index}
+        >
+          <Skeleton shape="lg" className="size-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <TextLine className={widths[index % widths.length]} />
+          </div>
+          <Skeleton shape="lg" className="h-5 w-24 shrink-0" />
+          <Skeleton shape="full" className="size-6 shrink-0" />
+        </div>
       ))}
-    </div>
+    </SkeletonRegion>
   )
 }

@@ -10,6 +10,7 @@ import {
   icpGenerationView,
 } from "@/components/onboarding/steps/icp/icp-model"
 import type { IcpGenerationView } from "@/components/onboarding/steps/icp/icp-model"
+import { useMinuteClock } from "@/hooks/use-minute-clock"
 import { useMountedRef } from "@/hooks/use-mounted"
 
 export type IcpRunReason = "initial" | "retry" | "regenerate"
@@ -40,7 +41,10 @@ export function useIcpGeneration(
   const [starting, setStarting] = useState(false)
   const mounted = useMountedRef()
 
-  const view = icpGenerationView(agent)
+  // A lost scheduled run never writes again, so the subscription alone would
+  // leave this screen generating forever: the clock is what makes it stale.
+  const now = useMinuteClock()
+  const view = icpGenerationView(agent, now)
   const price = icpGenerationPrice(view)
 
   // Only the latest attempt may update state, and only while the screen is mounted.

@@ -6,6 +6,8 @@ import { IcpChipGroup } from "@/components/onboarding/steps/icp/IcpChipGroup"
 import { IcpStepShell } from "@/components/onboarding/steps/icp/IcpStepShell"
 import { useIcpDraft } from "@/components/onboarding/steps/icp/use-icp-draft"
 import { InfoBanner } from "@/components/kit/InfoBanner"
+import { TextLine } from "@/components/onboarding/OnboardingSkeleton"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 
 function chips(values: readonly string[]) {
@@ -22,23 +24,21 @@ export function CompanyFiltersStep(props: OnboardingStepProps) {
   return (
     <IcpStepShell
       {...props}
-      description="We pre-filled this from your website — adjust or add as you like. Leaving a group on “All” means we don't narrow by it."
+      description="Leave a group on All to skip it."
       draft={draft}
+      skeleton={<FiltersSkeleton label="Suggesting the companies to target" />}
       title="What kind of companies are you targeting?"
     >
       {options === undefined ? (
-        <FiltersSkeleton />
+        <FiltersSkeleton label="Loading the filters you can choose from" />
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           {options.ready ? null : (
-            <InfoBanner title="We can't offer industries, locations or company types yet.">
-              The list we match them against hasn&rsquo;t loaded. Carry on — you
-              can set these on your agent once it has.
-            </InfoBanner>
+            <InfoBanner title="Filters aren't available yet. You can set them later." />
           )}
 
           <IcpChipGroup
-            addLabel="Add"
+            addLabel="Add more"
             allLabel="All industries"
             catalogue={chips(options.industries)}
             label="Industry"
@@ -52,7 +52,7 @@ export function CompanyFiltersStep(props: OnboardingStepProps) {
           />
 
           <IcpChipGroup
-            addLabel="Add a country"
+            addLabel="Add more"
             allLabel="All locations"
             catalogue={chips(options.locations)}
             label="Location"
@@ -94,20 +94,20 @@ export function CompanyFiltersStep(props: OnboardingStepProps) {
   )
 }
 
-function FiltersSkeleton() {
+/** Mirrors the four `IcpChipGroup`s: a label over a row of chips. */
+function FiltersSkeleton({ label }: { label: string }) {
   return (
-    <div aria-live="polite" className="flex flex-col gap-6" role="status">
-      <span className="sr-only">Loading the filters you can choose from</span>
+    <SkeletonRegion label={label} className="gap-8">
       {[0, 1, 2, 3].map((group) => (
-        <div className="flex flex-col gap-3" key={group}>
-          <Skeleton className="h-3 w-24 rounded-full" />
+        <div className="flex flex-col gap-2" key={group}>
+          <TextLine className="w-24" />
           <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-9 w-32 rounded-xl" />
-            <Skeleton className="h-9 w-28 rounded-xl" />
-            <Skeleton className="h-9 w-40 rounded-xl" />
+            <Skeleton shape="lg" className="h-8 w-32" />
+            <Skeleton shape="lg" className="h-8 w-28" />
+            <Skeleton shape="lg" className="h-8 w-40" />
           </div>
         </div>
       ))}
-    </div>
+    </SkeletonRegion>
   )
 }

@@ -4,6 +4,7 @@ import { ConvexError } from "convex/values"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { ONBOARDING_STEPS } from "../../../convex/lib/validators"
 import type { OnboardingStep } from "../../../convex/lib/validators"
+import { ONBOARDING_STAGE_LABELS } from "@/components/onboarding/onboarding-stages"
 import { CompanyStep } from "@/components/onboarding/steps/company/CompanyStep"
 import { CompanyFiltersStep } from "@/components/onboarding/steps/icp/CompanyFiltersStep"
 import { ExclusionsStep } from "@/components/onboarding/steps/icp/ExclusionsStep"
@@ -16,7 +17,8 @@ import { KeywordsStep } from "@/components/onboarding/steps/signals/KeywordsStep
 import { ReviewStep } from "@/components/onboarding/steps/signals/ReviewStep"
 import { StrategiesStep } from "@/components/onboarding/steps/signals/StrategiesStep"
 
-export const ONBOARDING_DOT_COUNT = 4
+/** The stage names are the only list of stages; the stepper's dots follow them. */
+export const ONBOARDING_DOT_COUNT = ONBOARDING_STAGE_LABELS.length
 
 type OnboardingProgress = {
   dot: number

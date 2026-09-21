@@ -1,8 +1,13 @@
 import type { ReactNode } from "react"
 import { OnboardingShell } from "@/components/kit/OnboardingShell"
 import Logo from "@/components/layout/Logo"
+import {
+  ONBOARDING_STAGE_LABELS,
+  onboardingStageLabel,
+} from "@/components/onboarding/onboarding-stages"
+import { FormError } from "@/components/states/states"
 
-const ONBOARDING_DOTS = 4
+const ONBOARDING_DOTS = ONBOARDING_STAGE_LABELS.length
 const OUTREACH_DOT = 3
 const OUTREACH_SUB_STEPS = 2
 
@@ -16,7 +21,9 @@ export function OutreachStepShell({
   nextLabel,
   nextDisabled,
   nextLoading,
+  nextHint,
   secondaryAction,
+  moveError = null,
 }: {
   /** 1 = connect the inbox, 2 = goals. */
   step: 1 | 2
@@ -28,13 +35,17 @@ export function OutreachStepShell({
   nextLabel?: string
   nextDisabled?: boolean
   nextLoading?: boolean
+  nextHint?: ReactNode
   secondaryAction?: ReactNode
+  /** Why the container refused the last step change. */
+  moveError?: string | null
 }) {
   return (
     <OnboardingShell
-      logo={<Logo />}
+      logo={<Logo markClassName="size-8" />}
       dotCount={ONBOARDING_DOTS}
       currentDot={OUTREACH_DOT}
+      stageLabel={onboardingStageLabel(OUTREACH_DOT)}
       step={step}
       stepCount={OUTREACH_SUB_STEPS}
       title={title}
@@ -44,9 +55,13 @@ export function OutreachStepShell({
       {...(nextLabel !== undefined ? { nextLabel } : {})}
       {...(nextDisabled !== undefined ? { nextDisabled } : {})}
       {...(nextLoading !== undefined ? { nextLoading } : {})}
+      {...(nextHint !== undefined ? { nextHint } : {})}
       {...(secondaryAction !== undefined ? { secondaryAction } : {})}
     >
-      {children}
+      <div className="flex flex-col gap-8">
+        {children}
+        <FormError message={moveError} />
+      </div>
     </OnboardingShell>
   )
 }

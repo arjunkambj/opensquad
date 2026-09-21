@@ -21,7 +21,12 @@ export type IcpGenerationView =
   | { state: "ready" }
   | { state: "failed"; code: OperationErrorCode }
 
-export function icpGenerationView(agent: Doc<"agents">): IcpGenerationView {
+export function icpGenerationView(
+  agent: Doc<"agents">,
+  /** The caller's ticking clock. A lost run never writes again, so only a
+   *  clock that moves turns a spinner into a way out. */
+  now: number,
+): IcpGenerationView {
   const status = agent.icpGeneration
   if (status === undefined) {
     return { state: "never" }
@@ -30,7 +35,7 @@ export function icpGenerationView(agent: Doc<"agents">): IcpGenerationView {
     case "idle":
       return { state: "never" }
     case "generating":
-      return Date.now() - status.startedAt > ICP_GENERATION_STALE_AFTER_MS
+      return now - status.startedAt > ICP_GENERATION_STALE_AFTER_MS
         ? { state: "stalled" }
         : { state: "generating" }
     case "ready":

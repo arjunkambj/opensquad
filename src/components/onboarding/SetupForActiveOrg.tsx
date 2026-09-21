@@ -7,9 +7,8 @@ import { AgentSetupFlow } from "@/components/onboarding/AgentSetupFlow"
 import { EntryRefusalState } from "@/components/onboarding/EntryRefusalState"
 import { entryRefusalOf } from "@/components/onboarding/onboarding-model"
 import type { OnboardingEntryRefusal } from "@/components/onboarding/onboarding-model"
-import { SetupFrame } from "@/components/onboarding/SetupFrame"
+import { OnboardingSkeleton } from "@/components/onboarding/OnboardingSkeleton"
 import { useMountedRef } from "@/hooks/use-mounted"
-import { LoadingState } from "@/components/states/states"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import { detectLocalTimezone } from "@/lib/org-time"
 
@@ -55,12 +54,7 @@ export function SetupForActiveOrg({ user }: { user: CurrentUser }) {
 
   if (current.status === "loading") {
     return (
-      <SetupFrame>
-        <LoadingState
-          description="Checking your account and organization."
-          title="Opening setup"
-        />
-      </SetupFrame>
+      <OnboardingSkeleton label="Checking your account and organization" />
     )
   }
 
@@ -77,12 +71,7 @@ export function SetupForActiveOrg({ user }: { user: CurrentUser }) {
       )
     }
     return (
-      <SetupFrame>
-        <LoadingState
-          description="Setting up the organization your agent runs in."
-          title="Just a moment"
-        />
-      </SetupFrame>
+      <OnboardingSkeleton label="Setting up the organization your agent runs in" />
     )
   }
 

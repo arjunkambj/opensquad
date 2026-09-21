@@ -1,14 +1,15 @@
 import { useQuery } from "convex/react"
-import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { api } from "../../../../../convex/_generated/api"
 import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpVocabulary"
-import { CheckCard } from "@/components/kit/CheckCard"
 import { ChipInput } from "@/components/kit/ChipInput"
-import { InfoBanner } from "@/components/kit/InfoBanner"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { IcpStepShell } from "@/components/onboarding/steps/icp/IcpStepShell"
 import { useIcpDraft } from "@/components/onboarding/steps/icp/use-icp-draft"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Skeleton } from "@/components/ui/skeleton"
+import { TextLine } from "@/components/onboarding/OnboardingSkeleton"
+import { SkeletonRegion } from "@/components/states/skeletons"
 
 export function ExclusionsStep(props: OnboardingStepProps) {
   const draft = useIcpDraft(props.orgId, props.agent)
@@ -20,49 +21,53 @@ export function ExclusionsStep(props: OnboardingStepProps) {
   return (
     <IcpStepShell
       {...props}
-      description="We pre-filled this from your website — adjust or add as you like. Anyone matching these is left out of every search."
+      description="Anyone matching these is never contacted."
       draft={draft}
+      skeleton={<ExclusionsSkeleton label="Suggesting who to exclude" />}
       title="Who should we exclude?"
     >
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Exclude these profiles
-          </p>
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-foreground">Profiles</p>
           {options === undefined ? (
-            <div aria-live="polite" className="flex flex-col gap-2" role="status">
-              <span className="sr-only">Loading the exclusions</span>
-              <Skeleton className="h-14 rounded-2xl" />
-              <Skeleton className="h-14 rounded-2xl" />
-            </div>
+            <SkeletonRegion label="Loading the exclusions" className="gap-3">
+              <CheckboxRowSkeleton />
+              <CheckboxRowSkeleton />
+              <CheckboxRowSkeleton />
+            </SkeletonRegion>
           ) : (
-            <div className="flex flex-col gap-2">
-              {options.excludeProfiles.map((option) => (
-                <CheckCard
-                  checked={icp.excludeProfiles.includes(option.value)}
-                  key={option.value}
-                  onCheckedChange={(checked) => {
-                    draft.change({
-                      excludeProfiles: checked
-                        ? [...icp.excludeProfiles, option.value]
-                        : icp.excludeProfiles.filter(
-                            (value) => value !== option.value,
-                          ),
-                    })
-                  }}
-                  title={option.label}
-                />
-              ))}
+            <div className="flex flex-col gap-3">
+              {options.excludeProfiles.map((option) => {
+                const id = `exclude-${option.value}`
+                return (
+                  <Field key={option.value} orientation="horizontal">
+                    <Checkbox
+                      checked={icp.excludeProfiles.includes(option.value)}
+                      id={id}
+                      onCheckedChange={(checked) => {
+                        draft.change({
+                          excludeProfiles: checked
+                            ? [...icp.excludeProfiles, option.value]
+                            : icp.excludeProfiles.filter(
+                                (value) => value !== option.value,
+                              ),
+                        })
+                      }}
+                    />
+                    <FieldLabel htmlFor={id}>{option.label}</FieldLabel>
+                  </Field>
+                )
+              })}
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Companies &amp; keywords to avoid
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-foreground">
+            Companies and keywords
           </p>
           <ChipInput
-            addLabel="Add"
+            addLabel="Add more"
             inputAriaLabel="Add a company or keyword to avoid"
             maxCount={ICP_GROUP_MAX_ITEMS.excludeKeywords}
             onChange={(next) => {
@@ -73,12 +78,41 @@ export function ExclusionsStep(props: OnboardingStepProps) {
             tone="neutral"
             values={icp.excludeKeywords}
           />
-          <InfoBanner icon={InformationCircleIcon} tone="plain">
-            Nobody at these companies, and nobody whose profile mentions these
-            words, is ever contacted.
-          </InfoBanner>
         </div>
       </div>
     </IcpStepShell>
+  )
+}
+
+/** Mirrors the whole step while a run drafts it: the profile checkboxes, then the chip row. */
+function ExclusionsSkeleton({ label }: { label: string }) {
+  return (
+    <SkeletonRegion label={label} className="gap-8">
+      <div className="flex flex-col gap-2">
+        <TextLine className="w-16" />
+        <div className="flex flex-col gap-3">
+          <CheckboxRowSkeleton />
+          <CheckboxRowSkeleton />
+          <CheckboxRowSkeleton />
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <TextLine className="w-44" />
+        <div className="flex flex-wrap gap-2">
+          <Skeleton shape="lg" className="h-8 w-32" />
+          <Skeleton shape="lg" className="h-8 w-24" />
+        </div>
+      </div>
+    </SkeletonRegion>
+  )
+}
+
+/** A horizontal `Field`: checkbox, then its label. */
+function CheckboxRowSkeleton() {
+  return (
+    <div className="flex items-center gap-2">
+      <Skeleton shape="lg" className="size-4 shrink-0" />
+      <TextLine className="w-48" />
+    </div>
   )
 }

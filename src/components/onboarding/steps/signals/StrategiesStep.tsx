@@ -1,11 +1,9 @@
 /** Save each selection immediately so leaving without Next still preserves it. */
-import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import type { Id } from "../../../../../convex/_generated/dataModel"
 import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
-import { InfoBanner } from "@/components/kit/InfoBanner"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { signalsFailureCopy } from "@/components/onboarding/steps/signals/signals-copy"
 import { strategyIsSelectable } from "@/components/onboarding/steps/signals/signals-model"
@@ -89,14 +87,17 @@ export function StrategiesStep(props: OnboardingStepProps) {
       badge={
         view.state === "ready" ? <AiGeneratedBadge label="AI-generated" /> : null
       }
-      description="These are the strongest reasons to reach the people you just described. Pick the ones that sound like your best customers."
+      description="Pick the ones that sound like your best customers."
       error={saveError}
       moveError={moveError}
       nextDisabled={generating || moving || chosen.length === 0}
+      nextHint={
+        !generating && chosen.length === 0 ? "Pick at least one signal." : null
+      }
       nextLoading={moving}
       onNext={goNext}
       progress={progress}
-      title="Here are the first signals we think you should track"
+      title="Signals to track"
       {...(goBack === undefined
         ? {}
         : { onPrevious: goBack, previousDisabled: moving })}
@@ -131,7 +132,7 @@ export function StrategiesStep(props: OnboardingStepProps) {
         <StrategyCardSkeletons />
       ) : strategies.length === 0 ? (
         <EmptyState
-          description="Nothing has been worked out for this agent yet. Run it again and we'll look at your profile and your ideal customer."
+          description="Run it again to get suggestions."
           title="No signals yet"
         />
       ) : (
@@ -141,11 +142,6 @@ export function StrategiesStep(props: OnboardingStepProps) {
           strategies={strategies}
         />
       )}
-
-      <InfoBanner icon={InformationCircleIcon} tone="plain">
-        Don&rsquo;t overthink it — you can change which signals your agent
-        tracks at any time.
-      </InfoBanner>
     </SignalsStepShell>
   )
 }

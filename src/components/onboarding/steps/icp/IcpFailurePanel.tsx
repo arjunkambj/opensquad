@@ -20,7 +20,7 @@ export function IcpFailurePanel({
 }: IcpFailurePanelProps) {
   return (
     <div
-      className="flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
+      className="flex flex-col gap-3 rounded-lg bg-destructive/5 px-4 py-3"
       role="alert"
     >
       <div className="flex items-start gap-2">
@@ -46,13 +46,12 @@ export function IcpFailurePanel({
         <Button
           disabled={retryDisabled}
           onClick={onRetry}
-          size="sm"
           type="button"
           variant="outline"
         >
           Try again
         </Button>
-        <Button onClick={onFillManually} size="sm" type="button" variant="ghost">
+        <Button onClick={onFillManually} type="button" variant="ghost">
           Fill it in myself
         </Button>
       </div>

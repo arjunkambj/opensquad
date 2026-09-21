@@ -1,14 +1,14 @@
 /** Confirm counts keywords and activates the agent; the run loop starts work when nextRunAt is due. */
-import { Target01Icon } from "@hugeicons/core-free-icons"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import type { OnboardingStep } from "../../../../../convex/lib/validators"
-import { InfoBanner } from "@/components/kit/InfoBanner"
-import { ReviewAccordion } from "@/components/kit/ReviewAccordion"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
 import { buildReviewRows } from "@/components/onboarding/steps/signals/review-rows"
-import { ReviewRowEditor } from "@/components/onboarding/steps/signals/ReviewRowEditor"
+import {
+  ReviewList,
+  ReviewListSkeleton,
+} from "@/components/onboarding/steps/signals/ReviewList"
 import {
   CONFIRM_FALLBACK,
   confirmBlockCopy,
@@ -18,7 +18,6 @@ import { SignalsFailurePanel } from "@/components/onboarding/steps/signals/Signa
 import { SignalsStepShell } from "@/components/onboarding/steps/signals/SignalsStepShell"
 import { useMountedRef } from "@/hooks/use-mounted"
 import { EmptyState } from "@/components/states/states"
-import { Skeleton } from "@/components/ui/skeleton"
 
 type StepFailure = { message: SignalsMessage; from: "confirm" | "step" }
 
@@ -105,15 +104,19 @@ export function ReviewStep(props: OnboardingStepProps) {
 
   return (
     <SignalsStepShell
-      description="Your agent starts from this. Everything here can be changed later."
-      icon={Target01Icon}
+      description="Everything here can be changed later."
       moveError={moveError}
       nextDisabled={loading || confirming || moving || signals.length === 0}
       nextLabel="Confirm & find leads"
+      nextHint={
+        !loading && signals.length === 0
+          ? "Switch on at least one signal first."
+          : null
+      }
       nextLoading={confirming}
       onNext={finish}
       progress={progress}
-      title="Check your setup before we find your leads"
+      title="Review your setup"
       {...(goBack === undefined
         ? {}
         : {
@@ -137,20 +140,19 @@ export function ReviewStep(props: OnboardingStepProps) {
         />
       )}
 
-      <InfoBanner title="Your agent will use this to find and surface the people most likely to reply.">
-        Fine-tune anything below to change who it looks for.
-      </InfoBanner>
-
       {loading ? (
-        <Skeleton className="h-96 w-full rounded-2xl" />
+        <ReviewListSkeleton />
       ) : profile === null ? (
         <EmptyState
-          description="Go back to the first step and save your company profile — your agent writes from it."
+          description="Go back to the first step and save it."
           title="Your company profile is missing"
         />
       ) : (
-        <ReviewAccordion
-          className="overflow-hidden rounded-2xl border"
+        <ReviewList
+          disabled={moving || confirming}
+          onEdit={(row) => {
+            jumpTo(row.step)
+          }}
           rows={buildReviewRows({
             companyName: profile.companyName,
             industry: profile.industry,
@@ -159,25 +161,9 @@ export function ReviewStep(props: OnboardingStepProps) {
             tone: agent.tone,
             signals,
             keywords: overview.keywords,
-          }).map(({ step, hint, ...row }) => ({
-            ...row,
-            content: (
-              <ReviewRowEditor
-                disabled={moving || confirming}
-                hint={hint}
-                onEdit={() => jumpTo(step)}
-              />
-            ),
-          }))}
+          })}
         />
       )}
-
-      {signals.length === 0 && !loading ? (
-        <p className="text-sm text-muted-foreground">
-          Go back to the signals step and switch on at least one, so your agent
-          has somewhere to start looking.
-        </p>
-      ) : null}
     </SignalsStepShell>
   )
 }

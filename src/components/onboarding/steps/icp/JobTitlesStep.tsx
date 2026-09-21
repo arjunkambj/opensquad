@@ -12,20 +12,14 @@ export function JobTitlesStep(props: OnboardingStepProps) {
   return (
     <IcpStepShell
       {...props}
-      description={
-        <>
-          We pre-filled this from your website — adjust or add as you like. We
-          match similar titles automatically, so there is no need to be
-          exhaustive.
-        </>
-      }
+      description="Suggested from your profile. Similar titles match too."
       draft={draft}
-      hint="Add at least one job title so your agent knows who to look for."
+      hint="Add at least one job title."
       nextDisabled={jobTitles.length === 0}
       title="Who's your ideal customer?"
     >
       <ChipInput
-        addLabel="Add"
+        addLabel="Add more"
         inputAriaLabel="Add a job title"
         maxCount={ICP_GROUP_MAX_ITEMS.jobTitles}
         onChange={(next) => {

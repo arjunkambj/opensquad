@@ -11,6 +11,10 @@ export type OutreachStepProps = {
   agent: OnboardingAgent
   goNext: () => void
   goBack: () => void
+  /** A step change is in flight: Next stays down until it lands or is refused. */
+  moving: boolean
+  /** Why the last step change was refused. Silent here would strand the user. */
+  moveError: string | null
 }
 
 export type AgentGoal = OnboardingAgent["goal"]

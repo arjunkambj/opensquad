@@ -1,4 +1,4 @@
-/** Navigate to Contacts only when the subscribed agent reads done.
+/** Navigate to Leads only when the subscribed agent reads done.
  * Navigating on the action result can race the route guard and bounce back to setup. */
 import { Navigate } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
@@ -12,9 +12,10 @@ import {
   ONBOARDING_STEP_REGISTRY,
   previousOnboardingStep,
 } from "@/components/onboarding/onboarding-model"
+import { OnboardingSkeleton } from "@/components/onboarding/OnboardingSkeleton"
 import { SetupFrame } from "@/components/onboarding/SetupFrame"
 import { useMountedRef } from "@/hooks/use-mounted"
-import { ErrorState, LoadingState } from "@/components/states/states"
+import { ErrorState } from "@/components/states/states"
 import { domainErrorCode } from "@/lib/convex-error"
 
 export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
@@ -30,12 +31,7 @@ export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
 
   if (agent === undefined) {
     return (
-      <SetupFrame>
-        <LoadingState
-          description="Picking up where you left off."
-          title="Loading your setup"
-        />
-      </SetupFrame>
+      <OnboardingSkeleton label="Picking up where you left off" />
     )
   }
 
@@ -53,10 +49,10 @@ export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
   }
 
   if (agent.onboardingStep === "done") {
-    // Contacts shows the agent's own run state, so landing there is what
+    // Leads shows the agent's own run state, so landing there is what
     // "finding your first leads" looks like. `replace`, because setup is over
     // and there is nothing behind it worth going back to.
-    return <Navigate replace to="/contacts" />
+    return <Navigate replace to="/leads" />
   }
 
   // Every step but `done` has a screen, and the registry's type says so — a

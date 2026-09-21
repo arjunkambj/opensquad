@@ -11,6 +11,7 @@ import {
   signalsGenerationView,
 } from "@/components/onboarding/steps/signals/signals-model"
 import type { SignalsGenerationView } from "@/components/onboarding/steps/signals/signals-model"
+import { useMinuteClock } from "@/hooks/use-minute-clock"
 import { useMountedRef } from "@/hooks/use-mounted"
 
 export type SignalsRunReason = "initial" | "retry" | "regenerate"
@@ -46,7 +47,10 @@ export function useStrategyRecommendation(
   const [starting, setStarting] = useState(false)
   const mounted = useMountedRef()
 
-  const view = signalsGenerationView(status ?? null)
+  // A lost scheduled run never writes again, so the subscription alone would
+  // leave this screen generating forever: the clock is what makes it stale.
+  const now = useMinuteClock()
+  const view = signalsGenerationView(status ?? null, now)
   const price = signalsGenerationPrice(view)
 
   // Only the latest attempt may update state, and only while the screen is mounted.
