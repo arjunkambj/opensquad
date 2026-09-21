@@ -9,10 +9,12 @@ const badgeVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground",
         secondary: "bg-secondary text-secondary-foreground",
-        outline: "border-border text-foreground",
+        outline: "bg-foreground/5 text-foreground",
+        surface: "bg-popover text-popover-foreground",
       },
       size: {
         default: "",
+        section: "h-7 rounded-xl px-3.5 py-0 text-sm font-normal",
         md: "h-7 px-3 py-1",
         lg: "h-auto gap-2 px-3 py-1.5 whitespace-normal",
       },

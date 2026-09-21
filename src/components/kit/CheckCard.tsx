@@ -39,13 +39,10 @@ function CheckCount({
   countPrefix?: string
 }) {
   if (count === "loading") {
-    // bg-foreground/10 rather than the default bg-muted: a checked card's
-    // ground is already tinted, and an invisible skeleton would read as a
-    // count that came back empty.
-    return <Skeleton className="h-5 w-16 shrink-0 rounded-full bg-foreground/10" />
+    return <Skeleton shape="lg" className="h-5 w-16 shrink-0" />
   }
   return (
-    <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
+    <span className="rounded-lg bg-background px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
       {[countPrefix, count.toLocaleString(), countLabel]
         .filter((part): part is string => part !== undefined)
         .join(" ")}
@@ -69,8 +66,8 @@ export function CheckCard({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-2xl border px-4 py-3 transition-colors",
-        checked ? "border-primary bg-primary/5" : "border-border bg-background",
+        "flex items-center gap-3 rounded-lg px-4 py-3 transition-colors",
+        checked ? "bg-muted" : "bg-muted/50 hover:bg-muted",
         disabled && "opacity-50",
         className,
       )}
@@ -93,7 +90,7 @@ export function CheckCard({
         <span
           aria-hidden="true"
           className={cn(
-            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
             checked
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-background",
@@ -126,9 +123,13 @@ export function CheckCard({
       {info ? (
         <Tooltip>
           <TooltipTrigger
-            type="button"
             aria-label={infoLabel}
-            className="shrink-0 rounded-full p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            render={
+              <button
+                type="button"
+                className="shrink-0 rounded-full p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              />
+            }
           >
             <HugeiconsIcon
               icon={InformationCircleIcon}

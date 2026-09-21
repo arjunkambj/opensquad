@@ -28,7 +28,7 @@ export function AnalysisFailurePanel({
   return (
     <div
       role="alert"
-      className="flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
+      className="flex flex-col gap-3 rounded-lg bg-destructive/5 px-4 py-3"
     >
       <div className="flex items-start gap-2">
         <HugeiconsIcon
@@ -48,7 +48,6 @@ export function AnalysisFailurePanel({
         <Button
           disabled={retryDisabled}
           onClick={onRetry}
-          size="sm"
           type="button"
           variant="outline"
         >
@@ -57,8 +56,7 @@ export function AnalysisFailurePanel({
         {onFillManually !== undefined ? (
           <Button
             onClick={onFillManually}
-            size="sm"
-            type="button"
+              type="button"
             variant="ghost"
           >
             Fill it in myself

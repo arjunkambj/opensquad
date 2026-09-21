@@ -1,15 +1,14 @@
 /**
- * FlameScore — the 1–3 flame AI score in the Contacts table (ref 23) and the
+ * FlameScore — the 1–3 star AI score in the Leads table (ref 23) and the
  * hot-leads list (ref 20).
  *
  * A score exists only on a researched lead (PLAN §7), so the four research
  * states are the props: an unresearched or failed lead gets words, not three
- * empty flames that would read as "scored zero". The score is never colour
+ * empty stars that would read as "scored zero". The score is never colour
  * alone — the accessible name always spells it out.
  */
-import { Fire02Icon } from "@hugeicons/core-free-icons"
+import { StarIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
 export type FlameScoreProps = (
@@ -42,7 +41,11 @@ export function FlameScore(props: FlameScoreProps) {
           className,
         )}
       >
-        <Spinner className="size-3.5" />
+        {/* Research is a background job, not a load: a status dot, not a spinner. */}
+        <span
+          aria-hidden="true"
+          className="size-2 shrink-0 animate-pulse rounded-full bg-primary"
+        />
         {researchingLabel}
       </span>
     )
@@ -71,14 +74,16 @@ export function FlameScore(props: FlameScoreProps) {
       aria-label={scoreLabel(score)}
       className={cn("inline-flex items-center gap-0.5", className)}
     >
-      {[1, 2, 3].map((flame) => (
+      {[1, 2, 3].map((star) => (
         <HugeiconsIcon
-          key={flame}
-          icon={Fire02Icon}
-          strokeWidth={2}
+          key={star}
+          icon={StarIcon}
+          strokeWidth={1.75}
           className={cn(
             "size-4",
-            flame <= score ? "text-primary" : "text-muted-foreground/40",
+            star <= score
+              ? "fill-current text-illustration-accent"
+              : "text-muted-foreground/40",
           )}
           aria-hidden="true"
         />

@@ -6,7 +6,7 @@ function NativeSelect({ className, ...props }: React.ComponentProps<"select">) {
     <select
       data-slot="native-select"
       className={cn(
-        "h-8 w-full min-w-0 appearance-none rounded-2xl bg-input/50 bg-[linear-gradient(45deg,transparent_50%,var(--muted-foreground)_50%),linear-gradient(135deg,var(--muted-foreground)_50%,transparent_50%)] bg-[position:calc(100%-19px)_50%,calc(100%-14px)_50%] bg-[size:5px_5px] bg-no-repeat px-2.5 py-1 pr-8 text-base transition-[color,box-shadow] duration-200 outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-1 aria-invalid:ring-destructive/20 md:text-sm dark:aria-invalid:ring-destructive/40",
+        "h-8 w-full min-w-0 appearance-none rounded-xl bg-input/50 bg-[linear-gradient(45deg,transparent_50%,var(--muted-foreground)_50%),linear-gradient(135deg,var(--muted-foreground)_50%,transparent_50%)] bg-[position:calc(100%-19px)_50%,calc(100%-14px)_50%] bg-[size:5px_5px] bg-no-repeat px-2.5 py-1 pr-8 text-base transition-[color,box-shadow] duration-200 outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-1 aria-invalid:ring-destructive/20 md:text-sm dark:aria-invalid:ring-destructive/40",
         className,
       )}
       {...props}

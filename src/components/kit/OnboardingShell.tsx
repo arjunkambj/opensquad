@@ -3,6 +3,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
+import { Hint } from "@/components/kit/Hint"
 import { OnboardingStepper } from "@/components/kit/OnboardingStepper"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -19,6 +20,8 @@ export type OnboardingShellProps = {
   step?: number
   /** How many sub-steps the current dot has. */
   stepCount?: number
+  /** The stage's name, shown above the title with the sub-step count. */
+  stageLabel?: string
   /** Top-left slot inside the card, for `AiGeneratedBadge`. */
   badge?: ReactNode
   /** Optional icon tile above the title (ref 11). */
@@ -33,8 +36,12 @@ export type OnboardingShellProps = {
   nextLabel?: string
   nextDisabled?: boolean
   nextLoading?: boolean
+  /** Tooltip on Next — why it is off, when it is. */
+  nextHint?: ReactNode
   /** Sits to the left of Next — "Connect later", "No keywords needed". */
   secondaryAction?: ReactNode
+  /** Right-hand column on wide screens; stacks above the footer on narrow ones. */
+  aside?: ReactNode
   /** Accessible name for the stepper list. */
   stepperLabel?: string
   className?: string
@@ -46,6 +53,7 @@ export function OnboardingShell({
   currentDot,
   step,
   stepCount,
+  stageLabel,
   badge,
   icon,
   title,
@@ -58,7 +66,9 @@ export function OnboardingShell({
   nextLabel = "Next step",
   nextDisabled = false,
   nextLoading = false,
+  nextHint,
   secondaryAction,
+  aside,
   stepperLabel = "Progress",
   className,
 }: OnboardingShellProps) {
@@ -66,12 +76,99 @@ export function OnboardingShell({
     step !== undefined && stepCount !== undefined && stepCount > 0
       ? (step - 1) / stepCount
       : 0
+  const showStep =
+    step !== undefined && stepCount !== undefined && stepCount > 1
   const hasFooter = onPrevious !== undefined || onNext !== undefined
+
+  const heading = (
+    <>
+      {stageLabel !== undefined || showStep || badge ? (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {stageLabel !== undefined || showStep ? (
+            <p className="text-sm font-medium text-muted-foreground">
+              {stageLabel}
+              {stageLabel !== undefined && showStep ? " · " : null}
+              {showStep ? `${step} of ${stepCount}` : null}
+            </p>
+          ) : null}
+          {badge}
+        </div>
+      ) : null}
+
+      <header className="flex flex-col items-start gap-2">
+        {icon ? (
+          <span className="mb-2 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <HugeiconsIcon
+              icon={icon}
+              strokeWidth={2}
+              className="size-5"
+              aria-hidden="true"
+            />
+          </span>
+        ) : null}
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {title}
+        </h1>
+        {description ? (
+          <div className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+            {description}
+          </div>
+        ) : null}
+      </header>
+    </>
+  )
+
+  const footer = hasFooter ? (
+    <footer className="flex items-start justify-between gap-4">
+      <div>
+        {onPrevious ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={previousDisabled}
+            onClick={onPrevious}
+          >
+            <HugeiconsIcon
+              icon={ArrowLeft01Icon}
+              strokeWidth={2}
+              data-icon="inline-start"
+              aria-hidden="true"
+            />
+            {previousLabel}
+          </Button>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-4">
+        {secondaryAction}
+        {onNext ? (
+          <Hint content={nextHint}>
+            <Button
+              type="button"
+              disabled={nextDisabled || nextLoading}
+              onClick={onNext}
+            >
+              {nextLabel}
+              {nextLoading ? (
+                <Spinner data-icon="inline-end" />
+              ) : (
+                <HugeiconsIcon
+                  icon={ArrowRight01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-end"
+                  aria-hidden="true"
+                />
+              )}
+            </Button>
+          </Hint>
+        ) : null}
+      </div>
+    </footer>
+  ) : null
 
   return (
     <div
       className={cn(
-        "flex min-h-svh w-full flex-col items-center bg-linear-to-br from-background via-background to-primary/25 px-4 py-10 sm:px-6",
+        "flex min-h-svh w-full flex-col items-center bg-linear-to-br from-background via-background to-section-accent/20 px-4 py-10 sm:px-6",
         className,
       )}
     >
@@ -85,86 +182,24 @@ export function OnboardingShell({
         label={stepperLabel}
       />
 
-      <section className="mt-10 w-full max-w-3xl rounded-[min(var(--radius-5xl),32px)] bg-card px-6 py-8 shadow-xl shadow-foreground/5 sm:px-10 sm:py-10">
-        <div className="flex min-h-6 items-start justify-between gap-4">
-          <div className="min-w-0">{badge}</div>
-          {step !== undefined && stepCount !== undefined ? (
-            <p className="shrink-0 text-xs text-muted-foreground">
-              Step {step} of {stepCount}
-            </p>
-          ) : null}
-        </div>
-
-        <header className="flex flex-col items-center gap-2 text-center">
-          {icon ? (
-            <span className="mb-2 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <HugeiconsIcon
-                icon={icon}
-                strokeWidth={2}
-                className="size-5"
-                aria-hidden="true"
-              />
-            </span>
-          ) : null}
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            {title}
-          </h1>
-          {description ? (
-            <div className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              {description}
-            </div>
-          ) : null}
-        </header>
-
-        <div className="mt-8">{children}</div>
-
-        {hasFooter ? (
-          <footer className="mt-8 flex items-center justify-between gap-4 border-t border-border pt-5">
-            <div>
-              {onPrevious ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="cta"
-                  disabled={previousDisabled}
-                  onClick={onPrevious}
-                >
-                  <HugeiconsIcon
-                    icon={ArrowLeft01Icon}
-                    strokeWidth={2}
-                    data-icon="inline-start"
-                    aria-hidden="true"
-                  />
-                  {previousLabel}
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-4">
-              {secondaryAction}
-              {onNext ? (
-                <Button
-                  type="button"
-                  size="cta"
-                  disabled={nextDisabled || nextLoading}
-                  onClick={onNext}
-                >
-                  {nextLabel}
-                  {nextLoading ? (
-                    <Spinner className="size-4" />
-                  ) : (
-                    <HugeiconsIcon
-                      icon={ArrowRight01Icon}
-                      strokeWidth={2}
-                      data-icon="inline-end"
-                      aria-hidden="true"
-                    />
-                  )}
-                </Button>
-              ) : null}
-            </div>
-          </footer>
-        ) : null}
-      </section>
+      {aside === undefined ? (
+        <section className="mt-12 flex w-full max-w-2xl flex-col gap-8">
+          <div>{heading}</div>
+          <div className="min-w-0">{children}</div>
+          {footer}
+        </section>
+      ) : (
+        <section className="mt-12 grid w-full max-w-6xl gap-y-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-x-20">
+          {/* Sticky so Next stays in reach while the longer right column scrolls. */}
+          <div className="flex min-w-0 flex-col gap-8 lg:sticky lg:top-10 lg:self-start">
+            <div>{heading}</div>
+            <div className="min-w-0">{children}</div>
+            <div className="max-lg:hidden">{footer}</div>
+          </div>
+          <aside className="min-w-0">{aside}</aside>
+          <div className="lg:hidden">{footer}</div>
+        </section>
+      )}
     </div>
   )
 }

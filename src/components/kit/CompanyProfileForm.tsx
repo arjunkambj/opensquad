@@ -3,7 +3,6 @@ import { COMPANY_FIELD_LIMITS, industryOptions } from "@/lib/company-form"
 import type { CompanyForm } from "@/lib/company-form"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
@@ -17,14 +16,6 @@ export type CompanyProfileFormProps = {
   disabled?: boolean
 }
 
-function RequiredMark() {
-  return (
-    <span aria-hidden="true" className="text-destructive">
-      *
-    </span>
-  )
-}
-
 export function CompanyProfileForm({
   value,
   onChange,
@@ -33,15 +24,13 @@ export function CompanyProfileForm({
   const industries = industryOptions(value.industry)
 
   return (
-    <FieldGroup className="gap-5">
-      <div className="grid gap-5 sm:grid-cols-2">
+    <FieldGroup>
+      <div className="grid gap-x-4 gap-y-8 sm:grid-cols-2">
         <Field>
-          <FieldLabel className="gap-1" htmlFor="company-name">
+          <FieldLabel htmlFor="company-name">
             Company name
-            <RequiredMark />
           </FieldLabel>
           <Input
-            className="h-10"
             disabled={disabled}
             id="company-name"
             maxLength={COMPANY_FIELD_LIMITS.name}
@@ -51,12 +40,10 @@ export function CompanyProfileForm({
           />
         </Field>
         <Field>
-          <FieldLabel className="gap-1" htmlFor="company-industry">
+          <FieldLabel htmlFor="company-industry">
             Industry
-            <RequiredMark />
           </FieldLabel>
           <NativeSelect
-            className="h-10"
             disabled={disabled}
             id="company-industry"
             required
@@ -74,28 +61,23 @@ export function CompanyProfileForm({
       </div>
 
       <Field>
-        <FieldLabel className="gap-1" htmlFor="company-description">
-          What you do and why it is worth buying
-          <RequiredMark />
+        <FieldLabel htmlFor="company-description">
+          What you do
         </FieldLabel>
         <Textarea
-          className="min-h-28"
+          className="min-h-24"
           disabled={disabled}
           id="company-description"
           maxLength={COMPANY_FIELD_LIMITS.description}
+          placeholder="What you sell, who it's for and why it matters."
           required
           value={value.description}
           onChange={(event) => onChange({ description: event.target.value })}
         />
-        <FieldDescription>
-          Every email your agent writes is built from this. Two or three plain
-          sentences work better than a tagline.
-        </FieldDescription>
       </Field>
 
       <RowListField
-        addPlaceholder="Add a key feature…"
-        description="What your product actually does. Your agent may only claim what is on this list."
+        addPlaceholder="Add a feature, then press Enter"
         disabled={disabled}
         label="Key features"
         maxCount={COMPANY_FIELD_LIMITS.listItems}
@@ -107,8 +89,7 @@ export function CompanyProfileForm({
       />
 
       <RowListField
-        addPlaceholder="Add a customer, result or number…"
-        description="Named customers, results or credentials you can stand behind. Leave it empty rather than inventing one."
+        addPlaceholder="A customer, result or number"
         disabled={disabled}
         label="Social proof"
         maxCount={COMPANY_FIELD_LIMITS.listItems}

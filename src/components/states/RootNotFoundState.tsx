@@ -10,7 +10,7 @@ export function RootNotFoundState() {
         title="Page not found"
         description="The page you're looking for doesn't exist."
         action={
-          <Button render={<Link to="/dashboard" />}>Back to the dashboard</Button>
+          <Button render={<Link to="/overview" />}>Back to Overview</Button>
         }
       />
     </div>

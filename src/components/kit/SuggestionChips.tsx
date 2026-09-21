@@ -1,8 +1,8 @@
 /**
- * SuggestionChips — the dashed "click to add" row under the keyword chips
+ * SuggestionChips — the "click to add" row under the keyword chips
  * (ref 10).
  *
- * Suggestions are offers, not state: they read as dashed outlines with a
+ * Suggestions are offers, not state: they read as plain outlines with a
  * leading plus so they never look like something already chosen. The caller
  * removes an accepted suggestion from the list, and `action` carries the
  * "Generate more" control so this component never asks for anything itself.
@@ -59,7 +59,7 @@ export function SuggestionChips({
             onClick={() => {
               onAdd(suggestion)
             }}
-            className="inline-flex h-8 items-center gap-1 rounded-lg border border-dashed border-border px-3 text-sm text-foreground outline-none transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-muted px-3 text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
           >
             <HugeiconsIcon
               icon={Add01Icon}

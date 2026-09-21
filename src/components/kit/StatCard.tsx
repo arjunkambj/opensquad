@@ -7,19 +7,23 @@
  * component inventing a zero. `loading` is a separate state for the same
  * reason: a figure still being counted must not look like a counted zero.
  */
+import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
+import { FramedPanel } from "@/components/kit/FramedPanel"
+import { Hint } from "@/components/kit/Hint"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
 
 export type StatCardProps = {
   label: string
+  icon?: IconSvgElement
   /** The figure, or a placeholder glyph when the caller has no number. */
   value: ReactNode
   /** Line under the figure, e.g. "Invitations sent". */
-  sublabel?: string
-  /** Muted line at the bottom, e.g. "Last 30 days". */
+  sublabel?: ReactNode
+  /** The window the figure covers. Shown on hover only: the page already
+   *  says which window is picked, so five cards need not repeat it. */
   hint?: string
-  /** Top-right slot, e.g. an Edit button. */
+  /** Header slot, e.g. an Edit button. */
   action?: ReactNode
   loading?: boolean
   className?: string
@@ -27,6 +31,7 @@ export type StatCardProps = {
 
 export function StatCard({
   label,
+  icon,
   value,
   sublabel,
   hint,
@@ -35,30 +40,29 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-2 rounded-2xl border border-border bg-card px-5 py-4",
-        className,
-      )}
+    <FramedPanel
+      as="div"
+      title={<Hint content={hint}>{label}</Hint>}
+      icon={icon}
+      action={action}
+      className={className}
+      bodyClassName="gap-2 px-5 py-3"
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        {action}
-      </div>
       {loading ? (
-        // bg-foreground/10 rather than the default bg-muted: the card's own
-        // ground is muted on several themes, and an invisible skeleton reads
-        // as a finished, empty figure.
-        <Skeleton className="h-8 w-20 rounded-xl bg-foreground/10" />
+        <Skeleton shape="xl" className="h-9 w-20" />
       ) : (
-        <p className="font-display text-3xl leading-none font-semibold tracking-tight text-foreground tabular-nums">
+        <p className="font-display text-4xl leading-none font-semibold tracking-tight text-foreground tabular-nums">
           {value}
         </p>
       )}
       {sublabel ? (
-        <p className="text-xs text-foreground">{sublabel}</p>
+        <p className="text-xs text-muted-foreground">{sublabel}</p>
+      ) : loading ? (
+        // Holds the sublabel's line so the card keeps its loaded height.
+        <div className="flex h-4 items-center">
+          <Skeleton shape="full" className="h-3 w-32" />
+        </div>
       ) : null}
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
+    </FramedPanel>
   )
 }

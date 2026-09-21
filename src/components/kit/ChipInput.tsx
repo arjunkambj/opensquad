@@ -9,7 +9,7 @@ export type ChipInputProps = {
   onChange: (next: string[]) => void
   /** Accessible name for the inline text field. */
   inputAriaLabel: string
-  /** Text on the dashed add chip. */
+  /** Text on the add chip. */
   addLabel?: string
   placeholder?: string
   /** Upper bound; the add chip disappears once reached. */
@@ -17,8 +17,6 @@ export type ChipInputProps = {
   disabled?: boolean
   /** Coral outline (refs 06, 07) or neutral outline (ref 08). */
   tone?: "primary" | "neutral"
-  /** Pill (refs 06, 08) or rounded rectangle, to match a chip group (ref 07). */
-  shape?: "pill" | "rounded"
   /** Accessible name for a chip's remove button. */
   removeLabel?: (value: string) => string
   className?: string
@@ -51,12 +49,11 @@ export function ChipInput({
   values,
   onChange,
   inputAriaLabel,
-  addLabel = "Add",
+  addLabel = "Add more",
   placeholder,
   maxCount,
   disabled = false,
   tone = "primary",
-  shape = "pill",
   removeLabel = (value) => `Remove ${value}`,
   className,
 }: ChipInputProps) {
@@ -64,7 +61,6 @@ export function ChipInput({
   const [isAdding, setIsAdding] = useState(false)
 
   const atMax = maxCount !== undefined && values.length >= maxCount
-  const radius = shape === "pill" ? "rounded-full" : "rounded-xl"
 
   function commit(raw: string) {
     const next = mergeValues(values, raw, maxCount)
@@ -85,11 +81,10 @@ export function ChipInput({
         <span
           key={value}
           className={cn(
-            "inline-flex h-9 items-center gap-2 border px-4 text-sm",
-            radius,
+            "inline-flex h-8 items-center gap-2 rounded-lg px-4 text-sm",
             tone === "primary"
-              ? "border-primary/40 bg-primary/5 text-primary"
-              : "border-border bg-background text-foreground",
+              ? "bg-accent text-accent-foreground"
+              : "bg-muted text-foreground",
           )}
         >
           {value}
@@ -100,7 +95,7 @@ export function ChipInput({
             onClick={() => {
               onChange(values.filter((current) => current !== value))
             }}
-            className="-mr-1 rounded-full p-1 outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            className="-mr-1 rounded-md p-1 outline-none transition-colors hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
           >
             <HugeiconsIcon
               icon={Cancel01Icon}
@@ -121,7 +116,7 @@ export function ChipInput({
           aria-label={inputAriaLabel}
           placeholder={placeholder}
           disabled={disabled}
-          className={cn("h-9 w-52", radius)}
+          className="w-52"
           onChange={(event) => {
             const raw = event.target.value
             if (raw.includes(",")) {
@@ -163,8 +158,7 @@ export function ChipInput({
             setIsAdding(true)
           }}
           className={cn(
-            "inline-flex h-9 items-center gap-1.5 border border-dashed border-border px-4 text-sm text-muted-foreground outline-none transition-colors hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
-            radius,
+            "inline-flex h-8 items-center gap-1.5 rounded-lg px-4 text-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
           )}
         >
           <HugeiconsIcon

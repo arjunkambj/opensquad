@@ -35,7 +35,7 @@ export function InfoBanner({
       className={cn(
         "flex items-start gap-2 text-sm",
         tone === "primary"
-          ? "rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3"
+          ? "rounded-lg bg-muted/60 px-4 py-3"
           : "text-xs",
         className,
       )}

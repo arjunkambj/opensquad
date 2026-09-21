@@ -1,4 +1,4 @@
-import { Delete02Icon } from "@hugeicons/core-free-icons"
+import { Cancel01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useId, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 export type RowListFieldProps = {
   label: string
-  /** Shows the required marker and is announced on every row. */
+  /** Announced on every row. Optional lists say so beside the label. */
   required?: boolean
   values: string[]
   onChange: (next: string[]) => void
@@ -53,13 +53,11 @@ export function RowListField({
 
   return (
     <Field className={className}>
-      <FieldTitle className="gap-1" id={labelId}>
+      <FieldTitle id={labelId}>
         {label}
-        {required ? (
-          <span aria-hidden="true" className="text-destructive">
-            *
-          </span>
-        ) : null}
+        {required ? null : (
+          <span className="font-normal text-muted-foreground">Optional</span>
+        )}
       </FieldTitle>
 
       <ul aria-labelledby={labelId} className="flex flex-col gap-2">
@@ -72,7 +70,6 @@ export function RowListField({
           >
             <Input
               aria-label={rowLabel(index)}
-              className="h-10"
               disabled={disabled}
               value={value}
               onChange={(event) => {
@@ -90,10 +87,9 @@ export function RowListField({
               size="icon"
               type="button"
               variant="ghost"
-              className="text-muted-foreground hover:text-destructive"
             >
               <HugeiconsIcon
-                icon={Delete02Icon}
+                icon={Cancel01Icon}
                 strokeWidth={2}
                 aria-hidden="true"
               />
@@ -103,30 +99,21 @@ export function RowListField({
       </ul>
 
       {full ? null : (
-        <div className={cn("flex items-center gap-2", values.length > 0 && "mt-2")}>
-          <Input
-            aria-label={addPlaceholder}
-            className="h-10"
-            disabled={disabled}
-            placeholder={addPlaceholder}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault()
-                commit()
-              }
-            }}
-          />
-          <Button
-            disabled={disabled || draft.trim().length === 0}
-            onClick={commit}
-            type="button"
-            variant="outline"
-          >
-            Add
-          </Button>
-        </div>
+        <Input
+          aria-label={addPlaceholder}
+          className={cn(values.length > 0 && "mt-2")}
+          disabled={disabled}
+          placeholder={addPlaceholder}
+          value={draft}
+          onBlur={commit}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              commit()
+            }
+          }}
+        />
       )}
 
       {description !== undefined ? (

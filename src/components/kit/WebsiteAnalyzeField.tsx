@@ -21,8 +21,10 @@ export type WebsiteAnalyzeFieldProps = {
   price: number
   /** Our own sentence for why the button is off, or `null` when it is on. */
   blockedReason: string | null
-  /** Offered only before a profile exists — "I don't have a website". */
-  onSkip?: () => void
+  /** Off when the surrounding flow starts the read itself (onboarding's Next). */
+  withButton?: boolean
+  /** The surrounding section already says "Website". */
+  hideLabel?: boolean
 }
 
 export function WebsiteAnalyzeField({
@@ -33,7 +35,8 @@ export function WebsiteAnalyzeField({
   analyzing,
   price,
   blockedReason,
-  onSkip,
+  withButton = true,
+  hideLabel = false,
 }: WebsiteAnalyzeFieldProps) {
   const label = intent === "regenerate" ? "Regenerate" : "Analyze"
   const noteId = "company-website-note"
@@ -49,8 +52,10 @@ export function WebsiteAnalyzeField({
 
   return (
     <Field>
-      <FieldLabel htmlFor="company-website">Website</FieldLabel>
-      <InputGroup className="h-10">
+      <FieldLabel className={hideLabel ? "sr-only" : undefined} htmlFor="company-website">
+        Website
+      </FieldLabel>
+      <InputGroup>
         <InputGroupInput
           aria-describedby={noteId}
           autoComplete="url"
@@ -67,44 +72,31 @@ export function WebsiteAnalyzeField({
             }
           }}
         />
-        <InputGroupAddon align="inline-end">
-          <Button
-            disabled={disabled}
-            onClick={onAnalyze}
-            size="sm"
-            type="button"
-          >
-            {analyzing ? (
-              <Spinner className="size-4" data-icon="inline-start" />
-            ) : (
-              <HugeiconsIcon
-                aria-hidden="true"
-                data-icon="inline-start"
-                icon={Search01Icon}
-                strokeWidth={2}
-              />
-            )}
-            {analyzing ? "Analyzing…" : label}
-          </Button>
-        </InputGroupAddon>
+        {withButton ? (
+          <InputGroupAddon align="inline-end">
+            <Button
+              disabled={disabled}
+              onClick={onAnalyze}
+              size="sm"
+              type="button"
+            >
+              {analyzing ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  data-icon="inline-start"
+                  icon={Search01Icon}
+                  strokeWidth={2}
+                />
+              )}
+              {analyzing ? "Analyzing…" : label}
+            </Button>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
 
       <FieldDescription id={noteId}>{note}</FieldDescription>
-
-      {onSkip !== undefined ? (
-        <div className="flex justify-center">
-          <Button
-            className="text-muted-foreground"
-            disabled={analyzing}
-            onClick={onSkip}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            I don&rsquo;t have a website
-          </Button>
-        </div>
-      ) : null}
     </Field>
   )
 }

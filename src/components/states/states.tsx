@@ -3,42 +3,11 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
-export function LoadingState({
-  title = "Loading",
-  description,
-  className,
-}: {
-  title?: string
-  description?: string
-  className?: string
-}) {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-[min(var(--radius-4xl),24px)] border border-dashed border-border px-6 py-12 text-center",
-        className,
-      )}
-    >
-      <Spinner className="size-5 text-muted-foreground" />
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      {description ? (
-        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
-      ) : null}
-    </div>
-  )
-}
+// EmptyState and ErrorState share one surface so a page reads the same whichever it lands on.
+const standaloneStateClassName =
+  "flex flex-col items-center justify-center gap-2 rounded-card bg-card px-6 py-12 text-center"
 
 export type EmptyStateProps = {
   icon?: IconSvgElement
@@ -69,10 +38,9 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center text-center",
         plain
-          ? "gap-3 px-6 py-14"
-          : "gap-2 rounded-[min(var(--radius-4xl),24px)] border border-dashed border-border px-6 py-12",
+          ? "flex flex-col items-center justify-center gap-3 px-6 py-12 text-center"
+          : standaloneStateClassName,
         className,
       )}
     >
@@ -126,27 +94,23 @@ export function ErrorState({
   className?: string
 }) {
   return (
-    <Card className={cn("border-destructive/40", className)}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-destructive">
-          <HugeiconsIcon
-            icon={Alert02Icon}
-            strokeWidth={2}
-            className="size-4"
-            aria-hidden="true"
-          />
-          {title}
-        </CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
-      </CardHeader>
-      {onRetry ? (
-        <CardContent>
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            {retryLabel}
-          </Button>
-        </CardContent>
+    <div role="alert" className={cn(standaloneStateClassName, className)}>
+      <HugeiconsIcon
+        icon={Alert02Icon}
+        strokeWidth={2}
+        className="size-5 text-destructive"
+        aria-hidden="true"
+      />
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {description ? (
+        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
       ) : null}
-    </Card>
+      {onRetry ? (
+        <Button variant="outline" className="mt-2" onClick={onRetry}>
+          {retryLabel}
+        </Button>
+      ) : null}
+    </div>
   )
 }
 

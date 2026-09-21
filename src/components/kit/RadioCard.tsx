@@ -25,10 +25,10 @@ export function RadioCard({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50",
+        "flex cursor-pointer items-start gap-3 rounded-lg px-4 py-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50",
         checked
-          ? "border-primary bg-primary/5"
-          : "border-border bg-background hover:bg-muted/60",
+          ? "bg-accent"
+          : "bg-muted/60 hover:bg-muted",
         disabled && "pointer-events-none opacity-50",
         className,
       )}
@@ -48,13 +48,13 @@ export function RadioCard({
         aria-hidden="true"
         className={cn(
           "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-          checked ? "border-primary" : "border-border",
+          checked ? "border-accent-foreground" : "border-muted-foreground/40",
         )}
       >
         <span
           className={cn(
             "size-2 rounded-full transition-colors",
-            checked ? "bg-primary" : "bg-transparent",
+            checked ? "bg-accent-foreground" : "bg-transparent",
           )}
         />
       </span>

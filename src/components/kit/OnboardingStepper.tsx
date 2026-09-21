@@ -38,7 +38,7 @@ function Dot({
         filled
           ? "border-foreground bg-foreground text-background"
           : "border-border bg-card text-muted-foreground",
-        state === "current" && "ring-4 ring-primary/20",
+        state === "current" && "ring-4 ring-section-accent",
       )}
     >
       {filled ? (
@@ -63,8 +63,8 @@ function Connector({ fill }: { fill: number }) {
       className="mx-1 block h-px w-10 shrink-0 bg-border sm:w-20"
     >
       <span
-        className="block h-px bg-foreground transition-[width] duration-300"
-        style={{ width: `${percent}%` }}
+        className="block h-px w-(--fill) bg-foreground transition-all duration-300"
+        style={{ "--fill": `${percent}%` } as React.CSSProperties}
       />
     </span>
   )

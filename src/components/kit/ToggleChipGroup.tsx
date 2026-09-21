@@ -7,7 +7,7 @@ export type ToggleChipOption = {
 }
 
 export type ToggleChipGroupProps = {
-  /** Group label; rendered uppercase. */
+  /** Group label. */
   label: string
   options: ToggleChipOption[]
   selected: string[]
@@ -51,8 +51,8 @@ export function ToggleChipGroup({
   const chips = allOption ? [allOption, ...options] : options
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+    <div className={cn("flex flex-col gap-2", className)}>
+      <p className="text-sm font-medium text-foreground">
         {label}
       </p>
       <div
@@ -72,10 +72,10 @@ export function ToggleChipGroup({
                 toggle(option.value)
               }}
               className={cn(
-                "inline-flex h-9 items-center rounded-xl border px-4 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+                "inline-flex h-8 items-center rounded-lg px-4 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
                 isOn
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "border-border bg-background text-foreground hover:bg-muted",
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground",
               )}
             >
               {option.label}
