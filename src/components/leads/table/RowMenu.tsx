@@ -6,6 +6,7 @@ import {
   UserGroupIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { Hint } from "@/components/kit/Hint"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -49,8 +50,7 @@ export function RowMenu({
           <Button
             aria-label={`Actions for ${name}`}
             size="icon-sm"
-            variant="ghost"
-            className="text-muted-foreground"
+            variant="muted"
           />
         }
       >
@@ -71,32 +71,34 @@ export function RowMenu({
         )}
         <DropdownMenuSeparator />
         {items.map(({ icon, action }) => (
-          <DropdownMenuItem
-            key={action.label}
-            disabled={action.disabledReason !== null}
-            title={action.disabledReason ?? undefined}
-            onClick={action.run}
-          >
-            <HugeiconsIcon icon={icon} strokeWidth={2} />
-            {action.label}
-          </DropdownMenuItem>
+          <Hint key={action.label} content={action.disabledReason} side="left">
+            <DropdownMenuItem
+              disabled={action.disabledReason !== null}
+              onClick={action.run}
+            >
+              <HugeiconsIcon icon={icon} strokeWidth={2} />
+              {action.label}
+            </DropdownMenuItem>
+          </Hint>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={approve.disabledReason !== null}
-          title={approve.disabledReason ?? undefined}
-          onClick={approve.run}
-        >
-          {approve.label}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={reject.disabledReason !== null}
-          title={reject.disabledReason ?? undefined}
-          onClick={reject.run}
-        >
-          {reject.label}
-        </DropdownMenuItem>
+        <Hint content={approve.disabledReason} side="left">
+          <DropdownMenuItem
+            disabled={approve.disabledReason !== null}
+            onClick={approve.run}
+          >
+            {approve.label}
+          </DropdownMenuItem>
+        </Hint>
+        <Hint content={reject.disabledReason} side="left">
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={reject.disabledReason !== null}
+            onClick={reject.run}
+          >
+            {reject.label}
+          </DropdownMenuItem>
+        </Hint>
       </DropdownMenuContent>
     </DropdownMenu>
   )

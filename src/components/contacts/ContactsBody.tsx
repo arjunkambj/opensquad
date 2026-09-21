@@ -1,20 +1,23 @@
+import { Link, useNavigate } from "@tanstack/react-router"
+import { ContactBookIcon } from "@hugeicons/core-free-icons"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { ACTION_PRICES } from "../../../convex/lib/prices"
-import { InboxConnectionBanner } from "@/components/inbox-connection/InboxConnectionBanner"
-import { LoadingState } from "@/components/states/states"
+import { ActionNotice } from "@/components/leads/ActionNotice"
+import { StalePageState } from "@/components/leads/NoLeadsState"
+import { RunStateStrip } from "@/components/leads/RunStateStrip"
+import { LeadDrawer } from "@/components/leads/drawer/LeadDrawer"
+import { TableFooterBar } from "@/components/leads/table/TableFooterBar"
+import { useLeadActions } from "@/components/leads/use-lead-actions"
+import { useLeadSelection } from "@/components/leads/use-lead-selection"
 import { useMinuteClock } from "@/hooks/use-minute-clock"
-import { ActionNotice } from "./ActionNotice"
-import { ContactsResults } from "./ContactsResults"
-import { LeadDrawer } from "./drawer/LeadDrawer"
-import { BulkActionsBar } from "./filters/BulkActionsBar"
-import { ContactsFilters } from "./filters/ContactsFilters"
-import { NoLeadsState } from "./NoLeadsState"
-import { RunStateStrip } from "./RunStateStrip"
+import { EmptyState } from "@/components/states/states"
+import { Button } from "@/components/ui/button"
+import { ContactsResultsSkeleton } from "./ContactsPageSkeleton"
+import { ContactsTable } from "./ContactsTable"
+import { RevealBar } from "./RevealBar"
 import { useContactsSearch } from "./use-contacts-search"
-import { useLeadActions } from "./use-lead-actions"
-import { useLeadSelection } from "./use-lead-selection"
 
 const PRICES = {
   email: ACTION_PRICES.get_email.credits,
@@ -26,20 +29,16 @@ export function ContactsBody({ orgId }: { orgId: Id<"orgs"> }) {
   const actions = useLeadActions(orgId)
   const selection = useLeadSelection()
 
-  const { search, limit } = url
+  const navigate = useNavigate()
   const now = useMinuteClock()
-  const page = useQuery(api.leads.queries.list, {
+
+  const { search, limit } = url
+  const page = useQuery(api.leads.queries.listRevealable, {
     orgId,
-    ...(search.q !== undefined ? { text: search.q } : {}),
-    ...(search.stage !== undefined ? { stage: search.stage } : {}),
-    ...(search.approval !== undefined ? { approval: search.approval } : {}),
-    ...(search.score !== undefined ? { score: search.score } : {}),
-    ...(search.sort === "lowest" ? { lowestScoreFirst: true } : {}),
     ...(search.cursor !== undefined ? { cursor: search.cursor } : {}),
     limit,
   })
   const run = useQuery(api.leads.counts.runState, { orgId, now })
-  const signals = useQuery(api.leads.counts.byStrategy, { orgId })
   const credits = useQuery(api.billing.credits.balance, { orgId })
 
   const spend = {
@@ -47,120 +46,104 @@ export function ContactsBody({ orgId }: { orgId: Id<"orgs"> }) {
   }
   const busy = actions.pending !== null
 
-  const filterTo = (patch: Parameters<typeof url.applyFilter>[0]) => {
-    selection.clear()
-    url.applyFilter(patch)
-  }
-
-  const inBulk = async (
-    call: (ids: Id<"prospects">[]) => Promise<void>,
-    ids: Id<"prospects">[],
-  ) => {
-    await call(ids)
+  const reveal = async (prospectIds: Id<"prospects">[]) => {
+    await actions.getEmails(prospectIds)
     selection.clear()
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <InboxConnectionBanner orgId={orgId} />
       {run === undefined || run === null ? null : (
         <RunStateStrip
           run={run}
-          onShowNeedsAttention={() => filterTo({ stage: "needs_attention" })}
+          onShowNeedsAttention={() =>
+            void navigate({
+              to: "/leads",
+              search: { stage: "needs_attention" },
+            })
+          }
         />
       )}
 
-      <ContactsFilters
-        search={search}
-        text={url.text}
-        onText={url.setText}
-        onFilter={filterTo}
-      />
-
-      <BulkActionsBar
-        count={selection.selected.size}
-        busy={busy}
-        spend={spend}
-        prices={PRICES}
-        onGetEmails={() => void inBulk(actions.getEmails, selection.ids)}
-        onResearch={() => void inBulk(actions.research, selection.ids)}
-        onApprove={() =>
-          void inBulk((ids) => actions.decide(ids, "approved"), selection.ids)
-        }
-        onReject={() =>
-          void inBulk((ids) => actions.decide(ids, "rejected"), selection.ids)
-        }
-        onClear={selection.clear}
-      />
+      {selection.selected.size === 0 ? null : (
+        <RevealBar
+          count={selection.selected.size}
+          busy={busy}
+          spend={spend}
+          price={PRICES.email}
+          onReveal={() => void reveal(selection.ids)}
+          onClear={selection.clear}
+        />
+      )}
 
       {actions.notice === null ? null : (
         <ActionNotice notice={actions.notice} />
       )}
 
       {page === undefined ? (
-        <LoadingState
-          title="Loading contacts"
-          description="Reading this organization's leads."
+        <ContactsResultsSkeleton />
+      ) : page.items.length === 0 && search.cursor !== undefined ? (
+        <StalePageState
+          onReset={() => {
+            selection.clear()
+            url.resetPaging()
+          }}
         />
       ) : page.items.length === 0 ? (
-        // `run` and `signals` may still be reading — the zero-state is the
-        // one that says so, because the reason a table is empty is the run
-        // state and the per-signal counts.
-        <NoLeadsState
-          run={run}
-          signals={signals}
-          filtered={url.filtered}
-          onClearFilters={() => filterTo({ q: undefined })}
+        <EmptyState
+          variant="plain"
+          icon={ContactBookIcon}
+          title="Nobody left to reveal"
+          description="Every lead your agent found has had its email looked up. New finds land here."
+          action={
+            <Button size="sm" variant="outline" render={<Link to="/leads" />}>
+              Open leads
+            </Button>
+          }
         />
       ) : (
-        <ContactsResults
-          leads={page.items}
-          selected={selection.selected}
-          busy={busy}
-          spend={spend}
-          prices={PRICES}
-          sortable={!url.filtered}
-          lowestScoreFirst={search.sort === "lowest"}
-          onToggleSort={() =>
-            filterTo({
-              sort: search.sort === "lowest" ? undefined : "lowest",
-            })
-          }
-          onToggleAll={(checked) =>
-            selection.replace(
-              checked ? page.items.map((lead) => lead._id) : [],
-            )
-          }
-          handlers={{
-            toggle: selection.toggle,
-            open: url.openLead,
-            getEmail: (prospectId) => void actions.getEmails([prospectId]),
-            research: (prospectId) => void actions.research([prospectId]),
-            approve: (prospectId) =>
-              void actions.decide([prospectId], "approved"),
-            reject: (prospectId) =>
-              void actions.decide([prospectId], "rejected"),
-          }}
-          pagination={{
-            firstIndex: (url.pageNumber - 1) * limit + 1,
-            total: page.total,
-            pageSize: limit,
-            canGoBack: url.canGoBack,
-            canGoForward: page.hasMore && page.cursor !== null,
-            onPageSize: url.setPageSize,
-            onBack: () => {
+        <>
+          <ContactsTable
+            contacts={page.items}
+            selected={selection.selected}
+            busy={busy}
+            spend={spend}
+            price={PRICES.email}
+            onToggle={selection.toggle}
+            onToggleAll={(checked) =>
+              selection.replace(
+                checked ? page.items.map((contact) => contact._id) : [],
+              )
+            }
+            onOpen={url.openLead}
+            onReveal={(prospectId) => void reveal([prospectId])}
+          />
+          <TableFooterBar
+            noun="contacts"
+            shown={page.items.length}
+            firstIndex={(url.pageNumber - 1) * limit + 1}
+            total={page.total}
+            pageSize={limit}
+            canGoBack={url.canGoBack}
+            canGoForward={page.hasMore && page.cursor !== null}
+            onPageSize={(size) => {
+              // A smaller page hides rows Reveal emails would still spend on.
+              selection.clear()
+              url.setPageSize(size)
+            }}
+            onBack={() => {
               selection.clear()
               url.goBack()
-            },
-            onForward: () => {
+            }}
+            onForward={() => {
               if (page.cursor === null) {
                 return
               }
               selection.clear()
               url.goForward(page.cursor)
-            },
-          }}
-        />
+            }}
+          />
+        </>
       )}
 
       {search.lead === undefined ? null : (

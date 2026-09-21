@@ -1,6 +1,7 @@
 /**
- * The lead read surface: the Contacts table, its bounded total and the lead
- * drawer. Member-guarded, index-backed and paginated.
+ * The lead read surface: the Leads table, the Contacts reveal queue, their
+ * bounded totals and the lead drawer. Member-guarded, index-backed and
+ * paginated.
  *
  * ONE LIST MODE AT A TIME. Convex ranges an index, so every filter this screen
  * offers is a range over an index the schema declares — company search, one
@@ -169,7 +170,7 @@ function rangeOf(
 }
 
 /**
- * The Contacts table: one page of leads, the signals that found each of them,
+ * The Leads table: one page of leads, the signals that found each of them,
  * and the bounded total the footer's "Showing x to y of z" reads.
  */
 export const list = query({
@@ -207,8 +208,53 @@ export const list = query({
   },
 });
 
+/** Leads whose email is still locked and may be bought: never a rejected one. */
+function revealableRange(ctx: QueryCtx, orgId: Id<"orgs">) {
+  return ctx.db
+    .query("prospects")
+    .withIndex("by_orgId_and_emailStatus_and_scoreKey", (q) =>
+      q.eq("orgId", orgId).eq("emailStatus", "locked"),
+    )
+    .order("desc")
+    // Paginated `.filter` still fills the page. Rejected leads are a small
+    // tail, and an index on approval would split this list into two ranges.
+    // eslint-disable-next-line @convex-dev/no-filter-in-query
+    .filter((q) => q.neq(q.field("approval"), "rejected"));
+}
+
 /**
- * The lead drawer (`/contacts?lead=…`): what research learned, the evidence
+ * The Contacts table: every lead whose email can still be revealed, best
+ * score first. A lead leaves this list the moment its reveal starts.
+ */
+export const listRevealable = query({
+  args: {
+    orgId: v.id("orgs"),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    limit: v.optional(v.number()),
+  },
+  returns: vLeadPage,
+  handler: async (ctx, args) => {
+    await requireOrgMember(ctx, args.orgId);
+    const result = await revealableRange(ctx, args.orgId).paginate({
+      numItems: boundedLimit(args.limit),
+      cursor: args.cursor ?? null,
+    });
+    const counted = await revealableRange(ctx, args.orgId).take(
+      CONTACTS_TOTAL_BOUND + 1,
+    );
+    const titles = await signalTitles(ctx, args.orgId);
+    return {
+      ...paged(result, result.page.map((lead) => toLeadRow(lead, titles))),
+      total: {
+        count: Math.min(counted.length, CONTACTS_TOTAL_BOUND),
+        hasMore: counted.length > CONTACTS_TOTAL_BOUND,
+      },
+    };
+  },
+});
+
+/**
+ * The lead drawer (`/leads?lead=…`): what research learned, the evidence
  * behind it, the signals that found the person and the history that produced
  * the row. The thread itself is `inbox.conversations.listForProspect` — the
  * drawer asks the domain that owns conversations rather than copying it.

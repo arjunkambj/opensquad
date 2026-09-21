@@ -1,7 +1,7 @@
 /** Map domain codes to user copy; provider messages are for operators only.
  * Keep trial-cap refusals distinct from an empty credit balance. */
 import type { FunctionReturnType } from "convex/server"
-import type { ContactsSearch } from "@/routes/_dashboard/_org/contacts"
+import type { LeadsSearch } from "@/routes/_dashboard/_org/leads"
 import type { api } from "../../../convex/_generated/api"
 import { domainErrorCode } from "@/lib/convex-error"
 import type { DomainErrorCode } from "../../../convex/lib/errors"
@@ -13,11 +13,11 @@ import type {
 } from "../../../convex/lib/validators"
 import { withFilters } from "@/lib/search-params"
 
-export type ContactRowData = FunctionReturnType<
+export type LeadRowData = FunctionReturnType<
   typeof api.leads.queries.list
 >["items"][number]
 
-export type ContactDetailData = FunctionReturnType<
+export type LeadDetailData = FunctionReturnType<
   typeof api.leads.queries.getDetail
 >
 
@@ -131,7 +131,7 @@ export type SpendContext = {
 
 /** The client knows credit balance, not hidden provider allowances; the server reports those refusals. */
 export function emailDisabledReason(
-  lead: Pick<ContactRowData, "emailStatus" | "approval">,
+  lead: Pick<LeadRowData, "emailStatus" | "approval">,
   price: number,
   spend: SpendContext,
 ): string | null {
@@ -160,7 +160,7 @@ type ResearchState = {
 }
 
 export function researchDisabledReason(
-  lead: ResearchState & Pick<ContactRowData, "approval">,
+  lead: ResearchState & Pick<LeadRowData, "approval">,
   price: number,
   spend: SpendContext,
 ): string | null {
@@ -181,7 +181,7 @@ export function researchDisabledReason(
 
 /** Retry is free for a researched lead parked by a later step; only unfinished research costs credits. */
 export function retryAction(
-  lead: ResearchState & Pick<ContactRowData, "approval">,
+  lead: ResearchState & Pick<LeadRowData, "approval">,
   price: number,
   spend: SpendContext,
 ): { price: number; disabled: string | null; label: string } {
@@ -210,7 +210,7 @@ export function retryAction(
 }
 
 export function decisionDisabledReason(
-  lead: Pick<ContactRowData, "approval">,
+  lead: Pick<LeadRowData, "approval">,
   approval: LeadApproval,
 ): string | null {
   return lead.approval === approval
@@ -229,16 +229,16 @@ export function personName(lead: {
 }
 
 /** Reset both cursor and page number whenever the filters change. */
-export function withContactFilters(
-  current: ContactsSearch,
-  patch: Partial<ContactsSearch>,
-): ContactsSearch {
+export function withLeadFilters(
+  current: LeadsSearch,
+  patch: Partial<LeadsSearch>,
+): LeadsSearch {
   return withFilters(current, { ...patch, page: undefined })
 }
 
 export function exclusiveFilters(
-  patch: Partial<ContactsSearch>,
-): Partial<ContactsSearch> {
+  patch: Partial<LeadsSearch>,
+): Partial<LeadsSearch> {
   return {
     stage: undefined,
     approval: undefined,

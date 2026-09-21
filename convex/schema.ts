@@ -799,6 +799,12 @@ export default defineSchema({
     .index("by_agentId_and_stage", ["agentId", "stage"])
     // The approval queue: what is waiting for a yes/no in this org.
     .index("by_orgId_and_approval", ["orgId", "approval"])
+    // Contacts: leads whose email can still be revealed, best score first.
+    .index("by_orgId_and_emailStatus_and_scoreKey", [
+      "orgId",
+      "emailStatus",
+      "scoreKey",
+    ])
     // Contact search. Equality filters are applied INSIDE `withSearchIndex`;
     // search mode never combines with due ranges or date sorting, and empty
     // text falls back to the ordinary list.

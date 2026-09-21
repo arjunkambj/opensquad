@@ -4,7 +4,7 @@ import { useCallback, useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import type { LeadApproval } from "../../../convex/lib/validators"
-import { outcomeSummary, refusalCopy } from "./contacts-model"
+import { outcomeSummary, refusalCopy } from "./leads-model"
 import { useRequestIntents } from "@/lib/use-request-intents"
 
 export type LeadActionName = "approve" | "reject" | "email" | "research"
@@ -37,7 +37,7 @@ export function useLeadActions(orgId: Id<"orgs">) {
           prospectIds,
           approval,
           ...(approval === "rejected"
-            ? { reason: "Rejected from Contacts" }
+            ? { reason: "Rejected from Leads" }
             : {}),
           requestId: intentFor(prospectIds.join(","), approval),
         })
@@ -107,7 +107,5 @@ export function useLeadActions(orgId: Id<"orgs">) {
     [researchNow, orgId],
   )
 
-  const dismiss = useCallback(() => setNotice(null), [])
-
-  return { pending, notice, dismiss, decide, getEmails, research }
+  return { pending, notice, decide, getEmails, research }
 }

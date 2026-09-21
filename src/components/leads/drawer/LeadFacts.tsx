@@ -1,8 +1,8 @@
-import type { ContactDetailData } from "../contacts-model"
-import { EMAIL_STATE_LABEL } from "../contacts-model"
+import type { LeadDetailData } from "../leads-model"
+import { EMAIL_STATE_LABEL } from "../leads-model"
 import { SignalCell } from "../table/SignalCell"
 
-export function LeadFacts({ lead }: { lead: ContactDetailData["lead"] }) {
+export function LeadFacts({ lead }: { lead: LeadDetailData["lead"] }) {
   const location = [lead.location?.city, lead.location?.state, lead.location?.country]
     .filter((part): part is string => part !== undefined && part !== "")
     .join(", ")

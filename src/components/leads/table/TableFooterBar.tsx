@@ -7,6 +7,7 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { PAGE_SIZES, type PageSize } from "@/lib/search-params"
 
 export function TableFooterBar({
+  noun,
   shown,
   firstIndex,
   total,
@@ -17,6 +18,7 @@ export function TableFooterBar({
   onBack,
   onForward,
 }: {
+  noun: "leads" | "contacts"
   shown: number
   /** 1-based index of the first row on this page. */
   firstIndex: number
@@ -35,14 +37,14 @@ export function TableFooterBar({
     <div className="flex flex-wrap items-center justify-between gap-3 px-1">
       <p className="text-sm text-muted-foreground">
         {shown === 0
-          ? "Showing no contacts"
-          : `Showing ${firstIndex} to ${last} of ${totalLabel} contacts`}
+          ? `Showing no ${noun}`
+          : `Showing ${firstIndex} to ${last} of ${totalLabel} ${noun}`}
       </p>
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Show
           <NativeSelect
-            aria-label="Contacts per page"
+            aria-label="Rows per page"
             className="w-20"
             value={String(pageSize)}
             onChange={(event) =>

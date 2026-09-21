@@ -4,7 +4,6 @@ import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import { formatWaited } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { boundedCount } from "@/lib/bounded-count"
 
 export type RunState = NonNullable<
@@ -25,10 +24,15 @@ export function RunStateStrip({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-card px-4 py-3">
       {run.running ? (
-        <div className="flex items-center gap-2.5">
-          <Spinner className="size-4 text-primary" />
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex size-4 shrink-0 items-center justify-center"
+          >
+            <span className="size-2 animate-pulse rounded-full bg-primary" />
+          </span>
           <div>
             <p className="text-sm font-medium text-foreground">
               {run.researched.count === 0
@@ -44,7 +48,7 @@ export function RunStateStrip({
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <HugeiconsIcon
             icon={Alert02Icon}
             strokeWidth={2}

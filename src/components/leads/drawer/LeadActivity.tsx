@@ -2,7 +2,8 @@ import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../convex/_generated/api"
 import { formatWaited } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
-import type { ContactDetailData } from "../contacts-model"
+import { Skeleton } from "@/components/ui/skeleton"
+import type { LeadDetailData } from "../leads-model"
 
 type Conversations = FunctionReturnType<
   typeof api.inbox.conversations.listForProspect
@@ -14,7 +15,7 @@ export function LeadActivity({
   onOpenConversation,
 }: {
   conversations: Conversations | undefined
-  events: ContactDetailData["events"]
+  events: LeadDetailData["events"]
   onOpenConversation: (conversationId: string) => void
 }) {
   return (
@@ -22,7 +23,11 @@ export function LeadActivity({
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-foreground">Conversation</h3>
         {conversations === undefined ? (
-          <p className="text-sm text-muted-foreground">Reading threads…</p>
+          <Skeleton
+            role="status"
+            aria-label="Loading threads"
+            className="h-16 w-full"
+          />
         ) : conversations.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No thread yet. One starts when the first email goes out.
@@ -32,7 +37,7 @@ export function LeadActivity({
             {conversations.items.map((conversation) => (
               <li
                 key={conversation.conversationId}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3"
+                className="flex items-center justify-between gap-3 rounded-2xl bg-card px-4 py-3"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm text-foreground">

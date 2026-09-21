@@ -1,19 +1,20 @@
+import { Hint } from "@/components/kit/Hint"
 /** Score sorting applies only to the unfiltered list; filtered modes use their own index ordering. */
 import { SortByDown01Icon, SortByUp01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { Id } from "../../../../convex/_generated/dataModel"
+import { TableFrame } from "@/components/kit/PageSection"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
   TableBody,
   TableHead,
   TableHeader,
-  TableRow,
 } from "@/components/ui/table"
-import type { ContactRowData, SpendContext } from "../contacts-model"
-import { ContactRow, type ContactRowHandlers } from "./ContactRow"
+import type { LeadRowData, SpendContext } from "../leads-model"
+import { LeadRow, type LeadRowHandlers } from "./LeadRow"
 
-export function ContactsTable({
+export function LeadsTable({
   leads,
   selected,
   busy,
@@ -25,7 +26,7 @@ export function ContactsTable({
   onToggleAll,
   handlers,
 }: {
-  leads: readonly ContactRowData[]
+  leads: readonly LeadRowData[]
   selected: ReadonlySet<Id<"prospects">>
   busy: boolean
   spend: SpendContext
@@ -34,25 +35,33 @@ export function ContactsTable({
   lowestScoreFirst: boolean
   onToggleSort: () => void
   onToggleAll: (checked: boolean) => void
-  handlers: ContactRowHandlers
+  handlers: LeadRowHandlers
 }) {
   const allSelected =
     leads.length > 0 && leads.every((lead) => selected.has(lead._id))
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <TableFrame>
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/40">
-            <TableHead className="w-10 pl-4">
-              <Checkbox
-                aria-label="Select every lead on this page"
-                checked={allSelected}
-                onCheckedChange={(checked) => onToggleAll(checked === true)}
-              />
+          <tr className="border-b">
+            <TableHead className="w-10">
+              <div className="flex items-center pl-2">
+                <Checkbox
+                  aria-label="Select every lead on this page"
+                  checked={allSelected}
+                  onCheckedChange={(checked) => onToggleAll(checked === true)}
+                />
+              </div>
             </TableHead>
-            <TableHead>Contact</TableHead>
-            <TableHead>Signal</TableHead>
+            <TableHead>Lead</TableHead>
+            <TableHead>
+              <Hint content="The search that found this person.">
+                <span className="cursor-help underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
+                  Signal
+                </span>
+              </Hint>
+            </TableHead>
             <TableHead>
               {sortable ? (
                 <button
@@ -77,15 +86,29 @@ export function ContactsTable({
               )}
             </TableHead>
             <TableHead>Email</TableHead>
-            <TableHead>Stage</TableHead>
+            <TableHead>
+              <Hint content="Where this lead is, from found and researched through contacted, replied and meeting booked. Hover a stage for why it is there.">
+                <span className="cursor-help underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
+                  Stage
+                </span>
+              </Hint>
+            </TableHead>
             <TableHead>Imported</TableHead>
-            <TableHead>Approval</TableHead>
-            <TableHead className="pr-4 text-right">Actions</TableHead>
-          </TableRow>
+            <TableHead>
+              <Hint content="Nothing goes out until you approve a lead — unless Autopilot is on and it clears your score.">
+                <span className="cursor-help underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
+                  Approval
+                </span>
+              </Hint>
+            </TableHead>
+            <TableHead className="text-right">
+              <span className="pr-2">Actions</span>
+            </TableHead>
+          </tr>
         </TableHeader>
         <TableBody>
           {leads.map((lead) => (
-            <ContactRow
+            <LeadRow
               key={lead._id}
               lead={lead}
               selected={selected.has(lead._id)}
@@ -97,6 +120,6 @@ export function ContactsTable({
           ))}
         </TableBody>
       </Table>
-    </div>
+    </TableFrame>
   )
 }

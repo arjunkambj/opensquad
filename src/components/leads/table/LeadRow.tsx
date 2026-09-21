@@ -1,13 +1,14 @@
 import { LinkSquare02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { Id } from "../../../../convex/_generated/dataModel"
+import { Hint } from "@/components/kit/Hint"
 import { FlameScore } from "@/components/kit/FlameScore"
+import { stageChipVariant } from "@/components/inbox/inbox-presentation"
 import { Chip } from "@/components/kit/Chip"
 import { formatWaited } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { TableCell, TableRow } from "@/components/ui/table"
-import { cn } from "@/lib/utils"
 import {
   APPROVAL_LABEL,
   decisionDisabledReason,
@@ -15,14 +16,14 @@ import {
   personName,
   researchDisabledReason,
   STAGE_LABEL,
-  type ContactRowData,
+  type LeadRowData,
   type SpendContext,
-} from "../contacts-model"
+} from "../leads-model"
 import { EmailCell } from "./EmailCell"
 import { RowMenu } from "./RowMenu"
 import { SignalCell } from "./SignalCell"
 
-export type ContactRowHandlers = {
+export type LeadRowHandlers = {
   toggle: (prospectId: Id<"prospects">) => void
   open: (prospectId: Id<"prospects">) => void
   getEmail: (prospectId: Id<"prospects">) => void
@@ -31,7 +32,7 @@ export type ContactRowHandlers = {
   reject: (prospectId: Id<"prospects">) => void
 }
 
-export function ContactRow({
+export function LeadRow({
   lead,
   selected,
   busy,
@@ -39,27 +40,34 @@ export function ContactRow({
   prices,
   handlers,
 }: {
-  lead: ContactRowData
+  lead: LeadRowData
   selected: boolean
   busy: boolean
   spend: SpendContext
   prices: { email: number; research: number }
-  handlers: ContactRowHandlers
+  handlers: LeadRowHandlers
 }) {
   const name = personName(lead)
   const emailReason = emailDisabledReason(lead, prices.email, spend)
   const researchReason = researchDisabledReason(lead, prices.research, spend)
   const approveReason = decisionDisabledReason(lead, "approved")
   const rejectReason = decisionDisabledReason(lead, "rejected")
+  // Approval authorises the reveal, so a lead without an address costs one.
+  const approvalBuysEmail =
+    lead.emailStatus !== "found" &&
+    lead.emailStatus !== "not_found" &&
+    lead.emailStatus !== "revealing"
 
   return (
     <TableRow data-state={selected ? "selected" : undefined}>
-      <TableCell className="w-10 pl-4">
-        <Checkbox
-          aria-label={`Select ${name}`}
-          checked={selected}
-          onCheckedChange={() => handlers.toggle(lead._id)}
-        />
+      <TableCell className="w-10">
+        <div className="flex items-center pl-2">
+          <Checkbox
+            aria-label={`Select ${name}`}
+            checked={selected}
+            onCheckedChange={() => handlers.toggle(lead._id)}
+          />
+        </div>
       </TableCell>
 
       <TableCell className="max-w-72">
@@ -119,16 +127,11 @@ export function ContactRow({
       </TableCell>
 
       <TableCell>
-        <span title={lead.stageReason}>
-          <Chip
-            className={cn(
-              lead.stage === "needs_attention" &&
-                "bg-destructive/10 text-destructive",
-            )}
-          >
+        <Hint content={lead.stageReason}>
+          <Chip variant={stageChipVariant(lead.stage)}>
             {STAGE_LABEL[lead.stage]}
           </Chip>
-        </span>
+        </Hint>
       </TableCell>
 
       <TableCell className="text-xs text-muted-foreground">
@@ -138,64 +141,81 @@ export function ContactRow({
       <TableCell>
         {lead.approval === "pending" ? (
           <div className="flex gap-1.5">
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy || approveReason !== null}
-              title={approveReason ?? undefined}
-              onClick={() => handlers.approve(lead._id)}
+            <Hint
+              content={
+                approveReason ??
+                (approvalBuysEmail
+                  ? `Lets your agent find this person's email (${prices.email} credits) and draft an outreach email for you to review. Nothing is sent yet.`
+                  : "Lets your agent draft an outreach email for you to review. Nothing is sent yet.")
+              }
             >
-              Approve
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={busy || rejectReason !== null}
-              title={rejectReason ?? undefined}
-              onClick={() => handlers.reject(lead._id)}
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={busy || approveReason !== null}
+                onClick={() => handlers.approve(lead._id)}
+              >
+                Approve
+                {approvalBuysEmail ? (
+                  <span className="text-muted-foreground">
+                    · {prices.email} cr
+                  </span>
+                ) : null}
+              </Button>
+            </Hint>
+            <Hint
+              content={
+                rejectReason ??
+                "Skip this lead. Your agent won't research or contact them."
+              }
             >
-              Reject
-            </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={busy || rejectReason !== null}
+                onClick={() => handlers.reject(lead._id)}
+              >
+                Reject
+              </Button>
+            </Hint>
           </div>
         ) : (
-          <Chip
-            className={cn(
-              lead.approval === "approved" && "bg-primary/10 text-primary",
-            )}
-          >
+          <Chip variant={lead.approval === "approved" ? "success" : "muted"}>
             {APPROVAL_LABEL[lead.approval]}
           </Chip>
         )}
       </TableCell>
 
-      <TableCell className="pr-4 text-right">
-        <RowMenu
-          name={name}
-          open={() => handlers.open(lead._id)}
-          {...(lead.linkedinUrl === undefined
-            ? {}
-            : { profileUrl: lead.linkedinUrl })}
-          email={{
-            label: `Get email · ${prices.email} credits`,
-            disabledReason: busy ? "Working…" : emailReason,
-            run: () => handlers.getEmail(lead._id),
-          }}
-          research={{
-            label: `Research · ${prices.research} credits`,
-            disabledReason: busy ? "Working…" : researchReason,
-            run: () => handlers.research(lead._id),
-          }}
-          approve={{
-            label: "Approve for outreach",
-            disabledReason: busy ? "Working…" : approveReason,
-            run: () => handlers.approve(lead._id),
-          }}
-          reject={{
-            label: "Reject this lead",
-            disabledReason: busy ? "Working…" : rejectReason,
-            run: () => handlers.reject(lead._id),
-          }}
-        />
+      <TableCell className="text-right">
+        <div className="pr-2">
+          <RowMenu
+            name={name}
+            open={() => handlers.open(lead._id)}
+            {...(lead.linkedinUrl === undefined
+              ? {}
+              : { profileUrl: lead.linkedinUrl })}
+            email={{
+              label: `Get email · ${prices.email} credits`,
+              disabledReason: busy ? "Working…" : emailReason,
+              run: () => handlers.getEmail(lead._id),
+            }}
+            research={{
+              label: `Research · ${prices.research} credits`,
+              disabledReason: busy ? "Working…" : researchReason,
+              run: () => handlers.research(lead._id),
+            }}
+            approve={{
+              label: "Approve for outreach",
+              disabledReason: busy ? "Working…" : approveReason,
+              run: () => handlers.approve(lead._id),
+            }}
+            reject={{
+              label: "Reject this lead",
+              disabledReason: busy ? "Working…" : rejectReason,
+              run: () => handlers.reject(lead._id),
+            }}
+          />
+        </div>
       </TableCell>
     </TableRow>
   )

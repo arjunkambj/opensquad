@@ -3,15 +3,15 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import type { LeadResearch } from "../../../../convex/lib/validators"
 import { FlameScore } from "@/components/kit/FlameScore"
 import { formatWaited } from "@/lib/presentation"
-import type { ContactDetailData } from "../contacts-model"
-import { LEAD_ERROR_COPY } from "../contacts-model"
+import type { LeadDetailData } from "../leads-model"
+import { LEAD_ERROR_COPY } from "../leads-model"
 
 export function LeadResearchPanel({
   research,
   evidence,
 }: {
   research: LeadResearch
-  evidence: ContactDetailData["evidence"]
+  evidence: LeadDetailData["evidence"]
 }) {
   return (
     <section className="flex flex-col gap-3">
@@ -73,7 +73,7 @@ export function LeadResearchPanel({
             {evidence.map((row) => (
               <li
                 key={row._id}
-                className="rounded-2xl border border-border px-4 py-3"
+                className="rounded-2xl bg-card px-4 py-3"
               >
                 <p className="text-sm text-foreground">{row.observation}</p>
                 <a

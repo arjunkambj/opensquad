@@ -1,11 +1,11 @@
 import type { Id } from "../../../convex/_generated/dataModel"
 import type { PageSize } from "@/lib/search-params"
-import type { ContactRowData, SpendContext } from "./contacts-model"
-import type { ContactRowHandlers } from "./table/ContactRow"
-import { ContactsTable } from "./table/ContactsTable"
+import type { LeadRowData, SpendContext } from "./leads-model"
+import type { LeadRowHandlers } from "./table/LeadRow"
+import { LeadsTable } from "./table/LeadsTable"
 import { TableFooterBar } from "./table/TableFooterBar"
 
-export function ContactsResults({
+export function LeadsResults({
   leads,
   selected,
   busy,
@@ -18,7 +18,7 @@ export function ContactsResults({
   handlers,
   pagination,
 }: {
-  leads: readonly ContactRowData[]
+  leads: readonly LeadRowData[]
   selected: ReadonlySet<Id<"prospects">>
   busy: boolean
   spend: SpendContext
@@ -27,7 +27,7 @@ export function ContactsResults({
   lowestScoreFirst: boolean
   onToggleSort: () => void
   onToggleAll: (checked: boolean) => void
-  handlers: ContactRowHandlers
+  handlers: LeadRowHandlers
   pagination: {
     firstIndex: number
     total: { count: number; hasMore: boolean }
@@ -41,7 +41,7 @@ export function ContactsResults({
 }) {
   return (
     <>
-      <ContactsTable
+      <LeadsTable
         leads={leads}
         selected={selected}
         busy={busy}
@@ -54,6 +54,7 @@ export function ContactsResults({
         handlers={handlers}
       />
       <TableFooterBar
+        noun="leads"
         shown={leads.length}
         firstIndex={pagination.firstIndex}
         total={pagination.total}
