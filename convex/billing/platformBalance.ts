@@ -10,14 +10,11 @@
  * cost more than the ten credits we reserved. The wallet is the only figure
  * that cannot drift, so it gets the last word.
  *
- * How it trips, and why this mechanism: `PLATFORM_PAUSED` is a deployment
- * env var, which no Convex function can set, and an operator resetting the
- * guard must not need a deploy either. So the breaker is expressed in the
- * same rows `withCredits` already checks — `platformBudgets` for the two
- * lead-data metrics — by adding a marker far larger than any real usage to
- * their `used` counters. Every lead-data paid call then refuses with the
- * neutral "at capacity" code for everyone, while the genuine usage
- * underneath is preserved: releasing subtracts exactly the marker back out.
+ * How it trips: through `billing/platformBudgets.setPlatformBreaker`, which
+ * is the ONE implementation of the breaker convention and works for any
+ * metric — this file only decides WHICH metrics and WHEN. The convention
+ * itself, and why it is a marker on a budget row rather than a flag, is
+ * documented there.
  *
  * Nothing here is client-visible and nothing names a provider to a user; the
  * refusal the UI sees is `PLATFORM_CAPACITY`, as it is for any other spent
@@ -25,18 +22,18 @@
  */
 import { internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
-import type { MutationCtx } from "../_generated/server";
 import { fetchWalletBalance } from "../integrations/enrich/wallet";
 import { operationErrorCodeOf } from "../integrations/enrich/client";
-import { PLATFORM_BUDGETS, readIntEnv } from "../lib/limits";
-import type { PlatformBudgetPolicy, TrialMeteredMetric } from "../lib/limits";
+import { readIntEnv } from "../lib/limits";
+import type { TrialMeteredMetric, TunableEnvName } from "../lib/limits";
 import { vOperationErrorCode } from "../lib/validators";
 import type { OperationErrorCode } from "../lib/validators";
-import { platformBudgetLimit, platformPeriodKey } from "./platformBudgets";
+import { setPlatformBreaker } from "./platformBudgets";
 import { v } from "convex/values";
 
-/** Deployment setting: the balance below which paid lead-data calls stop. */
-export const ENRICH_BALANCE_FLOOR_ENV = "ENRICH_BALANCE_FLOOR";
+/** Deployment setting: the balance below which paid lead-data calls stop.
+ *  Declared in `convex.config.ts` and read through the typed `env`. */
+export const ENRICH_BALANCE_FLOOR_ENV: TunableEnvName = "ENRICH_BALANCE_FLOOR";
 
 /**
  * A floor a HEALTHY account clears.
@@ -55,13 +52,6 @@ export const ENRICH_BALANCE_FLOOR_ENV = "ENRICH_BALANCE_FLOOR";
  * `ENRICH_BALANCE_FLOOR` raises it on a funded account without a deploy.
  */
 export const ENRICH_BALANCE_FLOOR_DEFAULT = 25;
-
-/**
- * The marker added to a budget's `used` to trip it. Far above any real
- * usage, so "tripped" is unambiguous and removing it restores the true
- * figure rather than guessing at it.
- */
-const BREAKER_MARKER_UNITS = 1_000_000_000;
 
 /** The two budgets a lead-data paid call is checked against. */
 const GUARDED_METRICS: readonly TrialMeteredMetric[] = [
@@ -93,62 +83,16 @@ export const setLeadDataBreaker = internalMutation({
   ): Promise<{ tripped: boolean; changed: string[] }> => {
     const changed: string[] = [];
     for (const metric of GUARDED_METRICS) {
-      if (await applyMarker(ctx, metric, args.tripped)) {
+      // One convention, one implementation: `setPlatformBreaker` is shared
+      // with every other watchdog, so a breaker cannot be tripped two
+      // different ways on two different metrics.
+      if (await setPlatformBreaker(ctx, metric, args.tripped)) {
         changed.push(metric);
       }
     }
     return { tripped: args.tripped, changed };
   },
 });
-
-/**
- * Add or remove the marker on one metric's budget for the CURRENT period.
- *
- * A budget resets on its own period (UTC day for credits, UTC month for
- * searches), so a trip only marks the period it was taken in — and the
- * hourly cron re-trips the new period within the hour if the balance is
- * still low. That is deliberate: a breaker that outlived the condition that
- * caused it would need a deploy to clear.
- */
-async function applyMarker(
-  ctx: MutationCtx,
-  metric: TrialMeteredMetric,
-  tripped: boolean,
-): Promise<boolean> {
-  const policy: PlatformBudgetPolicy = PLATFORM_BUDGETS[metric];
-  const periodKey = platformPeriodKey(policy, Date.now());
-  const row = await ctx.db
-    .query("platformBudgets")
-    .withIndex("by_provider_and_periodKey", (q) =>
-      q.eq("provider", policy.provider).eq("periodKey", periodKey),
-    )
-    .unique();
-  const now = Date.now();
-  if (row === null) {
-    if (!tripped) {
-      return false;
-    }
-    await ctx.db.insert("platformBudgets", {
-      provider: policy.provider,
-      periodKey,
-      limit: platformBudgetLimit(policy),
-      used: BREAKER_MARKER_UNITS,
-      updatedAt: now,
-    });
-    return true;
-  }
-  const marked = row.used >= BREAKER_MARKER_UNITS;
-  if (marked === tripped) {
-    return false;
-  }
-  await ctx.db.patch("platformBudgets", row._id, {
-    used: tripped
-      ? row.used + BREAKER_MARKER_UNITS
-      : Math.max(0, row.used - BREAKER_MARKER_UNITS),
-    updatedAt: now,
-  });
-  return true;
-}
 
 /**
  * The hourly watchdog: read the real balance and set the breaker to match.

@@ -25,7 +25,6 @@ import {
   COMPANY_PAIN_POINTS_MAX_LENGTH,
   domainError,
   invalid,
-  normalizeHttpUrl,
 } from "../lib/validators";
 import {
   ANALYSIS_STALE_AFTER_MS,
@@ -34,6 +33,28 @@ import {
 } from "./model";
 import { vBusinessProfileDoc } from "./queries";
 import { v } from "convex/values";
+
+/**
+ * Admit a typed-in website address under the fetch policy, or refuse it.
+ *
+ * ONE door into `businessProfiles.websiteUrl`, used by both mutations below,
+ * so the address that is STORED is always one we are allowed to fetch —
+ * `startAnalysis` checking it on its way to the scraper is not enough, since
+ * any later reader of the stored column would inherit the SSRF vector
+ * `normalizeHttpUrl` leaves open (it accepts `http://127.0.0.1/` and
+ * `http://internal:8080/`).
+ *
+ * Every rejection reason maps to one sentence: the distinction between "that
+ * is a private host" and "that is not a domain" is for operators, and telling
+ * a stranger which is which turns the form into a network probe.
+ */
+function admitWebsiteUrl(raw: string): string {
+  const admitted = checkPublicHttpUrl(raw);
+  if (!admitted.ok) {
+    throw invalid("websiteUrl must be a public http(s) website address");
+  }
+  return admitted.url.url;
+}
 
 /**
  * Create-or-update the profile. Pass `expectedVersion: 0` when no profile may
@@ -60,10 +81,13 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const { identityKey } = await requireOrgMember(ctx, args.orgId);
 
+    // The SAME policy the fetch uses, at the point of STORAGE. An ABSENT
+    // address is not a rejected one: "I don't have a website" is a supported
+    // path (PLAN §5), and the user types the name and description instead.
     const websiteUrl =
       args.websiteUrl === undefined
         ? undefined
-        : normalizeHttpUrl(args.websiteUrl, "websiteUrl");
+        : admitWebsiteUrl(args.websiteUrl);
     const companyName = boundedString(args.companyName, "companyName", {
       min: 1,
       max: COMPANY_NAME_MAX_LENGTH,
@@ -186,13 +210,9 @@ export const startAnalysis = mutation({
     // Before the reserve, so a refused caller leaves nothing behind.
     await requireRateLimit(ctx, "analyzeWebsite", identityKey);
 
-    const admitted = checkPublicHttpUrl(args.websiteUrl);
-    if (!admitted.ok) {
-      // One sentence for every rejection reason: the distinction is for
-      // operators, and the screen says "we can't read that address".
-      throw invalid("websiteUrl must be a public http(s) website address");
-    }
-    const websiteUrl = admitted.url.url;
+    // The same admission `update` stores through, so the two doors into
+    // `businessProfiles.websiteUrl` cannot drift apart.
+    const websiteUrl = admitWebsiteUrl(args.websiteUrl);
 
     const existing = await getOrgProfile(ctx, args.orgId);
     const now = Date.now();

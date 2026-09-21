@@ -32,10 +32,19 @@ type Env = {
   readonly CONVEX_SITE_URL: string;
   readonly AGENTMAIL_BASE_URL: string | undefined;
   readonly AGENTMAIL_WEBHOOK_SECRET: string | undefined;
+  readonly AI_DAILY_CALL_BUDGET: string | undefined;
   readonly ENRICH_API_KEY: string | undefined;
+  readonly ENRICH_BALANCE_FLOOR: string | undefined;
+  readonly ENRICH_DAILY_CREDIT_BUDGET: string | undefined;
+  readonly ENRICH_MONTHLY_SEARCH_BUDGET: string | undefined;
   readonly FIRECRAWL_API_KEY: string;
+  readonly FIRECRAWL_DAILY_BUDGET: string | undefined;
   readonly FIRECRAWL_WEBHOOK_SECRET: string | undefined;
+  readonly MAX_TRIAL_ORGS: string | undefined;
+  readonly PAID_CALL_STALE_MS: string | undefined;
+  readonly PLATFORM_PAUSED: string | undefined;
   readonly SECRETS_ENCRYPTION_KEY: string | undefined;
+  readonly UNCERTAIN_HOLD_MAX_AGE_MS: string | undefined;
   readonly VITE_HEXCLAVE_PROJECT_ID: string | undefined;
 };
 

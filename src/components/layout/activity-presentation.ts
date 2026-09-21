@@ -12,25 +12,28 @@
  */
 import {
   Alert02Icon,
+  Calendar03Icon,
   CancelCircleIcon,
   CheckmarkCircle02Icon,
   Clock01Icon,
+  Coins01Icon,
   InformationCircleIcon,
   Mail01Icon,
   MailSend01Icon,
   Message01Icon,
   PencilEdit02Icon,
+  RoboticIcon,
   Unlink01Icon,
   UserBlock01Icon,
   UserCircleIcon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 import type {
+  ActivityKindBell,
   ActivityKindP10,
-  ActivityKindP11,
 } from "../../../convex/lib/validators"
 
-export type ActivityKind = ActivityKindP10 | ActivityKindP11
+export type ActivityKind = ActivityKindP10 | ActivityKindBell
 
 export type ActivityPresentation = {
   label: string
@@ -62,7 +65,11 @@ const KIND_PRESENTATION: Record<ActivityKind, ActivityPresentation> = {
     label: "Unmatched message",
     icon: Unlink01Icon,
   },
+  // The four the header bell exists for (PLAN §5).
   reply_classified: { label: "New reply", icon: Message01Icon },
+  meeting_booked: { label: "Meeting booked", icon: Calendar03Icon },
+  run_finished: { label: "Run finished", icon: RoboticIcon },
+  credits_low: { label: "Credits running low", icon: Coins01Icon },
 }
 
 const UNKNOWN_KIND: ActivityPresentation = {

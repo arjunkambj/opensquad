@@ -34,6 +34,20 @@ crons.interval(
   {},
 );
 
+// The reply half of the same boundary. A receipt that was ingested still has
+// to be CLASSIFIED, and Convex does not re-run a failed action — so a
+// `handleInboundReply` that throws leaves the thread with an inbound newer
+// than its disposition and nothing to move it. This re-drives exactly those
+// conversations (`lastInboundAt > lastDispositionAt`) once they are old
+// enough that a live attempt is no longer plausible, and stops looking after
+// a day, so a permanently unclassifiable thread is not retried for ever.
+crons.interval(
+  "inbound-reply-sweep",
+  { minutes: 10 },
+  internal.inbox.replySweeps.sweepUndispositionedConversations,
+  {},
+);
+
 // The same belt for every paid call that goes through `withCredits`: an
 // operation whose action died before it could settle is parked `uncertain`,
 // which KEEPS its credits and provider units blocked. We cannot prove the
@@ -71,12 +85,19 @@ crons.interval(
 // silently returns zero rows, so the catalogue behind every strategy is
 // refreshed on a schedule rather than trusted to stay right. A failed
 // refresh keeps the previous cache; it never empties it.
-// `crons.cron`, not the `weekly` helper: the cron guidelines allow only
-// `interval` and `cron`, and the expression says the same thing — 04:00 UTC
-// every Monday.
+//
+// `crons.cron`, not the `weekly` helper: `crons.weekly` does exist in the
+// Convex API, but the house rules (`convex_rules.txt`, "Cron guidelines")
+// allow only `interval` and `cron`, and the expression says the same thing.
+//
+// NOT the top of the hour. Convex schedules every deployment's crons against
+// the same clock, so `0 4 * * 1` — Monday 04:00 UTC — is the documented
+// contention pattern: a minute when the whole platform's weekly jobs start at
+// once. Nothing about this refresh needs a round number, so it takes an
+// unremarkable minute of the same hour instead.
 crons.cron(
   "lead-filter-options-refresh",
-  "0 4 * * 1",
+  "17 4 * * 1",
   internal.agents.filterOptions.refreshFilterOptions,
   {},
 );

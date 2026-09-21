@@ -28,10 +28,25 @@ export const ACTIVITY_KINDS_P10 = [
 export type ActivityKindP10 = (typeof ACTIVITY_KINDS_P10)[number];
 
 /**
- * Activity kinds produced by the P11 inbound/reply modules. Same rule as the
- * P10 list: `kind` is a bounded string in storage and producers keep to this
- * list, which is the single definition site.
+ * The four events the header bell exists for (PLAN §5: "a feed from
+ * `activityEvents` (new reply, meeting booked, run finished, credits low)").
+ *
+ * They are listed apart from the P10/P11 module lists because they are a
+ * PRODUCT promise rather than a module's receipt trail: the bell is specified
+ * to show these, so each one has a writer helper in `activity/model.ts` and
+ * exactly one call site. Same storage rule as the lists above — `kind` is a
+ * bounded string and this is the single definition site.
+ *
+ *   reply_classified — a reply landed and the handler decided what it was.
+ *   meeting_booked   — a proposal was confirmed (PLAN §9.5).
+ *   run_finished     — an agent run ended and released its lease.
+ *   credits_low      — the org's remaining credits crossed a low-water mark.
  */
-export const ACTIVITY_KINDS_P11 = ["reply_classified"] as const;
+export const ACTIVITY_KINDS_BELL = [
+  "reply_classified",
+  "meeting_booked",
+  "run_finished",
+  "credits_low",
+] as const;
 
-export type ActivityKindP11 = (typeof ACTIVITY_KINDS_P11)[number];
+export type ActivityKindBell = (typeof ACTIVITY_KINDS_BELL)[number];

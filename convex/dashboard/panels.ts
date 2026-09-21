@@ -26,9 +26,14 @@ import { loadRepliedConversations } from "./outcomeReads";
 import { v } from "convex/values";
 
 /**
- * "Latest hot leads" — researched leads that scored 3 inside the window,
- * newest first. Person fields are optional on a sourced lead and are omitted
- * rather than filled in: the panel prints what the row says and nothing else.
+ * "Latest hot leads" — leads that were SCORED 3 inside the window, most
+ * recently scored first. Person fields are optional on a sourced lead and are
+ * omitted rather than filled in: the panel prints what the row says and
+ * nothing else.
+ *
+ * Each row carries `scoredAt`, which is the instant the window was applied to
+ * (`research.researchedAt`) — not the lead's creation, which can be months
+ * earlier and would read as a different list from the one this panel is.
  */
 export const latestHotLeads = query({
   args: { ...vRange, limit: v.optional(v.number()) },
@@ -37,7 +42,8 @@ export const latestHotLeads = query({
       v.object({
         prospectId: v.id("prospects"),
         score: v.number(),
-        createdAt: v.number(),
+        /** When research scored it — the timestamp the window bounds. */
+        scoredAt: v.number(),
         name: v.optional(v.string()),
         jobTitle: v.optional(v.string()),
         companyName: v.optional(v.string()),
@@ -57,7 +63,12 @@ export const latestHotLeads = query({
         return {
           prospectId: lead._id,
           score: HOT_LEAD_SCORE,
-          createdAt: lead.createdAt,
+          // `loadHotLeads` only returns researched leads, so the union member
+          // carrying `researchedAt` is the one this row is in.
+          scoredAt:
+            lead.research.status === "researched"
+              ? lead.research.researchedAt
+              : lead.createdAt,
           ...(name !== null ? { name } : {}),
           ...(lead.jobTitle !== undefined ? { jobTitle: lead.jobTitle } : {}),
           ...(lead.companyName !== undefined

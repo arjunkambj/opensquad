@@ -514,11 +514,18 @@ export type QuarantineReason =
  *
  * AgentMail inbox ids ARE addresses, and addresses compare case-insensitively:
  * the provider may echo `Sales@Acme.com` where the connection stored
- * `sales@acme.com`. Every comparison that would otherwise DEGRADE on a
- * mismatch — the stored-message lookup behind reply handling — goes through
- * this rather than `===`. The webhook binding in `inbox/inboundRoute.ts`
- * deliberately does not: there a mismatch quarantines rather than degrades,
- * and a security boundary is the one place to compare exactly.
+ * `sales@acme.com`. EVERY comparison of two inbox references goes through
+ * this rather than `===` — the stored-message lookup behind reply handling,
+ * and the webhook binding in `inbox/inboundRoute.ts` too.
+ *
+ * The binding used to compare exactly, on the reasoning that a security
+ * boundary should be the strictest thing in the codebase. It is no weaker
+ * this way: the event must still name THIS route's inbox, and case is not
+ * part of what an address identifies. Comparing exactly only meant that an
+ * echoed `Sales@Acme.com` was quarantined under a reference no assignment
+ * could match, so `quarantine.replayForInbox` — which ranges on the org's own
+ * stored reference — could never release it. A verified message held for ever
+ * is the failure this prevents.
  */
 export function sameInboxRef(left: unknown, right: unknown): boolean {
   if (typeof left !== "string" || typeof right !== "string") {

@@ -16,10 +16,14 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
+import { recordCreditsLow } from "../activity/model";
+import { CREDITS_LOW_THRESHOLDS } from "../lib/limits";
 import type { ProviderUnits, TrialMeteredMetric } from "../lib/limits";
 import {
   computeResultDigest,
   domainError,
+  USAGE_PERIOD_LIFETIME,
+  USAGE_SCOPE_ORG,
   vProviderKind,
 } from "../lib/validators";
 import { applyReservationTransition, reduceReservation } from "./transitions";
@@ -279,12 +283,62 @@ export async function settlePaidCallImpl(
       : {}),
   });
 
+  // PLAN §5: "credits low" is one of the four things the header bell exists
+  // for. This is where the balance actually moves, so it is where the feed
+  // learns about it — and only on a `billed` settle, because a refund and a
+  // hold both leave the spendable balance where it was. The writer keys the
+  // event on the threshold, so the org hears once per level, not once per
+  // call.
+  if (args.outcome === "billed") {
+    await noteCreditsLow(ctx, operation.orgId);
+  }
+
   return {
     outcome: args.outcome,
     credits: args.outcome === "refunded" ? 0 : credits,
     providerUnits: args.outcome === "refunded" ? {} : charged,
     replayed: false,
   };
+}
+
+/**
+ * Record "credits low" if this settle took the org under a threshold.
+ *
+ * `remaining` is the same figure the sidebar shows (`billing/credits.ts`):
+ * granted minus committed minus everything still held, so a member is warned
+ * against what they can actually spend rather than against a number that
+ * pending work has already claimed. An org with no grant has no balance to be
+ * low, and every paid call already refuses with `NO_CREDIT_GRANT`.
+ */
+async function noteCreditsLow(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+): Promise<void> {
+  const bucket = await ctx.db
+    .query("usageBuckets")
+    .withIndex("by_orgId_and_scopeKey_and_metric_and_periodKey", (q) =>
+      q
+        .eq("orgId", orgId)
+        .eq("scopeKey", USAGE_SCOPE_ORG)
+        .eq("metric", "credits")
+        .eq("periodKey", USAGE_PERIOD_LIFETIME),
+    )
+    .unique();
+  if (bucket === null) {
+    return;
+  }
+  const remaining = Math.max(
+    0,
+    bucket.limit - bucket.committed - bucket.reserved - bucket.uncertain,
+  );
+  // The thresholds are ascending and the FIRST match wins, so a call that
+  // crosses straight from 60 to 0 announces "out of credits" rather than the
+  // level it flew past.
+  const threshold = CREDITS_LOW_THRESHOLDS.find((level) => remaining <= level);
+  if (threshold === undefined) {
+    return;
+  }
+  await recordCreditsLow(ctx, { orgId, threshold, remaining });
 }
 
 /**

@@ -8,27 +8,45 @@
  */
 import type { QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { LeadApproval } from "../lib/validators";
 import {
   DASHBOARD_SCAN_BOUND,
   HOT_LEAD_SCORE,
-  countWithin,
   filled,
   type Bounded,
   type Range,
 } from "./model";
 
 /**
- * Researched leads that scored 3, newest first.
+ * When a lead BECAME hot, or `null` if it never did.
  *
- * Exact range on `by_orgId_and_scoreKey`: `scoreKey` is the
- * denormalised mirror of `research.aiScore`, so "score 3" implies
- * "researched" and no post-filter is needed. The index does not carry
- * `createdAt`, so the window is applied to the newest-first page — which is
- * exact for a window ending now, and bounded and honest otherwise.
+ * `researchedAt` is written by research and lives inside the `researched`
+ * member of the `research` union — which is also why `scoreKey` exists as a
+ * denormalised index key, since Convex cannot index into a union member.
+ */
+function scoredAt(lead: Doc<"prospects">): number | null {
+  return lead.research.status === "researched" ? lead.research.researchedAt : null;
+}
+
+/**
+ * Researched leads that scored 3, most recently SCORED first.
  *
- * Counts: `prospects` where `scoreKey = 3` and `createdAt` is in the window.
- * The same rows Contacts lists under a 3-flame score.
+ * Exact range on `by_orgId_and_scoreKey`: `scoreKey` is the denormalised
+ * mirror of `research.aiScore`, so "score 3" implies "researched" and no
+ * post-filter is needed to find them.
+ *
+ * The window is `researchedAt`, NOT `createdAt`. A lead becomes hot when it
+ * is scored, and sourcing and research are separate steps that can be weeks
+ * apart — a lead sourced two months ago and scored yesterday belongs in "Last
+ * 7 days", and windowing it on its creation hid it from this panel while
+ * Contacts listed it under the same 3-flame filter. The acceptance for this
+ * screen is that the two agree.
+ *
+ * Counts: `prospects` where `scoreKey = 3` and `research.researchedAt` is in
+ * the window. `researchedAt` is not an index key, so the page is anchored at
+ * the newest-CREATED scored-3 lead and `hasMore` is true whenever the page
+ * filled — with no ordering by `researchedAt` to lean on, a full page cannot
+ * prove it saw every lead scored in the window, and saying so is the honest
+ * answer.
  */
 export async function loadHotLeads(
   ctx: QueryCtx,
@@ -42,68 +60,53 @@ export async function loadHotLeads(
     )
     .order("desc")
     .take(DASHBOARD_SCAN_BOUND + 1);
-  const bounded = countWithin(
-    page.map((row) => ({ at: row.createdAt })),
-    range,
-  );
-  const rows = page
-    .filter((row) => row.createdAt >= range.from && row.createdAt <= range.to)
-    .sort((a, b) => b.createdAt - a.createdAt);
-  return { rows, bounded };
+  const within: { lead: Doc<"prospects">; at: number }[] = [];
+  for (const lead of page) {
+    const at = scoredAt(lead);
+    if (at !== null && at >= range.from && at <= range.to) {
+      within.push({ lead, at });
+    }
+  }
+  within.sort((a, b) => b.at - a.at);
+  return {
+    rows: within.map((entry) => entry.lead),
+    bounded: {
+      count: Math.min(within.length, DASHBOARD_SCAN_BOUND),
+      hasMore: page.length > DASHBOARD_SCAN_BOUND,
+    },
+  };
 }
-
-/**
- * Every approval value, as a total map over the union: an approval added to
- * `vLeadApproval` fails this build until it is listed here, which is what
- * stops the partition below quietly losing a bucket of leads.
- */
-const APPROVAL_PARTITION = {
-  pending: true,
-  approved: true,
-  rejected: true,
-} satisfies Record<LeadApproval, true>;
-
-const LEAD_APPROVALS = Object.keys(APPROVAL_PARTITION) as LeadApproval[];
 
 /**
  * Leads created in the window, for the activity chart's daily series.
  *
- * `prospects` has no `(orgId, createdAt)` index, so this reads the
- * three `by_orgId_and_approval` ranges newest-first instead — three
- * exact index ranges rather than one table scan, and together they partition
- * the table, so no lead is missed. Each is bounded separately, so an org
- * past the bound reports `hasMore` and the chart says so under the plot.
+ * ONE exact range on `by_orgId_and_createdAt` — the index the schema declares
+ * for precisely this read. It used to fan out across the three
+ * `by_orgId_and_approval` ranges to work around an index that did not exist
+ * yet; it does now, so the workaround is gone: one range, no partition to
+ * keep total, and a bound that means what it says.
  *
- * The integrator should add `prospects.by_orgId_and_createdAt`; this
- * becomes one exact range and the bound stops mattering.
+ * Counts: `prospects` where `createdAt` is in the window — every lead,
+ * whatever its approval or stage.
  */
 export async function loadLeadsCreated(
   ctx: QueryCtx,
   orgId: Id<"orgs">,
   range: Range,
 ): Promise<{ createdAt: number[]; bounded: Bounded }> {
-  const createdAt: number[] = [];
-  let hasMore = false;
-  for (const approval of LEAD_APPROVALS) {
-    const page = await ctx.db
-      .query("prospects")
-      .withIndex("by_orgId_and_approval", (q) =>
-        q.eq("orgId", orgId).eq("approval", approval),
-      )
-      .order("desc")
-      .take(DASHBOARD_SCAN_BOUND + 1);
-    const bucket = countWithin(
-      page.map((row) => ({ at: row.createdAt })),
-      range,
-    );
-    hasMore = hasMore || bucket.hasMore;
-    for (const row of page) {
-      if (row.createdAt >= range.from && row.createdAt <= range.to) {
-        createdAt.push(row.createdAt);
-      }
-    }
-  }
-  return { createdAt, bounded: { count: createdAt.length, hasMore } };
+  const page = await ctx.db
+    .query("prospects")
+    .withIndex("by_orgId_and_createdAt", (q) =>
+      q.eq("orgId", orgId).gte("createdAt", range.from).lte("createdAt", range.to),
+    )
+    .order("desc")
+    .take(DASHBOARD_SCAN_BOUND + 1);
+  return {
+    createdAt: page
+      .slice(0, DASHBOARD_SCAN_BOUND)
+      .map((row) => row.createdAt),
+    bounded: filled(page, DASHBOARD_SCAN_BOUND),
+  };
 }
 
 /**

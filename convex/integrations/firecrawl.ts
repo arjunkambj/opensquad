@@ -28,9 +28,7 @@
  * it already paid for instead of buying them again.
  */
 import { FirecrawlClient } from "@firecrawl/firecrawl-convex";
-import { v } from "convex/values";
 import { components } from "../_generated/api";
-import { internalAction } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import type { FunctionReference } from "convex/server";
@@ -216,10 +214,27 @@ function toScrapedPage(doc: ProviderDocument, limit: number): ScrapedPage | null
   };
 }
 
-/** Provider units this page consumed. A reported zero is a cache hit and is
- *  released; silence means it charged us the usual one page. */
+/**
+ * Provider units this page consumed, at the provider's own figure.
+ *
+ * A reported ZERO is a cache hit: the page was served without metering us, so
+ * the reserved unit is released (settlement treats an actual of 0 as a full
+ * release for that metric). SILENCE means it did not say, and the honest
+ * assumption is the usual one page.
+ *
+ * Anything else is taken AS REPORTED rather than flattened to 1: a page that
+ * cost the account two units and was counted as one would let the layer-2
+ * scrape budget — the cap that actually bounds our bill — drift below the
+ * real spend. The settle clamps the figure to what this call reserved, so
+ * reading it cannot commit more than the worst case we declared.
+ */
 function chargeOf(doc: ProviderDocument): number {
-  return doc.creditsUsed === 0 ? 0 : 1;
+  if (doc.creditsUsed === undefined) {
+    return 1;
+  }
+  return Number.isFinite(doc.creditsUsed)
+    ? Math.max(0, Math.trunc(doc.creditsUsed))
+    : 1;
 }
 
 /** The provider's own report, kept server-side for reconciliation (the
@@ -462,10 +477,24 @@ export async function scrapeSite(
         }
       }
 
+      // THE RULE, the same one the reveal boundary applies
+      // (`integrations/enrich/revealPoll.ts`): what was DELIVERED decides
+      // billed vs refunded, and the provider's invoice decides only the
+      // provider units.
+      //
+      // So a page served from the provider's cache — `creditsUsed: 0` — is
+      // still billed: the user asked for the site, got the site, and pays the
+      // posted price the button showed. The unit we reserved goes back,
+      // because no unit was spent, exactly as a reveal served from the
+      // provider's 24-hour cache commits the credits and releases the unit.
+      // Refunding the credits instead would make the price of a step depend
+      // on whether somebody else happened to read the same site first.
+      //
+      // Nothing delivered and nothing charged is the refunded row of PLAN §6
+      // ("the provider answered and charged 0"). Nothing delivered but
+      // charged is billed at what it charged: the work happened.
       const receipt = providerReceipt(fetched);
       if (pages.length === 0) {
-        // We reached the site and got nothing readable. If it cost nothing,
-        // it is a refund; if it cost something, we say so.
         return charged === 0
           ? { outcome: "refunded", reason: "provider_charged_nothing" }
           : {
@@ -514,65 +543,3 @@ export async function scrapeSite(
     ? { kind: "empty" }
     : { kind: "scraped", replayed: false, site: outcome.result };
 }
-
-/* ------------------------------------------------------------------ */
-/* Operational surfaces                                                 */
-/* ------------------------------------------------------------------ */
-
-/**
- * DEV-ONLY live probe: run one real scrape and report SIZES, not content, so
- * the integrator can verify the provider route and the refusal cases without
- * putting page bodies in a log. Internal-only — unreachable from clients and
- * from HTTP. **TODO(T50): remove before public release** (same convention as
- * agentmail.ts `diagnosticInboundState`).
- */
-export const diagnosticScrapeSite = internalAction({
-  args: {
-    orgId: v.id("orgs"),
-    url: v.string(),
-    pages: v.union(v.literal(1), v.literal(4)),
-    action: v.union(v.literal("analyze_website"), v.literal("research_lead")),
-    operationKey: v.string(),
-  },
-  returns: v.object({
-    kind: v.string(),
-    reason: v.optional(v.string()),
-    replayed: v.optional(v.boolean()),
-    combinedCharacters: v.optional(v.number()),
-    pages: v.array(
-      v.object({
-        url: v.string(),
-        title: v.optional(v.string()),
-        characters: v.number(),
-        truncated: v.boolean(),
-      }),
-    ),
-  }),
-  handler: async (ctx, args) => {
-    const outcome = await scrapeSite(ctx, {
-      orgId: args.orgId,
-      url: args.url,
-      pages: args.pages,
-      action: args.action,
-      operationKey: args.operationKey,
-    });
-    if (outcome.kind !== "scraped") {
-      return {
-        kind: outcome.kind,
-        ...(outcome.kind === "refused" ? { reason: outcome.reason } : {}),
-        pages: [],
-      };
-    }
-    return {
-      kind: outcome.kind,
-      replayed: outcome.replayed,
-      combinedCharacters: outcome.site.combinedMarkdown.length,
-      pages: outcome.site.pages.map((page) => ({
-        url: page.url,
-        ...(page.title !== undefined ? { title: page.title } : {}),
-        characters: page.markdown.length,
-        truncated: page.truncated,
-      })),
-    };
-  },
-});

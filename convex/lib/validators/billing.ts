@@ -122,43 +122,12 @@ export type ProviderOperationSettlement = Infer<
 >;
 
 /**
- * Does this operation's receipt consume the prospect's page allowance?
- *
- * Everything except a released reservation does. A row with no recorded
- * settlement is still in flight (`requested`/`accepted`) and its
- * reservation is live, so it counts too — an unsettled operation must never
- * be free.
- */
-export function consumesPageAllowance(row: {
-  settlement?: ProviderOperationSettlement;
-}): boolean {
-  return row.settlement !== "release";
-}
-
-/**
  * Lead research reads the lead's company home page and nothing else
  * (PLAN §4 "Firecrawl change needed": website analysis takes up to four
  * pages, lead research stays at one). Three is the per-lead ceiling on
  * BILLED retrievals, so a retried research step cannot buy a fourth page.
  */
 export const RESEARCH_PAGES_PER_PROSPECT = 3;
-
-/**
- * One page the BACKEND itself retrieved, in the shape the app stores and
- * cites. `retrievedAt` is epoch ms — `scrapePage` reports an ISO 8601
- * string, and the conversion happens once, here at the boundary, rather
- * than being repeated (and eventually mis-repeated) at each read site.
- */
-export const vRetrievedPage = v.object({
-  url: v.string(),
-  retrievedAt: v.number(),
-  excerpt: v.string(),
-  statusCode: v.optional(v.number()),
-  truncated: v.boolean(),
-  providerOperationId: v.id("providerOperations"),
-});
-
-export type RetrievedPage = Infer<typeof vRetrievedPage>;
 
 export const vUsageReservationState = v.union(
   v.literal("reserved"),

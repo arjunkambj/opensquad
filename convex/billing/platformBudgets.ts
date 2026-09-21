@@ -176,6 +176,78 @@ function platformCapacityError(metric: TrialMeteredMetric) {
 }
 
 /* ------------------------------------------------------------------ */
+/* The platform breaker                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The marker added to a budget's `used` to trip it. Far above any real usage,
+ * so "tripped" is unambiguous and removing it restores the true figure rather
+ * than guessing at it.
+ *
+ * Exported because it is the CONVENTION, not one watchdog's private constant:
+ * every breaker in the product trips the same way, on the same rows
+ * `withCredits` already checks, with the same size of marker.
+ */
+export const BREAKER_MARKER_UNITS = 1_000_000_000;
+
+/**
+ * Trip or release the platform breaker for ONE metric.
+ *
+ * Why a marker rather than a flag: `PLATFORM_PAUSED` is a deployment env var,
+ * which no Convex function can set, and an operator resetting a breaker must
+ * not need a deploy either. So a breaker is expressed in the rows the credit
+ * wrapper already reads — `platformBudgets` for the period — by adding a
+ * marker far larger than any real usage to `used`. Every paid call on that
+ * metric then refuses with the neutral `PLATFORM_CAPACITY` code for everyone,
+ * while the genuine usage underneath is preserved: releasing subtracts
+ * exactly the marker back out.
+ *
+ * A budget resets on its own period (UTC day for credits, UTC month for
+ * searches), so a trip only marks the period it was taken in — and the
+ * watchdog re-trips the new period on its next pass if the condition holds.
+ * That is deliberate: a breaker that outlived its cause would need a deploy
+ * to clear.
+ *
+ * Idempotent in both directions: a second trip adds nothing and a release
+ * with no marker present changes nothing, so a cron that keeps finding the
+ * same answer keeps writing the same state. Returns whether the row moved.
+ */
+export async function setPlatformBreaker(
+  ctx: MutationCtx,
+  metric: TrialMeteredMetric,
+  tripped: boolean,
+): Promise<boolean> {
+  const policy = PLATFORM_BUDGETS[metric];
+  const now = Date.now();
+  const periodKey = platformPeriodKey(policy, now);
+  const row = await findBudgetRow(ctx, policy, periodKey);
+  if (row === null) {
+    if (!tripped) {
+      return false;
+    }
+    await ctx.db.insert("platformBudgets", {
+      provider: policy.provider,
+      periodKey,
+      limit: platformBudgetLimit(policy),
+      used: BREAKER_MARKER_UNITS,
+      updatedAt: now,
+    });
+    return true;
+  }
+  const marked = row.used >= BREAKER_MARKER_UNITS;
+  if (marked === tripped) {
+    return false;
+  }
+  await ctx.db.patch("platformBudgets", row._id, {
+    used: tripped
+      ? row.used + BREAKER_MARKER_UNITS
+      : Math.max(0, row.used - BREAKER_MARKER_UNITS),
+    updatedAt: now,
+  });
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* Signup capacity                                                     */
 /* ------------------------------------------------------------------ */
 

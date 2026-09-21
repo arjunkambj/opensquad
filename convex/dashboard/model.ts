@@ -24,15 +24,20 @@
  *   its numbers reconcile with Contacts and Inbox over the same window.
  */
 import type { Doc } from "../_generated/dataModel";
+import { COUNT_SCAN_BOUND } from "../lib/limits";
 import { assertEpochMs, invalid, localDayKey } from "../lib/validators";
 import { v } from "convex/values";
 
 /**
- * How many rows any one range read may touch. A trial org's whole
- * window is smaller than this, so `hasMore` is false in practice — the bound
- * is what keeps the screen honest once that stops being true.
+ * How many rows any one range read may touch.
+ *
+ * It is `lib/limits.COUNT_SCAN_BOUND` and not a number of its own, because
+ * the acceptance for this screen is that its figures reconcile with the
+ * screen each came from: counting to 200 here while `leads/counts.ts`
+ * counted to 100 produced two true figures that disagreed past the smaller
+ * cap, with nothing on either screen to explain it.
  */
-export const DASHBOARD_SCAN_BOUND = 200;
+export const DASHBOARD_SCAN_BOUND = COUNT_SCAN_BOUND;
 
 /**
  * The longest window the aggregates will answer, in days. The range pills top
@@ -81,29 +86,6 @@ export function assertRange(from: number, to: number): Range {
     );
   }
   return { from, to };
-}
-
-/**
- * Turn a newest-first page of at most `DASHBOARD_SCAN_BOUND + 1` rows into a
- * count over `range`.
- *
- * `hasMore` is true only when the page filled AND its oldest row is still
- * inside the window — that is the case where rows in the window were left
- * unread. A page that filled but already reached past `from` has counted
- * every row in the window, so the figure is exact and says so.
- */
-export function countWithin(
-  rows: readonly { at: number }[],
-  range: Range,
-  bound: number = DASHBOARD_SCAN_BOUND,
-): Bounded {
-  const within = rows.filter(
-    (row) => row.at >= range.from && row.at <= range.to,
-  ).length;
-  const oldest = rows.at(-1);
-  const truncated =
-    rows.length > bound && oldest !== undefined && oldest.at >= range.from;
-  return { count: Math.min(within, bound), hasMore: truncated };
 }
 
 /** A page of at most `bound + 1` rows whose length says whether it filled. */

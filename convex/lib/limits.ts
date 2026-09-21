@@ -14,7 +14,32 @@
  * lookups below, not their call sites.
  */
 import type { RateLimitConfig } from "@convex-dev/rate-limiter";
+import { env } from "../_generated/server";
 import type { ProviderKind } from "./validators";
+
+/* ------------------------------------------------------------------ */
+/* The deployment settings this file reads                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Every tunable name, as a union.
+ *
+ * The readers at the bottom index the TYPED `env` with this, and every name
+ * is declared in `convex.config.ts`, so a misspelling is a build failure.
+ * That is the whole point: an undeclared name still reaches `process.env`, so
+ * `PLATFORM_PAUSE` would have compiled and left the kill switch OPEN, and a
+ * mistyped budget would have fallen silently back to its default ceiling.
+ */
+export type TunableEnvName =
+  | "PLATFORM_PAUSED"
+  | "ENRICH_DAILY_CREDIT_BUDGET"
+  | "ENRICH_MONTHLY_SEARCH_BUDGET"
+  | "AI_DAILY_CALL_BUDGET"
+  | "FIRECRAWL_DAILY_BUDGET"
+  | "MAX_TRIAL_ORGS"
+  | "ENRICH_BALANCE_FLOOR"
+  | "PAID_CALL_STALE_MS"
+  | "UNCERTAIN_HOLD_MAX_AGE_MS";
 
 /* ------------------------------------------------------------------ */
 /* Layer 1 · visible credits                                           */
@@ -78,6 +103,22 @@ export const ACTION_PRICES: Record<PaidAction, ActionPrice> = {
 /** The lifetime grant, made with the org and never refilled (PLAN §6). */
 export const TRIAL_CREDIT_GRANT = 300;
 
+/**
+ * The balances that put "credits low" in the header bell (PLAN §5).
+ *
+ * ASCENDING — the reader takes the FIRST level the balance is at or below,
+ * so a call that goes straight from 60 to 0 announces "out of credits"
+ * rather than the level it flew past. Each one fires AT MOST ONCE per org:
+ * the feed writer keys its event on the threshold, so a member is told once
+ * that the balance has fallen under 50 and once that it has run out, rather
+ * than on every paid call afterwards.
+ *
+ * 50 is chosen against the layer-1 prices: three more emails found, or a
+ * dozen researched leads — enough warning to be worth having, late enough
+ * not to be noise on a 300-credit grant.
+ */
+export const CREDITS_LOW_THRESHOLDS: readonly number[] = [0, 50];
+
 /* ------------------------------------------------------------------ */
 /* Layer 2 · hidden provider caps per org                        */
 /* ------------------------------------------------------------------ */
@@ -125,7 +166,7 @@ export const TRIAL_DAILY_SEND_LIMIT_MAX = 30;
  * Deployment env var whose value, when exactly `"true"`, stops every paid
  * call instantly — no deploy, no code path left open (PLAN §6).
  */
-export const PLATFORM_PAUSED_ENV = "PLATFORM_PAUSED";
+export const PLATFORM_PAUSED_ENV: TunableEnvName = "PLATFORM_PAUSED";
 
 export type PlatformBudgetPolicy = {
   provider: ProviderKind;
@@ -135,7 +176,9 @@ export type PlatformBudgetPolicy = {
   /** Distinguishes two budgets of the SAME provider in the period key, since
    *  `platformBudgets` is unique per (provider, periodKey). */
   periodPrefix: string;
-  envName: string;
+  /** Declared in `convex.config.ts` and read through the typed `env`, so a
+   *  budget cannot be wired to a name no deployment will ever set. */
+  envName: TunableEnvName;
   /**
    * Used when the env var is absent. Conservative by design: a budget that
    * defaulted to "unlimited" would make the whole layer decorative, and one
@@ -183,9 +226,29 @@ export const PLATFORM_BUDGETS: Record<TrialMeteredMetric, PlatformBudgetPolicy> 
   };
 
 /** How many trial orgs exist before new signups see the waitlist. */
-export const MAX_TRIAL_ORGS_ENV = "MAX_TRIAL_ORGS";
+export const MAX_TRIAL_ORGS_ENV: TunableEnvName = "MAX_TRIAL_ORGS";
 
 export const MAX_TRIAL_ORGS_DEFAULT = 50;
+
+/* ------------------------------------------------------------------ */
+/* Counted reads                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How far ANY counted read scans before it answers "n+" instead of "n".
+ *
+ * One number, in one place, because the acceptance for the Dashboard is that
+ * its figures reconcile with the screen each came from: a funnel that stopped
+ * counting at 100 beside a stat row that stopped at 200 makes two true
+ * numbers that disagree, and nothing on either screen says why. Convex has no
+ * count API, so a count is a bounded read — the bound is a product decision,
+ * not a per-query one.
+ *
+ * A trial org's whole table is smaller than this, so `hasMore` is false in
+ * practice; the bound is what keeps every screen honest once that stops being
+ * true.
+ */
+export const COUNT_SCAN_BOUND = 100;
 
 /* ------------------------------------------------------------------ */
 /* Recovery timing                                                     */
@@ -199,7 +262,7 @@ export const MAX_TRIAL_ORGS_DEFAULT = 50;
  */
 export const PAID_CALL_STALE_MS_DEFAULT = 15 * 60 * 1000;
 
-export const PAID_CALL_STALE_MS_ENV = "PAID_CALL_STALE_MS";
+export const PAID_CALL_STALE_MS_ENV: TunableEnvName = "PAID_CALL_STALE_MS";
 
 export function paidCallStaleMs(): number {
   return readIntEnv(PAID_CALL_STALE_MS_ENV, PAID_CALL_STALE_MS_DEFAULT);
@@ -211,7 +274,8 @@ export function paidCallStaleMs(): number {
  */
 export const UNCERTAIN_HOLD_MAX_AGE_MS_DEFAULT = 24 * 60 * 60 * 1000;
 
-export const UNCERTAIN_HOLD_MAX_AGE_MS_ENV = "UNCERTAIN_HOLD_MAX_AGE_MS";
+export const UNCERTAIN_HOLD_MAX_AGE_MS_ENV: TunableEnvName =
+  "UNCERTAIN_HOLD_MAX_AGE_MS";
 
 /**
  * Both windows are env-tunable because recovery timing is an operational
@@ -324,9 +388,13 @@ export const AGENT_FOLLOW_UP_DAYS_DEFAULT: readonly number[] = [3, 7];
  * A non-negative integer deployment setting, or `fallback` when unset. An
  * unreadable value is a deployment mistake, not a reason to spend without a
  * ceiling, so it throws rather than falling back silently.
+ *
+ * Read through the typed `env`, never `process.env`: the name is checked
+ * against `convex.config.ts` at build time, and a variable the deployment
+ * never set still yields exactly `fallback`, as it always did.
  */
-export function readIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
+export function readIntEnv(name: TunableEnvName, fallback: number): number {
+  const raw = env[name];
   if (raw === undefined || raw.trim() === "") {
     return fallback;
   }
@@ -338,7 +406,8 @@ export function readIntEnv(name: string, fallback: number): number {
 }
 
 /** `true` only for the exact string `"true"` — anything else leaves paid
- *  calls running, so a typo can never silently pause the product. */
-export function readBooleanEnv(name: string): boolean {
-  return process.env[name] === "true";
+ *  calls running, so a typo in the VALUE can never silently pause the
+ *  product, and a typo in the NAME no longer silently un-pauses it. */
+export function readBooleanEnv(name: TunableEnvName): boolean {
+  return env[name] === "true";
 }
