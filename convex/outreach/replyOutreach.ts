@@ -51,6 +51,7 @@ const vReplyRefusal = v.union(
   v.literal("agent_not_sending"),
   v.literal("association_missing"),
   v.literal("recipient_unknown"),
+  v.literal("reply_target_unknown"),
   v.literal("suppressed"),
   v.literal("lead_rejected"),
 );
@@ -154,8 +155,16 @@ export const draftAndSendReply = internalMutation({
     );
     // THE opt-out line, from the one helper every outbound path shares.
     const body = withOptOutLine(args.body).slice(0, DRAFT_BODY_MAX_LENGTH);
+    // A REPLY WITHOUT A PARENT IS NOT A REPLY. `replyToMessageRef` is what
+    // makes the send a `reply` operation on the provider's thread; without it
+    // the draft would go out as a brand-new thread — answering a message the
+    // recipient sees no connection to, and losing the threading the whole flow
+    // is built on. That is a refusal, not a degradation.
     const replyToMessageRef =
       args.replyToMessageRef ?? conversation.lastInboundMessageRef;
+    if (replyToMessageRef === undefined) {
+      return refuse("reply_target_unknown");
+    }
 
     const draft = await ctx.runMutation(
       internal.outreach.draftRevisions.createRevision,
@@ -170,7 +179,7 @@ export const draftAndSendReply = internalMutation({
           min: 1,
           max: 100,
         }),
-        ...(replyToMessageRef !== undefined ? { replyToMessageRef } : {}),
+        replyToMessageRef,
         ...(args.bookingId !== undefined && args.bookingVersion !== undefined
           ? { bookingId: args.bookingId, bookingVersion: args.bookingVersion }
           : {}),

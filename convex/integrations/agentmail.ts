@@ -35,7 +35,7 @@ import { components, internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { recordQuarantinedEvent } from "../inbox/quarantine";
+import { recordQuarantinedEvent, syntheticRef } from "../inbox/quarantine";
 import { upsertMessage } from "../inbox/model";
 import { recordReceipt } from "../outreach/sendReceipts";
 import {
@@ -46,12 +46,14 @@ import {
 } from "./agentmailApi";
 import { decryptSecret } from "../lib/secrets";
 import {
+  canonicalJson,
   domainError,
   evaluateOptOutText,
   inboundApplicationKey,
   outboundApplicationKey,
   parseInboundSender,
   PROVIDER_REF_MAX_LENGTH,
+  sha256Hex,
 } from "../lib/validators";
 import type { QuarantineReason } from "../lib/validators";
 
@@ -733,6 +735,21 @@ function providerRef(
 }
 
 /**
+ * A key for an envelope that carried no identifier of its own — a digest of
+ * the envelope itself, so a provider resend of the same payload dedupes onto
+ * the row it already wrote. Never throws (the rule at the top of this
+ * section): a payload that cannot be serialized degrades to a clock read,
+ * which records the event at the cost of deduping it.
+ */
+async function envelopeDigest(event: unknown): Promise<string> {
+  try {
+    return await sha256Hex(canonicalJson(event));
+  } catch {
+    return `at-${Date.now()}`;
+  }
+}
+
+/**
  * Resolve the owning org from the saved inbox assignment alone
  * (architecture §8 step 2: never guess an org from a body or a display
  * address). `.collect()` rather than `.unique()`: the assignment's uniqueness
@@ -813,13 +830,57 @@ export const onEvent = internalMutation({
 
     // `message.received` is delivered through onMessageReceived — the
     // component fires BOTH callbacks for it; never record twice.
+    if (eventType === "message.received") {
+      return null;
+    }
+    const payloadTimestamp = numberField(event, "timestamp");
     if (
-      eventType === "message.received" ||
       eventId === undefined ||
       eventType === undefined ||
       inboxRef === undefined ||
       messageRef === undefined
     ) {
+      // Verified, and missing the identifiers a receipt is keyed on. Returning
+      // here lost it permanently — the component has already marked
+      // `event_id` ingested, so the provider never resends — so it is
+      // quarantined instead, under keys minted from whatever the envelope did
+      // carry (a digest of it, when it carried nothing usable). The row is
+      // evidence, not a replayable event: `quarantine.replayOne` recognises
+      // `event_unparseable` and never replays it.
+      //
+      // `providerEventId` is the dedupe key, so a minted one has to be unique
+      // PER EVENT. Seeded from the message or the inbox — values every event
+      // for that mailbox shares — distinct events would collide on one row
+      // and `recordQuarantinedEvent` would drop every one after the first, so
+      // an inbox missing its event ids would leave exactly one row, forever.
+      // A digest of the envelope is the only seed that identifies THIS
+      // delivery, and it still dedupes a provider resend of it onto the same
+      // row — the same key the route-side twin mints (`inboundRoute.ts`).
+      const seed =
+        eventId === undefined ? await envelopeDigest(args.event) : eventId;
+      const eventRef = eventId ?? syntheticRef("event", seed);
+      // The message and inbox stand-ins are labels on the row rather than
+      // keys, so they may lean on whatever the envelope did carry.
+      const refSeed = messageRef ?? inboxRef ?? seed;
+      const quarantinedType = eventType ?? "unknown";
+      const quarantinedMessageRef =
+        messageRef ?? syntheticRef("message", refSeed);
+      await recordQuarantinedEvent(ctx, {
+        inboxRef: inboxRef ?? syntheticRef("inbox", refSeed),
+        providerEventId: eventRef,
+        applicationKey: outboundApplicationKey(
+          quarantinedMessageRef,
+          quarantinedType,
+        ),
+        providerMessageRef: quarantinedMessageRef,
+        ...(threadRef !== undefined ? { providerThreadRef: threadRef } : {}),
+        eventType: quarantinedType,
+        reason: "event_unparseable",
+        ...(payloadTimestamp !== undefined
+          ? { providerTimestamp: payloadTimestamp }
+          : {}),
+        note: "verified event carried no usable inbox, message or event id",
+      });
       return null;
     }
     // One business effect per (message, event type): provider re-delivery
@@ -832,7 +893,6 @@ export const onEvent = internalMutation({
       });
       return null;
     }
-    const payloadTimestamp = numberField(event, "timestamp");
     const resolved = await resolveOrgByInbox(
       ctx,
       inboxRef,

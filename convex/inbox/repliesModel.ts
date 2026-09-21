@@ -62,9 +62,9 @@ export const AUTO_REPLY_LIMIT = 2;
  * It does two jobs, which is why it is one string. `draftRevisions.createRevision`
  * dedupes on `(orgId, requestId)`, so a re-driven step replays the
  * revision it already wrote instead of proposing a second one; and the same
- * prefix is what `automaticReplyCount` counts, so the ceiling above is
- * measured from the drafts themselves rather than from a counter that could
- * drift away from them.
+ * prefix is what marks a draft as this flow's, so `automaticReplyCount` can
+ * tell an answer the agent sent from a first touch — measured from the sends
+ * themselves rather than from a counter that could drift away from them.
  */
 export const REPLY_REQUEST_PREFIX = "reply:";
 
@@ -91,30 +91,56 @@ export async function replyOperationKey(args: {
   return `${REPLY_REQUEST_PREFIX}${args.conversationId}:${digest}:r${args.agentRevision}`;
 }
 
-/** How many draft revisions one conversation is scanned for. */
-const DRAFT_SCAN_MAX = 64;
+/** How many of one conversation's send attempts are scanned. */
+const ATTEMPT_SCAN_MAX = 32;
 
 /**
- * Automatic replies already made on this thread — counted from the drafts
- * the reply flow itself wrote, which are exactly the ones carrying a
- * `reply:` request id. A first touch and its follow-ups are written by the
- * outreach loop under a different key and are deliberately not counted: the
- * ceiling is on ANSWERS, not on messages.
+ * Attempt states that will never become a reply on this thread: the send was
+ * abandoned before it left, so nothing was said. Every OTHER state —
+ * `reserved`, `requesting`, `uncertain`, `acknowledged` — either is a reply
+ * or is one dispatch away from being one, and counts.
+ */
+const NOT_A_REPLY: ReadonlySet<Doc<"sendAttempts">["state"]> = new Set([
+  "cancelled",
+  "definitively_failed",
+]);
+
+/**
+ * Automatic replies already MADE — or already under way — on this thread.
+ *
+ * Counted from the sends, not from the drafts: PLAN §9.3's ceiling is on
+ * automatic replies, and a Review-mode draft is not a reply — it is a
+ * suggestion sitting in front of a person who may never send it. Counting
+ * those handed the thread to the user after two answers nobody had sent.
+ *
+ * Counted from EVERY live attempt, not only the acknowledged ones, because
+ * the ceiling has to hold against the case it exists for: three inbounds
+ * arriving inside one send's lifetime would each see a `reserved` or
+ * `requesting` attempt as zero replies, and each would buy a model call and
+ * send. An attempt in flight is a reply this thread is going to make; only a
+ * `cancelled` or `definitively_failed` one is not. The draft behind each
+ * attempt is what says whether the reply flow wrote it, because a `reply:`
+ * request id is the one thing the first touch and its follow-ups never carry.
+ * Deduped by that request id, so the retries of one answer count once.
  */
 export async function automaticReplyCount(
   ctx: MutationCtx,
   conversation: Doc<"conversations">,
 ): Promise<number> {
-  const drafts = await ctx.db
-    .query("drafts")
-    .withIndex("by_conversationId_and_revision", (q) =>
+  const attempts = await ctx.db
+    .query("sendAttempts")
+    .withIndex("by_conversationId_and_createdAt", (q) =>
       q.eq("conversationId", conversation._id),
     )
     .order("desc")
-    .take(DRAFT_SCAN_MAX);
+    .take(ATTEMPT_SCAN_MAX);
   const keys = new Set<string>();
-  for (const draft of drafts) {
-    const requestId = draft.requestId;
+  for (const attempt of attempts) {
+    if (NOT_A_REPLY.has(attempt.state)) {
+      continue;
+    }
+    const draft = await ctx.db.get("drafts", attempt.draftId);
+    const requestId = draft?.requestId;
     if (requestId !== undefined && requestId.startsWith(REPLY_REQUEST_PREFIX)) {
       keys.add(requestId);
     }

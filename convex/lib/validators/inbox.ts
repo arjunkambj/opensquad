@@ -485,19 +485,47 @@ export function outboundApplicationKey(
 /**
  * Why a verified event could not be attributed to an org.
  *
- * Both are resolvable conditions, not corruption: an inbox assignment that
- * has not committed yet (or is being rotated), and two orgs
+ * The first two are resolvable conditions, not corruption: an inbox assignment
+ * that has not committed yet (or is being rotated), and two orgs
  * transiently claiming one `inboxRef`. Neither may be guessed at by the
  * callback — §8 step 2 resolves an org from the saved assignment alone —
  * and neither may drop the event, because the provider will not resend an
  * `event_id` the component has already ingested.
+ *
+ * `event_unparseable` is the third, and it is NOT resolvable: the envelope
+ * itself carried no usable inbox, message or event id, so there is nothing to
+ * attribute and nothing to replay. It is recorded anyway, under synthetic
+ * keys, because the alternative is the same permanent silent loss — an event
+ * we verified, answered 2xx and can no longer prove arrived.
  */
 export const vQuarantineReason = v.union(
   v.literal("inbox_unassigned"),
   v.literal("inbox_ambiguous"),
+  v.literal("event_unparseable"),
 );
 
-export type QuarantineReason = "inbox_unassigned" | "inbox_ambiguous";
+export type QuarantineReason =
+  | "inbox_unassigned"
+  | "inbox_ambiguous"
+  | "event_unparseable";
+
+/**
+ * Do two provider inbox references name the same inbox?
+ *
+ * AgentMail inbox ids ARE addresses, and addresses compare case-insensitively:
+ * the provider may echo `Sales@Acme.com` where the connection stored
+ * `sales@acme.com`. Every comparison that would otherwise DEGRADE on a
+ * mismatch — the stored-message lookup behind reply handling — goes through
+ * this rather than `===`. The webhook binding in `inbox/inboundRoute.ts`
+ * deliberately does not: there a mismatch quarantines rather than degrades,
+ * and a security boundary is the one place to compare exactly.
+ */
+export function sameInboxRef(left: unknown, right: unknown): boolean {
+  if (typeof left !== "string" || typeof right !== "string") {
+    return false;
+  }
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
 
 /**
  * `quarantined` — held, replayable. `released` — replayed into the normal

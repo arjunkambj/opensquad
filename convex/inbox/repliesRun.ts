@@ -30,6 +30,7 @@ import {
   vHandleReplyResult,
 } from "../ai/handleReply";
 import { runStructured } from "../ai/run";
+import { sameInboxRef } from "../lib/validators";
 import { v } from "convex/values";
 import type { ReplyContext } from "./repliesContext";
 import { vReplyHandlingMode } from "./repliesModel";
@@ -226,7 +227,15 @@ async function readStoredMessage(
     return null;
   }
   for (const row of rows) {
-    if (row.inboxId === args.inboxRef && row.messageId === args.messageRef) {
+    // The inbox is compared case-insensitively (`sameInboxRef`): provider
+    // inbox ids are addresses, and a stored row whose id differs only in case
+    // is the same inbox. An exact match here would end classification on
+    // `failed:no_message_text` for a message we do hold, instead of reading
+    // it. The MESSAGE id stays exact — it is an opaque provider identifier.
+    if (
+      sameInboxRef(row.inboxId, args.inboxRef) &&
+      row.messageId === args.messageRef
+    ) {
       return readInboundMessageText(row);
     }
   }

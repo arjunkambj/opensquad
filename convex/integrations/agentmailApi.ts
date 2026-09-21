@@ -20,6 +20,7 @@
  * contract and the response is data.
  */
 import { boundedString } from "../lib/validators";
+import { env } from "../_generated/server";
 
 const AGENTMAIL_DEFAULT_BASE_URL = "https://api.agentmail.to/v0";
 
@@ -80,7 +81,7 @@ export type AgentMailResult<T> =
   | { ok: false; code: AgentMailErrorCode; httpStatus?: number };
 
 export function agentmailBaseUrl(): string {
-  return (process.env.AGENTMAIL_BASE_URL ?? AGENTMAIL_DEFAULT_BASE_URL).replace(
+  return (env.AGENTMAIL_BASE_URL ?? AGENTMAIL_DEFAULT_BASE_URL).replace(
     /\/+$/,
     "",
   );

@@ -196,8 +196,9 @@ export async function evaluateReplyAutomation(
  * - `not_live_source` — a backfilled import. History is read, never answered.
  * - `before_connection` — older than `orgs.connectedAt`, or the
  *   org has no connection time at all.
- * - `thread_not_ours` — no accepted send of ours started this thread, or it
- *   is not bound to a lead. Someone else's conversation is not ours to work.
+ * - `thread_not_ours` — no accepted send of ours predates this message on this
+ *   thread, or it is not bound to a lead. Someone else's conversation is not
+ *   ours to work, and a send made after the message cannot be what it answers.
  * - `sender_is_us` — our own inbox address. An echo is not a reply.
  * - `sender_unverified` — the `From` header did not name exactly one address,
  *   so there is nobody to attribute the message to.
@@ -232,36 +233,45 @@ export const vReplyHistoryVerdict = v.union(
 export type ReplyHistoryVerdict = typeof vReplyHistoryVerdict.type;
 
 /**
- * How many send attempts are read looking for one of ours that left us.
- * A thread we started has one in its first few rows by construction, so this
- * bound answers the question rather than truncating it.
+ * How many ACKNOWLEDGED send attempts are read looking for one that predates
+ * the inbound. The state-bucketed index is what makes the bound safe: revision
+ * churn writes `reserved`, `cancelled` and `definitively_failed` rows, and
+ * none of them are scanned, so the oldest accepted sends are the first rows
+ * back and the question is answered rather than truncated.
  */
-const STARTED_BY_US_SCAN_MAX = 16;
+const STARTED_BY_US_SCAN_MAX = 8;
 
 /**
- * Did one of OUR sends start this thread?
+ * Did one of OUR sends start this thread, BEFORE this message arrived?
  *
  * `acknowledged` is the only state that means the provider took the message —
  * a reserved, requesting or failed attempt never reached anyone, so it cannot
  * be what a reply is replying to. A conversation the unassigned queue minted
  * from a stranger's mail has no attempts at all, which is exactly the case
  * this refuses.
+ *
+ * And the send must PREDATE the inbound. Without that, a stranger's mail that
+ * landed on an associated thread becomes answerable the moment we send
+ * anything on it afterwards — the reply would be validated by a message it
+ * could not have been a reply to. Ascending order makes the first row the
+ * oldest accepted send, so a page of them answers the question for every
+ * message that arrives later.
  */
 async function threadStartedByUs(
   ctx: AuthCtx,
   conversation: Doc<"conversations">,
+  receivedAt: number,
 ): Promise<boolean> {
   const attempts = await ctx.db
     .query("sendAttempts")
-    .withIndex("by_conversationId_and_createdAt", (q) =>
-      q.eq("conversationId", conversation._id),
+    .withIndex("by_conversationId_and_state", (q) =>
+      q.eq("conversationId", conversation._id).eq("state", "acknowledged"),
     )
     .order("asc")
     .take(STARTED_BY_US_SCAN_MAX);
   return attempts.some(
     (attempt) =>
-      attempt.state === "acknowledged" &&
-      attempt.orgId === conversation.orgId,
+      attempt.orgId === conversation.orgId && attempt.createdAt <= receivedAt,
   );
 }
 
@@ -305,7 +315,10 @@ export async function evaluateReplyHistory(
   if (connectedAt === undefined || receipt.receivedAt <= connectedAt) {
     return blocked("before_connection");
   }
-  if (conversation.prospectId === undefined || !(await threadStartedByUs(ctx, conversation))) {
+  if (
+    conversation.prospectId === undefined ||
+    !(await threadStartedByUs(ctx, conversation, receipt.receivedAt))
+  ) {
     return blocked("thread_not_ours");
   }
   if (args.fromAddress === undefined) {

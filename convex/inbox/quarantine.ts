@@ -81,11 +81,49 @@ function clipRef(value: string, max: number = PROVIDER_REF_MAX_LENGTH): string {
 }
 
 /**
+ * Prefix of every identifier this module's CALLERS mint because the envelope
+ * did not carry one. Never a provider value, and recognisable on sight — both
+ * here, where `replayOne` refuses to replay a row keyed on one, and to an
+ * operator reading the table.
+ */
+export const SYNTHETIC_REF_PREFIX = "unattributable:";
+
+/**
+ * A stand-in for a provider identifier a verified event did not carry.
+ *
+ * The row still has to be keyed on something — `recordQuarantinedEvent`
+ * records nothing without an inbox, an event id and a message ref — and the
+ * alternative to a synthetic key is the permanent silent loss this whole
+ * module exists to prevent. `seed` is a value that is stable for one event
+ * (its `svix-id`, or a digest of the body), so a provider resend of the same
+ * envelope dedupes onto the same row instead of piling up.
+ */
+export function syntheticRef(
+  kind: "inbox" | "message" | "event",
+  seed: string,
+): string {
+  return `${SYNTHETIC_REF_PREFIX}${kind}:${clipRef(seed, 120)}`;
+}
+
+/** Was this identifier minted by `syntheticRef` rather than read off an event? */
+function isSyntheticRef(value: string): boolean {
+  return value.startsWith(SYNTHETIC_REF_PREFIX);
+}
+
+/** Why a row keyed on a minted inbox is settled the moment it is written. */
+const UNREACHABLE_INBOX_NOTE =
+  "the event named no inbox, so no assignment can ever replay it: kept as evidence only";
+
+/**
  * Hold one verified event that could not be attributed to an org.
  *
  * Deduped on `providerEventId` with `.first()` rather than `.unique()`: a
  * second row for one event is an anomaly worth surviving, not worth throwing
  * on. Returns quietly on anything it cannot record, for the same reason.
+ *
+ * An event that named no inbox is written already settled — see below: no
+ * replay will ever reach it, and a row nothing can reach may not be left
+ * looking like one that is still waiting.
  */
 export async function recordQuarantinedEvent(
   ctx: MutationCtx,
@@ -129,6 +167,14 @@ export async function recordQuarantinedEvent(
     args.providerThreadRef === undefined
       ? undefined
       : clipRef(args.providerThreadRef);
+  // A row keyed on an inbox WE minted is unreachable: `replayForInbox` ranges
+  // `by_inboxRef_and_state` on a real inbox ref, and no assignment will ever
+  // name this one — so the row would sit `quarantined` for good and the
+  // discard `replayOne` would have given it never runs. It is settled here
+  // instead, at the only moment anything will ever look at it: still evidence
+  // that a verified event arrived, and honest about never being replayable.
+  const unreachable = isSyntheticRef(inboxRef);
+  const now = Date.now();
   await ctx.db.insert("quarantinedEmailEvents", {
     inboxRef,
     providerEventId,
@@ -136,17 +182,25 @@ export async function recordQuarantinedEvent(
     providerMessageRef,
     eventType,
     reason: args.reason,
-    receivedAt: Date.now(),
-    state: "quarantined",
+    receivedAt: now,
+    state: unreachable ? "discarded" : "quarantined",
+    ...(unreachable ? { releasedAt: now } : {}),
     ...(providerThreadRef !== undefined && providerThreadRef.length > 0
       ? { providerThreadRef }
       : {}),
     ...(args.providerTimestamp !== undefined
       ? { providerTimestamp: args.providerTimestamp }
       : {}),
-    ...(args.note !== undefined
-      ? { note: clipRef(args.note, QUARANTINE_NOTE_MAX_LENGTH) }
-      : {}),
+    ...(unreachable
+      ? {
+          note: clipRef(
+            `${args.note === undefined ? "" : `${args.note}; `}${UNREACHABLE_INBOX_NOTE}`,
+            QUARANTINE_NOTE_MAX_LENGTH,
+          ),
+        }
+      : args.note !== undefined
+        ? { note: clipRef(args.note, QUARANTINE_NOTE_MAX_LENGTH) }
+        : {}),
   });
 }
 
@@ -223,6 +277,24 @@ async function replayOne(
   org: Doc<"orgs">,
   row: Doc<"quarantinedEmailEvents">,
 ): Promise<"released" | "held" | "discarded"> {
+  if (
+    row.reason === "event_unparseable" ||
+    isSyntheticRef(row.providerMessageRef) ||
+    isSyntheticRef(row.providerEventId)
+  ) {
+    // Keyed on something we minted, so there is no provider message behind it
+    // and no receipt it could honestly become. The row stays as the record
+    // that a verified event arrived and what little it carried; replaying it
+    // would only park a receipt that can never match anything.
+    await settle(
+      ctx,
+      row,
+      "discarded",
+      undefined,
+      "the event carried no usable provider identifiers, so it can be inspected but never replayed",
+    );
+    return "discarded";
+  }
   if (directionForApplicationKey(row.applicationKey) === "outbound") {
     // A delivery fact needs no body: the receipt carries only the provider's
     // own timestamp, and `recordReceipt` folds it onto the matching attempt

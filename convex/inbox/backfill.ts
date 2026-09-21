@@ -7,9 +7,9 @@
  *
  * SHORT IDEMPOTENT STEPS, NEVER ONE LONG ACTION (PLAN §9.1). Each scheduled
  * step does exactly one provider request — one page of the thread listing, or
- * one thread — then writes its progress and schedules the next step in the
- * SAME transaction, so the chain cannot be lost between a write and a
- * schedule. The cursor lives on a `providerOperations` row keyed
+ * one page of one thread — then writes its progress and schedules the next
+ * step in the SAME transaction, so the chain cannot be lost between a write
+ * and a schedule. The cursor lives on a `providerOperations` row keyed
  * `inbox_backfill:<connectedAt>`, which also makes the whole run idempotent:
  * re-running connect for the same `connectedAt` resumes rather than restarts,
  * and a NEW connect gets a new key and a fresh run.
@@ -46,6 +46,7 @@ import {
   parseInboundSender,
   PROVIDER_REF_MAX_LENGTH,
 } from "../lib/validators";
+import { recordConversationNote } from "./conversationNotes";
 import { mergeConversationSource, upsertMessage, backfillEventId } from "./model";
 import { v } from "convex/values";
 
@@ -54,6 +55,18 @@ export const BACKFILL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Hard ceiling on one run, so the chain is bounded by construction. */
 export const BACKFILL_MAX_THREADS = 300;
+
+/**
+ * Pages of messages one thread may be read in.
+ *
+ * A single page holds `THREAD_MESSAGE_PAGE_LIMIT` messages, and a longer
+ * thread used to import as that one page — silently, and with the
+ * "newest message" the import stamps the conversation from picked out of a
+ * truncated set. So the pages are followed, bounded: this is history, and
+ * past this many pages the import says so on the thread rather than paging a
+ * mailing list forever.
+ */
+export const THREAD_IMPORT_MAX_PAGES = 5;
 
 /** Re-drives allowed for one step before the run is recorded as failed. */
 export const BACKFILL_MAX_ATTEMPTS = 5;
@@ -82,11 +95,19 @@ export function backfillOperationKey(connectedAt: number): string {
  * The cursor. `pending` holds the thread ids of the page currently being
  * imported — one is consumed per step — and `pageToken` is where the listing
  * resumes once that page is empty.
+ *
+ * `threadPageToken` is the same idea one level down: where the CURRENT thread
+ * resumes. While it is set the thread stays at the head of `pending`, so the
+ * next step reads its next page instead of the next thread, and the chain
+ * keeps its one-provider-request-per-step shape. `threadPages` counts the
+ * pages already read for it, against `THREAD_IMPORT_MAX_PAGES`.
  */
 type BackfillProgress = {
   phase: "listing" | "threads";
   pageToken?: string;
   pending: string[];
+  threadPageToken?: string;
+  threadPages: number;
   threadsImported: number;
   attempts: number;
 };
@@ -94,6 +115,7 @@ type BackfillProgress = {
 const EMPTY_PROGRESS: BackfillProgress = {
   phase: "listing",
   pending: [],
+  threadPages: 0,
   threadsImported: 0,
   attempts: 0,
 };
@@ -116,6 +138,10 @@ function readProgress(row: Doc<"providerOperations">): BackfillProgress {
           (entry): entry is string => typeof entry === "string",
         )
       : [],
+    ...(typeof stored.threadPageToken === "string"
+      ? { threadPageToken: stored.threadPageToken }
+      : {}),
+    threadPages: typeof stored.threadPages === "number" ? stored.threadPages : 0,
     threadsImported:
       typeof stored.threadsImported === "number" ? stored.threadsImported : 0,
     attempts: typeof stored.attempts === "number" ? stored.attempts : 0,
@@ -205,6 +231,8 @@ const vStepContext = v.union(
     afterMs: v.number(),
     pageToken: v.optional(v.string()),
     threadId: v.optional(v.string()),
+    /** Where the thread at the head of `pending` resumes, if it is part-read. */
+    threadPageToken: v.optional(v.string()),
   }),
   v.object({ run: v.literal(false), reason: v.string() }),
 );
@@ -318,6 +346,9 @@ export const nextStep = internalQuery({
         ? { pageToken: progress.pageToken }
         : {}),
       ...(threadId !== undefined ? { threadId } : {}),
+      ...(threadId !== undefined && progress.threadPageToken !== undefined
+        ? { threadPageToken: progress.threadPageToken }
+        : {}),
     };
   },
 });
@@ -354,6 +385,9 @@ export const runBackfillStep = internalAction({
     if (step.threadId !== undefined) {
       const thread = await getThread(apiKey, step.inboxRef, step.threadId, {
         limit: THREAD_MESSAGE_PAGE_LIMIT,
+        ...(step.threadPageToken !== undefined
+          ? { pageToken: step.threadPageToken }
+          : {}),
       });
       if (!thread.ok) {
         if (isCredentialFailure(thread.code)) {
@@ -389,6 +423,9 @@ export const runBackfillStep = internalAction({
             : {}),
           ...(message.from !== undefined ? { from: message.from } : {}),
         })),
+        ...(thread.value.nextPageToken !== undefined
+          ? { nextPageToken: thread.value.nextPageToken }
+          : {}),
       });
       return null;
     }
@@ -482,6 +519,10 @@ export const recordThreadPage = internalMutation({
       phase: moreToList ? "listing" : "threads",
       ...(moreToList ? { pageToken: args.nextPageToken } : {}),
       pending: [...previous.pending, ...accepted],
+      ...(previous.threadPageToken !== undefined
+        ? { threadPageToken: previous.threadPageToken }
+        : {}),
+      threadPages: previous.threadPages,
       threadsImported: previous.threadsImported,
       attempts: 0,
     };
@@ -504,6 +545,8 @@ export const recordThread = internalMutation({
     inboxRef: v.string(),
     threadId: v.string(),
     messages: v.array(vBackfillMessage),
+    /** The provider's cursor for the REST of this thread, when it sent one. */
+    nextPageToken: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -511,8 +554,31 @@ export const recordThread = internalMutation({
     if (row === null) {
       return null;
     }
-    await importThread(ctx, args);
     const previous = readProgress(row);
+    // The per-thread cursor belongs to the thread at the HEAD of `pending`,
+    // and only that thread may set it. A step re-driven after the cursor
+    // moved on — a sweep that re-drove a lost schedule, a thread skipped
+    // meanwhile — can land here for a thread that is no longer current: its
+    // messages are still worth importing (`upsertMessage` refuses a second
+    // row for one already stored), but writing its page token and page count
+    // onto the cursor would point the next step at the wrong thread's page,
+    // and counting it again would inflate `threadsImported`.
+    if (previous.pending[0] !== args.threadId) {
+      await importThread(ctx, { ...args, truncated: false });
+      await continueOrFinish(ctx, args.orgId, row, {
+        ...previous,
+        attempts: 0,
+      });
+      return null;
+    }
+    const pagesRead = previous.threadPages + 1;
+    // Another page of THIS thread is due unless the provider sent no cursor
+    // or the per-thread ceiling is reached. The thread then stays pending and
+    // is not counted as imported until its last page lands.
+    const morePages =
+      args.nextPageToken !== undefined && pagesRead < THREAD_IMPORT_MAX_PAGES;
+    const truncated = args.nextPageToken !== undefined && !morePages;
+    await importThread(ctx, { ...args, truncated });
     const progress: BackfillProgress = {
       // Carried, not recomputed: only the listing step decides whether more
       // pages remain.
@@ -520,14 +586,51 @@ export const recordThread = internalMutation({
       ...(previous.pageToken !== undefined
         ? { pageToken: previous.pageToken }
         : {}),
-      pending: previous.pending.filter((id) => id !== args.threadId),
-      threadsImported: previous.threadsImported + 1,
+      pending: morePages
+        ? previous.pending
+        : previous.pending.filter((id) => id !== args.threadId),
+      ...(morePages ? { threadPageToken: args.nextPageToken } : {}),
+      threadPages: morePages ? pagesRead : 0,
+      threadsImported: previous.threadsImported + (morePages ? 0 : 1),
       attempts: 0,
     };
     await continueOrFinish(ctx, args.orgId, row, progress);
     return null;
   },
 });
+
+/**
+ * What a thread the import stopped short of the end of is told.
+ *
+ * Deliberately silent about WHICH messages are missing: `getThread` follows
+ * the provider's own `page_token` and asks for no ordering, so neither "the
+ * oldest" nor "the newest" is a fact this code knows. What it does know is
+ * that the thread ran past the page ceiling, and that the rest of it is where
+ * it always was.
+ */
+const TRUNCATION_NOTE = `This thread was truncated at the import's ceiling of ${THREAD_IMPORT_MAX_PAGES} pages of history. Part of the conversation is in your mailbox but not here.`;
+
+/** Notes read when checking whether the truncation note is already written. */
+const TRUNCATION_NOTE_SCAN = 50;
+
+/**
+ * Has this conversation already been told? The note is written when a thread's
+ * last permitted page lands, and a re-driven step re-reads that page — so
+ * without this a re-run would say the same thing twice on one thread.
+ */
+async function hasTruncationNote(
+  ctx: MutationCtx,
+  conversation: Doc<"conversations">,
+): Promise<boolean> {
+  const notes = await ctx.db
+    .query("conversationNotes")
+    .withIndex("by_conversationId_and_createdAt", (q) =>
+      q.eq("conversationId", conversation._id),
+    )
+    .order("desc")
+    .take(TRUNCATION_NOTE_SCAN);
+  return notes.some((note) => note.body === TRUNCATION_NOTE);
+}
 
 /**
  * One imported thread: its conversation and its messages.
@@ -546,6 +649,8 @@ async function importThread(
     inboxRef: string;
     threadId: string;
     messages: Array<{ messageId: string; timestamp?: number; from?: string }>;
+    /** The thread has more messages than the import was willing to read. */
+    truncated?: boolean;
   },
 ): Promise<void> {
   const newest = args.messages.reduce<
@@ -585,6 +690,17 @@ async function importThread(
       await ctx.db.patch("conversations", conversation._id, {
         lastMessageAt: at,
         updatedAt: Date.now(),
+      });
+    }
+    if (args.truncated === true && !(await hasTruncationNote(ctx, conversation))) {
+      // Said out loud on the thread itself, rather than left for a reader to
+      // infer from a short history: this conversation is longer than what was
+      // imported, and the rest of it is only in the mailbox.
+      await recordConversationNote(ctx, {
+        conversation,
+        kind: "system",
+        actor: "system",
+        body: TRUNCATION_NOTE,
       });
     }
   }
@@ -630,8 +746,19 @@ export const recordStepFailure = internalMutation({
     const previous = readProgress(row);
     if (args.skipThread && previous.pending.length > 0) {
       const progress: BackfillProgress = {
-        ...previous,
+        phase: previous.phase,
+        ...(previous.pageToken !== undefined
+          ? { pageToken: previous.pageToken }
+          : {}),
         pending: previous.pending.slice(1),
+        // The skipped thread's cursor dies with it. Carried over, it would be
+        // handed to the NEXT thread: its next page would be read from another
+        // thread's token — a wrong page, or a token the provider rejects,
+        // which with `attempts: 0` would skip every remaining thread in turn
+        // — and out of a page budget already spent. Both fields are dropped
+        // by omission rather than set, so the next thread starts clean.
+        threadPages: 0,
+        threadsImported: previous.threadsImported,
         attempts: 0,
       };
       await continueOrFinish(ctx, args.orgId, row, progress);

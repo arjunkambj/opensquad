@@ -172,6 +172,37 @@ export const applyRotation = internalMutation({
   },
 });
 
+/**
+ * Forget a webhook registration the provider no longer has.
+ *
+ * `connectActions.registerOrgWebhook` deletes a mismatched registration before
+ * creating the replacement, and a failure between the two leaves the org
+ * holding the id of something that is gone: Manage inbox would keep reporting
+ * a registered webhook while no mail arrives at all. Only the id is cleared —
+ * the webhook SECRET stays, because it is the one thing that could still
+ * verify a delivery in flight, and the next successful registration replaces
+ * it. The inbox assignment stays too: this is a registration that failed, not
+ * a disconnect.
+ *
+ * `webhookId` is matched against the stored one so a late failure from a
+ * losing attempt cannot wipe the registration a concurrent connect just made.
+ */
+export const clearWebhookRegistration = internalMutation({
+  args: { orgId: v.id("orgs"), webhookId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get("orgs", args.orgId);
+    if (org === null || org.agentmailWebhookId !== args.webhookId) {
+      return null;
+    }
+    await ctx.db.patch("orgs", args.orgId, {
+      agentmailWebhookId: undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const releaseInbox = internalMutation({
   args: { orgId: v.id("orgs") },
   returns: v.null(),

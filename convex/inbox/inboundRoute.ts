@@ -36,10 +36,12 @@ import { decryptSecret } from "../lib/secrets";
 import {
   inboundApplicationKey,
   outboundApplicationKey,
+  sha256Hex,
+  vQuarantineReason,
   WEBHOOK_TOKEN_LENGTH,
 } from "../lib/validators";
 import { envelopeOf, readOrgSecret } from "../orgs/secrets";
-import { recordQuarantinedEvent } from "./quarantine";
+import { recordQuarantinedEvent, syntheticRef } from "./quarantine";
 import {
   verifyAgentMailWebhook,
   WebhookVerificationError,
@@ -127,6 +129,12 @@ export const resolveWebhookTarget = internalQuery({
  * Hold a verified event whose `inbox_id` is not this route's inbox. It is
  * recorded rather than dropped for the same reason every other unattributable
  * event is: the provider will not resend it once we have answered 2xx.
+ *
+ * `reason` separates the two ways that happens. `inbox_unassigned` is a real
+ * foreign inbox, replayable the moment somebody claims it; `event_unparseable`
+ * is an envelope that named no inbox, no message or no event id at all, and
+ * the caller has keyed it on identifiers it minted so there is at least a row
+ * to read.
  */
 export const quarantineForeignEvent = internalMutation({
   args: {
@@ -135,6 +143,7 @@ export const quarantineForeignEvent = internalMutation({
     providerMessageRef: v.string(),
     providerThreadRef: v.optional(v.string()),
     eventType: v.string(),
+    reason: vQuarantineReason,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -151,11 +160,11 @@ export const quarantineForeignEvent = internalMutation({
         ? { providerThreadRef: args.providerThreadRef }
         : {}),
       eventType: args.eventType,
-      // The closest truthful reason in the closed vocabulary: this route
-      // cannot attribute the inbox it was handed. `note` records that the
-      // cause was a token/inbox mismatch rather than a missing assignment.
-      reason: "inbox_unassigned",
-      note: "event arrived on an organization webhook whose inbox it does not name",
+      reason: args.reason,
+      note:
+        args.reason === "event_unparseable"
+          ? "verified event on an organization webhook carried no usable inbox, message or event id"
+          : "event arrived on an organization webhook whose inbox it does not name",
     });
     return null;
   },
@@ -225,20 +234,31 @@ export const inboundWebhook = httpAction(async (ctx, request) => {
       eventType,
       eventInbox: ids.inboxId,
     });
-    if (ids.inboxId !== undefined && ids.messageId !== undefined && eventId !== "") {
-      await ctx.runMutation(
-        internal.inbox.inboundRoute.quarantineForeignEvent,
-        {
-          inboxRef: ids.inboxId,
-          providerEventId: eventId,
-          providerMessageRef: ids.messageId,
-          ...(ids.threadId !== undefined
-            ? { providerThreadRef: ids.threadId }
-            : {}),
-          eventType: eventType.length > 0 ? eventType : "unknown",
-        },
-      );
-    }
+    // EVERY verified-but-unattributable event is quarantined (PLAN §9.4),
+    // including the ones whose envelope named no inbox, no message or no
+    // event id. Those used to be acknowledged and forgotten, which is a
+    // permanent loss: the component has already marked `event_id` ingested,
+    // so the provider never resends. What the envelope did not carry is
+    // replaced by a key minted from the delivery itself — the `svix-id`, or a
+    // digest of the body — so a resend dedupes onto the same row instead of
+    // piling up, and `quarantine.replayOne` recognises the minted keys and
+    // never tries to replay a message that does not exist.
+    const unparseable =
+      ids.inboxId === undefined || ids.messageId === undefined || eventId === "";
+    const seed =
+      headers["svix-id"].length > 0 ? headers["svix-id"] : await sha256Hex(raw);
+    await ctx.runMutation(internal.inbox.inboundRoute.quarantineForeignEvent, {
+      inboxRef: ids.inboxId ?? syntheticRef("inbox", seed),
+      providerEventId: eventId !== "" ? eventId : syntheticRef("event", seed),
+      providerMessageRef: ids.messageId ?? syntheticRef("message", seed),
+      ...(ids.threadId !== undefined
+        ? { providerThreadRef: ids.threadId }
+        : {}),
+      eventType: eventType.length > 0 ? eventType : "unknown",
+      reason: unparseable
+        ? ("event_unparseable" as const)
+        : ("inbox_unassigned" as const),
+    });
     return held();
   }
 

@@ -31,6 +31,7 @@ import {
   LEAD_EVENT_NOTE_MAX_LENGTH,
   MAX_LIST_LIMIT,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
+  sameInboxRef,
   vLeadApproval,
   vLeadStage,
 } from "../lib/validators";
@@ -314,7 +315,8 @@ export const markSendAccepted = internalMutation({
  * `conversations.associateProspect` when a held thread is bound. Keyed on the
  * provider message ref so a replayed receipt dedupes rather than double-
  * counting. Non-throwing like `markSendAccepted`: a reply fact must never
- * roll back the receipt that carries it.
+ * roll back the receipt that carries it. A message the org's own inbox sent
+ * is refused here rather than at each caller — see the echo check below.
  *
  * Clearing `nextActionAt` is the accounting-free half of PLAN §9.1's "a reply
  * arrives → follow-ups for that conversation cancelled in the same mutation
@@ -339,6 +341,20 @@ export const markReplied = internalMutation({
     }
     const prospect = await ctx.db.get("prospects", conversation.prospectId);
     if (prospect === null || prospect.orgId !== conversation.orgId) {
+      return { applied: false };
+    }
+    // OUR OWN ECHO IS NOT A REPLY. A verified inbound whose sender is the
+    // org's own inbox — a copy of our send landing back in the mailbox — would
+    // otherwise stamp `lastReplyAt`, clear `nextActionAt` and advance the lead
+    // to `replied`, which takes it out of outreach selection for good on the
+    // strength of a message we wrote. Inbox refs ARE addresses, so the
+    // comparison is case-insensitive; it is only made for the message this
+    // call is about, because `lastInboundFrom` describes that one alone.
+    const org = await ctx.db.get("orgs", conversation.orgId);
+    if (
+      conversation.lastInboundMessageRef === args.messageRef &&
+      sameInboxRef(conversation.lastInboundFrom, org?.inboxRef)
+    ) {
       return { applied: false };
     }
     const messageRef = boundedString(args.messageRef, "messageRef", {
