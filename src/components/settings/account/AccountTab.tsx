@@ -15,6 +15,7 @@ import { Logout03Icon, UserCircleIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp } from "@hexclave/react"
 import { Link } from "@tanstack/react-router"
+import { OrgResetCard } from "@/components/settings/account/OrgResetCard"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
 import type { ProfileUser } from "@/components/layout/SidebarUser"
 import { DetailRow } from "@/components/kit/DetailRow"
@@ -85,6 +86,8 @@ export function AccountTab({ user }: { user: ProfileUser }) {
           </Button>
         </CardContent>
       </Card>
+
+      <OrgResetCard />
     </div>
   )
 }

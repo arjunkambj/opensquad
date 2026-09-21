@@ -1174,7 +1174,8 @@ export default defineSchema({
     // One row per provider event, enforced transactionally.
     .index("by_providerEventId", ["providerEventId"])
     // The replay range: everything still held for one inbox, oldest first.
-    .index("by_inboxRef_and_state", ["inboxRef", "state"]),
+    .index("by_inboxRef_and_state", ["inboxRef", "state"])
+    .index("by_releasedTo", ["releasedTo"]),
 
   /* Usage ledger */
 

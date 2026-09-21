@@ -335,6 +335,8 @@ export const RATE_LIMITS = {
   revealEmail: { kind: "token bucket", rate: 10, period: 60_000, capacity: 10 },
   runAgentNow: { kind: "token bucket", rate: 3, period: 60_000, capacity: 3 },
   connectInbox: { kind: "token bucket", rate: 5, period: 60_000, capacity: 5 },
+  // Dev-only org wipe. Tight on purpose: it deletes the tenant.
+  resetOrg: { kind: "token bucket", rate: 1, period: 60_000, capacity: 1 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;
