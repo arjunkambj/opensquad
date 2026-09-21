@@ -2,6 +2,13 @@ import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { isTypingTarget } from "@/lib/keyboard"
 
+const rowSelector = (key: string) => `[data-queue-item="${CSS.escape(key)}"]`
+
+const focusRow = (key: string) => {
+  const row = document.querySelector<HTMLElement>(rowSelector(key))
+  row?.focus()
+}
+
 /**
  * Queue navigation for the two screens whose whole job is working a list:
  * `/inbox` and `/leads`.
@@ -33,13 +40,18 @@ export function useQueueNavigation<T>({
   const lastOpenedKey = useRef<string | null>(null)
   const wasDetailOpen = useRef(detailOpen)
 
-  const rowSelector = (key: string) =>
-    `[data-queue-item="${CSS.escape(key)}"]`
-
-  const focusRow = (key: string) => {
-    const row = document.querySelector<HTMLElement>(rowSelector(key))
-    row?.focus()
-  }
+  // What the key handler needs, held where reading it cannot re-subscribe the
+  // listener: `items` is a new array on every Convex update and `keyOf` a new
+  // closure on every render, so an effect keyed on their identities would
+  // remove and re-add a window listener continuously while a list is live.
+  const itemsRef = useRef(items)
+  const keyOfRef = useRef(keyOf)
+  const activeKeyRef = useRef(activeKey)
+  useEffect(() => {
+    itemsRef.current = items
+    keyOfRef.current = keyOf
+    activeKeyRef.current = activeKey
+  })
 
   // Record which row's detail is open, and give its focus back when the
   // detail closes. The row refocus is keyed on the transition, not on every
@@ -76,31 +88,34 @@ export function useQueueNavigation<T>({
       if (key !== "j" && key !== "k") {
         return
       }
-      if (items.length === 0) {
+      const rows = itemsRef.current
+      const keyFor = keyOfRef.current
+      const current = activeKeyRef.current
+      if (rows.length === 0) {
         return
       }
       event.preventDefault()
       const currentIndex =
-        activeKey === null
+        current === null
           ? -1
-          : items.findIndex((item) => keyOf(item) === activeKey)
+          : rows.findIndex((item) => keyFor(item) === current)
       const nextIndex =
         key === "j"
-          ? Math.min(currentIndex + 1, items.length - 1)
+          ? Math.min(currentIndex + 1, rows.length - 1)
           : currentIndex === -1
             ? 0
             : Math.max(currentIndex - 1, 0)
-      const next = items[nextIndex]
+      const next = rows[nextIndex]
       if (next === undefined) {
         return
       }
-      const nextKey = keyOf(next)
+      const nextKey = keyFor(next)
       setActiveKey(nextKey)
       focusRow(nextKey)
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [items, keyOf, activeKey])
+  }, [])
 
   return {
     /** The row key j/k last moved to — a row reads this for its own styling. */

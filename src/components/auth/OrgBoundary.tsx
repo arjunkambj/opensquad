@@ -16,6 +16,7 @@ import type { ReactNode } from "react"
 import type { CurrentUser } from "@hexclave/react"
 import { refreshConvexIdentity } from "@/components/ConvexClientProvider"
 import { EmptyState, ErrorState } from "@/components/states/states"
+import { useMountedRef } from "@/hooks/use-mounted"
 
 export function OrgBoundary({
   user,
@@ -32,6 +33,7 @@ export function OrgBoundary({
   // One selection request per mount: `setSelectedTeam` is a write, and the
   // re-render its own user refresh causes would otherwise fire a second.
   const requested = useRef(false)
+  const mounted = useMountedRef()
 
   useEffect(() => {
     const first = teams[0]
@@ -44,8 +46,15 @@ export function OrgBoundary({
       // The token is what carries the organization to Convex, so the switch
       // is not real until a new one is minted and installed.
       .then(refreshConvexIdentity)
-      .catch(() => setFailed(true))
-  }, [selected, teams, user])
+      // The failure belongs to this mount: the selection outlives a boundary
+      // the user navigated away from, and a refusal that lands afterwards has
+      // no screen to explain itself on.
+      .catch(() => {
+        if (mounted.current) {
+          setFailed(true)
+        }
+      })
+  }, [mounted, selected, teams, user])
 
   if (selected !== null) {
     return <>{children}</>

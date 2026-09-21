@@ -6,12 +6,17 @@
  * returned nothing — in which case this names them, with the matches each one
  * claimed, and links to where they can be changed. "No leads yet" on its own
  * would leave the user with nothing to do.
+ *
+ * The reason lives in two subscriptions that resolve after the list does, so
+ * this waits for them rather than reading a missing run as "never started":
+ * mid-run, that sentence would send a user back to setup they have finished.
  */
 import { Link } from "@tanstack/react-router"
 import { Target02Icon, UserGroupIcon } from "@hugeicons/core-free-icons"
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import { EmptyState } from "@/components/kit/EmptyState"
+import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import type { RunState } from "./RunStateStrip"
 
@@ -23,8 +28,10 @@ export function NoLeadsState({
   filtered,
   onClearFilters,
 }: {
-  run: RunState | null
-  signals: Signals
+  /** The run this org last had, `null` for none — `undefined` while reading. */
+  run: RunState | null | undefined
+  /** `undefined` while reading. */
+  signals: Signals | undefined
   /** True when a filter or search is narrowing the table. */
   filtered: boolean
   onClearFilters: () => void
@@ -40,6 +47,16 @@ export function NoLeadsState({
             Clear the filter
           </Button>
         }
+      />
+    )
+  }
+
+  // A filter can be answered without either of them; nothing below can.
+  if (run === undefined || signals === undefined) {
+    return (
+      <LoadingState
+        title="Loading contacts"
+        description="Reading what your agent has done so far."
       />
     )
   }

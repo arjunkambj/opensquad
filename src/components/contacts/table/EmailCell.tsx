@@ -1,5 +1,5 @@
 /**
- * The email column (ref 23's Enrich Email button, in our words).
+ * The email column (ref 23's "Get email" button, in our words).
  *
  * Four states, never three: `locked` is "nobody has paid to find this yet",
  * `not_found` is "we paid and there is none on file" — an address we do not

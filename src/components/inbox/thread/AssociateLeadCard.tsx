@@ -30,6 +30,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 import { useRequestIntents } from "@/lib/use-request-intents"
+import { useMountedRef } from "@/hooks/use-mounted"
 
 export function AssociateLeadCard({
   orgId,
@@ -47,6 +48,12 @@ export function AssociateLeadCard({
   const [prospectId, setProspectId] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The link is a write the pane does not own: leaving the thread while it is
+  // in flight leaves the mutation to finish on its own, and the answer it
+  // brings back belongs to a card that is no longer on screen. The toast is
+  // not guarded — it is global, and the success is worth saying wherever the
+  // user went.
+  const mounted = useMountedRef()
 
   const submit = () => {
     const lead = leads?.items.find((item) => item._id === prospectId)
@@ -70,14 +77,20 @@ export function AssociateLeadCard({
           type: "success",
         }),
       )
-      .catch((cause) =>
-        setError(
-          isConflictError(cause)
-            ? `${errorMessage(cause, "This thread changed while you had it open.")} The pane now shows the current version.`
-            : errorMessage(cause, "Could not link that lead."),
-        ),
-      )
-      .finally(() => setPending(false))
+      .catch((cause) => {
+        if (mounted.current) {
+          setError(
+            isConflictError(cause)
+              ? `${errorMessage(cause, "This thread changed while you had it open.")} The pane now shows the current version.`
+              : errorMessage(cause, "Could not link that lead."),
+          )
+        }
+      })
+      .finally(() => {
+        if (mounted.current) {
+          setPending(false)
+        }
+      })
   }
 
   return (

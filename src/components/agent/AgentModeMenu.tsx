@@ -26,6 +26,7 @@ import {
 import { toast } from "@/components/ui/toast"
 import { AutopilotConsentDialog } from "./AutopilotConsentDialog"
 import type { AgentDoc } from "./agent-model"
+import { useMountedRef } from "@/hooks/use-mounted"
 import {
   agentErrorCopy,
   MODE_DESCRIPTION,
@@ -45,6 +46,11 @@ export function AgentModeMenu({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [consentError, setConsentError] = useState<string | null>(null)
+  // The mode change is the agent's, not this menu's: navigating away mid-write
+  // leaves the mutation to land on its own, and its answer has no menu left to
+  // land in. The toast is global and stays unguarded — the switch is worth
+  // saying wherever the user went.
+  const mounted = useMountedRef()
 
   const apply = async (mode: AgentMode, withConsent: boolean) => {
     setSaving(true)
@@ -68,18 +74,20 @@ export function AgentModeMenu({
       })
       if (!result.ok) {
         const copy = MODE_REFUSAL_COPY[result.reason]
+        if (!mounted.current) return
         if (withConsent) setConsentError(copy)
         else setError(copy)
         return
       }
-      setConsentOpen(false)
+      if (mounted.current) setConsentOpen(false)
       toast.add({ title: `Mode set to ${MODE_LABEL[mode]}`, type: "success" })
     } catch (cause) {
       const copy = agentErrorCopy(cause, "Could not change the mode.")
+      if (!mounted.current) return
       if (withConsent) setConsentError(copy)
       else setError(copy)
     } finally {
-      setSaving(false)
+      if (mounted.current) setSaving(false)
     }
   }
 

@@ -7,10 +7,13 @@
  * exactly one agent, created with its row and filled in by setup, so the page
  * opens straight on it (PLAN §2).
  *
- * This container owns every Convex read on the screen; each card below owns
- * its own writes. Three honest states come first — still reading, no agent at
- * all, and an agent setup has not finished — because none of the controls
- * below means anything until there is a live agent to point them at.
+ * This container owns the reads the screen shares — the agent, its run state,
+ * its signals and the funnel — and each card below owns its own writes. The
+ * one exception is the needs-attention list: it is a paged read nothing else
+ * on the page uses, so it stays in the card that shows it. Three honest
+ * states come first — still reading, no agent at all, and an agent setup has
+ * not finished — because none of the controls below means anything until
+ * there is a live agent to point them at.
  */
 import { Link } from "@tanstack/react-router"
 import { useQuery } from "convex/react"

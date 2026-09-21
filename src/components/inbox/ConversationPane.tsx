@@ -12,7 +12,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { ConversationActions } from "@/components/inbox/ConversationActions"
@@ -50,11 +50,29 @@ export function ConversationPane({
   // Opening a thread clears its unread counter. A read is not a change any
   // draft was written against, so this deliberately does not move
   // `contextVersion`, and a failure here must not break the pane.
+  //
+  // The effect still watches the count, because a reply that arrives while the
+  // thread is open must clear too — but it remembers what it already cleared
+  // for this thread, so the re-render its own write causes does not call the
+  // mutation a second time.
   const unread = detail?.conversation.unreadCount ?? 0
+  const cleared = useRef<{ conversationId: string; count: number } | null>(null)
   useEffect(() => {
-    if (orgId !== undefined && unread > 0) {
-      void markRead({ orgId, conversationId }).catch(() => undefined)
+    if (orgId === undefined) {
+      return
     }
+    if (unread === 0) {
+      // Cleared — including by our own write. Forgetting what we cleared is
+      // what lets the NEXT reply on this open thread clear too.
+      cleared.current = null
+      return
+    }
+    const last = cleared.current
+    if (last !== null && last.conversationId === conversationId && last.count >= unread) {
+      return
+    }
+    cleared.current = { conversationId, count: unread }
+    void markRead({ orgId, conversationId }).catch(() => undefined)
   }, [orgId, conversationId, unread, markRead])
 
   if (orgId === undefined || detail === undefined) {

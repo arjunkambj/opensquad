@@ -39,7 +39,14 @@ export function LatestHotLeads({
       description={`Scored 3 of 3 · ${hint}`}
       action={
         leads !== undefined && leads.items.length > 0 ? (
-          <Button render={<Link to="/contacts" />} size="sm" variant="ghost">
+          // "View more" has to open the same list this panel shows, so it
+          // carries the score filter the panel is: Contacts filters on one
+          // flame score, and a bare `/contacts` would open every lead.
+          <Button
+            render={<Link to="/contacts" search={{ score: 3 }} />}
+            size="sm"
+            variant="ghost"
+          >
             View more
             <HugeiconsIcon icon={ArrowRight01Icon} data-icon="inline-end" />
           </Button>
