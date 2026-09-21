@@ -10,12 +10,22 @@
  *   3. the platform-wide budgets and the kill switch, which bound OUR bill
  *      whatever any one org does.
  *
+ * SERVER-SIDE ONLY: this file names providers and deployment settings, so no
+ * file under `src/` may import it (PLAN §4 "White-label rule"). The part of
+ * layer 1 a screen shows lives in `prices.ts`, which the browser imports and
+ * this file re-exports, so backend code keeps importing `lib/limits`.
+ *
  * There is one plan, `trial`. When a real plan map arrives it replaces the
  * lookups below, not their call sites.
  */
 import type { RateLimitConfig } from "@convex-dev/rate-limiter";
 import { env } from "../_generated/server";
+import { ACTION_PRICES as POSTED_PRICES } from "./prices";
+import type { PaidAction, PostedPrice } from "./prices";
 import type { ProviderKind } from "./validators";
+
+export { PAID_ACTIONS, TRIAL_DAILY_SEND_LIMIT_MAX } from "./prices";
+export type { PaidAction } from "./prices";
 
 /* ------------------------------------------------------------------ */
 /* The deployment settings this file reads                             */
@@ -46,58 +56,29 @@ export type TunableEnvName =
 /* ------------------------------------------------------------------ */
 
 /**
- * Everything that costs us money, named by what the USER did — not by which
- * provider answered. The union is the key of the price table below, so a new
- * paid step cannot be added without pricing it.
+ * A paid action's posted price (`prices.ts`) plus the attribution only the
+ * server may know.
  */
-export const PAID_ACTIONS = [
-  "analyze_website",
-  "generate_icp",
-  "recommend_signals",
-  "generate_keywords",
-  "find_leads",
-  "research_lead",
-  "get_email",
-  "write_email",
-  "handle_reply",
-  // The AI half of a two-provider action. Zero credits by design: the user
-  // pays once, on the step that fetched the page (`analyze_website`,
-  // `research_lead`), and a failed AI half is retried from the stored markdown
-  // without buying the page again (PLAN §6 "billed … even if a later step
-  // failed"). Still a paid call, so it is metered and capped in `ai_calls`.
-  "profile_company",
-  "score_lead",
-] as const;
-
-export type PaidAction = (typeof PAID_ACTIONS)[number];
-
-export type ActionPrice = {
-  /** Credits the action costs once it is no longer free. */
-  credits: number;
-  /**
-   * The first successful run of this action in an org is free (PLAN §6:
-   * "First-run onboarding … 0 (once each)"). Every later run costs `credits`,
-   * which is what the reference's "Re-run" and "Generate more" buttons spend.
-   */
-  firstRunFree: boolean;
+export type ActionPrice = PostedPrice & {
   /** The provider the operation record is attributed to. Server-side only. */
   provider: ProviderKind;
 };
 
-/** PLAN §6 layer-1 table. Browsing, counting, approving and sending are free
- *  and therefore absent — a free step never calls the credit wrapper. */
+/** PLAN §6 layer-1 table: the posted prices, each attributed to the provider
+ *  that answers it. The credits come from `prices.ts` rather than being
+ *  restated, so what a screen quotes is what a call charges. */
 export const ACTION_PRICES: Record<PaidAction, ActionPrice> = {
-  analyze_website: { credits: 3, firstRunFree: true, provider: "firecrawl" },
-  generate_icp: { credits: 3, firstRunFree: true, provider: "ai_gateway" },
-  recommend_signals: { credits: 3, firstRunFree: true, provider: "ai_gateway" },
-  generate_keywords: { credits: 3, firstRunFree: false, provider: "ai_gateway" },
-  find_leads: { credits: 2, firstRunFree: false, provider: "enrich" },
-  research_lead: { credits: 3, firstRunFree: false, provider: "firecrawl" },
-  get_email: { credits: 15, firstRunFree: false, provider: "enrich" },
-  write_email: { credits: 1, firstRunFree: false, provider: "ai_gateway" },
-  handle_reply: { credits: 1, firstRunFree: false, provider: "ai_gateway" },
-  profile_company: { credits: 0, firstRunFree: false, provider: "ai_gateway" },
-  score_lead: { credits: 0, firstRunFree: false, provider: "ai_gateway" },
+  analyze_website: { ...POSTED_PRICES.analyze_website, provider: "firecrawl" },
+  generate_icp: { ...POSTED_PRICES.generate_icp, provider: "ai_gateway" },
+  recommend_signals: { ...POSTED_PRICES.recommend_signals, provider: "ai_gateway" },
+  generate_keywords: { ...POSTED_PRICES.generate_keywords, provider: "ai_gateway" },
+  find_leads: { ...POSTED_PRICES.find_leads, provider: "enrich" },
+  research_lead: { ...POSTED_PRICES.research_lead, provider: "firecrawl" },
+  get_email: { ...POSTED_PRICES.get_email, provider: "enrich" },
+  write_email: { ...POSTED_PRICES.write_email, provider: "ai_gateway" },
+  handle_reply: { ...POSTED_PRICES.handle_reply, provider: "ai_gateway" },
+  profile_company: { ...POSTED_PRICES.profile_company, provider: "ai_gateway" },
+  score_lead: { ...POSTED_PRICES.score_lead, provider: "ai_gateway" },
 };
 
 /** The lifetime grant, made with the org and never refilled (PLAN §6). */
@@ -154,9 +135,6 @@ export const TRIAL_METRIC_CAPS: Record<
   ai_calls: { lifetime: 400, daily: 40 },
   scrapes: { lifetime: 80, daily: 15 },
 };
-
-/** PLAN §6: the trial's daily send ceiling, whatever the owner types. */
-export const TRIAL_DAILY_SEND_LIMIT_MAX = 30;
 
 /* ------------------------------------------------------------------ */
 /* Layer 3 · platform-wide budgets, kill switch and signup capacity    */

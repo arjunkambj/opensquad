@@ -6,7 +6,7 @@
  */
 import { ICP_GENERATION_STALE_AFTER_MS } from "../../../../../convex/agents/icpModel"
 import type { Doc } from "../../../../../convex/_generated/dataModel"
-import { ACTION_PRICES } from "../../../../../convex/lib/limits"
+import { ACTION_PRICES } from "../../../../../convex/lib/prices"
 import type {
   AgentIcp,
   OperationErrorCode,

@@ -12,7 +12,7 @@
 import { useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
-import { ACTION_PRICES } from "../../../../../convex/lib/limits"
+import { ACTION_PRICES } from "../../../../../convex/lib/prices"
 import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
 import { AnalysisFailurePanel } from "@/components/kit/AnalysisFailurePanel"
 import { CompanyProfileForm } from "@/components/kit/CompanyProfileForm"

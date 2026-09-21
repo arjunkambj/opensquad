@@ -5,7 +5,7 @@
  * The words a failure is shown in live next door, in `signals-copy.ts`.
  */
 import { STRATEGY_GENERATION_STALE_AFTER_MS } from "../../../../../convex/agents/strategiesModel"
-import { ACTION_PRICES } from "../../../../../convex/lib/limits"
+import { ACTION_PRICES } from "../../../../../convex/lib/prices"
 import type {
   GenerationStatus,
   OperationErrorCode,

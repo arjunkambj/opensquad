@@ -29,7 +29,7 @@
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
-import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/limits"
+import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/prices"
 import { SendWindowFields } from "@/components/settings/sending/SendWindowFields"
 import type { SendWindowValues } from "@/components/settings/sending/SendWindowFields"
 import { FormError } from "@/components/states/states"

@@ -12,7 +12,8 @@ convex/
   lib/            cross-domain helpers only
     auth.ts       identity, the active-organization guard, the verified-email gate
     errors.ts     the one typed error-code union the client maps to copy
-    limits.ts     every price, cap, budget and recovery window
+    limits.ts     every price, cap, budget and recovery window; server-only
+    prices.ts     the posted prices and trial limits the browser may import
     rateLimits.ts per-user token buckets on credit-spending entry points
     validators/   shared.ts + one file per domain, re-exported from index.ts
   integrations/   the ONLY place that talks HTTP to a provider

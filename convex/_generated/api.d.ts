@@ -137,6 +137,7 @@ import type * as leads_rows from "../leads/rows.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_limits from "../lib/limits.js";
+import type * as lib_prices from "../lib/prices.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_secrets from "../lib/secrets.js";
 import type * as lib_urlSafety from "../lib/urlSafety.js";
@@ -323,6 +324,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/errors": typeof lib_errors;
   "lib/limits": typeof lib_limits;
+  "lib/prices": typeof lib_prices;
   "lib/rateLimits": typeof lib_rateLimits;
   "lib/secrets": typeof lib_secrets;
   "lib/urlSafety": typeof lib_urlSafety;

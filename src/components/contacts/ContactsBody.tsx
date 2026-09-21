@@ -10,7 +10,7 @@
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { ACTION_PRICES } from "../../../convex/lib/limits"
+import { ACTION_PRICES } from "../../../convex/lib/prices"
 import { InboxConnectionBanner } from "@/components/inbox-connection/InboxConnectionBanner"
 import { LoadingState } from "@/components/states/states"
 import { ActionNotice } from "./ActionNotice"

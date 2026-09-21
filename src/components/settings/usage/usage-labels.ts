@@ -9,7 +9,7 @@
  * The record is total over the union, so pricing a new paid action forces a
  * label for it rather than letting it fall through to "Other".
  */
-import type { PaidAction } from "../../../../convex/lib/limits"
+import type { PaidAction } from "../../../../convex/lib/prices"
 
 export type UsageAction = PaidAction | "other"
 

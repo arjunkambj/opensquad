@@ -8,7 +8,7 @@
  * the server clamps anything higher, and a control that accepts 200 and
  * silently stores 30 would be lying about what the agent will do.
  */
-import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/limits"
+import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/prices"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"

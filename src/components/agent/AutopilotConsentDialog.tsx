@@ -12,7 +12,7 @@
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import type { ReactNode } from "react"
-import { ACTION_PRICES } from "../../../convex/lib/limits"
+import { ACTION_PRICES } from "../../../convex/lib/prices"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
