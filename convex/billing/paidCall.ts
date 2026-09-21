@@ -10,7 +10,7 @@ import type { Id } from "../_generated/dataModel";
 import { ACTION_PRICES, PAID_ACTIONS } from "../lib/limits";
 import type { PaidAction, ProviderUnits, TrialMeteredMetric } from "../lib/limits";
 import { boundedString, invalid } from "../lib/validators";
-import type { ProviderKind } from "../lib/validators";
+import type { OperationErrorCode, ProviderKind } from "../lib/validators";
 import { v } from "convex/values";
 
 export const vPaidAction = v.union(
@@ -81,6 +81,44 @@ export function toRefundReason(value: unknown): RefundReason {
   return (REFUND_REASONS as readonly string[]).includes(value as string)
     ? (value as RefundReason)
     : "unknown";
+}
+
+/**
+ * The code a paid run records when the request may have left us and nobody
+ * knows what it did — the hold parks `uncertain` and a sweep owns it. From
+ * the user's side that is always the same fact: this run did not finish.
+ */
+export const CODE_FOR_UNCERTAIN: OperationErrorCode = "provider_unavailable";
+
+/**
+ * Why a paid call refunded → the code the failed run stores. Money and
+ * capacity keep their own code because the screen offers a different next
+ * step for each; `badResult` is the domain's word for "the work came back
+ * unusable" (`validation` / `provider_charged_nothing`).
+ */
+export function codeForRefund(
+  reason: RefundReason,
+  badResult: OperationErrorCode,
+): OperationErrorCode {
+  switch (reason) {
+    case "kill_switch":
+      return "platform_paused";
+    case "no_credit_grant":
+    case "insufficient_credits":
+    case "trial_limit_reached":
+      return "insufficient_credits";
+    case "rate_limited":
+    case "throttled":
+      return "rate_limited";
+    case "platform_capacity":
+    case "unauthorized":
+      return "provider_unavailable";
+    case "validation":
+    case "provider_charged_nothing":
+      return badResult;
+    case "unknown":
+      return "unknown";
+  }
 }
 
 export const vPaidOutcome = v.union(

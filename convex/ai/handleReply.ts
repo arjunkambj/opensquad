@@ -68,8 +68,6 @@ export const vHandleReplyResult = v.object({
   suggestsBooked: v.optional(v.boolean()),
 });
 
-export type HandleReplyResult = Infer<typeof vHandleReplyResult>;
-
 /** The product-level word for one model class (`REPLY_DISPOSITIONS`). */
 export function replyDisposition(
   answer: HandleReplyClass,

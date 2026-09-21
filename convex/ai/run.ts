@@ -49,16 +49,12 @@ import { withCredits } from "../billing/withCredits";
 import type { PaidAction } from "../lib/limits";
 import { domainError } from "../lib/validators";
 import { classifyGatewayError } from "./failures";
-import { gatewayModel, gatewayTokenMintable, MODELS, modelForTier } from "./models";
+import { gatewayTokenMintable, MODELS, modelForTier } from "./models";
 import type { ModelTier } from "./models";
 import { parseStructured, strictJsonSchema } from "./structured";
 
 /* ------------------------------------------------------------------ */
 /* Bounded cost                                                        */
-/*                                                                     */
-/* These four belong in `convex/lib/limits.ts` with every other number */
-/* the product spends money against; they are local constants only     */
-/* because that file is integrator-only (EXECUTION §0).                */
 /* ------------------------------------------------------------------ */
 
 /** Characters of task input one call may carry. Scraped pages and threads
@@ -156,12 +152,6 @@ export type RunStructuredArgs<T extends Validator<unknown, "required", string>> 
   result: T;
   operationKey: string;
   maxOutputTokens?: number;
-  /**
-   * Health-check only (`ai/health.ts`): call a raw model id instead of the
-   * tier's, so the gateway's "not a valid model ID" branch can be provoked
-   * on a deployment. No product call site passes it.
-   */
-  modelId?: string;
 };
 
 /* ------------------------------------------------------------------ */
@@ -297,9 +287,8 @@ export async function runStructured<T extends Validator<unknown, "required", str
   // Derived BEFORE any money moves: a result validator this mapping cannot
   // express is a bug in the task, not a refusal to charge a user for.
   const schema = jsonSchema<unknown>(strictJsonSchema(args.result));
-  const modelId = args.modelId ?? MODELS[args.tier];
-  const model =
-    args.modelId === undefined ? modelForTier(args.tier) : gatewayModel(args.modelId);
+  const modelId = MODELS[args.tier];
+  const model = modelForTier(args.tier);
   const maxOutputTokens = args.maxOutputTokens ?? AI_MAX_OUTPUT_TOKENS[args.tier];
 
   return await withCredits(

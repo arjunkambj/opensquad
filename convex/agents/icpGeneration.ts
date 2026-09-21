@@ -20,7 +20,7 @@ import {
   vIcpGeneration,
 } from "../ai/generateIcp";
 import { runStructured } from "../ai/run";
-import type { RefundReason } from "../billing/paidCall";
+import { CODE_FOR_UNCERTAIN, codeForRefund } from "../billing/paidCall";
 import { getOrgProfile } from "../company/model";
 import type { OperationErrorCode } from "../lib/validators";
 import { EMPTY_ICP_OPTION_LISTS, readIcpOptionLists } from "./icpVocabulary";
@@ -120,44 +120,6 @@ export const generationInput = internalQuery({
 });
 
 /* ------------------------------------------------------------------ */
-/* Mapping a refusal to one of our own codes                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Money and capacity keep their own code because the screen offers a different
- * next step for each; everything else that ends in "we could not write an ICP"
- * collapses into the sentence the user actually needs.
- */
-function codeForRefund(reason: RefundReason): OperationErrorCode {
-  switch (reason) {
-    case "kill_switch":
-      return "platform_paused";
-    case "no_credit_grant":
-    case "insufficient_credits":
-    case "trial_limit_reached":
-      return "insufficient_credits";
-    case "rate_limited":
-    case "throttled":
-      return "rate_limited";
-    case "platform_capacity":
-    case "unauthorized":
-      return "provider_unavailable";
-    case "validation":
-    case "provider_charged_nothing":
-      return "invalid_response";
-    case "unknown":
-      return "unknown";
-  }
-}
-
-/**
- * A THROWN failure: the request left us and nobody knows what it did, so the
- * hold parks as `uncertain` and a sweep owns it (PLAN §6). From the user's
- * side that is always the same fact — this run did not finish.
- */
-const CODE_FOR_UNCERTAIN: OperationErrorCode = "provider_unavailable";
-
-/* ------------------------------------------------------------------ */
 /* The run                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -202,7 +164,7 @@ export const generate = internalAction({
       return await fail(CODE_FOR_UNCERTAIN);
     }
     if (ai.kind === "refunded") {
-      return await fail(codeForRefund(ai.reason));
+      return await fail(codeForRefund(ai.reason, "invalid_response"));
     }
     if (ai.kind === "uncertain") {
       return await fail(CODE_FOR_UNCERTAIN);

@@ -408,8 +408,6 @@ export const vKeywordSuggestions = v.object({
   keywords: v.array(v.string()),
 });
 
-export type KeywordSuggestions = Infer<typeof vKeywordSuggestions>;
-
 /* ------------------------------------------------------------------ */
 /* What a recommendation reads                                          */
 /* ------------------------------------------------------------------ */

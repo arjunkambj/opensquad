@@ -61,11 +61,6 @@ export type CompanyIndustry = Infer<typeof vCompanyIndustry>;
 export const COMPANY_INDUSTRIES: readonly CompanyIndustry[] =
   vCompanyIndustry.members.map((member) => member.value);
 
-/** True when a stored industry string is still one of the offered values. */
-export function isCompanyIndustry(value: string): value is CompanyIndustry {
-  return (COMPANY_INDUSTRIES as readonly string[]).includes(value);
-}
-
 /* ------------------------------------------------------------------ */
 /* The answer                                                           */
 /* ------------------------------------------------------------------ */

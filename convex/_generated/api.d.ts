@@ -37,7 +37,6 @@ import type * as ai_analyzeWebsite from "../ai/analyzeWebsite.js";
 import type * as ai_failures from "../ai/failures.js";
 import type * as ai_generateIcp from "../ai/generateIcp.js";
 import type * as ai_handleReply from "../ai/handleReply.js";
-import type * as ai_health from "../ai/health.js";
 import type * as ai_models from "../ai/models.js";
 import type * as ai_recommendStrategies from "../ai/recommendStrategies.js";
 import type * as ai_researchLead from "../ai/researchLead.js";
@@ -224,7 +223,6 @@ declare const fullApi: ApiFromModules<{
   "ai/failures": typeof ai_failures;
   "ai/generateIcp": typeof ai_generateIcp;
   "ai/handleReply": typeof ai_handleReply;
-  "ai/health": typeof ai_health;
   "ai/models": typeof ai_models;
   "ai/recommendStrategies": typeof ai_recommendStrategies;
   "ai/researchLead": typeof ai_researchLead;

@@ -34,17 +34,9 @@ export const MODELS: Record<ModelTier, string> = {
  *  spell out the provider package's own return type. */
 export type GatewayModel = ReturnType<typeof convexGateway>;
 
-/**
- * A gateway handle for a raw model id. The deployment's own service token is
- * minted inside the provider, so no model key is stored or passed anywhere.
- */
-export function gatewayModel(modelId: string): GatewayModel {
-  return convexGateway(modelId);
-}
-
 /** The handle for a tier — the form every AI task uses. */
 export function modelForTier(tier: ModelTier): GatewayModel {
-  return gatewayModel(MODELS[tier]);
+  return convexGateway(MODELS[tier]);
 }
 
 /**
