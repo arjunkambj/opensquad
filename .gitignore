@@ -12,6 +12,8 @@ node_modules
 dist
 dist-ssr
 *.local
+convex_rules.txt
+.claude
 
 # Editor directories and files
 .vscode/*

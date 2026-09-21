@@ -26,8 +26,6 @@ export const DOMAIN_ERROR_CODES = [
   "CONFLICT",
   "INVALID",
   /* --- the ways in (PLAN §6 "Closing the ways in") -------------------- */
-  /** The account's email is not verified, so it cannot create an org. */
-  "EMAIL_NOT_VERIFIED",
   /** The identity provider marks the account as restricted. */
   "ACCOUNT_RESTRICTED",
   /**

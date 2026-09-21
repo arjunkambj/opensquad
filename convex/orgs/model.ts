@@ -17,7 +17,7 @@ import {
   findTrialClaim,
   grantTrialBuckets,
 } from "../billing/trialBuckets";
-import { activeHexclaveOrgId, requireVerifiedUser } from "../lib/auth";
+import { activeHexclaveOrgId, requireUnrestrictedUser } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
   assertIanaTimezone,
@@ -109,11 +109,12 @@ type EnsureOrgArgs = {
  * is intentionally not persisted.
  *
  * Three rules from PLAN §6 "Closing the ways in" meet here:
- *   VERIFIED EMAIL. `requireVerifiedUser`, only on this path; every other
- *   entry point keeps `requireUser`.
+ *   UNRESTRICTED ACCOUNT. `requireUnrestrictedUser`, only on this path; every
+ *   other entry point keeps `requireUser`. The sign-in email is not required
+ *   to be verified — the sending address is verified at the mail provider.
  *   ONE TRIAL PER USER. Anyone can create unlimited organizations in the
  *   auth provider, so the grant cannot follow the organization: only the
- *   FIRST org a given verified identity initialises is granted credits.
+ *   FIRST org a given identity initialises is granted credits.
  *   Every later one is created in the already-designed "no credit grant"
  *   state, where each paid call refuses with `NO_CREDIT_GRANT`.
  *   TRIAL CAPACITY. `MAX_TRIAL_ORGS` refuses a new GRANT once the platform is
@@ -124,7 +125,7 @@ export async function ensureOrgImpl(
   ctx: MutationCtx,
   args: EnsureOrgArgs,
 ): Promise<{ orgId: Id<"orgs">; created: boolean }> {
-  const { identity, identityKey } = await requireVerifiedUser(ctx);
+  const { identity, identityKey } = await requireUnrestrictedUser(ctx);
   // The credit grant is handed out on this path, and a draft agent is
   // written with it, so it is rate-limited per identity like every other
   // credit-spending entry point (PLAN §6 "Closing the ways in"). At the TOP,

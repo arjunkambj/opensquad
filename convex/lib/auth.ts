@@ -84,39 +84,20 @@ export async function requireUser(ctx: AuthCtx): Promise<AuthenticatedUser> {
 }
 
 /**
- * A verified account — the gate in front of creating an org
- * (PLAN §6 "Closing the ways in", spikes §5).
+ * An account the identity provider has not restricted — the gate in front of
+ * creating an org (PLAN §6 "Closing the ways in").
  *
- * Read entirely from the token: the identity provider's access token carries
- * `email_verified` as a required claim, which Convex maps onto
- * `UserIdentity.emailVerified`, so this costs no network call and no secret
- * key. Strict equality against `true` means an ABSENT claim fails closed — a
- * missing claim would mean the provider or its configuration changed, which
- * is not a reason to hand someone a credit grant.
- *
- * `is_restricted` is refused as defence in depth. Every OTHER entry point
- * keeps `requireUser`, so an unverified account can still sign in and see the
- * "verify your email" state instead of looking signed out.
+ * Read entirely from the token, so this costs no network call and no secret
+ * key. The sign-in email is deliberately NOT required to be verified: nothing
+ * is ever sent from it. The address an agent sends from is connected, and
+ * verified along with its domain, at the mail provider.
  */
-export async function requireVerifiedUser(
+export async function requireUnrestrictedUser(
   ctx: AuthCtx,
 ): Promise<AuthenticatedUser> {
   const user = await requireUser(ctx);
-  const { identity } = user;
-  if (identity["is_restricted"] === true) {
+  if (user.identity["is_restricted"] === true) {
     throw domainError("ACCOUNT_RESTRICTED", "this account is not fully set up");
-  }
-  if (identity.emailVerified !== true) {
-    throw domainError(
-      "EMAIL_NOT_VERIFIED",
-      "verify your email address before creating an organization",
-    );
-  }
-  if (typeof identity.email !== "string" || identity.email.length === 0) {
-    throw domainError(
-      "EMAIL_NOT_VERIFIED",
-      "an account email is required to create an organization",
-    );
   }
   return user;
 }
