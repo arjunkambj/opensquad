@@ -16,12 +16,8 @@ function getSnapshot() {
 /**
  * Whether the viewport is phone-width.
  *
- * `useSyncExternalStore`, not state-plus-effect: the previous version started
- * at `undefined` and wrote the real value from an effect, so the first painted
- * frame always claimed desktop. On a phone that renders the desktop shell for
- * a frame before correcting itself, and it was the one lint warning in the
- * repo (`react(set-state-in-effect)`). Reading the media query during render
- * removes both.
+ * `useSyncExternalStore`, not state-plus-effect: reading the media query
+ * during render keeps the first painted frame honest on a phone.
  */
 export function useIsMobile() {
   return React.useSyncExternalStore(subscribe, getSnapshot, () => false)
