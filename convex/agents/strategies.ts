@@ -378,7 +378,15 @@ const vConfirmResult = v.union(
  * agent up on its own once `nextRunAt` is due.
  *
  * A user who picked no keywords, or whose keywords match nobody, is confirmed
- * exactly the same way with one strategy fewer.
+ * exactly the same way with one strategy fewer — and that is why every
+ * variant is CHECKED against the cached catalogue before it is counted: a
+ * catalogue refresh that dropped a value the keyword strategy used would
+ * otherwise throw out of the last screen of setup instead of confirming with
+ * one signal fewer.
+ *
+ * Rate-limited like its two paid siblings, from the identity `confirmContext`
+ * resolved: it buys nothing, but it is a public door that reaches a provider
+ * up to three times per press.
  */
 export const confirm = action({
   args: { orgId: v.id("orgs") },
@@ -393,6 +401,9 @@ export const confirm = action({
         ? { status: "already_done" as const }
         : { status: "blocked" as const, reason: context.reason };
     }
+    // After the blocks, so a repeated press on a finished setup never spends
+    // a token, and before anything reaches a provider.
+    await requireRateLimit(ctx, "confirmSignals", context.identityKey);
 
     // Free, and at most three of them: the ladder stops at the first place
     // these phrases actually find people (`strategiesModel.ts`).
@@ -405,6 +416,16 @@ export const confirm = action({
         }
       | undefined;
     for (const filters of context.keywordVariants) {
+      // The same no-network check the recommendation run makes before every
+      // count. A variant the builder would refuse is skipped, not thrown at
+      // the user: setup finishes with one signal fewer.
+      const checked = await ctx.runQuery(
+        internal.agents.filterOptions.validateFilters,
+        { filters, excludeFilters: context.excludeFilters },
+      );
+      if (!checked.ok) {
+        continue;
+      }
       const counted = await ctx.runAction(
         internal.integrations.enrich.search.countLeads,
         { filters, excludeFilters: context.excludeFilters },

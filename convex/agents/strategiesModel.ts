@@ -128,9 +128,13 @@ function catalogueValues(
  *  a longer list is refused at search time, far too late to tell anyone. */
 const CORE_LIST_MAX = {
   jobTitle: 25,
+  jobLevel: 10,
+  jobFunction: 26,
   linkedinIndustry: 20,
   continent: 7,
   countryName: 25,
+  // Ten is the provider's OWN ceiling for this filter and the length of its
+  // whole value list, so ten is never a truncation (spikes §3).
   companyEntityType: 10,
 } as const;
 
@@ -161,8 +165,22 @@ export function compileCoreFilters(args: {
   const { icp, options } = args;
   const filters: LeadFilters = {};
 
+  // WHO, in the provider's own vocabulary: seniority and department, exactly
+  // as PLAN §3 defines the core ICP. Not `jobTitle` — that filter is an
+  // EXACT, case-sensitive match on the written title, so "VP of Engineering"
+  // misses "VP Engineering" and a perfectly good ICP silently matches nobody.
+  // The provider's own guidance is the same: prefer `jobLevel` + `jobFunction`
+  // (or several title variants) over one exact title.
+  const roles = inferRoleFilters({ jobTitles: icp.jobTitles, options });
   const jobTitles = icp.jobTitles.slice(0, CORE_LIST_MAX.jobTitle);
-  if (jobTitles.length > 0) {
+  if (Object.keys(roles).length > 0) {
+    Object.assign(filters, roles);
+  } else if (jobTitles.length > 0) {
+    // Nothing in the titles could be placed on the provider's ladder or in
+    // any of its departments. The titles as the user wrote them are then the
+    // only statement of who they sell to, and several of them OR-ed together
+    // is the provider's own fallback — narrow, so the relax pass drops it
+    // first of all.
     filters["jobTitle"] = jobTitles;
   }
 
@@ -431,18 +449,64 @@ const JOB_LEVEL_CUES: readonly { level: string; cues: readonly string[] }[] = [
   },
 ];
 
+/**
+ * Cues that place a written job title in one of the provider's departments.
+ *
+ * The overlap rule below ("Marketing Manager" shares a word with "Advertising
+ * & Marketing") catches titles that echo the department's own name and
+ * nothing else — "Account Executive" is a salesperson and shares no word with
+ * "Sales & Business Development" — so the commonest titles are named here
+ * instead of being left to a word match that cannot see them. Every value is
+ * checked against the cached catalogue before it is used, like every other.
+ */
+const JOB_FUNCTION_CUES: readonly { fn: string; cues: readonly string[] }[] = [
+  {
+    fn: "Sales & Business Development",
+    cues: [
+      "sales",
+      "account executive",
+      "account manager",
+      "business development",
+      "revenue",
+      "partnerships",
+    ],
+  },
+  {
+    fn: "Advertising & Marketing",
+    cues: ["marketing", "growth", "demand generation", "brand", "seo", "ppc"],
+  },
+  {
+    fn: "Information Technology",
+    cues: ["it ", "information technology", "sysadmin", "infrastructure"],
+  },
+  {
+    fn: "Engineering",
+    cues: ["engineer", "developer", "devops", "architect", "technical"],
+  },
+  { fn: "Human Resources", cues: ["people", "talent", "recruit", "hr "] },
+  {
+    fn: "Finance & Accounting",
+    cues: ["finance", "accounting", "controller", "treasur"],
+  },
+  { fn: "Operations", cues: ["operations", "ops "] },
+  { fn: "Customer/Client Service", cues: ["customer success", "support"] },
+  { fn: "Legal", cues: ["legal", "counsel", "compliance"] },
+  { fn: "Supply Chain & Logistics", cues: ["supply chain", "logistics"] },
+];
+
 function words(text: string): string[] {
   return text.toLocaleLowerCase().match(/[a-z]{3,}/g) ?? [];
 }
 
 /**
- * The broader way to say who the ICP's job titles are: the provider's own
- * seniority ladder and job-function list.
+ * Who the ICP's job titles are, in the provider's own vocabulary: its
+ * seniority ladder and its department list.
  *
- * PLAN §3 step 4 names this as the first relax move, because `jobTitle` is a
- * contains-match on free text and is by far the narrowest filter in a core
- * set. Both lists are read from the cached catalogue, so a value that does
- * not exist can never come out of here.
+ * This is what PLAN §3 means by the core ICP, and `compileCoreFilters` uses
+ * it directly — `jobTitle` matches the written title EXACTLY and
+ * case-sensitively, so it belongs nowhere near the always-present strategy
+ * unless nothing else can be said. Both lists are read from the cached
+ * catalogue, so a value that does not exist can never come out of here.
  */
 export function inferRoleFilters(args: {
   jobTitles: readonly string[];
@@ -461,15 +525,22 @@ export function inferRoleFilters(args: {
       entry.cues.some((cue) => titles.includes(cue)),
   ).map((entry) => entry.level);
   if (levels.length > 0) {
-    filters["jobLevel"] = levels;
+    filters["jobLevel"] = levels.slice(0, CORE_LIST_MAX.jobLevel);
   }
 
   const titleWords = new Set(words(titles));
-  const functions = catalogueValues(args.options, "jobFunction").filter(
-    (value) => words(value).some((word) => titleWords.has(word)),
+  const allowedFunctions = catalogueValues(args.options, "jobFunction");
+  const cued = JOB_FUNCTION_CUES.filter(
+    (entry) =>
+      allowedFunctions.includes(entry.fn) &&
+      entry.cues.some((cue) => titles.includes(cue)),
+  ).map((entry) => entry.fn);
+  const echoed = allowedFunctions.filter((value) =>
+    words(value).some((word) => titleWords.has(word)),
   );
+  const functions = [...new Set([...cued, ...echoed])];
   if (functions.length > 0) {
-    filters["jobFunction"] = functions.slice(0, 26);
+    filters["jobFunction"] = functions.slice(0, CORE_LIST_MAX.jobFunction);
   }
 
   return filters;
@@ -493,14 +564,23 @@ function without(filters: LeadFilters, keys: readonly string[]): LeadFilters {
  * The order is PLAN §3 step 4's: roles first (the narrowest filter and the
  * one with an exact broader form), then headcount, then geography, then the
  * kind of organisation. Industry is never dropped — an agent searching every
- * industry is not the customer the user described.
+ * industry is not the customer the user described. The department goes last
+ * of all: widening it changes WHO gets written to, where every rung before it
+ * only changes which companies they work at.
  */
 export function relaxFilters(
   filters: LeadFilters,
   roleFilters: LeadFilters,
 ): LeadFilters | null {
-  if (filters["jobTitle"] !== undefined && Object.keys(roleFilters).length > 0) {
-    return { ...without(filters, ["jobTitle"]), ...roleFilters };
+  if (filters["jobTitle"] !== undefined) {
+    // An exact-title list is the narrowest thing a core set can carry, and
+    // the provider's own advice is to say the same thing with `jobLevel` and
+    // `jobFunction`. When the titles yielded neither, the title list simply
+    // goes: what remains is still the industry, size and geography the user
+    // described, where one exact spelling of one title is nobody at all.
+    return Object.keys(roleFilters).length > 0
+      ? { ...without(filters, ["jobTitle"]), ...roleFilters }
+      : without(filters, ["jobTitle"]);
   }
   if (
     filters["employeeCountMin"] !== undefined ||
@@ -518,6 +598,12 @@ export function relaxFilters(
   }
   if (filters["companyEntityType"] !== undefined) {
     return without(filters, ["companyEntityType"]);
+  }
+  if (filters["jobFunction"] !== undefined && filters["jobLevel"] !== undefined) {
+    // Last resort: keep the seniority, drop the department. Only while the
+    // seniority survives — a search with neither is "anyone who works
+    // anywhere", which is not a signal and not what the user described.
+    return without(filters, ["jobFunction"]);
   }
   return null;
 }
@@ -540,20 +626,15 @@ export function tightenFilters(filters: LeadFilters): LeadFilters | null {
     // so multiplying always raises the bar.
     return { ...filters, [key]: value * STRATEGY_TIGHTEN_FACTOR };
   }
-  // Second rung: a values signal is an OR across everything in its list, so
-  // the list itself is the width. The model writes them best-first, so the
-  // back half is what goes — the signal keeps meaning the same thing, of
-  // fewer companies. Behind the numeric rung on purpose: raising a minimum
-  // takes no value away from the card's own promise.
-  for (const [key, value] of Object.entries(filters)) {
-    const spec = signalFilterSpec(key);
-    if (spec?.kind !== "values" || !Array.isArray(value) || value.length < 2) {
-      continue;
-    }
-    return { ...filters, [key]: value.slice(0, Math.ceil(value.length / 2)) };
-  }
-  // A single-value list and a flag are already as narrow as they go — a flag
-  // has no smaller form than `true` — so there is nothing left to tighten.
+  // A values signal is an OR across its list, so the list is its width — but
+  // there is no honest way to cut it here. Halving it kept "the first half",
+  // which is only a tightening if the model wrote its values best-first, and
+  // nothing asks it to or checks that it did: the cut would as easily drop
+  // the tool the user's customers actually run and leave the ones they do
+  // not, while the card goes on promising the same thing. A card that names
+  // its real, large count is the honest form of a broad signal; the user can
+  // switch it off. A flag has no smaller form than `true` either, so a
+  // strategy whose only signal is a list or a flag is left as it is.
   return null;
 }
 

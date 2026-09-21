@@ -1,6 +1,6 @@
 /**
- * The lead read surface: the Contacts table, its bounded total, the due
- * counter and the lead drawer. Member-guarded, index-backed and paginated.
+ * The lead read surface: the Contacts table, its bounded total and the lead
+ * drawer. Member-guarded, index-backed and paginated.
  *
  * ONE LIST MODE AT A TIME. Convex ranges an index, so every filter this screen
  * offers is a range over an index the schema declares — company search, one
@@ -22,7 +22,6 @@ import {
   DEFAULT_LIST_LIMIT,
   domainError,
   invalid,
-  MAX_LIST_LIMIT,
   PROSPECT_COMPANY_NAME_MAX_LENGTH,
   vLeadApproval,
   vLeadStage,
@@ -207,43 +206,6 @@ export const list = query({
         count: Math.min(counted.length, CONTACTS_TOTAL_BOUND),
         hasMore: counted.length > CONTACTS_TOTAL_BOUND,
       },
-    };
-  },
-});
-
-/**
- * How many leads the state machine owes work to right now — the attention
- * count the app header renders. Bounded at `MAX_LIST_LIMIT` like every
- * org count: `hasMore` means the number is the bound, not the total, so
- * the UI renders "50+". Leads with no due time can never satisfy the range,
- * so they can never inflate it either.
- *
- * `now` is an argument, never `Date.now()` read in here: a query that reads
- * the wall clock returns a different answer for the same arguments, which
- * makes the result uncacheable and the subscription stale.
- */
-export const countDue = query({
-  args: { orgId: v.id("orgs"), now: v.number() },
-  returns: v.object({
-    count: v.number(),
-    hasMore: v.boolean(),
-    bound: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    const rows = await ctx.db
-      .query("prospects")
-      .withIndex("by_orgId_and_nextActionAt", (q) =>
-        q
-          .eq("orgId", args.orgId)
-          .gte("nextActionAt", 0)
-          .lte("nextActionAt", args.now),
-      )
-      .take(MAX_LIST_LIMIT + 1);
-    return {
-      count: Math.min(rows.length, MAX_LIST_LIMIT),
-      hasMore: rows.length > MAX_LIST_LIMIT,
-      bound: MAX_LIST_LIMIT,
     };
   },
 });

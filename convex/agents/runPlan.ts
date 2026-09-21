@@ -63,6 +63,7 @@ export type RunIdleReason =
   | "paused"
   | "platform_paused"
   | "no_strategies"
+  | "signals_parked"
   | "daily_lead_cap"
   | "pages_exhausted"
   | "research_budget_spent"
@@ -103,14 +104,23 @@ export async function planNextStep(
   const creditsBucket = await findCreditsBucket(ctx, agent.orgId);
   const credits = creditsBucket === null ? 0 : bucketRemaining(creditsBucket);
 
-  const strategies = await ctx.db
+  const enabled = await ctx.db
     .query("strategies")
     .withIndex("by_agentId_and_enabled", (q) =>
       q.eq("agentId", agent._id).eq("enabled", true),
     )
     .take(STRATEGY_SCAN_MAX);
-  if (strategies.length === 0) {
+  if (enabled.length === 0) {
     return { kind: "idle", reason: "no_strategies" };
+  }
+  // A signal a search refused is out of the rotation until a person switches
+  // it off and on again (`agents/sourcing.ts#parkStrategy`). It stays
+  // `enabled`, because that field is the user's answer and not the run's.
+  const strategies = enabled.filter(
+    (strategy) => strategy.lastError === undefined,
+  );
+  if (strategies.length === 0) {
+    return { kind: "idle", reason: "signals_parked" };
   }
 
   const sourcing = await nextStrategyPage(ctx, {
@@ -144,11 +154,14 @@ export async function planNextStep(
 /**
  * The next page to buy, if any.
  *
- * A strategy that has never been searched always gets its FIRST page: PLAN
- * §9.2 step 1 searches page 1 of every selected signal, and a daily cap that
- * silenced a signal the user deliberately chose would make the Agent page's
- * per-signal table lie on day one. Every page after that is subject to the
- * agent's `dailyLeadCap`, measured in whole pages.
+ * ONE allowance governs every page, first or not: `dailyLeadCap` in whole
+ * pages, plus one page for each selected signal that has never been searched.
+ * That second term is PLAN §9.2 step 1 — "search page 1 of each selected
+ * strategy" — expressed as budget rather than as an exemption: setup day
+ * buys exactly one page per signal and then stops, where a plain exemption
+ * let five or six signals buy five or six pages against a cap of one and
+ * called it compliance. A signal switched on later still gets its first page
+ * the day it is switched on, which is what makes the per-signal table honest.
  *
  * "How many pages today" is read from the usage ledger's own daily search
  * counter rather than from a count of rows: the ledger is already keyed on
@@ -164,9 +177,10 @@ async function nextStrategyPage(
     credits: number;
   },
 ): Promise<RunStep> {
-  const fresh = args.strategies
-    .filter((strategy) => pageOf(strategy) === 1)
-    .sort((a, b) => a.createdAt - b.createdAt)[0];
+  const firstPages = args.strategies.filter(
+    (strategy) => pageOf(strategy) === 1,
+  );
+  const fresh = [...firstPages].sort((a, b) => a.createdAt - b.createdAt)[0];
   const continued = args.strategies
     .filter(
       (strategy) => pageOf(strategy) > 1 && pageOf(strategy) <= MAX_SEARCH_PAGE,
@@ -179,17 +193,10 @@ async function nextStrategyPage(
   if (args.credits < ACTION_PRICES.find_leads.credits) {
     return { kind: "idle", reason: "out_of_credits" };
   }
-  if (fresh !== undefined) {
-    return { kind: "source", strategyId: fresh._id, page: 1 };
-  }
-  if (continued === undefined) {
-    return { kind: "idle", reason: "pages_exhausted" };
-  }
 
-  const pagesPerDay = Math.max(
-    1,
-    Math.ceil(args.agent.dailyLeadCap / SEARCH_PAGE_SIZE),
-  );
+  const pagesPerDay =
+    Math.max(1, Math.ceil(args.agent.dailyLeadCap / SEARCH_PAGE_SIZE)) +
+    firstPages.length;
   const bucket = await findBucket(
     ctx,
     args.org._id,
@@ -200,6 +207,12 @@ async function nextStrategyPage(
     bucket === null ? 0 : bucket.reserved + bucket.committed + bucket.uncertain;
   if (usedToday >= pagesPerDay) {
     return { kind: "idle", reason: "daily_lead_cap" };
+  }
+  if (fresh !== undefined) {
+    return { kind: "source", strategyId: fresh._id, page: 1 };
+  }
+  if (continued === undefined) {
+    return { kind: "idle", reason: "pages_exhausted" };
   }
   return { kind: "source", strategyId: continued._id, page: pageOf(continued) };
 }
@@ -256,19 +269,17 @@ async function nextResearchLead(
   if (researched.length < initialTarget) {
     remaining = initialTarget - researched.length;
   } else {
-    const bucket = await findBucket(
-      ctx,
-      args.org._id,
-      "scrapes",
-      dailyPeriodKey(args.org, Date.now()),
-    );
-    // The page allowance is the only day-keyed counter of research we have,
-    // and website analysis shares it. Sharing it can only make the agent
-    // research FEWER leads on a day the owner re-analysed their own site,
-    // never more — the conservative direction for a spend cap.
-    const usedToday =
-      bucket === null ? 0 : bucket.reserved + bucket.committed + bucket.uncertain;
-    remaining = args.agent.dailyResearchCap - usedToday;
+    // The agent's OWN day counter (`agents.researchDay`), not the day-keyed
+    // page allowance: that allowance also carries the owner's website
+    // re-analysis, so a re-analyse day quietly spent the agent's research
+    // budget on a scrape that researched no lead at all. The page allowance
+    // is still the money layer's cap; this is the product rule on top of it.
+    const periodKey = dailyPeriodKey(args.org, Date.now());
+    const researchedToday =
+      args.agent.researchDay?.periodKey === periodKey
+        ? args.agent.researchDay.count
+        : 0;
+    remaining = args.agent.dailyResearchCap - researchedToday;
   }
   if (remaining <= 0) {
     return { kind: "idle", reason: "research_budget_spent" };

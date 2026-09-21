@@ -16,6 +16,13 @@
  * A refused, failed or unknown search ENDS the run rather than handing back
  * to the planner, which cannot see a provider cap it did not take and would
  * schedule the identical step forever.
+ *
+ * One refusal is different, and it is the reason `strategies.lastError`
+ * exists: a filter set the search boundary will not build is this SIGNAL's
+ * problem, not the run's. Asking again next hour cannot fix a catalogue value
+ * that moved, and the planner prefers fresh first pages, so leaving it in the
+ * rotation stopped sourcing AND research for the whole org for good. Such a
+ * signal is parked with its reason and the run carries on with the others.
  */
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -26,8 +33,8 @@ import { vSourcedLead } from "../integrations/enrich/rows";
 import type { SourcedLead } from "../integrations/enrich/rows";
 import { companySizeRange } from "../leads/preRank";
 import { upsertSourcedLead } from "../leads/model";
-import { vLeadFilters } from "../lib/validators";
-import { finishRun, leasedAgent, renewRunLease } from "./run";
+import { vLeadFilters, vOperationErrorCode } from "../lib/validators";
+import { finishRun, holdsRunLease, renewRunLease } from "./run";
 import { v } from "convex/values";
 
 const vSourcingContext = v.union(
@@ -84,6 +91,11 @@ export const sourcingContext = internalQuery({
  * `rows` is empty on a replay — the page was bought and stored before, so the
  * cursor moves and nothing is written. `exhausted` marks a strategy whose
  * results have run out, so no later run pays for a page that cannot exist.
+ *
+ * The page lands whether or not this step still holds the run lease. A lost
+ * lease means another run is driving; it does not mean the rows this one
+ * PAID FOR may be thrown away, and the replay path downstream records "the
+ * call that paid stored them" — which has to be true.
  */
 export const recordSourcedPage = internalMutation({
   args: {
@@ -102,14 +114,21 @@ export const recordSourcedPage = internalMutation({
     merged: v.number(),
   }),
   handler: async (ctx, args) => {
-    const agent = await leasedAgent(ctx, args.agentId, args.leaseId);
+    const agent = await ctx.db.get("agents", args.agentId);
     if (agent === null) {
-      // Another run owns the agent now; it is driving, not this step.
       return { inserted: 0, merged: 0 };
     }
+    // The lease decides who DRIVES the run, never whether a page that has
+    // already been paid for is kept: dropping the rows here would bill the
+    // org for people it never receives, and storing them twice is
+    // impossible — `upsertSourcedLead` dedupes on the provider's row id
+    // within the agent, and the cursor only ever moves forward.
+    const holdsLease = holdsRunLease(agent, args.leaseId);
     const strategy = await ctx.db.get("strategies", args.strategyId);
     if (strategy === null || strategy.agentId !== agent._id) {
-      await handOff(ctx, agent, args.leaseId, true);
+      if (holdsLease) {
+        await handOff(ctx, agent, args.leaseId, true);
+      }
       return { inserted: 0, merged: 0 };
     }
 
@@ -135,15 +154,67 @@ export const recordSourcedPage = internalMutation({
     }
 
     await ctx.db.patch("strategies", strategy._id, {
-      // Only NEW people count as leads this signal generated; a person a
-      // second signal also matched is already in the first signal's total.
-      leadsFound: strategy.leadsFound + inserted,
+      // Every person this signal FOUND, whether the row was new or already
+      // held by another signal: a merge is this signal reaching someone too,
+      // and counting only inserts made the per-signal table disagree with the
+      // leads that carry the signal (PLAN §3 "+n signals").
+      leadsFound: strategy.leadsFound + inserted + merged,
       nextPage: args.exhausted ? MAX_SEARCH_PAGE + 1 : args.page + 1,
       lastRunAt: now,
       updatedAt: now,
     });
-    await handOff(ctx, agent, args.leaseId, args.resume);
+    if (holdsLease) {
+      await handOff(ctx, agent, args.leaseId, args.resume);
+    }
     return { inserted, merged };
+  },
+});
+
+/**
+ * Park one signal and carry on with the rest of the run.
+ *
+ * Called when the search boundary REFUSED to build this strategy's filters:
+ * a value the refreshed catalogue no longer holds, or a filter that can no
+ * longer be checked. That is a fact about the signal and nothing else, so the
+ * signal records it, leaves the planner's rotation, and the run continues —
+ * ending the run instead left the planner picking the same broken signal
+ * first on every later run, which stopped sourcing and research for the whole
+ * organization with nothing on screen to explain it.
+ *
+ * The user's own switch is untouched: `enabled` still says what they chose,
+ * and switching the signal off and on again clears the park.
+ */
+export const parkStrategy = internalMutation({
+  args: {
+    agentId: v.id("agents"),
+    leaseId: v.string(),
+    strategyId: v.id("strategies"),
+    code: vOperationErrorCode,
+  },
+  returns: v.object({ parked: v.boolean() }),
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get("agents", args.agentId);
+    if (agent === null) {
+      return { parked: false };
+    }
+    const strategy = await ctx.db.get("strategies", args.strategyId);
+    let parked = false;
+    if (strategy !== null && strategy.agentId === agent._id) {
+      const now = Date.now();
+      await ctx.db.patch("strategies", strategy._id, {
+        lastError: {
+          code: args.code,
+          at: now,
+          attempts: (strategy.lastError?.attempts ?? 0) + 1,
+        },
+        updatedAt: now,
+      });
+      parked = true;
+    }
+    if (holdsRunLease(agent, args.leaseId)) {
+      await handOff(ctx, agent, args.leaseId, true);
+    }
+    return { parked };
   },
 });
 
@@ -208,13 +279,18 @@ export const runSourcingStep = internalAction({
       });
     } catch {
       // The search boundary refuses an unusable filter set before it reserves
-      // anything, and an unusable strategy will not become usable by being
-      // asked again inside this run.
-      await ctx.runMutation(internal.agents.run.endRun, {
+      // anything — nothing was bought, so the cursor stays where it is — and
+      // it will refuse the same filters next hour just as flatly. The SIGNAL
+      // is parked with its reason and the run goes on to the others; a
+      // catalogue that has never been cached is not this path (the boundary
+      // answers `failed` for that, which stops the run instead).
+      await ctx.runMutation(internal.agents.sourcing.parkStrategy, {
         agentId: args.agentId,
         leaseId: args.leaseId,
+        strategyId: args.strategyId,
+        code: "invalid_response",
       });
-      return { outcome: "refused" };
+      return { outcome: "parked" };
     }
 
     if (found.status === "found") {

@@ -7,15 +7,19 @@
  * state machine has a single set of writers and the sweep can reuse them.
  *
  * The ladder is written on the LEAD, not on the run: `lastError { code, at,
- * attempts }` plus `nextActionAt` out 5 min, then 30 min, and the third
- * failure parks the lead in `needs_attention` with a reason code the client
- * maps to copy. Convex does not re-run a failed action, so the next run — or
- * the recovery sweep — is the retry.
+ * attempts }` plus `nextActionAt` out 5 min, then 30 min, then 4 h
+ * (`lib/limits.ts`), and the attempt with no rung left parks the lead in
+ * `needs_attention` with a reason code the client maps to copy. The attempts
+ * are counted per STEP (`prospects.stepAttempts.research`), because PLAN §9.1
+ * gives each step its own three tries. Convex does not re-run a failed
+ * action, so the next run — or the recovery sweep — is the retry.
  */
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
+import { dailyPeriodKey } from "../billing/model";
+import { STEP_MAX_ATTEMPTS, STEP_RETRY_DELAYS_MS } from "../lib/limits";
 import {
   advancedLeadStage,
   assertEvidenceExcerpt,
@@ -35,9 +39,9 @@ import { v } from "convex/values";
 /* ------------------------------------------------------------------ */
 /* The ladder                                                          */
 /*                                                                     */
-/* These belong in `convex/lib/limits.ts` with the rest of the policy  */
-/* numbers; they are local constants only because that file is         */
-/* integrator-only (EXECUTION §0).                                     */
+/* The delays and the attempt ceiling are PLAN §9.1 policy and live in  */
+/* `convex/lib/limits.ts` with every other number; the stall window is  */
+/* this step's own watchdog and stays here.                             */
 /* ------------------------------------------------------------------ */
 
 /** How long a lead may sit in `researching` before the sweep calls its step
@@ -45,24 +49,19 @@ import { v } from "convex/values";
  *  still working on it. */
 export const RESEARCH_STALL_MS = 15 * 60 * 1000;
 
-/** PLAN §9.1's ladder. The third failure parks the lead rather than waiting
- *  again, so these two delays are what a lead can actually see. */
-const STEP_RETRY_DELAYS_MS: readonly number[] = [5 * 60 * 1000, 30 * 60 * 1000];
-
-const STEP_MAX_ATTEMPTS = 3;
-
 /** How a parked lead explains itself. The CODE is what the client maps to
- *  copy; this sentence is what the lead's history shows. */
+ *  copy; this sentence is what the lead's history shows — and it does not
+ *  count the attempts out loud, because the ladder's length is policy. */
 const PARK_REASONS: Record<OperationErrorCode, string> = {
   rate_limited: "Research kept being throttled — try again later.",
   provider_unavailable: "Company research is unavailable right now.",
   unreadable_source: "We couldn't read this company's website.",
   not_found: "We couldn't find anything to research for this company.",
-  invalid_response: "Research came back unusable three times.",
+  invalid_response: "Research kept coming back unusable.",
   insufficient_credits: "Not enough credits to research this lead.",
   platform_paused: "Research is paused right now.",
-  timeout: "Research timed out three times.",
-  unknown: "Research failed three times.",
+  timeout: "Research kept timing out.",
+  unknown: "Research failed every time we tried.",
 };
 
 /* ------------------------------------------------------------------ */
@@ -116,6 +115,15 @@ export const beginResearch = internalMutation({
  * `strategyIds`: PLAN §3 gives a person two signals found a higher score, and
  * deriving it from the stored row rather than asking the model for it keeps
  * it explainable and impossible to invent.
+ *
+ * The run lease is re-checked, like every other write in the loop — but what
+ * a lost lease decides here is narrower than elsewhere, because this result
+ * has already been PAID for (the page, then the generation). So:
+ *   holding the lease — write, count the day's research, hand the run back;
+ *   lost or manual   — write anyway, unless a newer step has already scored
+ *                      this lead, in which case that answer is the current
+ *                      one and this older one is dropped rather than
+ *                      overwriting it; the run is not touched either way.
  */
 export const applyResearch = internalMutation({
   args: {
@@ -137,6 +145,14 @@ export const applyResearch = internalMutation({
     const lead = await ctx.db.get("prospects", args.prospectId);
     if (lead === null || lead.agentId !== args.agentId) {
       await continueRun(ctx, args.agentId, args.leaseId);
+      return { applied: false };
+    }
+    const agent = await ctx.db.get("agents", args.agentId);
+    // The same lease check `beginResearch` and `continueRun` make. A manual
+    // step passes a lease no run holds, which is exactly the "not under a
+    // run" case below.
+    const underLease = agent !== null && agent.run?.leaseId === args.leaseId;
+    if (!underLease && lead.research.status === "researched") {
       return { applied: false };
     }
     const operationKey = `lead:${args.prospectId}:research:r${args.revision}:a${args.attempt}`;
@@ -181,8 +197,16 @@ export const applyResearch = internalMutation({
       ),
       nextActionAt: undefined,
       lastError: undefined,
+      // The research ladder is spent: this lead is scored. An outreach ladder
+      // it may already have is none of research's business.
+      ...(lead.stepAttempts?.research === undefined
+        ? {}
+        : { stepAttempts: { ...lead.stepAttempts, research: undefined } }),
       updatedAt: now,
     });
+    if (underLease && agent !== null) {
+      await countResearchedToday(ctx, agent, now);
+    }
 
     // Evidence is only ever synthesized from OUR OWN retrieval: no page, no
     // source to cite, so no rows (`leads/evidence.ts`).
@@ -303,7 +327,10 @@ async function recordStepFailure(
   code: OperationErrorCode,
 ): Promise<{ attempts: number; parked: boolean }> {
   const now = Date.now();
-  const attempts = (lead.lastError?.attempts ?? 0) + 1;
+  // RESEARCH's own attempts (PLAN §9.1 counts step-level ones): a lead whose
+  // outreach write failed twice has a full research ladder, and the other way
+  // round. `lastError` still carries the count for the drawer to print.
+  const attempts = (lead.stepAttempts?.research ?? 0) + 1;
   const lastError = { code, at: now, attempts };
   const research: LeadResearch = { status: "failed", lastError };
   const delay = STEP_RETRY_DELAYS_MS[attempts - 1];
@@ -312,6 +339,7 @@ async function recordStepFailure(
     research,
     scoreKey: leadScoreKey(research),
     lastError,
+    stepAttempts: { ...lead.stepAttempts, research: attempts },
     updatedAt: now,
     ...(parked
       ? {
@@ -335,6 +363,32 @@ async function recordStepFailure(
     });
   }
   return { attempts, parked };
+}
+
+/**
+ * One more lead researched by the RUN today (`agents.researchDay`).
+ *
+ * The planner reads this against `dailyResearchCap` instead of the day-keyed
+ * page allowance, which the owner's own website re-analysis also spends. Only
+ * research the run itself drove is counted: a lead a person paid to research
+ * by hand is their choice, not the agent's budget.
+ */
+async function countResearchedToday(
+  ctx: MutationCtx,
+  agent: Doc<"agents">,
+  now: number,
+): Promise<void> {
+  const org = await ctx.db.get("orgs", agent.orgId);
+  if (org === null) {
+    return;
+  }
+  const periodKey = dailyPeriodKey(org, now);
+  const count =
+    agent.researchDay?.periodKey === periodKey ? agent.researchDay.count + 1 : 1;
+  await ctx.db.patch("agents", agent._id, {
+    researchDay: { periodKey, count },
+    updatedAt: now,
+  });
 }
 
 /** Hand the run back to the planner, if this step still holds the lease. */

@@ -114,13 +114,6 @@ export const TRIAL_METRIC_CAPS: Record<
   scrapes: { lifetime: 80, daily: 15 },
 };
 
-/**
- * The org's lifetime page allowance, named for the one caller that
- * reserves it directly (`integrations/firecrawl.ts`) rather than through the
- * credit wrapper, because its per-prospect cap is its own rule.
- */
-export const TRIAL_SCRAPES_LIFETIME_LIMIT = TRIAL_METRIC_CAPS.scrapes.lifetime;
-
 /** PLAN §6: the trial's daily send ceiling, whatever the owner types. */
 export const TRIAL_DAILY_SEND_LIMIT_MAX = 30;
 
@@ -165,6 +158,12 @@ export const PLATFORM_BUDGETS: Record<TrialMeteredMetric, PlatformBudgetPolicy> 
       periodKind: "utc_month",
       periodPrefix: "searches",
       envName: "ENRICH_MONTHLY_SEARCH_BUDGET",
+      // KEEP THIS AT OR BELOW 50. The lead-data account gives away 50 unique
+      // searches a month and every search past them is billed per row, so
+      // this budget is the ONLY thing standing between the platform and a
+      // real invoice: the per-org caps bound one trial, and nothing else
+      // counts the month across every org. Raising it above the free pool
+      // means paying for searches, deliberately.
       defaultLimit: 40,
     },
     ai_calls: {
@@ -230,6 +229,36 @@ export function uncertainHoldMaxAgeMs(): number {
 export const SWEEP_BATCH_SIZE = 50;
 
 /* ------------------------------------------------------------------ */
+/* The step-level retry ladder (PLAN §9.1 "Retries")                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How far out a failed step moves the lead before it is tried again:
+ * 5 min → 30 min → 4 h, exactly as PLAN §9.1 writes it. Convex does not
+ * re-run a failed action, so the delay is the retry: the lead comes back due
+ * and the next run — or the recovery sweep — picks it up.
+ *
+ * One ladder, shared by every per-lead step (research, outreach), so "what
+ * happens after a failure" is one number in one place rather than a constant
+ * per domain that quietly drifts from the plan.
+ */
+export const STEP_RETRY_DELAYS_MS: readonly number[] = [
+  5 * 60 * 1000,
+  30 * 60 * 1000,
+  4 * 60 * 60 * 1000,
+];
+
+/**
+ * Failures a step may take before the lead is parked as `needs_attention`
+ * with a reason and a Retry button: the first attempt plus the three the
+ * ladder waits for. The attempt that has no rung left is the one that parks.
+ *
+ * COUNTED PER STEP, per lead (`prospects.stepAttempts`): research failing
+ * twice must not spend the outreach writer's ladder, and vice versa.
+ */
+export const STEP_MAX_ATTEMPTS = STEP_RETRY_DELAYS_MS.length + 1;
+
+/* ------------------------------------------------------------------ */
 /* Per-user rate limits                                                */
 /* ------------------------------------------------------------------ */
 
@@ -253,8 +282,14 @@ export const RATE_LIMITS = {
     capacity: 3,
   },
   regenerate: { kind: "token bucket", rate: 3, period: 60_000, capacity: 3 },
-  findLeads: { kind: "token bucket", rate: 6, period: 60_000, capacity: 6 },
+  // The last step of setup. It buys nothing, but it fans out up to three
+  // counts against the platform's own provider quota, so it is limited like
+  // every other door that reaches a provider.
+  confirmSignals: { kind: "token bucket", rate: 5, period: 60_000, capacity: 5 },
   researchLead: { kind: "token bucket", rate: 10, period: 60_000, capacity: 10 },
+  // Re-queueing a parked lead spends nothing itself, but it pushes that lead
+  // straight back into the paid loop, so it is a credit-spending door.
+  retryLead: { kind: "token bucket", rate: 10, period: 60_000, capacity: 10 },
   revealEmail: { kind: "token bucket", rate: 10, period: 60_000, capacity: 10 },
   runAgentNow: { kind: "token bucket", rate: 3, period: 60_000, capacity: 3 },
   connectInbox: { kind: "token bucket", rate: 5, period: 60_000, capacity: 5 },

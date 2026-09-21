@@ -8,202 +8,24 @@
  * that contacts them — nothing here spends money or schedules work.
  */
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
 import type { SourcedLead } from "../integrations/enrich/rows";
 import {
-  assertEpochMs,
-  boundedLimit,
+  boundedString,
   domainError,
-  EPOCH_MS_MIN,
-  invalid,
+  leadScoreKey,
   leadSourceKey,
+  PROSPECT_STAGE_REASON_MAX_LENGTH,
 } from "../lib/validators";
 import type {
   AgentIcp,
-  LeadApproval,
   LeadOrigin,
+  LeadResearch,
   LeadStage,
 } from "../lib/validators";
+import { appendLeadEvent } from "./events";
 import { preRankLead } from "./preRank";
 import type { CompanySizeRange } from "./preRank";
-import { prospectFields } from "../schema";
-import { v } from "convex/values";
-
-export const vProspectDoc = v.object({
-  _id: v.id("prospects"),
-  _creationTime: v.number(),
-  ...prospectFields,
-});
-
-export const vListPage = v.object({
-  items: v.array(vProspectDoc),
-  cursor: v.union(v.string(), v.null()),
-  hasMore: v.boolean(),
-});
-
-type ListPageArgs = {
-  orgId: Id<"orgs">;
-  stage?: LeadStage;
-  approval?: LeadApproval;
-  dueRange?: { from?: number; to?: number };
-  unscheduled?: boolean;
-  topScoreFirst?: boolean;
-  cursor?: string | null;
-  limit?: number;
-};
-
-/**
- * Every list mode is an exact index range — never a post-filtered page. The
- * modes and the index behind each:
- *
- *   due (`dueRange`): soonest-due first on `by_orgId_and_nextActionAt`.
- *   A lead with no due time cannot satisfy a range bound, so this mode never
- *   hides one behind a page that looks filtered — it appears in the default
- *   and `unscheduled` modes instead.
- *
- *   unscheduled: the complementary slice — leads with NO `nextActionAt`.
- *
- *   score (`topScoreFirst`): best leads first on
- *   `by_orgId_and_scoreKey`. `scoreKey` is the denormalised mirror of
- *   `research.aiScore`; unresearched leads have none and sort below, which is
- *   exactly the "scored first, the rest one click away" order of PLAN §3.
- *
- *   stage / approval: the Contacts filters, each on its own index.
- *
- *   default: the whole org by next-action time, most recent first.
- *
- * Unsupported combinations REFUSE rather than silently post-filter: the
- * schema declares an index per enabled combination, and a filter pair with no
- * index is added deliberately or not at all.
- */
-export async function listPage(
-  ctx: QueryCtx,
-  args: ListPageArgs,
-): Promise<typeof vListPage.type> {
-  const paginate = {
-    numItems: boundedLimit(args.limit),
-    cursor: args.cursor ?? null,
-  };
-  const exclusive = [
-    args.stage !== undefined,
-    args.approval !== undefined,
-    args.dueRange !== undefined,
-    args.unscheduled === true,
-    args.topScoreFirst === true,
-  ].filter(Boolean).length;
-  if (exclusive > 1) {
-    throw invalid(
-      "stage, approval, dueRange, unscheduled and topScoreFirst are separate list modes — no index supports combining them",
-    );
-  }
-
-  if (args.unscheduled === true) {
-    // `undefined` sorts below every bound on this index, and every stored
-    // `nextActionAt` is ≥ EPOCH_MS_MIN, so `lt(EPOCH_MS_MIN)` names exactly
-    // the rows with no due time — the unscheduled state as a first-class
-    // slice rather than a sentinel date the reader has to know about.
-    const result = await ctx.db
-      .query("prospects")
-      .withIndex("by_orgId_and_nextActionAt", (q) =>
-        q.eq("orgId", args.orgId).lt("nextActionAt", EPOCH_MS_MIN),
-      )
-      .order("desc")
-      .paginate(paginate);
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
-  }
-
-  if (args.dueRange !== undefined) {
-    const from =
-      args.dueRange.from === undefined
-        ? undefined
-        : assertEpochMs(args.dueRange.from, "dueRange.from");
-    const to =
-      args.dueRange.to === undefined
-        ? undefined
-        : assertEpochMs(args.dueRange.to, "dueRange.to");
-    if (from !== undefined && to !== undefined && from > to) {
-      throw invalid("dueRange.from must not be after dueRange.to");
-    }
-    // A lead with NO `nextActionAt` stores `undefined` in the index, which
-    // sorts below every bound — `lte(to)` alone would return undated leads as
-    // "due". The lower bound is therefore always present: the caller's
-    // `from`, or 0 meaning "has a due date at all".
-    const lower = from ?? 0;
-    const result = await ctx.db
-      .query("prospects")
-      .withIndex("by_orgId_and_nextActionAt", (q) => {
-        const scoped = q
-          .eq("orgId", args.orgId)
-          .gte("nextActionAt", lower);
-        return to === undefined ? scoped : scoped.lte("nextActionAt", to);
-      })
-      .order("asc")
-      .paginate(paginate);
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
-  }
-
-  if (args.topScoreFirst === true) {
-    const result = await ctx.db
-      .query("prospects")
-      .withIndex("by_orgId_and_scoreKey", (q) =>
-        q.eq("orgId", args.orgId),
-      )
-      .order("desc")
-      .paginate(paginate);
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
-  }
-
-  const approval = args.approval;
-  if (approval !== undefined) {
-    const result = await ctx.db
-      .query("prospects")
-      .withIndex("by_orgId_and_approval", (q) =>
-        q.eq("orgId", args.orgId).eq("approval", approval),
-      )
-      .order("desc")
-      .paginate(paginate);
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
-  }
-
-  const stage = args.stage;
-  const result =
-    stage !== undefined
-      ? await ctx.db
-          .query("prospects")
-          .withIndex("by_orgId_and_stage_and_updatedAt", (q) =>
-            q.eq("orgId", args.orgId).eq("stage", stage),
-          )
-          .order("desc")
-          .paginate(paginate)
-      : await ctx.db
-          .query("prospects")
-          .withIndex("by_orgId_and_nextActionAt", (q) =>
-            q.eq("orgId", args.orgId),
-          )
-          .order("desc")
-          .paginate(paginate);
-  return {
-    items: result.page,
-    cursor: result.isDone ? null : result.continueCursor,
-    hasMore: !result.isDone,
-  };
-}
 
 /**
  * Load a lead for a write. A missing row and a row in another org are
@@ -219,6 +41,67 @@ export async function loadProspectForWrite(
     throw domainError("NOT_FOUND", "prospect not found");
   }
   return prospect;
+}
+
+/* ------------------------------------------------------------------ */
+/* Un-parking — the one way out of `needs_attention`                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Put a parked lead back in the queue. THE writer for that transition,
+ * whichever button asked for it.
+ *
+ * `needs_attention` is the end of the retry ladder (PLAN §9.1): the step
+ * failed its three tries and the lead now waits for a person. This is that
+ * person's answer, so it clears the ladder rather than continuing it — both
+ * step counters go, `lastError` goes, and the lead becomes due immediately.
+ *
+ * It costs NOTHING. Un-parking is not research: a lead that already has a
+ * score keeps it and goes back to `researched`, and one that does not goes
+ * back to `found`, where the planner picks it up and pays the ordinary
+ * research price once — the same 3 credits whichever door the person used
+ * (PLAN §6). No automatic transition may do this (`advancedLeadStage` does
+ * not leave `needs_attention`), which is what makes the button honest.
+ */
+export const LEAD_RETRY_REASON = "Put back in the queue by the organization";
+
+export async function unparkLead(
+  ctx: MutationCtx,
+  lead: Doc<"prospects">,
+  args: { reason: string; now: number; identityKey?: string },
+): Promise<LeadStage> {
+  const researched = lead.research.status === "researched";
+  const research: LeadResearch = researched
+    ? lead.research
+    : { status: "not_researched" };
+  const stage: LeadStage = researched ? "researched" : "found";
+  await ctx.db.patch("prospects", lead._id, {
+    research,
+    // Written in the same patch as `research`, never alone (PLAN §7).
+    scoreKey: leadScoreKey(research),
+    stage,
+    stageReason: boundedString(args.reason, "stageReason", {
+      min: 1,
+      max: PROSPECT_STAGE_REASON_MAX_LENGTH,
+    }),
+    lastError: undefined,
+    stepAttempts: undefined,
+    nextActionAt: args.now,
+    updatedAt: args.now,
+  });
+  await appendLeadEvent(ctx, {
+    orgId: lead.orgId,
+    prospectId: lead._id,
+    kind: "stage_changed",
+    summary: args.reason,
+    operationKey: `lead:${lead._id}:retry:${args.now}`,
+    ...(args.identityKey === undefined
+      ? {}
+      : { actor: { source: "human" as const, identityKey: args.identityKey } }),
+    fromStage: lead.stage,
+    toStage: stage,
+  });
+  return stage;
 }
 
 /* ------------------------------------------------------------------ */

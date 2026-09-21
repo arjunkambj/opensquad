@@ -22,6 +22,7 @@ import {
   LEAD_STAGES,
   vAgentMode,
   vAgentStatus,
+  vOperationErrorCode,
   vSignalKind,
 } from "../lib/validators";
 import type { LeadStage } from "../lib/validators";
@@ -59,9 +60,19 @@ const vStageCounts = v.object({
  * `running` is the run lease being LIVE, not merely present: an expired lease
  * belongs to an action that is already dead, and telling the user it is still
  * working would be the one piece of fiction on the screen.
+ *
+ * "Live" is measured against the caller's `now`, never `Date.now()` read in
+ * here: a query that reads the wall clock answers differently for the same
+ * arguments, so its subscription would keep showing "working…" long after the
+ * lease died and would never re-run to correct itself. `leaseUntil` travels
+ * too, so a screen can count down without asking again. With no `now` the
+ * answer is the honest weaker one — a lease exists — which the recovery
+ * sweep clears within ten minutes. Callers should pass a COARSE clock (a
+ * value that changes every few seconds at most): a per-millisecond argument
+ * is a new subscription key every render.
  */
 export const runState = query({
-  args: { orgId: v.id("orgs") },
+  args: { orgId: v.id("orgs"), now: v.optional(v.number()) },
   returns: v.union(
     v.null(),
     v.object({
@@ -69,6 +80,8 @@ export const runState = query({
       status: vAgentStatus,
       mode: vAgentMode,
       running: v.boolean(),
+      /** When the current lease expires; absent when no run holds one. */
+      leaseUntil: v.optional(v.number()),
       startedAt: v.optional(v.number()),
       lastRunAt: v.optional(v.number()),
       nextRunAt: v.optional(v.number()),
@@ -87,13 +100,16 @@ export const runState = query({
     if (agent === null) {
       return null;
     }
-    const now = Date.now();
     return {
       agentId: agent._id,
       status: agent.status,
       mode: agent.mode,
-      running: agent.run !== undefined && agent.run.leaseUntil > now,
-      ...(agent.run !== undefined ? { startedAt: agent.run.startedAt } : {}),
+      running:
+        agent.run !== undefined &&
+        (args.now === undefined || agent.run.leaseUntil > args.now),
+      ...(agent.run !== undefined
+        ? { leaseUntil: agent.run.leaseUntil, startedAt: agent.run.startedAt }
+        : {}),
       ...(agent.lastRunAt !== undefined ? { lastRunAt: agent.lastRunAt } : {}),
       ...(agent.nextRunAt !== undefined ? { nextRunAt: agent.nextRunAt } : {}),
       found: await countStage(ctx, agent._id, "found"),
@@ -110,6 +126,11 @@ export const runState = query({
  *
  * `exhausted` is the honest reason a signal stopped growing: its free pages
  * are used up, which is a different thing from a signal that found nobody.
+ *
+ * `parkedReason` is the other honest reason: a search refused this signal's
+ * filters, so the run skips it until a person switches it off and on again
+ * (`agents/sourcing.ts#parkStrategy`). Without it the row would say
+ * "enabled" and produce nothing for ever, with nothing to read.
  */
 export const byStrategy = query({
   args: { orgId: v.id("orgs") },
@@ -125,6 +146,8 @@ export const byStrategy = query({
       /** True when the provider estimated that count rather than ran it. */
       matchCountIsApproximate: v.boolean(),
       exhausted: v.boolean(),
+      /** Why the run parked this signal; absent when it is healthy. */
+      parkedReason: v.optional(vOperationErrorCode),
       lastRunAt: v.optional(v.number()),
     }),
   ),
@@ -146,6 +169,9 @@ export const byStrategy = query({
         matchCount: strategy.matchCount,
         matchCountIsApproximate: strategy.matchCountIsApproximate === true,
         exhausted: strategy.nextPage > MAX_SEARCH_PAGE,
+        ...(strategy.lastError !== undefined
+          ? { parkedReason: strategy.lastError.code }
+          : {}),
         ...(strategy.lastRunAt !== undefined
           ? { lastRunAt: strategy.lastRunAt }
           : {}),

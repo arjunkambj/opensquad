@@ -11,22 +11,15 @@
  * steps do that, under `withCredits`, where they always did.
  */
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { mutation } from "../_generated/server";
-import { appendLeadEvent } from "../leads/events";
+import type { MutationCtx } from "../_generated/server";
+import { LEAD_RETRY_REASON, unparkLead } from "../leads/model";
 import { requireOrgMember } from "../lib/auth";
 import { requireRateLimit } from "../lib/rateLimits";
-import {
-  boundedString,
-  domainError,
-  leadScoreKey,
-  PROSPECT_STAGE_REASON_MAX_LENGTH,
-  vLeadStage,
-} from "../lib/validators";
-import type { LeadResearch, LeadStage } from "../lib/validators";
+import { domainError, invalid, vLeadStage } from "../lib/validators";
+import { strategyIsSelectable } from "./strategiesModel";
 import { v } from "convex/values";
-
-/** What a retried lead's history records. */
-const RETRY_STAGE_REASON = "Put back in the queue by the organization";
 
 /**
  * Switch one signal on or off.
@@ -36,6 +29,16 @@ const RETRY_STAGE_REASON = "Put back in the queue by the organization";
  * searched from the next step onwards, and one switched on is picked up the
  * same way. Work already done for it is kept — the leads it found are the
  * user's leads whatever the signal's state now is.
+ *
+ * A signal that matches NOBODY cannot be switched on here, exactly as setup
+ * and confirm refuse it (`strategiesModel.ts`): the run would buy a page of
+ * search that can only come back empty, and this was the one door into the
+ * agent that did not check.
+ *
+ * Switching a signal on is also how a PARKED one is un-parked: a search
+ * refused its filters once, the planner stopped choosing it, and the person
+ * answering that is saying "try it again". If the filters are still unusable
+ * the next run parks it again, with its reason.
  */
 export const setStrategyEnabled = mutation({
   args: {
@@ -52,9 +55,16 @@ export const setStrategyEnabled = mutation({
       // one — existence never leaks across an org boundary.
       throw domainError("NOT_FOUND", "signal not found");
     }
-    if (strategy.enabled !== args.enabled) {
+    if (args.enabled && !strategyIsSelectable(strategy.matchCount)) {
+      throw invalid(
+        "this signal matches nobody, so switching it on would search for no one",
+      );
+    }
+    const parked = strategy.lastError !== undefined;
+    if (strategy.enabled !== args.enabled || (args.enabled && parked)) {
       await ctx.db.patch("strategies", strategy._id, {
         enabled: args.enabled,
+        ...(args.enabled ? { lastError: undefined } : {}),
         updatedAt: Date.now(),
       });
     }
@@ -111,13 +121,19 @@ export const runNow = mutation({
  * Put one parked lead back in the queue — the Retry button beside a
  * needs-attention row.
  *
- * `needs_attention` is the end of the retry ladder (PLAN §9.1): three step
- * failures, then the lead waits for a person. This is that person's answer,
- * so it clears the ladder rather than continuing it — `lastError` goes, the
- * attempt count starts again, and the lead becomes due immediately. The
- * planner selects on stage `found` plus a due time, so that is the state it
- * is returned to; a lead that already had a score keeps it and goes back to
- * `researched` instead of paying to research it twice.
+ * The write itself is `leads/model.ts#unparkLead`, the one writer of that
+ * transition, so this button and Contacts' Retry leave a lead in exactly the
+ * same state. It is FREE: un-parking buys nothing, and the research the
+ * planner then does costs the ordinary 3 credits once, whichever door the
+ * person used (PLAN §6).
+ *
+ * The lead is due immediately, and so is the AGENT: the card says "Retry puts
+ * one back in the queue for the next run", and without nudging `nextRunAt`
+ * the next run was up to an hour away. A run holding the lease is left alone
+ * — it is already working, and it reads the lead's due time at every step.
+ *
+ * Rate-limited even though it spends nothing directly, because what it does
+ * is push a lead back into the paid loop (PLAN §6 "Closing the ways in").
  *
  * Only a parked lead may be retried. Nothing else is re-queueable this way,
  * so a rejected or closed lead cannot be revived through this door.
@@ -133,6 +149,7 @@ export const retryLead = mutation({
       ctx,
       args.orgId,
     );
+    await requireRateLimit(ctx, "retryLead", identityKey);
     const lead = await ctx.db.get("prospects", args.prospectId);
     if (lead === null || lead.orgId !== args.orgId) {
       throw domainError("NOT_FOUND", "lead not found");
@@ -142,34 +159,37 @@ export const retryLead = mutation({
     }
 
     const now = Date.now();
-    const researched = lead.research.status === "researched";
-    const research: LeadResearch = researched
-      ? lead.research
-      : { status: "not_researched" };
-    const stage: LeadStage = researched ? "researched" : "found";
-    await ctx.db.patch("prospects", args.prospectId, {
-      research,
-      // Written in the same patch as `research`, never alone (PLAN §7).
-      scoreKey: leadScoreKey(research),
-      stage,
-      stageReason: boundedString(RETRY_STAGE_REASON, "stageReason", {
-        min: 1,
-        max: PROSPECT_STAGE_REASON_MAX_LENGTH,
-      }),
-      lastError: undefined,
-      nextActionAt: now,
-      updatedAt: now,
+    const stage = await unparkLead(ctx, lead, {
+      reason: LEAD_RETRY_REASON,
+      now,
+      identityKey,
     });
-    await appendLeadEvent(ctx, {
-      orgId: lead.orgId,
-      prospectId: lead._id,
-      kind: "stage_changed",
-      summary: RETRY_STAGE_REASON,
-      operationKey: `lead:${lead._id}:retry:${now}`,
-      actor: { source: "human", identityKey },
-      fromStage: lead.stage,
-      toStage: stage,
-    });
+    await nudgeAgent(ctx, lead.agentId, now);
     return { stage };
   },
 });
+
+/**
+ * Make this agent due now, unless a run already holds it.
+ *
+ * The cron starts a run for every live agent whose `nextRunAt` has come, so
+ * this is the whole handover — nothing here takes a lease, schedules a step
+ * or spends anything, and a paused or draft agent is left exactly as it is.
+ */
+async function nudgeAgent(
+  ctx: MutationCtx,
+  agentId: Id<"agents">,
+  now: number,
+): Promise<void> {
+  const agent = await ctx.db.get("agents", agentId);
+  if (
+    agent === null ||
+    agent.status !== "live" ||
+    agent.mode === "paused" ||
+    agent.run !== undefined ||
+    (agent.nextRunAt !== undefined && agent.nextRunAt <= now)
+  ) {
+    return;
+  }
+  await ctx.db.patch("agents", agent._id, { nextRunAt: now, updatedAt: now });
+}

@@ -12,8 +12,11 @@
  *                time so a step that dies comes back due instead of vanishing.
  *   REST       — the message is written; whatever happens next belongs to the
  *                approval and the send ledger, not to the loop.
- *   LADDER     — the step failed: 5 min, then 30 min, then `needs_attention`
- *                with a reason a person can act on.
+ *   LADDER     — the step failed: 5 min, then 30 min, then 4 h, then
+ *                `needs_attention` with a reason a person can act on. The
+ *                attempts are counted per STEP
+ *                (`prospects.stepAttempts.outreach`), so a lead that fought
+ *                its research does not arrive here with the ladder spent.
  *   RELEASE    — the step never began because of something that has nothing to
  *                do with this lead (out of credits, kill switch), so it goes
  *                back due WITHOUT burning an attempt (PLAN §9.1).
@@ -26,6 +29,7 @@ import type { DataModel, Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import type { GenericDatabaseReader } from "convex/server";
 import { appendLeadEvent, findLeadEventByOperationKey } from "../leads/events";
+import { STEP_MAX_ATTEMPTS, STEP_RETRY_DELAYS_MS } from "../lib/limits";
 import {
   advancedLeadStage,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
@@ -36,9 +40,9 @@ import type { OperationErrorCode } from "../lib/validators";
 /* ------------------------------------------------------------------ */
 /* Timing                                                              */
 /*                                                                     */
-/* These belong in `convex/lib/limits.ts` with the rest of the policy  */
-/* numbers; they are local constants only because that file is         */
-/* integrator-only (EXECUTION §0).                                     */
+/* The retry ladder is PLAN §9.1 policy and lives in                   */
+/* `convex/lib/limits.ts` with every other number; what stays here is  */
+/* this loop's own watchdog and scan bounds.                           */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -51,23 +55,20 @@ export const OUTREACH_STALL_MS = 15 * 60 * 1000;
 /** Conversations one lead can hold. A lead has a handful at most. */
 export const CONVERSATION_SCAN_MAX = 10;
 
-/** PLAN §9.1's ladder: 5 min, 30 min, then the lead is parked. */
-const STEP_RETRY_DELAYS_MS: readonly number[] = [5 * 60 * 1000, 30 * 60 * 1000];
-
-const STEP_MAX_ATTEMPTS = 3;
-
 /** How a parked lead explains itself. The CODE is what the client maps to
- *  copy; this sentence is what the lead's history shows. */
+ *  copy; this sentence is what the lead's history shows — and it does not
+ *  count the attempts out loud, because the ladder's length is policy
+ *  (`lib/limits.ts`). */
 const PARK_REASONS: Record<OperationErrorCode, string> = {
   rate_limited: "Writing this email kept being throttled — try again later.",
   provider_unavailable: "The email writer is unavailable right now.",
   unreadable_source: "There was not enough about this lead to write from.",
   not_found: "The lead's conversation or address could not be resolved.",
-  invalid_response: "The written email came back unusable three times.",
+  invalid_response: "The written email kept coming back unusable.",
   insufficient_credits: "Not enough credits to write this email.",
   platform_paused: "Outreach is paused right now.",
-  timeout: "Writing this email timed out three times.",
-  unknown: "Writing this email failed three times.",
+  timeout: "Writing this email kept timing out.",
+  unknown: "Writing this email failed every time we tried.",
 };
 
 function stageReason(text: string): string {
@@ -166,6 +167,11 @@ export async function restLeadAfterWrite(
   await ctx.db.patch("prospects", lead._id, {
     nextActionAt: undefined,
     lastError: undefined,
+    // The write succeeded, so this step's ladder is spent. A research ladder
+    // the lead may carry is not this step's to clear.
+    ...(lead.stepAttempts?.outreach === undefined
+      ? {}
+      : { stepAttempts: { ...lead.stepAttempts, outreach: undefined } }),
     updatedAt: Date.now(),
   });
 }
@@ -200,12 +206,16 @@ export async function failOutreachStep(
   code: OperationErrorCode,
 ): Promise<{ attempts: number; parked: boolean }> {
   const now = Date.now();
-  const attempts = (lead.lastError?.attempts ?? 0) + 1;
+  // THIS step's attempts (PLAN §9.1 counts step-level ones): a lead whose
+  // research failed twice still gets a full ladder to be written to, and the
+  // other way round. `lastError` carries the count for the drawer to print.
+  const attempts = (lead.stepAttempts?.outreach ?? 0) + 1;
   const lastError = { code, at: now, attempts };
   const delay = STEP_RETRY_DELAYS_MS[attempts - 1];
   const parked = attempts >= STEP_MAX_ATTEMPTS || delay === undefined;
   await ctx.db.patch("prospects", lead._id, {
     lastError,
+    stepAttempts: { ...lead.stepAttempts, outreach: attempts },
     updatedAt: now,
     ...(parked
       ? {
@@ -297,6 +307,10 @@ export async function scheduleNextOutreachStep(
     followUpsSent,
     nextActionAt: delay === null ? undefined : at + delay,
     lastError: undefined,
+    // A provider accepted the message, so this step's ladder is spent.
+    ...(lead.stepAttempts?.outreach === undefined
+      ? {}
+      : { stepAttempts: { ...lead.stepAttempts, outreach: undefined } }),
     updatedAt: Date.now(),
   });
 }

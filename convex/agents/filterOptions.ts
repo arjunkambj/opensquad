@@ -34,22 +34,18 @@ import {
 import type { LeadFilterOption, OperationErrorCode } from "../lib/validators";
 import { v } from "convex/values";
 
-/**
- * How old a cached catalogue may be before a reader should treat it as
- * stale. The weekly cron keeps it well inside this; the window exists so a
- * caller can say "refresh first" rather than silently searching against a
- * catalogue nobody has checked in a month.
- */
-export const FILTER_OPTIONS_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-
 /** A catalogue smaller than this is not a catalogue — the live one has 46. */
 const MIN_PLAUSIBLE_FILTER_COUNT = 10;
 
+/**
+ * `fetchedAt` travels instead of a computed "stale" flag: a Convex query must
+ * not read the wall clock — the same arguments would answer differently and
+ * the subscription would never re-run when the answer changed — and every
+ * caller that cares about age is an action, which has a clock of its own.
+ */
 const vCachedFilterOptions = v.object({
   options: v.record(v.string(), vLeadFilterOption),
   fetchedAt: v.number(),
-  /** `true` once the cache is older than `FILTER_OPTIONS_MAX_AGE_MS`. */
-  stale: v.boolean(),
 });
 
 /**
@@ -68,7 +64,6 @@ export const cachedFilterOptions = internalQuery({
 type CachedFilterOptions = {
   options: Record<string, LeadFilterOption>;
   fetchedAt: number;
-  stale: boolean;
 };
 
 /** The newest cached catalogue. One reader, so "the singleton" means the
@@ -84,11 +79,7 @@ async function readCachedOptions(
   if (row === null) {
     return null;
   }
-  return {
-    options: row.options,
-    fetchedAt: row.fetchedAt,
-    stale: Date.now() - row.fetchedAt > FILTER_OPTIONS_MAX_AGE_MS,
-  };
+  return { options: row.options, fetchedAt: row.fetchedAt };
 }
 
 /** Replace the singleton with a freshly fetched catalogue. */

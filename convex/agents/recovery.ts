@@ -20,6 +20,13 @@
  *   hold. We never hand back money we may have spent — the billing sweep's
  *   24-hour worst-case commit is the other end of the same rule, and this
  *   pass exists to reach the hold with a real answer first.
+ *
+ * An uncertain SEARCH, PAGE or GENERATION hold is deliberately not touched
+ * here. Reconciling means asking the provider what an operation did, and the
+ * email finder is the only one of them that submits a job with an id we
+ * recorded; the others are one-shot requests with nothing to look up
+ * afterwards. Guessing their actual usage would be releasing money we may
+ * have spent, so PLAN §6's 24-hour worst-case commit is their settlement.
  */
 import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
@@ -45,18 +52,24 @@ const STALLED_LEAD_SCAN = 25;
  * The email finder's own holds, by the prefix every key the credit wrapper
  * writes carries: `<action>:<caller key>` (`composeOperationKey`).
  *
- * The pass reads the AGE range and tests this prefix in JS rather than
- * ranging the key: age is what decides whether a hold may be reconciled at
- * all, so an age-ordered range puts every eligible hold first and no young
- * hold can hide an old one behind it.
+ * The pass ranges ON that prefix, inside the `markUncertain` settlement, so
+ * every row it reads is a hold it can actually settle. Reading an age range
+ * instead let any other action's old holds — which only the 24-hour
+ * worst-case commit will ever move — fill the window ahead of a reveal that
+ * has a job waiting to be asked about.
+ *
+ * `;` is the character after `:`, so the half-open range covers exactly the
+ * keys that start with the prefix.
  */
 const REVEAL_ACTION: PaidAction = "get_email";
 const REVEAL_HOLD_PREFIX = `${REVEAL_ACTION}:`;
+const REVEAL_HOLD_PREFIX_END = `${REVEAL_ACTION};`;
 
 /**
- * Rows of the `uncertain` age range one pass reads. Other actions' old holds
- * share the range and are stepped past, so the scan is wider than the batch
- * it fills; the bound is what keeps the sweep inside one transaction.
+ * Rows of the reveal-hold range one pass reads. Wider than the batch it
+ * fills because the range is ordered by key rather than by age, and the pass
+ * settles the OLDEST first; the bound is what keeps it inside one
+ * transaction.
  */
 const REVEAL_SCAN_MAX = 5 * SWEEP_BATCH_SIZE;
 
@@ -138,35 +151,38 @@ export const sweepStalledRuns = internalMutation({
     }
 
     // Every other action's hold is settled by its own path, or by the billing
-    // sweep's worst-case commit. Only the email finder has a job that can
-    // still be asked what it did, so only its holds are reconciled here.
+    // sweep's worst-case commit. Only the email finder submits a JOB that can
+    // still be asked what it did — a search, a page fetch and a generation
+    // leave no reference anything can look up — so only its holds are
+    // reconciled here, and this range holds nothing else.
     //
-    // The cutoff is IN the range and the range is oldest-first, so every row
-    // read is already old enough: a hold that ages past the window is reached
-    // before any younger one, whatever its key. The scan is deliberately
-    // wider than the batch, because other actions' old holds share the range
-    // and reading exactly one batch would let them crowd this one out again.
+    // Oldest first, within that range: the range is ordered by key, so the
+    // rows are sorted before any is dispatched. A hold younger than the poll
+    // belt's own window is left alone — the reveal's poller is still on it.
     const revealCutoff = now - REVEAL_RECONCILE_AFTER_MS;
-    const oldHolds = await ctx.db
+    const revealHolds = await ctx.db
       .query("providerOperations")
-      .withIndex("by_state_and_updatedAt", (q) =>
-        q.eq("state", "uncertain").lt("updatedAt", revealCutoff),
+      .withIndex("by_settlement_and_operationKey", (q) =>
+        q
+          .eq("settlement", "markUncertain")
+          .gte("operationKey", REVEAL_HOLD_PREFIX)
+          .lt("operationKey", REVEAL_HOLD_PREFIX_END),
       )
       .take(REVEAL_SCAN_MAX);
+    const dueHolds = revealHolds
+      .filter(
+        (hold) => hold.state === "uncertain" && hold.updatedAt < revealCutoff,
+      )
+      .sort((a, b) => a.updatedAt - b.updatedAt)
+      .slice(0, SWEEP_BATCH_SIZE);
     let holdsReconciled = 0;
-    for (const hold of oldHolds) {
-      if (!hold.operationKey.startsWith(REVEAL_HOLD_PREFIX)) {
-        continue;
-      }
+    for (const hold of dueHolds) {
       await ctx.scheduler.runAfter(
         0,
         internal.integrations.enrich.revealPoll.reconcileRevealOperation,
         { orgId: hold.orgId, operationKey: hold.operationKey },
       );
       holdsReconciled += 1;
-      if (holdsReconciled >= SWEEP_BATCH_SIZE) {
-        break;
-      }
     }
 
     return {

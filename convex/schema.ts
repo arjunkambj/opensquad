@@ -122,6 +122,16 @@ export const orgFields = {
   updatedAt: v.number(),
   /** AgentMail inbox reference; unique when present, claimed transactionally. */
   inboxRef: v.optional(v.string()),
+  /**
+   * The mailbox ADDRESS of `inboxRef`, as the provider reported it at connect
+   * (`Inbox.email`). The provider documents the id and the address as separate
+   * fields, so the two are stored separately rather than one being assumed to
+   * be the other: this is what "is this message from us?" compares against
+   * (`inbox/replyGate.ts`, `leads/mutations.ts`) and what Manage inbox shows.
+   * Absent for a connection made before this field existed — every reader
+   * falls back to `inboxRef`.
+   */
+  inboxAddress: v.optional(v.string()),
   /** The webhook this org registered on the user's own account. */
   agentmailWebhookId: v.optional(v.string()),
   /**
@@ -212,6 +222,17 @@ export const agentFields = {
   /** When the cron should pick this agent up. Absent means "not scheduled". */
   nextRunAt: v.optional(v.number()),
   lastRunAt: v.optional(v.number()),
+  /**
+   * Leads THIS RUN LOOP researched in one org-local day, against
+   * `dailyResearchCap` (PLAN §9.2 step 5). Its own counter on purpose: the
+   * day-keyed page allowance it used to be read from also carries the
+   * owner's website re-analysis, which made a re-analyse day silently cost
+   * the agent its research. `periodKey` is the org's local day, the same key
+   * the usage ledger uses.
+   */
+  researchDay: v.optional(
+    v.object({ periodKey: v.string(), count: v.number() }),
+  ),
   /** Traceability for an agent folded out of a pre-pivot campaign. */
   legacyCampaignId: v.optional(v.id("legacyCampaigns")),
   // Onboarding generations (absent = never run). The UI renders loading /
@@ -270,6 +291,15 @@ export const strategyFields = {
   createdAt: v.number(),
   updatedAt: v.number(),
   lastRunAt: v.optional(v.number()),
+  /**
+   * Why the run PARKED this signal: a search refused its filter set, which a
+   * later run cannot fix by asking again (the catalogue moved, or the values
+   * were never cacheable). A parked signal is skipped by the planner — so one
+   * unusable signal can no longer stop the whole run — stays visible with its
+   * reason on the agent page, and is un-parked by switching it off and on.
+   * Absent means healthy.
+   */
+  lastError: v.optional(vOperationError),
 };
 
 /**
@@ -398,6 +428,19 @@ export const prospectFields = {
   nextActionAt: v.optional(v.number()),
   /** The last failed step; drives the retry ladder (PLAN §9.1). */
   lastError: v.optional(vOperationError),
+  /**
+   * Failures so far PER STEP, because PLAN §9.1 counts "step-level attempts"
+   * and a lead can fail at more than one of them. `lastError.attempts` is the
+   * count of whichever step failed last — what the drawer prints — and this
+   * is what each ladder reads before deciding to wait or to park, so research
+   * failing twice can no longer spend the outreach writer's ladder.
+   */
+  stepAttempts: v.optional(
+    v.object({
+      research: v.optional(v.number()),
+      outreach: v.optional(v.number()),
+    }),
+  ),
   /* --- person, as the free search preview describes them ------------- */
   firstName: v.optional(v.string()),
   /** Masked until the reveal is paid for — stored exactly as returned. */
@@ -1256,11 +1299,13 @@ export default defineSchema({
       "prospectId",
       "state",
     ])
-    // The stale-operation sweep AND the recovery sweep's reconcile pass: both
-    // want `uncertain`/`requested` holds oldest first, which is what decides
-    // whether a hold may be settled at all. A by-key index would order the
-    // recovery pass by operation key instead, letting young holds hide old
-    // ones, so this one range serves both (`agents/recovery.ts` tests the
-    // `<action>:` prefix in JS over it).
-    .index("by_state_and_updatedAt", ["state", "updatedAt"]),
+    // The stale-operation sweep: `requested`/`accepted` rows oldest first,
+    // which is what decides whether one may be parked at all.
+    .index("by_state_and_updatedAt", ["state", "updatedAt"])
+    // The recovery sweep's reconcile pass. `settlement: "markUncertain"` plus
+    // an `<action>:` prefix on the key is EXACTLY the set of holds one pass
+    // can settle, so no other action's old holds share the window and crowd
+    // it out; age is then read from the rows themselves, which is safe
+    // because the range holds nothing else (`agents/recovery.ts`).
+    .index("by_settlement_and_operationKey", ["settlement", "operationKey"]),
 });

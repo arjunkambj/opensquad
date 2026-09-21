@@ -48,6 +48,9 @@ const vConfirmContext = v.union(
   v.object({
     status: v.literal("ready"),
     agentId: v.id("agents"),
+    /** The caller this confirm belongs to, for its rate-limit bucket: the
+     *  action that fans the counts out cannot authenticate by itself. */
+    identityKey: v.string(),
     keywords: v.array(v.string()),
     /**
      * The keyword strategy's filter set at each place a phrase can be
@@ -71,7 +74,7 @@ export const confirmContext = internalQuery({
   args: { orgId: v.id("orgs") },
   returns: vConfirmContext,
   handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
+    const { identityKey } = await requireOrgMember(ctx, args.orgId);
     const agent = await getOrgAgent(ctx, args.orgId);
     if (agent === null) {
       return { status: "blocked" as const, reason: "no_agent" as const };
@@ -101,6 +104,7 @@ export const confirmContext = internalQuery({
     return {
       status: "ready" as const,
       agentId: agent._id,
+      identityKey,
       keywords: agent.keywords,
       keywordVariants: keywordFilterLadder(agent.keywords).map((variant) =>
         mergeFilters(core.filters, variant),
