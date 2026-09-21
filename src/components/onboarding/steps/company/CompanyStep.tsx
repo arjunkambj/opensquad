@@ -10,31 +10,31 @@
  * profile, retry a failure, or regenerate an existing profile for credits.
  */
 import { useMutation, useQuery } from "convex/react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import { ACTION_PRICES } from "../../../../../convex/lib/limits"
 import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
+import { AnalysisFailurePanel } from "@/components/kit/AnalysisFailurePanel"
+import { CompanyProfileForm } from "@/components/kit/CompanyProfileForm"
 import { OnboardingShell } from "@/components/kit/OnboardingShell"
+import { WebsiteAnalyzeField } from "@/components/kit/WebsiteAnalyzeField"
 import Logo from "@/components/layout/Logo"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"
-import { AnalysisFailurePanel } from "@/components/onboarding/steps/company/AnalysisFailurePanel"
+import { FormError } from "@/components/states/states"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   analysisFailureCopy,
   startAnalysisCopy,
-} from "@/components/onboarding/steps/company/analysis-copy"
-import type { AnalysisMessage } from "@/components/onboarding/steps/company/analysis-copy"
+} from "@/lib/company-analysis-copy"
+import type { AnalysisMessage } from "@/lib/company-analysis-copy"
 import {
   cleanedList,
   companyFormIsComplete,
   EMPTY_COMPANY_FORM,
   profileToCompanyForm,
   sameWebsite,
-} from "@/components/onboarding/steps/company/company-form"
-import type { CompanyForm } from "@/components/onboarding/steps/company/company-form"
-import { CompanyProfileForm } from "@/components/onboarding/steps/company/CompanyProfileForm"
-import { WebsiteAnalyzeField } from "@/components/onboarding/steps/company/WebsiteAnalyzeField"
-import { FormError } from "@/components/states/states"
-import { Skeleton } from "@/components/ui/skeleton"
+} from "@/lib/company-form"
+import type { CompanyForm } from "@/lib/company-form"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 
 const ANALYSIS_CREDITS = ACTION_PRICES.analyze_website.credits
@@ -59,8 +59,17 @@ export function CompanyStep({
   const [websiteTyped, setWebsiteTyped] = useState(false)
   const [manual, setManual] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Next does two things — save, then ask the container to move on — and the
+  // button must stay down for BOTH. `saving` alone is cleared when the write
+  // lands, which is one turn before the move starts.
+  const [advancing, setAdvancing] = useState(false)
   const [startError, setStartError] = useState<AnalysisMessage | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // The real lock on the save. `saving` drives the button, but React state is
+  // not readable until the next render, so two `onNext` calls in one tick
+  // would both get past it and issue two `updateProfile` writes — the second
+  // against a version the first has already moved.
+  const inFlight = useRef(false)
 
   // Adopt the authoritative record whenever it changes underneath us — which
   // is how the analysis lands in the form — without overwriting whatever the
@@ -110,6 +119,16 @@ export function CompanyStep({
   }
 
   const saveProfile = async (): Promise<boolean> => {
+    if (inFlight.current) {
+      return false
+    }
+    // An untouched form is the record read back, so saving it would bump the
+    // profile's version and churn `updatedAt` to store what is already there.
+    // Moving on is the whole point of Next; writing is not.
+    if (!formDirty) {
+      return true
+    }
+    inFlight.current = true
     setSaving(true)
     setSaveError(null)
     try {
@@ -145,6 +164,7 @@ export function CompanyStep({
       return false
     } finally {
       setSaving(false)
+      inFlight.current = false
     }
   }
 
@@ -161,13 +181,19 @@ export function CompanyStep({
       description="We read your website and write the profile your agent sells from. Every line stays yours to edit."
       dotCount={progress.dotCount}
       logo={<Logo markClassName="size-8" />}
-      nextDisabled={!complete || analyzing || moving || saving}
-      nextLoading={saving || moving}
+      nextDisabled={!complete || analyzing || moving || saving || advancing}
+      nextLoading={saving || moving || advancing}
       onNext={() => {
         void (async () => {
+          setAdvancing(true)
           if (await saveProfile()) {
             goNext()
           }
+          // Released in the same turn as `goNext` set `moving`, so the two
+          // locks hand over in one render and the button is never live in
+          // between. A refused move clears `moving` and reports its own
+          // error, and the screen comes back with Next pressable again.
+          setAdvancing(false)
         })()
       }}
       step={progress.step}

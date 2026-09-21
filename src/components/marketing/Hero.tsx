@@ -6,9 +6,15 @@ import { HeroLeadSketch } from "@/components/marketing/HeroLeadSketch"
 import { MarketingChip } from "@/components/marketing/MarketingChip"
 import { Button } from "@/components/ui/button"
 
-/** The model provider the agent's writing runs on. */
-const providers = [
-  { name: "OpenAI", logo: "/marketing/logos/openai.svg" },
+/**
+ * What someone actually needs before the agent can start. No vendor is named
+ * here: which lead-data, research or model service we buy is ours to change
+ * and never client-visible (PLAN §4 "White-label rule").
+ */
+const startingPoints = [
+  "Your website",
+  "300 credits, no card",
+  "Your own inbox, when you want it sending",
 ] as const
 
 export function Hero() {
@@ -93,19 +99,16 @@ export function Hero() {
           variants={heroItemVariants}
         >
           <p className="text-sm text-muted-foreground">
-            Runs on OpenAI models
+            All it needs to start
           </p>
-          <ul aria-label="Providers" className="flex flex-wrap gap-2">
-            {providers.map((provider) => (
-              <li key={provider.name}>
-                <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-secondary px-3 text-xs font-medium text-secondary-foreground">
-                  <img
-                    alt=""
-                    className="size-4"
-                    decoding="async"
-                    src={provider.logo}
-                  />
-                  {provider.name}
+          <ul
+            aria-label="What you need to start"
+            className="flex flex-wrap gap-2"
+          >
+            {startingPoints.map((point) => (
+              <li key={point}>
+                <span className="inline-flex h-8 items-center rounded-lg bg-secondary px-3 text-xs font-medium text-secondary-foreground">
+                  {point}
                 </span>
               </li>
             ))}

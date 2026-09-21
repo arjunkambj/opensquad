@@ -78,7 +78,7 @@ export function Footer() {
 
         <div className="flex flex-col gap-3 border-t border-background/10 pt-6 text-xs text-background/50 sm:flex-row sm:items-center sm:justify-between">
           <p>&copy; {new Date().getFullYear()} OpenIntent. All rights reserved.</p>
-          <p>Runs on OpenAI models.</p>
+          <p>Sends from your inbox. Never from ours.</p>
         </div>
       </div>
     </footer>

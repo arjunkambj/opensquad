@@ -10,9 +10,9 @@
  * these states also offers Retry and "Fill in manually".
  */
 import { ConvexError } from "convex/values"
-import { DOMAIN_ERROR_CODES } from "../../../../../convex/lib/errors"
-import type { DomainErrorCode } from "../../../../../convex/lib/errors"
-import type { OperationErrorCode } from "../../../../../convex/lib/validators"
+import { DOMAIN_ERROR_CODES } from "../../convex/lib/errors"
+import type { DomainErrorCode } from "../../convex/lib/errors"
+import type { OperationErrorCode } from "../../convex/lib/validators"
 
 export type AnalysisMessage = {
   title: string
@@ -117,11 +117,6 @@ const START_REFUSALS: Record<DomainErrorCode, AnalysisMessage> = {
     title: "That company profile isn't here",
     description:
       "Reload the page and try again, or fill your profile in yourself.",
-  },
-  EMAIL_NOT_VERIFIED: {
-    title: "Verify your email to run this",
-    description:
-      "Open the link we sent you, come back, and try the analysis again.",
   },
   ACCOUNT_RESTRICTED: {
     title: "This account can't run an analysis",

@@ -5,8 +5,19 @@
  * Lists stay lists (the reference edits them as rows, not as text), and
  * `painPoints` is carried through untouched — it belongs to onboarding dot 3
  * and must survive a save from dot 1.
+ *
+ * It lives in `lib/` because two domains edit this one record — onboarding dot
+ * 1 and Settings → Company — and PLAN §10 forbids either of them reaching into
+ * the other. It is also the one place that reads the server's own industry
+ * list and field limits, so the form in `kit/` needs nothing from `convex/`.
  */
-import type { Doc } from "../../../../../convex/_generated/dataModel"
+import { COMPANY_INDUSTRIES } from "../../convex/ai/analyzeWebsite"
+import type { Doc } from "../../convex/_generated/dataModel"
+import {
+  COMPANY_DESCRIPTION_MAX_LENGTH,
+  COMPANY_LIST_MAX_ITEMS,
+  COMPANY_NAME_MAX_LENGTH,
+} from "../../convex/lib/validators"
 
 export type CompanyForm = {
   companyName: string
@@ -84,4 +95,27 @@ export function sameWebsite(typed: string, stored: string | undefined): boolean 
       .replace(/\/+$/, "")
   const left = strip(typed)
   return left !== "" && left === strip(stored)
+}
+
+/**
+ * The server's own limits on the fields, so an input cannot accept more than
+ * `company.mutations.update` would store.
+ */
+export const COMPANY_FIELD_LIMITS = {
+  name: COMPANY_NAME_MAX_LENGTH,
+  description: COMPANY_DESCRIPTION_MAX_LENGTH,
+  listItems: COMPANY_LIST_MAX_ITEMS,
+} as const
+
+/**
+ * The industries the analysis chooses from, for the select.
+ *
+ * A stored industry from an older list (or typed by hand) stays selectable
+ * rather than being silently swapped for the first option.
+ */
+export function industryOptions(current: string): readonly string[] {
+  return current !== "" &&
+    !(COMPANY_INDUSTRIES as readonly string[]).includes(current)
+    ? [current, ...COMPANY_INDUSTRIES]
+    : COMPANY_INDUSTRIES
 }

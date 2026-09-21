@@ -14,7 +14,7 @@ import { useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
 import type { Id } from "../../../../convex/_generated/dataModel"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import {
   USAGE_ACTION_LABEL,
   USAGE_OUTCOME_LABEL,
@@ -76,6 +76,7 @@ export function UsageHistory({
           <LoadingState title="Loading your usage" />
         ) : result.entries.length === 0 ? (
           <EmptyState
+            variant="plain"
             icon={Coins01Icon}
             title={
               trail.length === 0 ? "Nothing spent yet" : "No more entries"

@@ -17,8 +17,11 @@ import { useCurrentOrg } from "@/hooks/use-current-org"
  * Pathless, so it adds no URL segment — `/dashboard` stays `/dashboard`.
  *
  * `onboarding` and `settings` stay OUTSIDE it deliberately: setup cannot be
- * gated by the thing setup creates, and account access must survive having no
- * organization row.
+ * gated by the thing setup creates, and Settings → Account must survive
+ * having no organization row — it is where someone with nothing set up reads
+ * their own identity and signs out. `/settings` is not therefore ungated:
+ * `SettingsPage` applies these same two conditions to every org-scoped tab,
+ * so the only thing reachable before setup finishes is Account.
  *
  * The redirect lives here rather than in `beforeLoad` because the router is
  * created without context (`src/main.tsx`), so no Convex client is reachable

@@ -6,12 +6,20 @@
  * container owns that read, the step change every screen asks for, and the
  * one navigation setup performs.
  *
- * LEAVING IS GATED ON THE ROW, NOT ON THE ANSWER. The last screen's Confirm
+ * LEAVING IS GATED ON THE ROW, AND ON NOTHING ELSE. The last screen's Confirm
  * flips the agent live, but `/contacts` sits behind a gate that reads the
  * same agent row: moving there on the action's result alone would arrive
  * before the row's `done` reached this client and be bounced straight back
- * into setup. So the confirmed screen only says "I finished", and the move
- * happens when the query itself reads `done`.
+ * into setup. So the move happens when the query itself reads `done`.
+ *
+ * A FINISHED AGENT ALWAYS LEAVES FOR THE SAME PLACE. The destination used to
+ * depend on a flag the last screen set through a callback, which made it a
+ * race: the row can reach `done` on this client before that callback runs,
+ * and the screen that would have run it is already unmounted by then, so the
+ * user landed somewhere else for reasons they could not see. `/contacts` is
+ * where the first leads appear and is the only thing setup is owed, so it is
+ * where setup ends — whether the user just pressed Confirm or opened
+ * `/onboarding` again afterwards (PLAN §5 "after Confirm → /contacts").
  */
 import { Navigate } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
@@ -35,11 +43,6 @@ export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
   const setStep = useMutation(api.agents.onboarding.setStep)
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState<string | null>(null)
-  // Set by the last screen the moment its Confirm came back confirmed. It is
-  // what tells `done` apart from the `done` someone arrives with by opening
-  // /onboarding again: one has just finished setup and is owed the screen
-  // where its first leads appear, the other simply belongs elsewhere.
-  const [finished, setFinished] = useState(false)
   const mounted = useMountedRef()
   // A step change can be asked for again before the last one answered — two
   // presses of Next, or Next and then Previous. The answer belongs to the
@@ -74,7 +77,7 @@ export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
     // Contacts shows the agent's own run state, so landing there is what
     // "finding your first leads" looks like. `replace`, because setup is over
     // and there is nothing behind it worth going back to.
-    return <Navigate replace to={finished ? "/contacts" : "/dashboard"} />
+    return <Navigate replace to="/contacts" />
   }
 
   // Every step but `done` has a screen, and the registry's type says so — a
@@ -117,7 +120,6 @@ export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
       }}
       moveError={moveError}
       moving={moving}
-      onFinished={() => setFinished(true)}
       progress={{
         dot: entry.dot,
         dotCount: ONBOARDING_DOT_COUNT,

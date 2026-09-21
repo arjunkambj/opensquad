@@ -13,6 +13,18 @@
  * invalidates approvals written against the old policy, which is why a save
  * that changes nothing must not happen — the server skips the write, and this
  * form disables Save until something is dirty.
+ *
+ * TWO WRITES MEANS A HALF-APPLIED SAVE IS REACHABLE, and no amount of client
+ * code makes it atomic: the second call can fail, or lose a race with a
+ * policy change from another session, after the first has already committed
+ * and bumped `policyVersion`. So this form is honest about it instead —
+ * success is reported only when both landed, a partial apply says which half
+ * saved, keeps the other half on screen, and moves the expected version onto
+ * what the first write produced so pressing Save again converges instead of
+ * conflicting forever. The real fix is server-side and is one mutation:
+ * `orgs.mutations.setSendingPolicy` taking an optional `timezone` beside the
+ * window and the limit, writing all three in one transaction under one
+ * `expectedPolicyVersion` and one bump.
  */
 import { useMutation } from "convex/react"
 import { useState } from "react"
@@ -98,6 +110,11 @@ export function SendWindowCard({ org }: { org: OrgView }) {
     }
     setSaving(true)
     setError(null)
+    // Whether the timezone half of the save already committed. Once it has,
+    // the record has moved and this form is the only place the other half
+    // still exists, so a failure after it must neither claim success nor
+    // throw the unsaved window away.
+    let timezoneApplied = false
     try {
       let version = baseVersion
       if (form.timezone !== org.timezone) {
@@ -107,8 +124,14 @@ export function SendWindowCard({ org }: { org: OrgView }) {
           expectedPolicyVersion: version,
         })
         version = updated.policyVersion
+        timezoneApplied = true
+        // Adopt the version that write landed on straight away. Pressing Save
+        // again has to be checked against what the record IS: re-sending the
+        // version the form started from would conflict on every retry, and
+        // the user would never be able to finish their own save.
+        setBaseVersion(version)
       }
-      await setSendingPolicy({
+      const saved = await setSendingPolicy({
         orgId: org._id,
         expectedPolicyVersion: version,
         dailySendLimit: Number(form.dailySendLimit),
@@ -118,6 +141,7 @@ export function SendWindowCard({ org }: { org: OrgView }) {
           endMinute: timeStringToMinutes(form.endTime) ?? 0,
         },
       })
+      setBaseVersion(saved.policyVersion)
       setDirty(false)
       toast.add({
         title: "Sending policy saved",
@@ -126,7 +150,16 @@ export function SendWindowCard({ org }: { org: OrgView }) {
         type: "success",
       })
     } catch (cause) {
-      if (isConflictError(cause)) {
+      if (timezoneApplied) {
+        // Two writes, so there is a state where one of them landed. Say so
+        // rather than reporting a failure the record does not agree with, and
+        // keep the form dirty: the values still on screen are the half that
+        // did not save, and Save now retries exactly that half against the
+        // version the first write produced.
+        setError(
+          "Your time zone was saved, but the sending window and daily limit were not. They are still as you left them — press Save to finish.",
+        )
+      } else if (isConflictError(cause)) {
         setDirty(false)
         setError(
           "This policy changed in another session. The current values are shown — check them and save again.",

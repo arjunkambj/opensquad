@@ -84,7 +84,6 @@ const REFUSAL_COPY: Record<DomainErrorCode, string> = {
   NOT_FOUND: "That lead is no longer here.",
   CONFLICT: "That decision was already recorded.",
   INVALID: "That request could not be made.",
-  EMAIL_NOT_VERIFIED: "Verify your email address first.",
   ACCOUNT_RESTRICTED: "This account is not fully set up.",
   NO_ACTIVE_ORG: "Pick an organization to work in first.",
   TRIAL_CAPACITY_REACHED: "New organizations are at capacity right now.",

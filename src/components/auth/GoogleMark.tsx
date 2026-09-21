@@ -1,4 +1,10 @@
-/** The four-color Google "G", for the sign-in button. */
+/**
+ * The four-color Google "G", for the sign-in button.
+ *
+ * The only hex colours in `src/components/`: a brand mark is not ours to
+ * re-theme, so these four fills are exempt from the token rule (PLAN §10) and
+ * must stay exactly as Google publishes them, in both themes.
+ */
 export function GoogleMark({ className }: { className?: string }) {
   return (
     <svg

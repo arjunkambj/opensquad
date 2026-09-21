@@ -7,8 +7,10 @@
  * display: a row with no answer says so in words, because "—" on a review
  * screen is how a user ends up confirming something they never chose.
  *
- * Each row's body is the one thing a review screen owes: a way back to the
- * step that wrote it.
+ * Each row names the step that wrote it, which is the one thing a review
+ * screen owes: a way back. Building the control for that is the screen's job,
+ * not this file's — rows are data, so nothing here renders or is handed a
+ * callback.
  */
 import {
   BlockedIcon,
@@ -30,7 +32,6 @@ import {
   GOAL_OPTIONS,
   TONE_OPTIONS,
 } from "@/components/onboarding/steps/outreach/outreach-step-model"
-import { Button } from "@/components/ui/button"
 
 export type ReviewSource = {
   companyName: string
@@ -54,32 +55,15 @@ function optionTitle(
   return options.find((option) => option.value === value)?.title ?? value
 }
 
-export function buildReviewRows(args: {
-  source: ReviewSource
-  onEdit: (step: OnboardingStep) => void
-  editDisabled: boolean
-}): ReviewAccordionRow[] {
-  const { source, onEdit, editDisabled } = args
+/** A row of the review list, plus the way back to the step behind it. */
+export type ReviewRow = Omit<ReviewAccordionRow, "content"> & {
+  /** The step this answer was given on; "Change this" reopens it. */
+  step: OnboardingStep
+  /** One line on what changing it affects. */
+  hint: string
+}
 
-  const editor = (step: OnboardingStep, label: string) => (
-    <div className="flex flex-col gap-2 px-4 pb-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <div>
-        <Button
-          disabled={editDisabled}
-          onClick={() => {
-            onEdit(step)
-          }}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Change this
-        </Button>
-      </div>
-    </div>
-  )
-
+export function buildReviewRows(source: ReviewSource): ReviewRow[] {
   const sizes = source.icp.companySizes.map(
     (value) => companySizeBand(value)?.label ?? value,
   )
@@ -93,20 +77,16 @@ export function buildReviewRows(args: {
       icon: Building01Icon,
       label: "What you sell",
       summary: `${source.companyName} — ${source.industry}`,
-      content: editor(
-        "company",
-        "Your agent writes from this profile, so it is worth being accurate.",
-      ),
+      step: "company",
+      hint: "Your agent writes from this profile, so it is worth being accurate.",
     },
     {
       id: "job-titles",
       icon: UserGroupIcon,
       label: "Job roles",
       summary: readBack(source.icp.jobTitles, "Anyone at a matching company"),
-      content: editor(
-        "icp_job_titles",
-        "The titles your agent looks for. Similar ones are matched automatically.",
-      ),
+      step: "icp_job_titles",
+      hint: "The titles your agent looks for. Similar ones are matched automatically.",
     },
     {
       id: "company-filters",
@@ -118,10 +98,8 @@ export function buildReviewRows(args: {
         readBack(source.icp.companyTypes, "Any kind of organisation"),
         readBack(source.icp.locations, "Worldwide"),
       ].join(" · "),
-      content: editor(
-        "icp_company_filters",
-        "The companies those people work at.",
-      ),
+      step: "icp_company_filters",
+      hint: "The companies those people work at.",
     },
     {
       id: "exclusions",
@@ -131,10 +109,8 @@ export function buildReviewRows(args: {
         [...exclusions, ...source.icp.excludeKeywords],
         "Nobody is excluded",
       ),
-      content: editor(
-        "icp_exclusions",
-        "The people and companies your agent skips, whatever else matches.",
-      ),
+      step: "icp_exclusions",
+      hint: "The people and companies your agent skips, whatever else matches.",
     },
     {
       id: "goal",
@@ -144,20 +120,16 @@ export function buildReviewRows(args: {
         TONE_OPTIONS,
         source.tone,
       )}`,
-      content: editor(
-        "outreach_goals",
-        "What the outreach is for, and how it reads.",
-      ),
+      step: "outreach_goals",
+      hint: "What the outreach is for, and how it reads.",
     },
     {
       id: "signals",
       icon: SparklesIcon,
       label: "Signals",
       summary: readBack(source.signals, "No signals switched on yet"),
-      content: editor(
-        "signals_strategies",
-        "The searches your agent runs, in the order it found them.",
-      ),
+      step: "signals_strategies",
+      hint: "The searches your agent runs, in the order it found them.",
     },
     {
       id: "keywords",
@@ -167,10 +139,8 @@ export function buildReviewRows(args: {
         source.keywords,
         "None — your agent won't watch for topics",
       ),
-      content: editor(
-        "signals_keywords",
-        "Words your agent watches for on people's own profiles.",
-      ),
+      step: "signals_keywords",
+      hint: "Words your agent watches for on people's own profiles.",
     },
   ]
 }

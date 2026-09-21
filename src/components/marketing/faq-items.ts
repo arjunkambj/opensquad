@@ -16,7 +16,7 @@ export const faqItems = [
   {
     title: "Can I review everything before it sends?",
     content:
-      "Yes, and that is the default. In Review mode nothing leaves without two separate approvals: yours on the lead, which allows finding their address and drafting, and yours on the specific email text. Autopilot only starts after you accept a dialog spelling out what it will do, and even then it goes through the same blocklist, sending window, daily limit and credit checks as a manual send. Paused stops everything.",
+      "Yes. A new agent starts in Sourcing only — finding and researching, contacting nobody — and stays there until you connect an inbox and pick a sending mode yourself. Review is the mode that keeps every email waiting for you: nothing leaves without two separate approvals, yours on the lead, which allows finding their address and drafting, and yours on the specific email text. Autopilot is the other choice, and it only starts after you accept a dialog spelling out what it will do; even then it goes through the same blocklist, sending window, daily limit and credit checks as a manual send. Paused stops everything.",
   },
   {
     title: "How do opt-outs work?",
@@ -41,6 +41,6 @@ export const faqItems = [
   {
     title: "What does it run on?",
     content:
-      "OpenAI models, called from our backend on your own team's data. It writes each email for one person from the research on that person, so nothing is a template with a name dropped in.",
+      "Language models, called from our own backend on your team's data — your browser never talks to anyone but us. Which services we buy underneath is ours to choose and ours to change, and none of it is something you sign up for or pay separately for. What it is asked to do is the part that matters: every email is written for one person from the research on that person, so nothing is a template with a name dropped in.",
   },
 ] as const

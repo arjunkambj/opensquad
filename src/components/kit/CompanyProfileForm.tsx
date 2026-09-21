@@ -1,22 +1,20 @@
 /**
  * The editable company profile (reference 02).
  *
- * Presentational: it holds no Convex call and no state of its own. The step
- * container owns the values, the save and the analysis that fills them in.
+ * Presentational: it holds no Convex call and no state of its own. Whichever
+ * container renders it — onboarding dot 1 or Settings → Company — owns the
+ * values, the save and the analysis that fills them in. The field limits and
+ * the industry list reach it through `lib/company-form`, so nothing in `kit/`
+ * imports from `convex/` (PLAN §10).
  *
  * Everything the analysis writes is editable, and the required markers name
  * exactly the four fields the rest of the product cannot run without — social
  * proof is not one of them, because a young company honestly has none and an
  * invented proof is worse than a blank field.
  */
-import { COMPANY_INDUSTRIES } from "../../../../../convex/ai/analyzeWebsite"
-import {
-  COMPANY_DESCRIPTION_MAX_LENGTH,
-  COMPANY_LIST_MAX_ITEMS,
-  COMPANY_NAME_MAX_LENGTH,
-} from "../../../../../convex/lib/validators"
-import type { CompanyForm } from "@/components/onboarding/steps/company/company-form"
-import { RowListField } from "@/components/onboarding/steps/company/RowListField"
+import { RowListField } from "@/components/kit/RowListField"
+import { COMPANY_FIELD_LIMITS, industryOptions } from "@/lib/company-form"
+import type { CompanyForm } from "@/lib/company-form"
 import {
   Field,
   FieldDescription,
@@ -46,13 +44,7 @@ export function CompanyProfileForm({
   onChange,
   disabled = false,
 }: CompanyProfileFormProps) {
-  // A stored industry from an older list (or typed by hand) stays selectable
-  // rather than being silently swapped for the first option.
-  const industryOptions =
-    value.industry !== "" &&
-    !(COMPANY_INDUSTRIES as readonly string[]).includes(value.industry)
-      ? [value.industry, ...COMPANY_INDUSTRIES]
-      : COMPANY_INDUSTRIES
+  const industries = industryOptions(value.industry)
 
   return (
     <FieldGroup className="gap-5">
@@ -66,7 +58,7 @@ export function CompanyProfileForm({
             className="h-10"
             disabled={disabled}
             id="company-name"
-            maxLength={COMPANY_NAME_MAX_LENGTH}
+            maxLength={COMPANY_FIELD_LIMITS.name}
             required
             value={value.companyName}
             onChange={(event) => onChange({ companyName: event.target.value })}
@@ -86,7 +78,7 @@ export function CompanyProfileForm({
             onChange={(event) => onChange({ industry: event.target.value })}
           >
             <option value="">Choose an industry</option>
-            {industryOptions.map((industry) => (
+            {industries.map((industry) => (
               <option key={industry} value={industry}>
                 {industry}
               </option>
@@ -104,7 +96,7 @@ export function CompanyProfileForm({
           className="min-h-28"
           disabled={disabled}
           id="company-description"
-          maxLength={COMPANY_DESCRIPTION_MAX_LENGTH}
+          maxLength={COMPANY_FIELD_LIMITS.description}
           required
           value={value.description}
           onChange={(event) => onChange({ description: event.target.value })}
@@ -120,7 +112,7 @@ export function CompanyProfileForm({
         description="What your product actually does. Your agent may only claim what is on this list."
         disabled={disabled}
         label="Key features"
-        maxCount={COMPANY_LIST_MAX_ITEMS}
+        maxCount={COMPANY_FIELD_LIMITS.listItems}
         onChange={(keyFeatures) => onChange({ keyFeatures })}
         removeLabel={(index) => `Remove key feature ${index + 1}`}
         required
@@ -133,7 +125,7 @@ export function CompanyProfileForm({
         description="Named customers, results or credentials you can stand behind. Leave it empty rather than inventing one."
         disabled={disabled}
         label="Social proof"
-        maxCount={COMPANY_LIST_MAX_ITEMS}
+        maxCount={COMPANY_FIELD_LIMITS.listItems}
         onChange={(socialProof) => onChange({ socialProof })}
         removeLabel={(index) => `Remove social proof ${index + 1}`}
         rowLabel={(index) => `Social proof ${index + 1}`}

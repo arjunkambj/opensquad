@@ -15,7 +15,7 @@ import {
   type ActivitySeries,
 } from "@/components/dashboard/activity-chart-model"
 import { ActivityChartPlot } from "@/components/dashboard/ActivityChartPlot"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +41,7 @@ export function ActivityChart({
     return (
       <ChartFrame hint={hint}>
         <EmptyState
+          variant="plain"
           icon={ChartLineData01Icon}
           title="Nothing happened in this window"
           description="Leads found, emails accepted and replies received each get a line here, one point per day. Widen the range, or give your agent time for its next run."

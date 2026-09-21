@@ -15,7 +15,7 @@ import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
 import type { Id } from "../../../../convex/_generated/dataModel"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import { InstructionsEditorCard } from "@/components/settings/outreach/InstructionsEditorCard"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
 import { LoadingState } from "@/components/states/states"
@@ -113,6 +113,7 @@ export function OutreachTab({ orgId }: { orgId: Id<"orgs"> }) {
         <Card>
           <CardContent>
             <EmptyState
+              variant="plain"
               icon={Note01Icon}
               title="No default instructions yet"
               description="Without them your agent writes from your company profile and what it researched about the lead: the problem it thinks they have, one relevant thing you do, and a short ask. Add instructions to set the voice, the length and what it must never claim."

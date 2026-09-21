@@ -20,27 +20,27 @@ const steps = [
   },
   {
     step: "02",
+    title: "You connect your sending inbox",
+    description:
+      "Setup asks for this before it goes looking, and skipping it is allowed: the agent stays in Sourcing only, finding and researching and contacting nobody. Connecting one starts nothing either — how it sends is a separate choice, made by you.",
+  },
+  {
+    step: "03",
     title: "You pick the signals",
     description:
       "It proposes a few named searches from your own profile and shows how many people each one matches, before anything is spent.",
   },
   {
-    step: "03",
+    step: "04",
     title: "You confirm, and the first leads land",
     description:
       "The searches run, every lead arrives tagged with the signal that found it, and the strongest few are researched and scored first. The rest wait with a Research button.",
   },
   {
-    step: "04",
-    title: "You connect your sending inbox",
-    description:
-      "Until you do, the agent stays in Sourcing only and sends nothing at all. Skipping this step is allowed; the agent just keeps finding and researching.",
-  },
-  {
     step: "05",
     title: "You approve the first lead and the first email",
     description:
-      "It finds the address, writes the email, and sends inside your window. Two follow-ups go out only if nobody answers.",
+      "Once you have put the agent in Review, it finds the address and writes the email, and it goes out inside your window only after you say yes to that exact text. Two follow-ups go out only if nobody answers.",
   },
   {
     step: "06",
@@ -50,7 +50,7 @@ const steps = [
   },
 ] as const
 
-/** The four things the agent is never allowed to do by itself. */
+/** The five things the agent is never allowed to do by itself. */
 const neverAlone = [
   "Send anything before you connect your own inbox",
   "Send in Review mode without your approval of that exact text",

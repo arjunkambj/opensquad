@@ -17,7 +17,7 @@ import { Link } from "@tanstack/react-router"
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import type { ReplyDisposition } from "../../../convex/lib/validators"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import { PanelFrame } from "@/components/dashboard/PanelFrame"
 import { Chip, formatInstant } from "@/components/shared/presentation"
 import { Button } from "@/components/ui/button"
@@ -74,6 +74,7 @@ export function LatestReplies({
       ) : replies.inboxConnection !== "connected" &&
         replies.items.length === 0 ? (
         <EmptyState
+          variant="plain"
           icon={MailAdd01Icon}
           title="Connect your inbox to never miss a reply"
           description="Replies land here as soon as your agent is sending from your own inbox."
@@ -88,6 +89,7 @@ export function LatestReplies({
         />
       ) : replies.items.length === 0 ? (
         <EmptyState
+          variant="plain"
           icon={BubbleChatIcon}
           title="No replies in this window"
           description="Your inbox is connected and quiet. Every reply your agent receives shows up here."

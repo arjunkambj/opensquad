@@ -49,17 +49,6 @@ export type OnboardingStepProps = {
   goNext: () => void
   /** Absent on the very first screen, which has nothing behind it. */
   goBack?: () => void
-  /**
-   * Setup is over: the last screen's Confirm came back confirmed. It does not
-   * move anywhere — the container waits until the agent row itself reads
-   * `done` and then leaves, so the gate on the page it leaves for (which
-   * reads that same row) never bounces the user back into setup.
-   *
-   * REQUIRED, not optional: it is the only thing that ends setup, so a
-   * container that forgot to pass it would leave the last screen spinning
-   * with no way out. Missing it must break the build, not the user.
-   */
-  onFinished: () => void
   /** A step change is being saved. */
   moving: boolean
   /** Our copy for a refused step change, or `null`. */
@@ -175,13 +164,11 @@ export function previousOnboardingStep(
  * other failure is `unknown` and gets the retryable error state.
  */
 export type OnboardingEntryRefusal =
-  | "EMAIL_NOT_VERIFIED"
   | "ACCOUNT_RESTRICTED"
   | "TRIAL_CAPACITY_REACHED"
   | "unknown"
 
 const ENTRY_REFUSALS = [
-  "EMAIL_NOT_VERIFIED",
   "ACCOUNT_RESTRICTED",
   "TRIAL_CAPACITY_REACHED",
 ] as const

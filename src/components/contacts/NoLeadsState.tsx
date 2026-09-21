@@ -15,7 +15,7 @@ import { Link } from "@tanstack/react-router"
 import { Target02Icon, UserGroupIcon } from "@hugeicons/core-free-icons"
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import type { RunState } from "./RunStateStrip"
@@ -39,6 +39,7 @@ export function NoLeadsState({
   if (filtered) {
     return (
       <EmptyState
+        variant="plain"
         icon={UserGroupIcon}
         title="No contacts match this filter"
         description="Every contact is still here — this view is just narrower than the leads you have."
@@ -64,6 +65,7 @@ export function NoLeadsState({
   if (run === null || run.status !== "live") {
     return (
       <EmptyState
+        variant="plain"
         icon={Target02Icon}
         title="Your agent has not started yet"
         description="Finish setting the agent up — its ICP and its signals — and the first leads land here."
@@ -79,6 +81,7 @@ export function NoLeadsState({
   if (run.running) {
     return (
       <EmptyState
+        variant="plain"
         icon={Target02Icon}
         title="Finding your first leads…"
         description="The agent is searching your signals right now. Rows appear here as they land — nothing to do but wait."
@@ -91,6 +94,7 @@ export function NoLeadsState({
 
   return (
     <EmptyState
+      variant="plain"
       icon={Target02Icon}
       title={
         enabled.length === 0

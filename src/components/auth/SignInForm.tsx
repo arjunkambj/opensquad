@@ -207,7 +207,7 @@ export function SignInForm() {
       {step === "email" ? (
         <div className="flex flex-col gap-4">
           <Button
-            className="border-border bg-background text-foreground shadow-[0_1px_1px_rgba(0,0,0,0.03),0_4px_12px_-6px_rgba(0,0,0,0.06)] hover:bg-background hover:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_6px_16px_-6px_rgba(0,0,0,0.08)]"
+            className="border-border bg-background text-foreground shadow-button-lift hover:bg-background hover:shadow-button-lift-hover"
             type="button"
             variant="outline"
             size="lg"

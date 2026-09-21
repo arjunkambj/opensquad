@@ -7,7 +7,7 @@
  * one message would send a reader looking for a row that is only hidden.
  */
 import { ShieldBanIcon } from "@hugeicons/core-free-icons"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 
 export type BlocklistEmptyProps = {
@@ -25,6 +25,7 @@ export function BlocklistEmpty({
   if (filtered) {
     return (
       <EmptyState
+        variant="plain"
         icon={ShieldBanIcon}
         title="Nothing matches that"
         description="No entry matches this search and scope. Clear them to see the whole list."
@@ -39,6 +40,7 @@ export function BlocklistEmpty({
 
   return (
     <EmptyState
+      variant="plain"
       icon={ShieldBanIcon}
       title="Nothing is blocked yet"
       description="An unsubscribe or a bounce adds itself here. Add an address by hand when someone asks to be left alone off-channel, or a domain when no mail to that company should ever go out."

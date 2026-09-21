@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 const facts = [
   "300 credits, once. No card.",
   "Nothing is sent until you connect your own inbox.",
-  "Review mode is the default: you approve every email.",
+  "It starts in Sourcing only: you pick if and how it sends.",
   "Every email carries an opt-out line.",
 ] as const
 

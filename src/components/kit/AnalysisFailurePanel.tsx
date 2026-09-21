@@ -3,12 +3,12 @@
  *
  * It keeps the address, says in our own words what happened, and offers the
  * two ways forward the plan requires: try again, or write the profile by hand.
- * The wording arrives already chosen (`analysis-copy.ts`) — nothing here reads
+ * The wording arrives already chosen (`lib/company-analysis-copy.ts`) — nothing here reads
  * a provider's error.
  */
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import type { AnalysisMessage } from "@/components/onboarding/steps/company/analysis-copy"
+import type { AnalysisMessage } from "@/lib/company-analysis-copy"
 import { Button } from "@/components/ui/button"
 
 export type AnalysisFailurePanelProps = {

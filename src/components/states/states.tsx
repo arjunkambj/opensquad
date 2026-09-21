@@ -53,35 +53,86 @@ export function LoadingState({
   )
 }
 
+export type EmptyStateProps = {
+  /** A Hugeicon for the standard treatment. */
+  icon?: IconSvgElement
+  /** A richer illustration, rendered instead of `icon` when given. */
+  illustration?: ReactNode
+  title: string
+  description?: ReactNode
+  /** The one thing to do next. */
+  action?: ReactNode
+  /**
+   * `outlined`, the default, is the dashed block a screen shows where a whole
+   * page has nothing on it. `plain` is the card-interior form of reference 26
+   * ("No custom templates yet"), for a card that already has its own border.
+   */
+  variant?: "outlined" | "plain"
+  className?: string
+}
+
+/**
+ * Empty is a designed state, not a blank area: an icon or illustration, what
+ * is missing, why it matters, and the one action that fills it. The action is
+ * a slot, so the caller keeps the mutation and the permission check.
+ *
+ * One component with two skins rather than two components — there used to be a
+ * second copy in `kit/`, and a screen picked whichever it happened to import.
+ */
 export function EmptyState({
-  icon = InformationCircleIcon,
+  icon,
+  illustration,
   title,
   description,
   action,
+  variant = "outlined",
   className,
-}: {
-  icon?: IconSvgElement
-  title: string
-  description?: string
-  action?: ReactNode
-  className?: string
-}) {
+}: EmptyStateProps) {
+  const plain = variant === "plain"
+  // Outlined stands on its own, so it always shows a mark; plain sits inside
+  // something that already frames it and shows one only when asked.
+  const mark = icon ?? (plain ? undefined : InformationCircleIcon)
+
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-[min(var(--radius-4xl),24px)] border border-dashed border-border px-6 py-12 text-center",
+        "flex flex-col items-center justify-center text-center",
+        plain
+          ? "gap-3 px-6 py-14"
+          : "gap-2 rounded-[min(var(--radius-4xl),24px)] border border-dashed border-border px-6 py-12",
         className,
       )}
     >
-      <HugeiconsIcon
-        icon={icon}
-        strokeWidth={2}
-        className="size-5 text-muted-foreground"
-        aria-hidden="true"
-      />
-      <p className="text-sm font-medium text-foreground">{title}</p>
+      {illustration ??
+        (mark === undefined ? null : (
+          <HugeiconsIcon
+            icon={mark}
+            strokeWidth={plain ? 1.5 : 2}
+            className={cn(
+              "text-muted-foreground",
+              plain ? "size-9" : "size-5",
+            )}
+            aria-hidden="true"
+          />
+        ))}
+      <p
+        className={
+          plain
+            ? "font-heading text-base font-semibold text-foreground"
+            : "text-sm font-medium text-foreground"
+        }
+      >
+        {title}
+      </p>
       {description ? (
-        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
+        <div
+          className={cn(
+            "max-w-md text-sm text-muted-foreground",
+            plain ? "leading-relaxed" : "",
+          )}
+        >
+          {description}
+        </div>
       ) : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>

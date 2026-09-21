@@ -15,23 +15,23 @@ import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
 import type { Id } from "../../../../convex/_generated/dataModel"
 import { ACTION_PRICES } from "../../../../convex/lib/limits"
+import { CompanyProfileCard } from "@/components/settings/company/CompanyProfileCard"
+import { CompanyWebsiteCard } from "@/components/settings/company/CompanyWebsiteCard"
+import { LoadingState } from "@/components/states/states"
+import { toast } from "@/components/ui/toast"
 import {
   analysisFailureCopy,
   startAnalysisCopy,
-} from "@/components/onboarding/steps/company/analysis-copy"
-import type { AnalysisMessage } from "@/components/onboarding/steps/company/analysis-copy"
+} from "@/lib/company-analysis-copy"
+import type { AnalysisMessage } from "@/lib/company-analysis-copy"
 import {
   cleanedList,
   companyFormIsComplete,
   EMPTY_COMPANY_FORM,
   profileToCompanyForm,
   sameWebsite,
-} from "@/components/onboarding/steps/company/company-form"
-import type { CompanyForm } from "@/components/onboarding/steps/company/company-form"
-import { CompanyProfileCard } from "@/components/settings/company/CompanyProfileCard"
-import { CompanyWebsiteCard } from "@/components/settings/company/CompanyWebsiteCard"
-import { LoadingState } from "@/components/states/states"
-import { toast } from "@/components/ui/toast"
+} from "@/lib/company-form"
+import type { CompanyForm } from "@/lib/company-form"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 
 const ANALYSIS_CREDITS = ACTION_PRICES.analyze_website.credits

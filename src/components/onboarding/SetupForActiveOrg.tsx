@@ -87,7 +87,6 @@ export function SetupForActiveOrg({ user }: { user: CurrentUser }) {
             setAttempt((value) => value + 1)
           }}
           refusal={refusal}
-          user={user}
         />
       )
     }

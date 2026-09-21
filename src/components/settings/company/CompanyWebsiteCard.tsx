@@ -2,17 +2,17 @@
  * Settings → Company, the website card: the address the profile was written
  * from, and the button that reads it again.
  *
- * Presentational. It reuses onboarding dot 1's own field and failure panel so
- * the two screens cannot drift: the same button wording, the same price
- * sentence, the same words for a blocked site. The container decides the
- * price, the reason and what a retry does.
+ * Presentational. The field and the failure panel come from `kit/`, and
+ * onboarding dot 1 renders the same two, so the screens cannot drift: the same
+ * button wording, the same price sentence, the same words for a blocked site.
+ * The container decides the price, the reason and what a retry does.
  */
 import { GlobeIcon } from "@hugeicons/core-free-icons"
-import type { AnalysisMessage } from "@/components/onboarding/steps/company/analysis-copy"
-import { AnalysisFailurePanel } from "@/components/onboarding/steps/company/AnalysisFailurePanel"
-import { WebsiteAnalyzeField } from "@/components/onboarding/steps/company/WebsiteAnalyzeField"
+import { AnalysisFailurePanel } from "@/components/kit/AnalysisFailurePanel"
+import { WebsiteAnalyzeField } from "@/components/kit/WebsiteAnalyzeField"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
 import { Card, CardContent } from "@/components/ui/card"
+import type { AnalysisMessage } from "@/lib/company-analysis-copy"
 
 export type CompanyWebsiteCardProps = {
   website: string

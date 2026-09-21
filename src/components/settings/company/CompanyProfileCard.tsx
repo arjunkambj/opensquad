@@ -6,8 +6,7 @@
  * one line why Save is off when the form is short of what the rest of the
  * product needs.
  */
-import type { CompanyForm } from "@/components/onboarding/steps/company/company-form"
-import { CompanyProfileForm } from "@/components/onboarding/steps/company/CompanyProfileForm"
+import { CompanyProfileForm } from "@/components/kit/CompanyProfileForm"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
+import type { CompanyForm } from "@/lib/company-form"
 
 export type CompanyProfileCardProps = {
   value: CompanyForm

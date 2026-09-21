@@ -14,7 +14,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
-import { EmptyState } from "@/components/kit/EmptyState"
+import { EmptyState } from "@/components/states/states"
 import { FlameScore } from "@/components/kit/FlameScore"
 import { PanelFrame } from "@/components/dashboard/PanelFrame"
 import { Button } from "@/components/ui/button"
@@ -61,6 +61,7 @@ export function LatestHotLeads({
         </div>
       ) : leads.items.length === 0 ? (
         <EmptyState
+          variant="plain"
           icon={UserGroupIcon}
           title="No hot leads in this window"
           description="Your agent scores every lead it researches out of three. The ones that score three land here."

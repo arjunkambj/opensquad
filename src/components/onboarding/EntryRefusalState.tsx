@@ -6,29 +6,21 @@
  * rather than a raw error. The only live read is whether the trial has room
  * again, which decides if the waitlist state may offer Try again at all.
  */
-import type { CurrentUser } from "@hexclave/react"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { OnboardingEntryRefusal } from "@/components/onboarding/onboarding-model"
 import { SetupFrame } from "@/components/onboarding/SetupFrame"
-import { VerifyEmailRefusal } from "@/components/onboarding/VerifyEmailRefusal"
 import { EmptyState, ErrorState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 
 export function EntryRefusalState({
   refusal,
-  user,
   onRetry,
 }: {
   refusal: OnboardingEntryRefusal
-  user: CurrentUser
   onRetry: () => void
 }) {
   const trial = useQuery(api.billing.queries.trialOpen, {})
-
-  if (refusal === "EMAIL_NOT_VERIFIED") {
-    return <VerifyEmailRefusal onRetry={onRetry} user={user} />
-  }
 
   if (refusal === "ACCOUNT_RESTRICTED") {
     return (
