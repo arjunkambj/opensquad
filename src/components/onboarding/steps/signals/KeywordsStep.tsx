@@ -18,6 +18,7 @@ import type { OnboardingStepProps } from "@/components/onboarding/onboarding-mod
 import { KeywordCard } from "@/components/onboarding/steps/signals/KeywordCard"
 import { KEYWORDS_GENERATION_CREDITS } from "@/components/onboarding/steps/signals/signals-model"
 import { SignalsStepShell } from "@/components/onboarding/steps/signals/SignalsStepShell"
+import { useMountedRef } from "@/hooks/use-mounted"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -39,6 +40,7 @@ export function KeywordsStep(props: OnboardingStepProps) {
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const mounted = useMountedRef()
 
   const keywords = overview?.keywords ?? []
   const taken = new Set(keywords.map((word) => word.toLocaleLowerCase()))
@@ -72,13 +74,23 @@ export function KeywordsStep(props: OnboardingStepProps) {
     }
   }, [generating, pool])
 
+  // Every keyword edit is its own write, so two of them can be in flight at
+  // once — and the answer belongs to the write that asked for it. Only the
+  // LAST one may speak: an older failure arriving after a newer save
+  // succeeded would put an error on a list that is saved.
+  const saved = useRef(0)
+
   const save = (next: string[]) => {
     setError(null)
+    saved.current += 1
+    const attempt = saved.current
     void (async () => {
       try {
         await saveKeywords({ orgId, keywords: next })
       } catch {
-        setError("We couldn't save that. Try it again.")
+        if (mounted.current && saved.current === attempt) {
+          setError("We couldn't save that. Try it again.")
+        }
       }
     })()
   }
@@ -86,14 +98,22 @@ export function KeywordsStep(props: OnboardingStepProps) {
   const skip = () => {
     setLeaving(true)
     setError(null)
+    saved.current += 1
+    const attempt = saved.current
     void (async () => {
       try {
         await saveKeywords({ orgId, keywords: [] })
-        goNext()
+        if (mounted.current && saved.current === attempt) {
+          goNext()
+        }
       } catch {
-        setError("We couldn't save that. Try it again.")
+        if (mounted.current && saved.current === attempt) {
+          setError("We couldn't save that. Try it again.")
+        }
       } finally {
-        setLeaving(false)
+        if (mounted.current) {
+          setLeaving(false)
+        }
       }
     })()
   }
@@ -116,8 +136,12 @@ export function KeywordsStep(props: OnboardingStepProps) {
         await generateMore({ orgId })
       } catch {
         requestedAt.current = null
-        setGenerating(false)
-        setError("We couldn't ask for more suggestions. Try again in a moment.")
+        if (mounted.current) {
+          setGenerating(false)
+          setError(
+            "We couldn't ask for more suggestions. Try again in a moment.",
+          )
+        }
       }
     })()
   }

@@ -22,6 +22,7 @@ import {
   icpGenerationView,
 } from "@/components/onboarding/steps/icp/icp-model"
 import type { IcpGenerationView } from "@/components/onboarding/steps/icp/icp-model"
+import { useMountedRef } from "@/hooks/use-mounted"
 
 /** Why a run is being asked for. `initial` is the automatic free one. */
 export type IcpRunReason = "initial" | "retry" | "regenerate"
@@ -52,23 +53,37 @@ export function useIcpGeneration(
 
   const [refusal, setRefusal] = useState<IcpStartRefusal | null>(null)
   const [starting, setStarting] = useState(false)
+  const mounted = useMountedRef()
 
   const view = icpGenerationView(agent)
   const price = icpGenerationPrice(view)
 
+  // A request can be asked for again — Try again, Regenerate — before the
+  // previous one has answered, and the screen belongs to the LATEST one. The
+  // attempt it was made at is what an answer checks before it speaks, so a
+  // stale refusal never lands on a run that is still going, and none of them
+  // land on a screen the user has already left.
+  const attempts = useRef(0)
+
   const start = useCallback(
     async (reason: IcpRunReason) => {
+      attempts.current += 1
+      const attempt = attempts.current
       setStarting(true)
       setRefusal(null)
       try {
         await startGeneration({ orgId, reason })
       } catch (cause) {
-        setRefusal({ message: startGenerationCopy(cause), reason })
+        if (mounted.current && attempts.current === attempt) {
+          setRefusal({ message: startGenerationCopy(cause), reason })
+        }
       } finally {
-        setStarting(false)
+        if (mounted.current && attempts.current === attempt) {
+          setStarting(false)
+        }
       }
     },
-    [startGeneration, orgId],
+    [mounted, startGeneration, orgId],
   )
 
   // One automatic request per mount. The server decides whether it runs.

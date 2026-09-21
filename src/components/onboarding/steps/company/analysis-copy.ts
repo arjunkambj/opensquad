@@ -10,6 +10,8 @@
  * these states also offers Retry and "Fill in manually".
  */
 import { ConvexError } from "convex/values"
+import { DOMAIN_ERROR_CODES } from "../../../../../convex/lib/errors"
+import type { DomainErrorCode } from "../../../../../convex/lib/errors"
 import type { OperationErrorCode } from "../../../../../convex/lib/validators"
 
 export type AnalysisMessage = {
@@ -79,8 +81,16 @@ export function analysisFailureCopy(
   }
 }
 
-/** The codes `company.mutations.startAnalysis` refuses with. */
-const START_REFUSALS: Record<string, AnalysisMessage> = {
+/**
+ * The codes `company.mutations.startAnalysis` can refuse with.
+ *
+ * TOTAL over the backend's error vocabulary on purpose: a code added to
+ * `convex/lib/errors.ts` fails the build here until someone decides what this
+ * screen says about it, rather than quietly arriving as the fallback. Codes
+ * this mutation cannot reach today still get copy, because "cannot reach"
+ * is a fact about today's handler and not something the type can hold.
+ */
+const START_REFUSALS: Record<DomainErrorCode, AnalysisMessage> = {
   INVALID: {
     title: "That doesn't look like a website address",
     description:
@@ -103,6 +113,55 @@ const START_REFUSALS: Record<string, AnalysisMessage> = {
     title: "Your session expired",
     description: "Sign in again and pick up where you left off.",
   },
+  NOT_FOUND: {
+    title: "That company profile isn't here",
+    description:
+      "Reload the page and try again, or fill your profile in yourself.",
+  },
+  EMAIL_NOT_VERIFIED: {
+    title: "Verify your email to run this",
+    description:
+      "Open the link we sent you, come back, and try the analysis again.",
+  },
+  ACCOUNT_RESTRICTED: {
+    title: "This account can't run an analysis",
+    description:
+      "You can still fill your profile in yourself and carry on with setup.",
+  },
+  NO_ACTIVE_ORG: {
+    title: "No organization is open",
+    description: "Pick the organization you're working in, then try again.",
+  },
+  TRIAL_CAPACITY_REACHED: {
+    title: "We're at capacity right now",
+    description:
+      "Try again in a little while, or fill your profile in yourself and carry on.",
+  },
+  NO_CREDIT_GRANT: {
+    title: "This organization has no credits",
+    description:
+      "Website analysis is a paid step. Fill your profile in yourself and carry on with setup.",
+  },
+  INSUFFICIENT_CREDITS: {
+    title: "No credits left for another analysis",
+    description:
+      "Your allowance for website analysis is used up. You can still fill your profile in yourself.",
+  },
+  TRIAL_LIMIT_REACHED: {
+    title: "Your trial's analysis limit is reached",
+    description:
+      "Fill your profile in yourself and carry on — nothing else in setup is blocked.",
+  },
+  PLATFORM_PAUSED: {
+    title: "Website analysis is paused right now",
+    description:
+      "We've paused it for everyone while we look at something. Fill your profile in yourself and carry on.",
+  },
+  PLATFORM_CAPACITY: {
+    title: "Website analysis is at capacity today",
+    description:
+      "Try again tomorrow, or fill your profile in yourself and carry on with setup.",
+  },
 }
 
 const START_FALLBACK: AnalysisMessage = {
@@ -117,8 +176,11 @@ export function startAnalysisCopy(error: unknown): AnalysisMessage {
     const data: unknown = error.data
     if (typeof data === "object" && data !== null) {
       const code = (data as { code?: unknown }).code
-      if (typeof code === "string") {
-        return START_REFUSALS[code] ?? START_FALLBACK
+      if (
+        typeof code === "string" &&
+        (DOMAIN_ERROR_CODES as readonly string[]).includes(code)
+      ) {
+        return START_REFUSALS[code as DomainErrorCode]
       }
     }
   }

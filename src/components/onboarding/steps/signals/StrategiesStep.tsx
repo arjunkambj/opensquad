@@ -13,7 +13,7 @@
  */
 import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { useMutation, useQuery } from "convex/react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import type { Id } from "../../../../../convex/_generated/dataModel"
 import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
@@ -30,6 +30,7 @@ import {
 } from "@/components/onboarding/steps/signals/StrategyCardList"
 import { useStrategyRecommendation } from "@/components/onboarding/steps/signals/use-strategy-recommendation"
 import type { SignalsRunReason } from "@/components/onboarding/steps/signals/use-strategy-recommendation"
+import { useMountedRef } from "@/hooks/use-mounted"
 import { EmptyState } from "@/components/states/states"
 
 export function StrategiesStep(props: OnboardingStepProps) {
@@ -41,6 +42,8 @@ export function StrategiesStep(props: OnboardingStepProps) {
     overview === undefined ? undefined : overview.generation,
   )
   const [saveError, setSaveError] = useState<string | null>(null)
+  const mounted = useMountedRef()
+  const selected = useRef(0)
 
   const view = generation.view
   const generating = view.state === "generating"
@@ -64,11 +67,18 @@ export function StrategiesStep(props: OnboardingStepProps) {
           .map((strategy) => strategy._id)
           .filter((id) => id !== strategyId)
     setSaveError(null)
+    // Ticks come faster than the writes answer, and the answer belongs to the
+    // tick that asked for it: only the last one may put an error on the
+    // screen, and only while the screen is still here.
+    selected.current += 1
+    const attempt = selected.current
     void (async () => {
       try {
         await setSelection({ orgId, strategyIds: next })
       } catch {
-        setSaveError("We couldn't save that choice. Try it again.")
+        if (mounted.current && selected.current === attempt) {
+          setSaveError("We couldn't save that choice. Try it again.")
+        }
       }
     })()
   }

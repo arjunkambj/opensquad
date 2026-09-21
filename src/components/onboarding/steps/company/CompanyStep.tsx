@@ -161,7 +161,7 @@ export function CompanyStep({
       description="We read your website and write the profile your agent sells from. Every line stays yours to edit."
       dotCount={progress.dotCount}
       logo={<Logo markClassName="size-8" />}
-      nextDisabled={!complete || analyzing || moving}
+      nextDisabled={!complete || analyzing || moving || saving}
       nextLoading={saving || moving}
       onNext={() => {
         void (async () => {

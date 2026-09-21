@@ -23,6 +23,7 @@ import {
   signalsGenerationView,
 } from "@/components/onboarding/steps/signals/signals-model"
 import type { SignalsGenerationView } from "@/components/onboarding/steps/signals/signals-model"
+import { useMountedRef } from "@/hooks/use-mounted"
 
 /** Why a run is being asked for. `initial` is the automatic free one. */
 export type SignalsRunReason = "initial" | "retry" | "regenerate"
@@ -58,23 +59,37 @@ export function useStrategyRecommendation(
 
   const [refusal, setRefusal] = useState<SignalsStartRefusal | null>(null)
   const [starting, setStarting] = useState(false)
+  const mounted = useMountedRef()
 
   const view = signalsGenerationView(status ?? null)
   const price = signalsGenerationPrice(view)
 
+  // A request can be asked for again — Try again, Regenerate — before the
+  // previous one has answered, and the screen belongs to the LATEST one. The
+  // attempt it was made at is what an answer checks before it speaks, so a
+  // stale refusal never lands on a run that is still going, and none of them
+  // land on a screen the user has already left.
+  const attempts = useRef(0)
+
   const start = useCallback(
     async (reason: SignalsRunReason) => {
+      attempts.current += 1
+      const attempt = attempts.current
       setStarting(true)
       setRefusal(null)
       try {
         await startRecommendation({ orgId, reason })
       } catch (cause) {
-        setRefusal({ message: startRecommendationCopy(cause), reason })
+        if (mounted.current && attempts.current === attempt) {
+          setRefusal({ message: startRecommendationCopy(cause), reason })
+        }
       } finally {
-        setStarting(false)
+        if (mounted.current && attempts.current === attempt) {
+          setStarting(false)
+        }
       }
     },
-    [startRecommendation, orgId],
+    [mounted, startRecommendation, orgId],
   )
 
   // One automatic request per mount, and only once the status has actually

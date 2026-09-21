@@ -11,9 +11,8 @@
  * the step that wrote it, which is the whole job of a review screen.
  */
 import { Target01Icon } from "@hugeicons/core-free-icons"
-import { useNavigate } from "@tanstack/react-router"
 import { useAction, useMutation, useQuery } from "convex/react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
 import type { OnboardingStep } from "../../../../../convex/lib/validators"
 import { InfoBanner } from "@/components/kit/InfoBanner"
@@ -27,18 +26,20 @@ import {
 import type { SignalsMessage } from "@/components/onboarding/steps/signals/signals-copy"
 import { SignalsFailurePanel } from "@/components/onboarding/steps/signals/SignalsFailurePanel"
 import { SignalsStepShell } from "@/components/onboarding/steps/signals/SignalsStepShell"
+import { useMountedRef } from "@/hooks/use-mounted"
 import { EmptyState } from "@/components/states/states"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function ReviewStep(props: OnboardingStepProps) {
-  const { orgId, agent, progress, goBack, moving, moveError } = props
-  const navigate = useNavigate()
+  const { orgId, agent, progress, goBack, moving, moveError, onFinished } =
+    props
   const profile = useQuery(api.company.queries.get, { orgId })
   const overview = useQuery(api.agents.strategies.overview, { orgId })
   const setStep = useMutation(api.agents.onboarding.setStep)
   const confirm = useAction(api.agents.strategies.confirm)
 
   const [confirming, setConfirming] = useState(false)
+  const mounted = useMountedRef()
   // The panel's "Try again" has to do the thing that failed, so a failure
   // carries which one it was — re-running a confirm to reopen a step would be
   // a button that lies about what it does.
@@ -53,6 +54,12 @@ export function ReviewStep(props: OnboardingStepProps) {
     .map((strategy) => strategy.title)
 
   const [lastStep, setLastStep] = useState<OnboardingStep | null>(null)
+
+  // Confirm can be pressed again while its last press is still in flight —
+  // the failure panel offers exactly that. The answer belongs to the press
+  // that asked for it, so only the latest one may put anything on the
+  // screen, and only while the screen is still here.
+  const attempts = useRef(0)
 
   const jumpTo = (step: OnboardingStep) => {
     setFailure(null)
@@ -75,21 +82,35 @@ export function ReviewStep(props: OnboardingStepProps) {
   const finish = () => {
     setConfirming(true)
     setFailure(null)
+    attempts.current += 1
+    const attempt = attempts.current
     void (async () => {
       try {
         const result = await confirm({ orgId })
-        if (result.status === "blocked") {
-          setFailure({ from: "confirm", message: confirmBlockCopy(result.reason) })
+        if (!mounted.current || attempts.current !== attempt) {
           return
         }
-        // Contacts shows the agent's own run state, so landing there is what
-        // "finding your first leads" looks like. `replace`, because setup is
-        // over and there is nothing behind it worth going back to.
-        await navigate({ to: "/contacts", replace: true })
+        if (result.status === "blocked") {
+          setFailure({
+            from: "confirm",
+            message: confirmBlockCopy(result.reason),
+          })
+          setConfirming(false)
+          return
+        }
+        // The agent is live. WHERE setup ends is the container's call, and it
+        // waits for the agent row to read `done` before it moves: leaving on
+        // this result alone would arrive at a page whose gate reads that same
+        // row and be bounced back into setup for a frame.
+        //
+        // `confirming` stays true on purpose — the screen is on its way out,
+        // and its button must not be pressable again while it goes.
+        onFinished()
       } catch {
-        setFailure({ from: "confirm", message: CONFIRM_FALLBACK })
-      } finally {
-        setConfirming(false)
+        if (mounted.current && attempts.current === attempt) {
+          setFailure({ from: "confirm", message: CONFIRM_FALLBACK })
+          setConfirming(false)
+        }
       }
     })()
   }
