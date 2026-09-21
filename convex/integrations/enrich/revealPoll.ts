@@ -146,15 +146,20 @@ export const pollLeadReveal = internalAction({
 
     const providerCredits = chargedOn(body);
     const contact = firstRevealedContact((body.results ?? {}).revealed);
-    if (providerCredits === 0) {
-      // Charged nothing — served from the provider's 24-hour team cache, or
-      // nothing found. Either way the credits go back in full (PLAN §6) and
-      // any address that did come back is still returned.
+    if (contact === null && providerCredits === 0) {
+      // The provider looked, had no address on file and charged nothing for
+      // it. Nothing was bought, so the credits go back in full (PLAN §6).
       await settle(ctx, args, {
         outcome: "refunded",
         reason: "provider_charged_nothing",
       });
     } else {
+      // An address came back, so the work WAS done and the user is charged
+      // what the button said (PLAN §6: "credits commit at the posted price").
+      // `providerCredits` is zero when the field was served from the
+      // provider's 24-hour team cache — that is a hidden unit we did not
+      // spend, not a free email: the hidden cap keeps its unit and only the
+      // visible price is committed.
       await settle(ctx, args, {
         outcome: "billed",
         actualUnits: { enrich_credits: providerCredits },

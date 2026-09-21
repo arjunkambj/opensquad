@@ -19,11 +19,16 @@
  * unknown outcome THROWS so the hold parks as `uncertain`.
  */
 import { internal } from "../../_generated/api";
-import { internalAction } from "../../_generated/server";
+import { internalAction, internalQuery } from "../../_generated/server";
 import type { ActionCtx } from "../../_generated/server";
 import { withCredits } from "../../billing/withCredits";
 import { composeOperationKey, vRefundReason } from "../../billing/paidCall";
 import type { RefundReason } from "../../billing/paidCall";
+import {
+  platformBudgetLimit,
+  platformPeriodKey,
+} from "../../billing/platformBudgets";
+import { PLATFORM_BUDGETS } from "../../lib/limits";
 import type { LeadFilterOption, OperationErrorCode } from "../../lib/validators";
 import {
   domainError,
@@ -48,17 +53,46 @@ const SEARCH_PAGE_SIZE = 25;
 /** The last page the free tier covers. Page 4 would be 1 credit per row. */
 const MAX_SEARCH_PAGE = 3;
 
+/**
+ * Free unique searches the provider account gets per calendar month — a
+ * search being one unique FILTER COMBINATION, with paging and re-running the
+ * same filters consuming none (the provider's free-tier rule). Past it, the
+ * pages this build treats as free start costing a credit per row, which is
+ * the one way our ledger could record zero while the account is charged.
+ *
+ * Nothing in a response reports the pool, so the only tracker is our own
+ * monthly `enrich_searches` budget: it counts one unit per PAGE, which is at
+ * least one per unique search, so reading it against this number can only
+ * warn early — never late. `ENRICH_MONTHLY_SEARCH_BUDGET` is the ceiling that
+ * actually enforces it and must stay at or below this figure.
+ */
+export const FREE_UNIQUE_SEARCHES_PER_MONTH = 50;
+
 const vCountResult = v.union(
   v.object({
     status: v.literal("counted"),
     count: v.number(),
-    /** Whether the number is an estimate, read from every signal the response
-     *  carries (`countIsApproximate`) — the flag alone was false at 89,731 on
-     *  this account (spikes §3). */
+    /** Whether the number is an estimate, read from what the response itself
+     *  says (`countIsApproximate`) and never from how big it is — the flag
+     *  was false at 89,731 on this account (spikes §3). */
     isApproximate: v.boolean(),
   }),
   v.object({ status: v.literal("failed"), code: vOperationErrorCode }),
 );
+
+/**
+ * The provider's own answer to "is there another page?", or `null` when it
+ * sent no pagination at all. The two are different facts: "there is nothing
+ * more" ends a signal, "we do not know" must not.
+ */
+const vHasMore = v.union(v.boolean(), v.null());
+
+/** What an EMPTY page's own pagination said. `null` members are the provider
+ *  saying nothing, which is never evidence that the results ran out. */
+const vEmptyPage = v.object({
+  hasMore: vHasMore,
+  totalResults: v.union(v.number(), v.null()),
+});
 
 const vFindResult = v.union(
   v.object({
@@ -67,7 +101,7 @@ const vFindResult = v.union(
     credits: v.number(),
     page: v.number(),
     totalResults: v.number(),
-    hasMore: v.boolean(),
+    hasMore: vHasMore,
     isApproximate: v.boolean(),
     presence: vLeadFieldPresence,
     /** Empty when the caller asked for a summary only. */
@@ -79,9 +113,8 @@ const vFindResult = v.union(
     operationKey: v.optional(v.string()),
     /** Present only for `provider_charged_nothing`: the empty page's own
      *  pagination, so the caller can tell the end of a signal from a page
-     *  that happened to hold nobody. */
-    hasMore: v.optional(v.boolean()),
-    totalResults: v.optional(v.number()),
+     *  that happened to hold nobody — and an unknown from either. */
+    emptyPage: v.optional(vEmptyPage),
   }),
   /** This exact search was already paid for; its rows were stored then. */
   v.object({ status: v.literal("replayed"), operationKey: v.string() }),
@@ -111,24 +144,24 @@ type SearchResponse = {
   };
 };
 
-/** The provider's own pagination cap (doc.enrich.so, count + search). A count
- *  standing at it was cut off there rather than counted past it, so what came
- *  back is a floor and not the real total. */
-const PAGEABLE_CAP = 500_000;
-
 /**
  * Whether the number the provider just handed back is an estimate.
  *
- * Only what the response itself says: the `isApproximate` flag where it is
- * sent, and `searchedTotalResult` — the raw total, which EQUALS the pageable
- * count whenever nothing was discounted or truncated, so a divergence is the
- * provider saying the count was adjusted. The documented 500,000 cap is the
- * third case, and it is a cap, not a guess about size.
+ * ONLY what the response itself says, in the provider's own two signals:
+ *   - `isApproximate`, the documented flag;
+ *   - `searchedTotalResult`, the raw total, which EQUALS the returned count
+ *     whenever nothing was discounted or truncated. A divergence is the
+ *     provider itself saying the number was adjusted (spikes §3 records the
+ *     dedup discount and the 500,000 pagination cap as the two reasons it
+ *     diverges), so the cap case is still caught — by the provider's own
+ *     figures rather than by a size we chose.
  *
- * Nothing is inferred from how big the count is: the flag was false at 89,731
- * on this account (spikes §3), so a large exact count stays exact. `searchType`
- * is not a signal either — `unified` is the ordinary answer and was seen
- * beside an exact count.
+ * Nothing is inferred from how big the count is. The docs claim results above
+ * 10,000 are estimated, but the flag came back FALSE at 89,731 on this
+ * account (spikes §3: "do not key UI copy on the 10k threshold, read the
+ * flag"), and a count standing at the pagination cap is a cap, not a guess
+ * about size. `searchType` is not a signal either — `unified` is the ordinary
+ * answer and was seen beside an exact count.
  */
 function countIsApproximate(signals: {
   flag: unknown;
@@ -139,14 +172,11 @@ function countIsApproximate(signals: {
     return true;
   }
   const raw = signals.searchedTotalResult;
-  if (
+  return (
     typeof raw === "number" &&
     Number.isFinite(raw) &&
     Math.trunc(raw) !== signals.count
-  ) {
-    return true;
-  }
-  return signals.count >= PAGEABLE_CAP;
+  );
 }
 
 /**
@@ -252,9 +282,7 @@ export const findLeads = internalAction({
      *  result of its own, and the caller needs to know whether there are more
      *  pages behind it. Held in a box because the search fills it in from
      *  inside the credit wrapper. */
-    const empty: { page: { hasMore: boolean; totalResults: number } | null } = {
-      page: null,
-    };
+    const empty: { page: EmptyPagePagination | null } = { page: null };
     let outcome;
     try {
       outcome = await withCredits(
@@ -288,12 +316,25 @@ export const findLeads = internalAction({
           const pagination = result.data.pagination ?? {};
           const totalResults = wholeNumber(pagination.totalResults, rows.length);
           if (rows.length === 0) {
+            if (page === 1) {
+              // The FIRST page of a filter combination is what spends one of
+              // the account's free monthly searches; later pages of the same
+              // combination spend none. The refund below releases the
+              // reserved search unit along with the credits — a refunded
+              // settlement cannot keep a provider unit — so this line is the
+              // only record that the shared pool moved. See
+              // `FREE_UNIQUE_SEARCHES_PER_MONTH`.
+              console.warn(
+                "lead search: an empty first page spent one of the month's free searches",
+              );
+            }
             // The provider answered and charged nothing (PLAN §6). Its own
             // pagination travels with the refund: an empty page with more
-            // behind it is a gap, not the end of the results.
+            // behind it is a gap, not the end of the results — and a page
+            // that came back with NO pagination says neither.
             empty.page = {
-              hasMore: pagination.hasMore === true,
-              totalResults,
+              hasMore: knownBoolean(pagination.hasMore),
+              totalResults: knownWholeNumber(pagination.totalResults),
             };
             return {
               outcome: "refunded" as const,
@@ -306,7 +347,7 @@ export const findLeads = internalAction({
               rows,
               page,
               totalResults,
-              hasMore: pagination.hasMore === true,
+              hasMore: knownBoolean(pagination.hasMore),
               isApproximate: countIsApproximate({
                 flag: pagination.isApproximate,
                 count: totalResults,
@@ -343,12 +384,7 @@ export const findLeads = internalAction({
         ...(outcome.operationId !== null
           ? { operationKey: outcome.operationKey }
           : {}),
-        ...(empty.page !== null
-          ? {
-              hasMore: empty.page.hasMore,
-              totalResults: empty.page.totalResults,
-            }
-          : {}),
+        ...(empty.page !== null ? { emptyPage: empty.page } : {}),
       };
     }
     if (outcome.kind === "uncertain") {
@@ -376,6 +412,12 @@ export const findLeads = internalAction({
   },
 });
 
+/** An empty page's own pagination. `null` is the provider saying nothing. */
+export type EmptyPagePagination = {
+  hasMore: boolean | null;
+  totalResults: number | null;
+};
+
 type FindLeadsResult =
   | {
       status: "found";
@@ -383,7 +425,7 @@ type FindLeadsResult =
       credits: number;
       page: number;
       totalResults: number;
-      hasMore: boolean;
+      hasMore: boolean | null;
       isApproximate: boolean;
       presence: LeadFieldPresence;
       rows: SourcedLead[];
@@ -392,12 +434,95 @@ type FindLeadsResult =
       status: "refunded";
       reason: RefundReason;
       operationKey?: string;
-      hasMore?: boolean;
-      totalResults?: number;
+      emptyPage?: EmptyPagePagination;
     }
   | { status: "replayed"; operationKey: string }
   | { status: "uncertain"; operationKey: string; code: OperationErrorCode }
   | { status: "failed"; code: OperationErrorCode };
+
+const vSearchPool = v.object({
+  /** The month this reading is for, as the budget row keys it. */
+  periodKey: v.string(),
+  /** Search units committed or held this month — pages, so never fewer than
+   *  the unique searches they came from. A tripped platform breaker marks
+   *  this same counter far above any real usage, so a reading taken during a
+   *  trip reads as exhausted; paid searches are stopped then anyway, and the
+   *  figure itself says which case it is. */
+  used: v.number(),
+  /** Our own enforcing ceiling for the month. */
+  budgetLimit: v.number(),
+  /** What the provider gives away before it starts charging. */
+  freePerMonth: v.number(),
+  /** Free searches still unaccounted for, floored at zero. */
+  remainingFree: v.number(),
+  /** The month's free pool may be spent: pages 1–3 can no longer be assumed
+   *  free, so every settlement recording zero provider credits is suspect. */
+  exhausted: v.boolean(),
+});
+
+type SearchPool = {
+  periodKey: string;
+  used: number;
+  budgetLimit: number;
+  freePerMonth: number;
+  remainingFree: number;
+  exhausted: boolean;
+};
+
+/**
+ * Where this month's search consumption stands against the account's free
+ * unique-search pool — the counted signal PLAN §6's layer 3 reads.
+ *
+ * `at` is an argument rather than a clock read because a query must not
+ * depend on the wall clock; `searchPoolStatus` is the door that supplies it.
+ */
+export const monthlySearchPool = internalQuery({
+  args: { at: v.number() },
+  returns: vSearchPool,
+  handler: async (ctx, args): Promise<SearchPool> => {
+    const policy = PLATFORM_BUDGETS.enrich_searches;
+    const periodKey = platformPeriodKey(policy, args.at);
+    const row = await ctx.db
+      .query("platformBudgets")
+      .withIndex("by_provider_and_periodKey", (q) =>
+        q.eq("provider", policy.provider).eq("periodKey", periodKey),
+      )
+      .unique();
+    const used = row?.used ?? 0;
+    return {
+      periodKey,
+      used,
+      budgetLimit: platformBudgetLimit(policy),
+      freePerMonth: FREE_UNIQUE_SEARCHES_PER_MONTH,
+      remainingFree: Math.max(0, FREE_UNIQUE_SEARCHES_PER_MONTH - used),
+      exhausted: used >= FREE_UNIQUE_SEARCHES_PER_MONTH,
+    };
+  },
+});
+
+/**
+ * The same reading, with the clock — for the platform watchdog and for a live
+ * check from the CLI, and the one place the pool's exhaustion is said out
+ * loud. It is logged rather than acted on because the ceiling that stops the
+ * spending is the monthly budget the reserve already checks.
+ */
+export const searchPoolStatus = internalAction({
+  args: {},
+  returns: vSearchPool,
+  handler: async (ctx): Promise<SearchPool> => {
+    const pool: SearchPool = await ctx.runQuery(
+      internal.integrations.enrich.search.monthlySearchPool,
+      { at: Date.now() },
+    );
+    if (pool.exhausted) {
+      console.error(
+        "lead search: the account's free monthly searches are used up; pages are no longer free",
+        { periodKey: pool.periodKey, used: pool.used },
+      );
+    }
+    return pool;
+  },
+});
 
 /**
  * The cached filter catalogue every value is checked against.
@@ -442,6 +567,20 @@ function wholeNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.trunc(value)
     : fallback;
+}
+
+/** The boolean the provider actually sent, or `null` when it sent none. A
+ *  missing flag is not `false`: that is the difference between "there is no
+ *  more" and "we do not know". */
+function knownBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+/** The count the provider actually sent, or `null` when it sent none. */
+function knownWholeNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : null;
 }
 
 export { MAX_SEARCH_PAGE, SEARCH_PAGE_SIZE };

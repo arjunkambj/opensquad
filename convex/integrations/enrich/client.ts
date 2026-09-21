@@ -155,6 +155,18 @@ export type EnrichRequest = {
 };
 
 /**
+ * The kill switch, readable before a request is built.
+ *
+ * `enrichRequest` checks it for every call that does not opt out, but a caller
+ * whose FIRST provider read is one of the opted-out ones (the balance read)
+ * has to refuse before it makes that read — a paused platform makes no
+ * provider calls at all (PLAN §6).
+ */
+export function enrichCallsPaused(): boolean {
+  return readBooleanEnv(PLATFORM_PAUSED_ENV);
+}
+
+/**
  * Perform one provider request and classify it. The body is parsed as the
  * documented envelope `{ success, data, meta.requestId }` (spikes §3); a 2xx
  * that does not parse that way is an unknown outcome, not a success.
@@ -162,7 +174,7 @@ export type EnrichRequest = {
 export async function enrichRequest<T>(
   request: EnrichRequest,
 ): Promise<EnrichResult<T>> {
-  if (request.respectKillSwitch !== false && readBooleanEnv(PLATFORM_PAUSED_ENV)) {
+  if (request.respectKillSwitch !== false && enrichCallsPaused()) {
     return { kind: "refused", reason: "kill_switch" };
   }
   const apiKey = env.ENRICH_API_KEY;

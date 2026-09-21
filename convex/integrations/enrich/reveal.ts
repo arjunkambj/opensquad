@@ -22,12 +22,17 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import type { ActionCtx } from "../../_generated/server";
-import { vRefundReason } from "../../billing/paidCall";
+import { composeOperationKey, vRefundReason } from "../../billing/paidCall";
 import type { RefundReason } from "../../billing/paidCall";
 import { withCredits } from "../../billing/withCredits";
 import { domainError, vOperationErrorCode } from "../../lib/validators";
 import type { OperationErrorCode } from "../../lib/validators";
-import { enrichRequest, operationErrorCodeOf, refundReasonOf } from "./client";
+import {
+  enrichCallsPaused,
+  enrichRequest,
+  operationErrorCodeOf,
+  refundReasonOf,
+} from "./client";
 import type { EnrichUnknown } from "./client";
 import { fetchWalletBalance } from "./wallet";
 import { v } from "convex/values";
@@ -63,6 +68,18 @@ const vRevealSubmission = v.union(
     sourceLeadId: v.string(),
     operationKey: v.string(),
   }),
+  /**
+   * The submit left us and its outcome is unknown: the provider may be
+   * running the job and charging for it. The hold stays and the caller must
+   * keep the lead in a state the recovery sweep re-drives — releasing it
+   * here would strand an address the platform paid for.
+   */
+  v.object({
+    status: v.literal("uncertain"),
+    sourceLeadId: v.string(),
+    operationKey: v.string(),
+    code: vOperationErrorCode,
+  }),
   v.object({
     status: v.literal("failed"),
     sourceLeadId: v.string(),
@@ -79,6 +96,12 @@ export type RevealSubmission =
     }
   | { status: "refunded"; sourceLeadId: string; reason: RefundReason }
   | { status: "replayed"; sourceLeadId: string; operationKey: string }
+  | {
+      status: "uncertain";
+      sourceLeadId: string;
+      operationKey: string;
+      code: OperationErrorCode;
+    }
   | { status: "failed"; sourceLeadId: string; code: OperationErrorCode };
 
 type SubmitResponse = { jobId?: unknown; creditsReserved?: unknown };
@@ -127,6 +150,12 @@ export const revealLeadEmails = internalAction({
         "INVALID",
         `leads must hold between 1 and ${MAX_LEADS_PER_REVEAL} entries`,
       );
+    }
+    if (enrichCallsPaused()) {
+      // Before the balance read: that one read deliberately ignores the kill
+      // switch (it is what decides whether the breaker should trip), so a
+      // paused platform would otherwise still make a provider call here.
+      return { status: "failed", code: "platform_paused" };
     }
     const balance = await fetchWalletBalance();
     if (balance.kind !== "ok") {
@@ -216,9 +245,24 @@ async function submitOne(
     );
   } catch (error) {
     if (unknownReason !== null) {
+      // The request LEFT US and we do not know what it did: the job may be
+      // running and charging. `withCredits` has parked the hold `uncertain`,
+      // so this is not a refusal — telling the caller "failed" here is what
+      // used to release the lead and strand an address we may have paid for.
+      const operationKey = composeOperationKey("get_email", args.operationKey);
+      // The reconciliation door (the only path allowed to RELEASE an
+      // uncertain hold) settles it from the provider's own job as soon as the
+      // operation carries a reference; without one the hold waits for PLAN
+      // §6's worst-case commit, which is the honest end of an unknown submit.
+      await ctx.scheduler.runAfter(
+        REVEAL_POLL_INTERVAL_MS,
+        internal.integrations.enrich.revealPoll.reconcileRevealOperation,
+        { orgId: args.orgId, operationKey },
+      );
       return {
-        status: "failed",
+        status: "uncertain",
         sourceLeadId: args.sourceLeadId,
+        operationKey,
         code: operationErrorCodeOf(unknownReason),
       };
     }
@@ -248,9 +292,14 @@ async function submitOne(
       { orgId: args.orgId, operationKey },
     );
     if (recorded === null || recorded.jobId === null) {
+      // The hold is real and nothing points at a job, so the outcome is
+      // unknown rather than failed: the money stays held and the lead stays
+      // with the recovery sweep instead of being handed back as if nothing
+      // had been spent.
       return {
-        status: "failed",
+        status: "uncertain",
         sourceLeadId: args.sourceLeadId,
+        operationKey,
         code: "unknown",
       };
     }

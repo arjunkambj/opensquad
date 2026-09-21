@@ -29,6 +29,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { mutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import { bucketRemaining, dailyPeriodKey, findBucket } from "../billing/model";
+import { platformBudgetHasRoom } from "../billing/platformBudgets";
 import {
   MAX_LEADS_PER_REVEAL,
   REVEAL_CREDITS_PER_LEAD,
@@ -177,8 +178,14 @@ function ineligible(
 
 /**
  * How many addresses this org can actually pay for right now — the
- * smaller of the visible credit balance and the hidden provider allowance,
- * capped by the provider's own batch ceiling.
+ * smallest of the visible credit balance, the hidden provider allowance and
+ * the PLATFORM budget for the period, capped by the provider's own batch
+ * ceiling.
+ *
+ * The platform layer is checked here and not only inside the credit wrapper
+ * for the same reason the org caps are: a claim the reserve will refuse one
+ * lead at a time costs a round trip each and leaves the leads sitting in
+ * `revealing` until the stall sweep notices (PLAN §6 layer 3).
  */
 async function affordableReveals(
   ctx: MutationCtx,
@@ -197,6 +204,7 @@ async function affordableReveals(
       "this organization has no credit grant; no paid step can run",
     );
   }
+  const now = Date.now();
   const byCredits = Math.floor(bucketRemaining(credits) / price);
   const byProvider = Math.min(
     await providerAllowance(
@@ -208,11 +216,49 @@ async function affordableReveals(
     await providerAllowance(
       ctx,
       org,
-      dailyPeriodKey(org, Date.now()),
+      dailyPeriodKey(org, now),
       TRIAL_METRIC_CAPS.enrich_credits.daily,
     ),
   );
-  return Math.max(0, Math.min(byCredits, byProvider, MAX_LEADS_PER_REVEAL));
+  const wanted = Math.max(
+    0,
+    Math.min(byCredits, byProvider, MAX_LEADS_PER_REVEAL),
+  );
+  return await platformAllowance(ctx, wanted, now);
+}
+
+/**
+ * How many of `wanted` reveals the platform budget still has room for.
+ *
+ * `platformBudgetHasRoom` answers yes or no for one amount and the budget row
+ * is billing's to read, so the largest affordable count is found by halving —
+ * at most a handful of reads of the same row inside this transaction.
+ */
+async function platformAllowance(
+  ctx: MutationCtx,
+  wanted: number,
+  now: number,
+): Promise<number> {
+  if (wanted <= 0) {
+    return 0;
+  }
+  let low = 0;
+  let high = wanted;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const room = await platformBudgetHasRoom(
+      ctx,
+      "enrich_credits",
+      mid * REVEAL_CREDITS_PER_LEAD,
+      now,
+    );
+    if (room) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return low;
 }
 
 /**
@@ -243,7 +289,9 @@ async function providerAllowance(
 /**
  * WHICH refusal. PLAN §6: an org can hold credits it is no longer
  * allowed to spend, and "Trial limit for emails reached" is a different
- * sentence from "out of credits". The code is what the client maps to copy.
+ * sentence from "out of credits" — and neither is "the platform is at
+ * capacity today", which is nobody's allowance at all. The code is what the
+ * client maps to copy.
  */
 async function refusal(
   ctx: MutationCtx,
@@ -260,6 +308,37 @@ async function refusal(
     return domainError(
       "INSUFFICIENT_CREDITS",
       "not enough credits to find an email",
+    );
+  }
+  // The org's own allowance answers first: "at capacity" is only the true
+  // reason when this org still had room of its own.
+  const now = Date.now();
+  const byProvider = Math.min(
+    await providerAllowance(
+      ctx,
+      org,
+      USAGE_PERIOD_LIFETIME,
+      TRIAL_METRIC_CAPS.enrich_credits.lifetime,
+    ),
+    await providerAllowance(
+      ctx,
+      org,
+      dailyPeriodKey(org, now),
+      TRIAL_METRIC_CAPS.enrich_credits.daily,
+    ),
+  );
+  if (
+    byProvider > 0 &&
+    !(await platformBudgetHasRoom(
+      ctx,
+      "enrich_credits",
+      REVEAL_CREDITS_PER_LEAD,
+      now,
+    ))
+  ) {
+    return domainError(
+      "PLATFORM_CAPACITY",
+      "the platform is at capacity for this period; no email can be found now",
     );
   }
   return domainError(

@@ -42,17 +42,23 @@ export const submitReveals = internalAction({
     orgId: v.id("orgs"),
     prospectIds: v.array(v.id("prospects")),
   },
-  returns: v.object({ submitted: v.number(), released: v.number() }),
+  returns: v.object({
+    submitted: v.number(),
+    released: v.number(),
+    /** Submits whose outcome is unknown: the lead is deliberately LEFT
+     *  `revealing` so the recovery sweep re-drives it (PLAN §6). */
+    uncertain: v.number(),
+  }),
   handler: async (
     ctx,
     args,
-  ): Promise<{ submitted: number; released: number }> => {
+  ): Promise<{ submitted: number; released: number; uncertain: number }> => {
     const targets = await ctx.runQuery(internal.leads.emailRevealState.revealTargets, {
       orgId: args.orgId,
       prospectIds: args.prospectIds,
     });
     if (targets.length === 0) {
-      return { submitted: 0, released: 0 };
+      return { submitted: 0, released: 0, uncertain: 0 };
     }
     const prospectOf = new Map(
       targets.map((target) => [target.sourceLeadId, target.prospectId]),
@@ -74,6 +80,7 @@ export const submitReveals = internalAction({
     if (outcome.status === "failed") {
       return {
         submitted: 0,
+        uncertain: 0,
         released: await release(
           ctx,
           args.orgId,
@@ -83,6 +90,7 @@ export const submitReveals = internalAction({
     }
 
     let submitted = 0;
+    let uncertain = 0;
     const releasing: Id<"prospects">[] = [];
     for (const result of outcome.results) {
       const prospectId = prospectOf.get(result.sourceLeadId);
@@ -110,6 +118,14 @@ export const submitReveals = internalAction({
         submitted += 1;
         continue;
       }
+      if (result.status === "uncertain") {
+        // The request left us and the provider may be running the job. The
+        // lead STAYS `revealing` with the watchdog the claim set, so
+        // `emailRevealState.recoverStalledReveals` re-drives it — releasing
+        // it here is what used to strand an address we may have paid for.
+        uncertain += 1;
+        continue;
+      }
       // Refused before the request left us, or the submit failed outright —
       // nothing was learned, so the lead goes back to `locked`.
       releasing.push(prospectId);
@@ -122,6 +138,7 @@ export const submitReveals = internalAction({
     }
     return {
       submitted,
+      uncertain,
       released: await release(ctx, args.orgId, releasing),
     };
   },

@@ -220,7 +220,11 @@ export const runSourcingStep = internalAction({
     if (found.status === "found") {
       await record(ctx, args, {
         rows: found.rows,
-        exhausted: !found.hasMore,
+        // Only the provider SAYING there is no more page ends the signal. A
+        // response with no pagination says nothing, and "we do not know" must
+        // not retire a signal that still has people in it — the page bound
+        // (`MAX_SEARCH_PAGE`) is what stops the paging either way.
+        exhausted: found.hasMore === false,
         resume: true,
       });
       return { outcome: "found" };
@@ -233,11 +237,15 @@ export const runSourcingStep = internalAction({
     if (found.status === "refunded") {
       if (found.reason === "provider_charged_nothing") {
         // The provider answered and this page holds nobody. That is the end of
-        // the signal only when the provider says so — no more pages, or a
-        // search with nobody in it at all. A page that came back empty with
-        // more behind it is a gap: the cursor moves past it and the next run
-        // reads the page after, rather than killing a signal on one bad page.
-        const exhausted = found.hasMore !== true || found.totalResults === 0;
+        // the signal only on POSITIVE evidence — the provider saying there is
+        // no page behind this one, or that the whole search matches nobody.
+        // An empty page with more behind it is a gap, and an empty page whose
+        // response carried no pagination at all is an unknown: both move the
+        // cursor on rather than killing a signal on one bad page.
+        const empty = found.emptyPage;
+        const exhausted =
+          empty !== undefined &&
+          (empty.hasMore === false || empty.totalResults === 0);
         await record(ctx, args, { rows: [], exhausted, resume: true });
         return { outcome: exhausted ? "empty" : "empty_page" };
       }

@@ -32,6 +32,10 @@ type FilterSpec =
   | { kind: "enum_list"; maxItems: number }
   /** A list of free text — matched exactly or by "contains", per filter. */
   | { kind: "text_list"; maxItems: number }
+  /** ONE free-text value. The provider documents these as `string` rather
+   *  than `string[]`, and an array there is a 400 (lead-finder filters
+   *  reference, "Type" column). */
+  | { kind: "text" }
   /** A non-negative integer; on the count filters, a minimum. */
   | { kind: "integer" }
   /** A non-negative number; on the funding and traffic filters, a minimum. */
@@ -78,7 +82,7 @@ const FILTER_SPECS: Record<string, FilterSpec> = {
   personHeadline: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
   skills: { kind: "text_list", maxItems: TEXT_LIST_MAX_ITEMS },
   languages: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
-  city: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
+  city: { kind: "text" },
   jobIsCurrent: { kind: "boolean" },
   /* --- company, from the catalogue ---------------------------------- */
   linkedinIndustry: { kind: "enum_list", maxItems: 20 },
@@ -97,8 +101,8 @@ const FILTER_SPECS: Record<string, FilterSpec> = {
   companyHeadline: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
   aboutUs: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
   domain: { kind: "text_list", maxItems: DOMAIN_LIST_MAX_ITEMS },
-  headquartersCity: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
-  headquartersState: { kind: "text_list", maxItems: KEYWORD_LIST_MAX_ITEMS },
+  headquartersCity: { kind: "text" },
+  headquartersState: { kind: "text" },
   employeeCount: { kind: "integer" },
   employeeCountMin: { kind: "integer" },
   employeeCountMax: { kind: "integer" },
@@ -255,6 +259,8 @@ function checkValue(
     }
     case "text_list":
       return checkList(key, value, spec.maxItems);
+    case "text":
+      return checkText(key, value);
     case "enum_list": {
       const list = checkList(key, value, spec.maxItems);
       const option = options[key];
@@ -303,6 +309,22 @@ function checkNumber(
     throw invalid(`${key} is out of range`);
   }
   return value;
+}
+
+/**
+ * A scalar text filter takes exactly one value. A list here is refused rather
+ * than folded into one: the provider's schema says `string`, so an array is a
+ * 400 and a silently-dropped second value would be worse than a refusal.
+ */
+function checkText(key: string, value: LeadFilters[string]): string {
+  if (typeof value !== "string") {
+    throw invalid(`${key} must be a single string value, not a list`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > FILTER_VALUE_MAX_LENGTH) {
+    throw invalid(`${key} has a value of an unusable length`);
+  }
+  return trimmed;
 }
 
 /** A list filter accepts one value or several; both arrive as a list. */
