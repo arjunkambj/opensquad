@@ -1,88 +1,194 @@
-import { Route01Icon } from "@hugeicons/core-free-icons"
+import { Route01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 import { motion } from "motion/react"
 import {
   MarketingSection,
   MarketingSectionIntro,
 } from "@/components/marketing/MarketingSection"
-import { stages } from "@/components/marketing/stages"
 import {
-  revealCardVariants,
+  revealContainerVariants,
+  revealItemVariants,
   useRevealViewport,
 } from "@/components/marketing/motion-variants"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
-/**
- * The five stages of the loop, each split into what you do, what the agent
- * does and what it costs — the same split the app enforces, so nothing here
- * promises work the agent is not allowed to do on its own.
- */
+function ProfileIllustration() {
+  return (
+    <div className="w-full rounded-xl bg-illustration px-5 pt-4 pb-3.5 shadow-xl shadow-foreground/10">
+      <p className="text-xs tracking-widest text-muted-foreground uppercase">
+        Company profile
+      </p>
+      <div className="mt-3.5 flex flex-col gap-2">
+        {[
+          { label: "Sells to", value: "Mid-size SaaS teams" },
+          { label: "Solves", value: "Hiring without buying lists" },
+          { label: "Sounds like", value: "Plain, short emails" },
+        ].map(({ label, value }) => (
+          <div className="flex items-center gap-3" key={label}>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{value}</p>
+              <p className="truncate text-xs text-muted-foreground">{label}</p>
+            </div>
+            <HugeiconsIcon
+              className="ml-auto size-4 shrink-0"
+              icon={Tick02Icon}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        Fix what it misread, then continue.
+      </p>
+    </div>
+  )
+}
+
+function SignalsIllustration() {
+  return (
+    <div className="w-full rounded-xl bg-illustration px-5 pt-4 pb-3.5 shadow-xl shadow-foreground/5">
+      <p className="text-xs tracking-widest text-muted-foreground uppercase">
+        Pick the signals
+      </p>
+      <p className="mt-3.5 rounded-lg bg-card px-3 py-2.5 text-xs">
+        Which teams are hiring marketers right now?
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {["Hiring · 180", "Funded · 96", "Headcount · 240"].map(
+          (pill, index) => (
+            <span
+              className={cn(
+                "rounded-lg px-2.5 py-2 text-xs",
+                index === 0
+                  ? "bg-foreground text-background"
+                  : "bg-card text-foreground",
+              )}
+              key={pill}
+            >
+              {pill}
+            </span>
+          ),
+        )}
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        Counts are free. A search costs 2 credits a page.
+      </p>
+    </div>
+  )
+}
+
+function ApproveIllustration() {
+  return (
+    <div className="w-full rounded-xl bg-illustration px-5 pt-4 pb-3.5 shadow-xl shadow-foreground/20">
+      <p className="text-xs tracking-widest text-muted-foreground uppercase">
+        Approve, then it sends
+      </p>
+      <div className="mt-3.5 flex flex-col gap-2">
+        {[
+          { label: "A lead worth an email", action: "Approve" },
+          { label: "First email draft", action: "Send" },
+        ].map(({ label, action }) => (
+          <div
+            className="flex items-center gap-3 rounded-lg bg-card px-3 py-2.5"
+            key={label}
+          >
+            <p className="min-w-0 truncate text-xs">{label}</p>
+            <span className="ml-auto shrink-0 rounded-full bg-foreground px-3 py-1 text-xs text-background">
+              {action}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">
+        It follows up until someone replies.
+      </p>
+    </div>
+  )
+}
+
+const steps = [
+  {
+    title: "Paste your website",
+    description:
+      "It reads your site and drafts who you sell to. You fix what it misread.",
+    background: "/marketing/backgrounds/forest-peach-lake.webp",
+    backgroundPosition: "object-center",
+    Illustration: ProfileIllustration,
+  },
+  {
+    title: "Pick the signals",
+    description:
+      "Choose the buying signals worth watching. Match counts are free.",
+    background: "/marketing/backgrounds/forest-peach-path.webp",
+    backgroundPosition: "object-center",
+    Illustration: SignalsIllustration,
+  },
+  {
+    title: "Approve, then it sends",
+    description:
+      "Say yes to the lead and the email. It follows up until someone replies.",
+    background: "/marketing/backgrounds/forest-peach-overlook.webp",
+    backgroundPosition: "object-center",
+    Illustration: ApproveIllustration,
+  },
+] as const
+
 export function HowItWorks() {
   const revealViewport = useRevealViewport()
 
   return (
     <MarketingSection id="how-it-works">
-      <div className="grid items-start gap-12 lg:grid-cols-[0.8fr_1.6fr] lg:gap-16">
-        <div className="lg:sticky lg:top-40">
-          <MarketingSectionIntro
-            description="Set it up once. After that it runs on its own schedule, and stops wherever you told it to wait for you."
-            eyebrow="How it works"
-            icon={Route01Icon}
-            revealViewport={revealViewport}
-            spacing="none"
-            title="Five stages, start to meeting."
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-5 md:gap-6">
-          {stages.map(({ title, description, you, agent, cost }, index) => (
+      <MarketingSectionIntro
+        description="Paste your site, pick your signals, approve the sends — three steps and it's working."
+        eyebrow="How it works"
+        icon={Route01Icon}
+        revealViewport={revealViewport}
+        title="Get started in three steps"
+      />
+      <motion.div
+        className="grid gap-x-6 gap-y-12 lg:grid-cols-3"
+        initial="initial"
+        variants={revealContainerVariants}
+        viewport={revealViewport}
+        whileInView="animate"
+      >
+        {steps.map(
+          (
+            { title, description, background, backgroundPosition, Illustration },
+            index,
+          ) => (
             <motion.div
-              initial="initial"
+              className="flex min-w-0 flex-col gap-5"
               key={title}
-              variants={revealCardVariants}
-              viewport={revealViewport}
-              whileInView="animate"
+              variants={revealItemVariants}
             >
-              <Card className="gap-6 rounded-4xl [--card-spacing:--spacing(7)] sm:[--card-spacing:--spacing(9)]">
-                <CardHeader className="gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="sr-only">Stage </span>
-                    {String(index + 1).padStart(2, "0")}
-                  </p>
-                  <CardTitle>
-                    <h3 className="text-2xl leading-tight tracking-tight sm:text-3xl">
-                      {title}
-                    </h3>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-5">
-                  <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                    {description}
-                  </p>
-                  <dl className="grid gap-3 rounded-2xl bg-muted p-4 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <dt className="text-xs font-semibold tracking-eyebrow text-muted-foreground uppercase">
-                        You
-                      </dt>
-                      <dd className="text-sm leading-relaxed">{you}</dd>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <dt className="text-xs font-semibold tracking-eyebrow text-muted-foreground uppercase">
-                        The agent
-                      </dt>
-                      <dd className="text-sm leading-relaxed">{agent}</dd>
-                    </div>
-                  </dl>
-                  <p className="text-xs text-muted-foreground">{cost}</p>
-                </CardContent>
-              </Card>
+              <div
+                aria-hidden="true"
+                className="relative isolate flex aspect-square items-center justify-center overflow-hidden rounded-marketing-panel bg-section-accent p-6 sm:p-10 lg:p-6 xl:p-8"
+              >
+                <img
+                  alt=""
+                  className={`absolute inset-0 -z-10 size-full object-cover ${backgroundPosition}`}
+                  decoding="async"
+                  loading="lazy"
+                  src={background}
+                />
+                <div className="w-full max-w-80 rounded-2xl bg-illustration/40 p-1.5 shadow-xl shadow-foreground/10 backdrop-blur-sm">
+                  <Illustration />
+                </div>
+              </div>
+              <div className="flex flex-col gap-3">
+                <h3 className="text-2xl tracking-tight">
+                  <span className="sr-only">Step {index + 1}: </span>
+                  {title}
+                </h3>
+                <p className="text-base leading-relaxed text-muted-foreground">
+                  {description}
+                </p>
+              </div>
             </motion.div>
-          ))}
-        </div>
-      </div>
+          ),
+        )}
+      </motion.div>
     </MarketingSection>
   )
 }

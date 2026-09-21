@@ -1,14 +1,20 @@
-import { NewTwitterIcon } from "@hugeicons/core-free-icons"
+import { Mail01Icon, NewTwitterIcon, Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
+import { useEffect, useState } from "react"
 import Logo from "@/components/layout/Logo"
+
+/**
+ * The support address. Shared with the FAQ's documented fallback, so the
+ * footer and the FAQ never disagree about where to write.
+ */
+const SUPPORT_EMAIL = "support@openintent.ai"
 
 // Every entry points at a route or anchor that exists today. The anchors are
 // root-relative so they also work from a page other than the landing page.
 const productLinks = [
   { href: "/#how-it-works", name: "How it works" },
-  { href: "/#features", name: "Controls" },
-  { href: "/#first-run", name: "Your first run" },
+  { href: "/#features", name: "Features" },
   { href: "/#trial", name: "Trial" },
   { href: "/#faq", name: "FAQ" },
 ] as const
@@ -18,67 +24,147 @@ const accountLinks = [
   { to: "/dashboard", name: "Dashboard" },
 ] as const
 
-const footerLinkClassName =
-  "text-sm text-background/70 transition-colors hover:text-background"
+const socialButtonClassName =
+  "flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
 
-/** Full-width dark band, matching the navbar, that closes the page. */
+/**
+ * Copies the support address instead of opening a mail client. The icon
+ * flips to a tick for a moment so the click has visible feedback; the
+ * address stays in the title attribute so it can still be copied by hand
+ * when the clipboard is unavailable.
+ */
+function CopyEmailButton({ email }: { email: string }) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) {
+      return
+    }
+    const timeout = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(timeout)
+  }, [copied])
+
+  async function copyEmail() {
+    try {
+      await navigator.clipboard.writeText(email)
+      setCopied(true)
+    } catch {
+      // The title attribute still carries the address.
+    }
+  }
+
+  return (
+    <button
+      aria-label={copied ? "Email copied" : `Copy email ${email}`}
+      className={socialButtonClassName}
+      onClick={copyEmail}
+      title={copied ? "Copied" : email}
+      type="button"
+    >
+      <HugeiconsIcon
+        aria-hidden="true"
+        className="size-4"
+        icon={copied ? Tick02Icon : Mail01Icon}
+      />
+    </button>
+  )
+}
+
+/**
+ * A full-width band in the card color with content held to the page width,
+ * so it lines up with every section above. An oversized wordmark sits behind
+ * the content and is cropped by the footer's bottom edge.
+ */
 export function Footer() {
   return (
-    <footer className="marketing-ink-deep mt-24 w-full sm:mt-32">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-14 px-4 pt-16 pb-8 sm:px-6 sm:pt-20 lg:px-8">
-        <div className="grid gap-12 md:grid-cols-[1.6fr_1fr_1fr] md:gap-8">
-          <div className="flex max-w-sm flex-col items-start gap-6">
-            <Link aria-label="OpenIntent home" className="w-fit" to="/">
-              <Logo className="text-background hover:text-background/80" />
-            </Link>
-            <p className="text-sm leading-relaxed text-background/70">
-              An AI sales agent that finds and researches leads for you,
-              contacts them from your own inbox, and works the replies until
-              there is a meeting to book. Email only.
+    <footer className="relative isolate mt-24 w-full overflow-hidden bg-card text-card-foreground sm:mt-32">
+      <div className="@container mx-auto flex w-full max-w-7xl flex-col px-4 pt-12 pb-6 sm:px-6 sm:pt-14 lg:px-8 lg:pb-8">
+        <p
+          aria-hidden="true"
+          className="footer-wordmark pointer-events-none absolute inset-x-0 -bottom-[0.22em] -z-10 leading-none font-bold font-display tracking-tighter text-center text-foreground/[0.04] select-none"
+        >
+          OpenIntent
+        </p>
+        <Link aria-label="OpenIntent home" className="w-fit" to="/">
+          <Logo />
+        </Link>
+        <div className="mt-12 flex flex-col gap-12 lg:flex-row lg:justify-between">
+          <div className="flex max-w-xs flex-col">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              An AI sales agent that finds your leads and emails them from
+              your own inbox.
             </p>
-            <a
-              aria-label="OpenIntent on X"
-              className="flex size-9 items-center justify-center rounded-lg bg-background/10 text-background/80 transition-colors hover:bg-background/15 hover:text-background"
-              href="https://x.com/arjunkambj"
-              rel="noreferrer"
-              target="_blank"
-            >
-              <HugeiconsIcon className="size-4" icon={NewTwitterIcon} />
-            </a>
+            {/* -ml-2 lines the first icon up with the text above it. */}
+            <div className="-ml-2 mt-4 flex items-center">
+              <a
+                aria-label="OpenIntent on X"
+                className={socialButtonClassName}
+                href="https://x.com/arjunkambj"
+                rel="noreferrer"
+                target="_blank"
+              >
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  className="size-4"
+                  icon={NewTwitterIcon}
+                />
+              </a>
+              <CopyEmailButton email={SUPPORT_EMAIL} />
+            </div>
           </div>
-          <div className="flex flex-col gap-4">
-            <h4 className="text-xs font-semibold tracking-eyebrow text-background/50 uppercase">
-              Product
-            </h4>
-            <ul className="flex flex-col gap-2.5">
-              {productLinks.map((link) => (
-                <li key={link.name}>
-                  <a className={footerLinkClassName} href={link.href}>
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="flex flex-col gap-4">
-            <h4 className="text-xs font-semibold tracking-eyebrow text-background/50 uppercase">
-              Account
-            </h4>
-            <ul className="flex flex-col gap-2.5">
-              {accountLinks.map((link) => (
-                <li key={link.name}>
-                  <Link className={footerLinkClassName} to={link.to}>
-                    {link.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          <div className="grid grid-cols-2 gap-x-12 gap-y-10 lg:gap-x-16">
+            <div className="flex flex-col">
+              <h4 className="flex items-center gap-2 text-sm font-medium">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 bg-illustration-accent"
+                />
+                Product
+              </h4>
+              <ul className="mt-2.5 flex flex-col gap-2 pl-3.5">
+                {productLinks.map((link) => (
+                  <li key={link.name}>
+                    <a
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      href={link.href}
+                    >
+                      {link.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex flex-col">
+              <h4 className="flex items-center gap-2 text-sm font-medium">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 bg-illustration-accent"
+                />
+                Account
+              </h4>
+              <ul className="mt-2.5 flex flex-col gap-2 pl-3.5">
+                {accountLinks.map((link) => (
+                  <li key={link.name}>
+                    <Link
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      to={link.to}
+                    >
+                      {link.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
-
-        <div className="flex flex-col gap-3 border-t border-background/10 pt-6 text-xs text-background/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-28 flex flex-col gap-3 text-sm text-muted-foreground sm:mt-40 sm:flex-row sm:items-center sm:justify-between lg:mt-48">
           <p>&copy; {new Date().getFullYear()} OpenIntent. All rights reserved.</p>
-          <p>Sends from your inbox. Never from ours.</p>
+          <a
+            className="w-fit transition-colors hover:text-foreground"
+            href="/#hero"
+          >
+            Back to top ↑
+          </a>
         </div>
       </div>
     </footer>

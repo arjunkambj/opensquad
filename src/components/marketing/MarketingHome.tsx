@@ -2,14 +2,15 @@
  * Marketing — the public site: the landing page and its sections.
  *
  * Signed-out only, and data-free — nothing here reads Convex or knows about a
- * team. Every claim on this page has to be true of the product as built: the
- * loop, the four modes, the two approvals, the sending policy and the trial
- * credit prices, and nothing else.
+ * team. The story runs problem first, then proof: the loop, the controls that
+ * keep it safe, what the trial actually costs, the questions people ask, and
+ * the close. Every claim on this page has to be true of the product as built:
+ * the loop, the four modes, the two approvals, the sending policy and the
+ * trial credit prices, and nothing else.
  */
 import { CTA } from "@/components/marketing/CTA"
 import { FAQ } from "@/components/marketing/FAQ"
 import { Features } from "@/components/marketing/Features"
-import { FirstRun } from "@/components/marketing/FirstRun"
 import { Footer } from "@/components/marketing/Footer"
 import { Hero } from "@/components/marketing/Hero"
 import { HowItWorks } from "@/components/marketing/HowItWorks"
@@ -23,7 +24,6 @@ export function MarketingHome() {
         <Hero />
         <HowItWorks />
         <Features />
-        <FirstRun />
         <Trial />
         <FAQ />
         <CTA />

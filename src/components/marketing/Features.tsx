@@ -1,163 +1,302 @@
-import {
-  Clock01Icon,
-  Layers01Icon,
-  MailAccount01Icon,
-  Message01Icon,
-  ToggleOnIcon,
-  UserBlock01Icon,
-  UserCheck01Icon,
-} from "@hugeicons/core-free-icons"
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
+import { Layers01Icon } from "@hugeicons/core-free-icons"
 import { motion } from "motion/react"
+import { LogoMark } from "@/components/layout/Logo"
 import {
   MarketingSection,
   MarketingSectionIntro,
 } from "@/components/marketing/MarketingSection"
 import {
-  revealCardVariants,
   revealContainerVariants,
+  revealItemVariants,
   useRevealViewport,
 } from "@/components/marketing/motion-variants"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
-const controls: readonly {
-  icon: IconSvgElement
-  title: string
-  description: string
-  points: readonly string[]
-}[] = [
-  {
-    icon: ToggleOnIcon,
-    title: "Four modes, one switch",
-    description:
-      "How much the agent is allowed to do is a single setting you can change at any moment.",
-    points: [
-      "Sourcing only — finds and researches, contacts nobody",
-      "Review — every email waits for you",
-      "Autopilot — sends on its own, inside your limits",
-      "Paused — stops everything",
-    ],
-  },
-  {
-    icon: UserCheck01Icon,
-    title: "Two approvals, never one",
-    description:
-      "Saying yes to a person and saying yes to a piece of text are different decisions, so they are different buttons.",
-    points: [
-      "Approve the lead: allows finding their address and drafting",
-      "Approve the email: allows that exact text, that revision",
-      "Autopilot only starts after you accept a dialog listing what it will do",
-    ],
-  },
-  {
-    icon: MailAccount01Icon,
-    title: "Your own sending inbox",
-    description:
-      "Mail leaves from your address, not ours, and the replies come back to the same place.",
-    points: [
-      "Connect your own inbox during setup or later",
-      "Until it is connected the agent stays in Sourcing only",
-      "Disconnect and the agent pauses instead of sending",
-    ],
-  },
-  {
-    icon: UserBlock01Icon,
-    title: "An opt-out on every email",
-    description:
-      "Anyone can end it in one line, and the agent respects that without being asked twice.",
-    points: [
-      "Every send carries an opt-out line",
-      "Someone who asks to stop is suppressed and never contacted again",
-      "Your blocklist takes addresses and whole domains",
-      "Checked before every send, follow-ups and replies included",
-    ],
-  },
-  {
-    icon: Clock01Icon,
-    title: "Your hours, your ceiling",
-    description:
-      "The agent runs while you are away, but only in the window you gave it.",
-    points: [
-      "Sending days and hours you set",
-      "A daily send limit it cannot exceed",
-      "Autopilot goes through the same checks as a manual send",
-    ],
-  },
-  {
-    icon: Message01Icon,
-    title: "A reply stops the sequence",
-    description:
-      "The moment someone answers, the queued follow-ups for that lead are cancelled — in the same step that stores the reply.",
-    points: [
-      "Follow-ups cancelled, unsent drafts dropped",
-      "The reply is read, classified and answered",
-      "Anything the agent will not answer alone is handed to you",
-    ],
-  },
-]
+/** The reader's question, styled like the prompt in an AI chat. */
+function Prompt({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="ml-auto max-w-[85%] rounded-xl rounded-br-sm bg-foreground px-3.5 py-2.5 text-sm leading-snug text-background">
+      {children}
+    </p>
+  )
+}
 
+/** The agent's reply: a short lead line, compact rows, a takeaway. */
+function Answer({
+  lead,
+  rows,
+  footer,
+}: {
+  lead: string
+  rows: readonly {
+    name: string
+    detail: string
+    value: string
+    tone?: "good" | "bad"
+  }[]
+  footer: React.ReactNode
+}) {
+  return (
+    <div className="rounded-xl bg-illustration p-4 text-foreground">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <LogoMark className="size-4" />
+        {lead}
+      </div>
+      <ul className="mt-3 flex flex-col gap-1">
+        {rows.map((row) => (
+          <li
+            className="flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2"
+            key={row.name}
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{row.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {row.detail}
+              </p>
+            </div>
+            <p
+              className={cn(
+                "shrink-0 text-sm font-medium tabular-nums",
+                row.tone === "bad" && "text-destructive",
+                row.tone === "good" && "text-illustration-positive",
+              )}
+            >
+              {row.value}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-sm leading-snug">{footer}</p>
+    </div>
+  )
+}
+
+function FindingMockup() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Prompt>Which hiring companies match my profile?</Prompt>
+      <Answer
+        footer={
+          <>
+            <span className="font-medium">25 people</span> across three
+            signals. Match counts are free — a search costs 2 credits a page.
+          </>
+        }
+        lead="Signals · live match counts"
+        rows={[
+          {
+            name: "Hiring marketers",
+            detail: "180 people match",
+            value: "3",
+            tone: "good",
+          },
+          {
+            name: "Recently funded",
+            detail: "96 people match",
+            value: "2",
+          },
+          {
+            name: "Growing headcount",
+            detail: "240 people match",
+            value: "1",
+          },
+        ]}
+      />
+    </div>
+  )
+}
+
+function ResearchMockup() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Prompt>Why is this lead worth an email?</Prompt>
+      <Answer
+        footer="Funded last quarter, three marketing roles open. Approve the lead and it finds the address."
+        lead="VP Marketing · at a 200-person SaaS company"
+        rows={[
+          {
+            name: "Funded last quarter",
+            detail: "Buying signal",
+            value: "3",
+            tone: "good",
+          },
+          {
+            name: "Hiring marketers",
+            detail: "Three roles open",
+            value: "3",
+            tone: "good",
+          },
+          {
+            name: "Uses a competitor tool",
+            detail: "From their hiring post",
+            value: "2",
+          },
+        ]}
+      />
+    </div>
+  )
+}
+
+function SendingMockup() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Prompt>What goes out this week?</Prompt>
+      <Answer
+        footer="Nothing sends until you approve the exact text. Every email carries an opt-out line."
+        lead="Review mode · waiting on you"
+        rows={[
+          {
+            name: "First email",
+            detail: "VP Marketing · written for them",
+            value: "1",
+          },
+          {
+            name: "Follow-up one",
+            detail: "Goes out only if nobody replies",
+            value: "1",
+          },
+          {
+            name: "Follow-up two",
+            detail: "Last touch, then it stops",
+            value: "1",
+            tone: "bad",
+          },
+        ]}
+      />
+    </div>
+  )
+}
+
+// Every mockup answers a question someone actually asks before signing up,
+// using only what the product does: signal searches, research notes with
+// 1–3 scores, and Review-mode approvals. Figures are illustrative.
+const features = [
+  {
+    eyebrow: "Finding",
+    title: "Find leads on buying signals, not lists",
+    description:
+      "Each search is one signal crossed with your own fit: funded, hiring, growing, or a keyword you care about.",
+    background: "/marketing/backgrounds/forest-peach-ridge.webp",
+    backgroundPosition: "object-[50%_70%]",
+    tags: ["Funded", "Hiring", "Headcount", "Keywords"],
+    Illustration: FindingMockup,
+  },
+  {
+    eyebrow: "Research",
+    title: "Know why each lead is worth an email",
+    description:
+      "The agent reads the company's own site and writes a short note on why this lead is worth contacting, then scores them 1 to 3.",
+    background: "/marketing/backgrounds/forest-peach-stream.webp",
+    backgroundPosition: "object-[40%_65%]",
+    tags: ["Notes", "Scores", "Signals"],
+    Illustration: ResearchMockup,
+  },
+  {
+    eyebrow: "Sending",
+    title: "Emails from your inbox, with your approval",
+    description:
+      "One email written for that one person, then two follow-ups if they stay quiet. Review keeps every send waiting on you.",
+    background: "/marketing/backgrounds/forest-peach-clearing.webp",
+    backgroundPosition: "object-[65%_70%]",
+    tags: ["Your inbox", "Two approvals", "Follow-ups", "Opt-out"],
+    Illustration: SendingMockup,
+  },
+] as const
+
+/**
+ * Alternating rows: a large illustration panel beside its copy, switching
+ * sides each row so the eye zigzags down the section.
+ */
 export function Features() {
   const revealViewport = useRevealViewport()
 
   return (
     <MarketingSection id="features">
       <MarketingSectionIntro
-        description="An agent that emails strangers from your address needs brakes. These are the brakes."
-        eyebrow="Controls"
+        align="center"
+        description="Finding, research and sending — each one paired with the control that keeps it safe."
+        eyebrow="Features"
         icon={Layers01Icon}
         revealViewport={revealViewport}
-        title="You decide how far it goes."
+        title="What it can do for you"
       />
-      <motion.div
-        className="grid items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3"
-        initial="initial"
-        variants={revealContainerVariants}
-        viewport={revealViewport}
-        whileInView="animate"
-      >
-        {controls.map(({ icon, title, description, points }) => (
-          <motion.div
-            className="h-full min-w-0"
-            key={title}
-            variants={revealCardVariants}
-          >
-            <Card className="h-full gap-5 rounded-4xl">
-              <CardHeader className="gap-3">
-                <span
+      <div className="flex flex-col gap-20 lg:gap-32">
+        {features.map(
+          (
+            {
+              eyebrow,
+              title,
+              description,
+              tags,
+              background,
+              backgroundPosition,
+              Illustration,
+            },
+            index,
+          ) => {
+            const imageFirst = index % 2 === 0
+
+            return (
+              <motion.div
+                className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16"
+                initial="initial"
+                key={title}
+                variants={revealContainerVariants}
+                viewport={revealViewport}
+                whileInView="animate"
+              >
+                <motion.div
                   aria-hidden="true"
-                  className="flex size-9 items-center justify-center rounded-xl bg-foreground text-background"
+                  className={cn(
+                    "relative isolate flex aspect-square items-center justify-center overflow-hidden rounded-marketing-panel p-8",
+                    !imageFirst && "lg:order-last",
+                  )}
+                  variants={revealItemVariants}
                 >
-                  <HugeiconsIcon
-                    className="size-[1.125rem]"
-                    icon={icon}
-                    strokeWidth={2}
+                  <img
+                    alt=""
+                    className={`absolute inset-0 -z-10 size-full object-cover ${backgroundPosition}`}
+                    decoding="async"
+                    loading="lazy"
+                    src={background}
                   />
-                </span>
-                <CardTitle>
-                  <h3 className="text-xl leading-snug tracking-tight">
+                  <div className="w-full max-w-sm rounded-2xl bg-illustration/40 p-1.5 shadow-xl shadow-foreground/10 backdrop-blur-sm">
+                    <Illustration />
+                  </div>
+                </motion.div>
+                <motion.div
+                  className="flex flex-col items-start"
+                  variants={revealItemVariants}
+                >
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 bg-illustration-accent"
+                    />
+                    {eyebrow}
+                  </p>
+                  <h3 className="mt-4 max-w-md text-balance text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
                     {title}
                   </h3>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {description}
-                </p>
-                <ul className="flex flex-col gap-2 border-t border-border pt-4">
-                  {points.map((point) => (
-                    <li
-                      className="text-sm leading-relaxed text-muted-foreground"
-                      key={point}
-                    >
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </motion.div>
+                  <p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
+                    {description}
+                  </p>
+                  <ul className="mt-6 flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <li
+                        className="rounded-full bg-card px-3 py-1.5 text-sm"
+                        key={tag}
+                      >
+                        {tag}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              </motion.div>
+            )
+          },
+        )}
+      </div>
     </MarketingSection>
   )
 }

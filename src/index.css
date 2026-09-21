@@ -38,6 +38,14 @@
     --color-illustration-accent: oklch(0.78 0.11 40);
     --color-illustration-accent-foreground: oklch(1 0 0);
 
+    /* Green for the good figure in an illustration's comparison table. */
+    --color-illustration-positive: oklch(0.52 0.12 155);
+
+    /* Peach pulled from the marketing landscape, for section illustration
+     * panels. */
+    --color-section-accent: #fce1d3;
+    --color-section-accent-foreground: #1c1c1c;
+
     /* Lift under the hero panels. */
     --color-panel-shadow: #30234355;
 
@@ -273,4 +281,9 @@
 /* Lift for the hero panels. */
 @utility panel-shadow {
     box-shadow: 0 16px 50px -12px var(--color-panel-shadow);
+}
+
+/* The footer's oversized wordmark, sized to its container's width. */
+@utility footer-wordmark {
+    font-size: 26cqw;
 }

@@ -30,7 +30,7 @@ const navVariants = {
  */
 const marketingNavLinks = [
   { href: "/#how-it-works", name: "How it works" },
-  { href: "/#features", name: "Controls" },
+  { href: "/#features", name: "Features" },
   { href: "/#trial", name: "Trial" },
   { href: "/#faq", name: "FAQ" },
 ] as const
@@ -102,11 +102,10 @@ export function Navbar() {
 
   return (
     <motion.div
+      animate="animate"
       className="sticky top-4 z-50 mt-4 w-full md:top-6 md:mt-6"
       initial="initial"
       variants={navVariants}
-      viewport={{ once: true }}
-      whileInView="animate"
     >
       <div className="mx-auto flex w-full max-w-7xl justify-center px-4 sm:px-6 lg:px-8">
         <nav
@@ -115,14 +114,10 @@ export function Navbar() {
         >
           <Link
             aria-label="OpenIntent home"
-            className="flex shrink-0 items-center rounded-lg text-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-background"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-background"
             to="/"
           >
-            <Logo
-              className="text-background hover:text-background/80"
-              markClassName="size-8"
-              markOnly
-            />
+            <Logo markClassName="size-5" markOnly />
           </Link>
 
           <ul className="hidden items-center gap-4 sm:flex">

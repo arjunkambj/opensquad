@@ -7,6 +7,7 @@ import {
   revealItemVariants,
   type RevealViewport,
 } from "@/components/marketing/motion-variants"
+import { cn } from "@/lib/utils"
 
 export function MarketingSection({
   children,
@@ -35,6 +36,7 @@ export function MarketingSection({
  * content instead of above it.
  */
 export function MarketingSectionIntro({
+  align = "start",
   children,
   description,
   eyebrow,
@@ -43,6 +45,7 @@ export function MarketingSectionIntro({
   spacing = "section",
   title,
 }: {
+  align?: "start" | "center"
   children?: ReactNode
   description: ReactNode
   eyebrow: string
@@ -53,11 +56,11 @@ export function MarketingSectionIntro({
 }) {
   return (
     <motion.div
-      className={
-        spacing === "none"
-          ? "flex w-full flex-col items-start gap-4 text-left"
-          : "mb-12 flex w-full flex-col items-start gap-4 text-left sm:mb-16"
-      }
+      className={cn(
+        "flex w-full flex-col gap-4",
+        align === "center" ? "items-center text-center" : "items-start text-left",
+        spacing === "none" ? undefined : "mb-12 sm:mb-16",
+      )}
       initial="initial"
       variants={revealContainerVariants}
       viewport={revealViewport}
@@ -73,7 +76,10 @@ export function MarketingSectionIntro({
         {title}
       </motion.h2>
       <motion.p
-        className="max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg"
+        className={cn(
+          "max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg",
+          align === "center" && "text-center",
+        )}
         variants={revealItemVariants}
       >
         {description}
