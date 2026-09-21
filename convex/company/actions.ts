@@ -114,6 +114,12 @@ export const analyze = internalAction({
     if (scrape.kind === "refused") {
       return await fail(codeForRefund(scrape.reason));
     }
+    if (scrape.kind === "not_found") {
+      // The address does not resolve at all. A typo is far more likely than a
+      // site that has genuinely vanished, so the screen says so and offers
+      // the manual path rather than a Retry that cannot succeed.
+      return await fail("not_found");
+    }
     if (scrape.kind === "empty" || scrape.kind === "unavailable") {
       return await fail("unreadable_source");
     }

@@ -118,6 +118,10 @@ export type ScrapedSite = {
  *
  *   scraped     — pages in hand (`replayed` means they were already paid for).
  *   empty       — we reached the site and there was nothing readable on it.
+ *   not_found   — the address does not resolve: nothing answers there, so
+ *                 there is no site to read. Distinct from `empty` because
+ *                 the user's next step is to check the address for a typo,
+ *                 not to try again.
  *   refused     — we never read it. `reason` picks the copy; none of the
  *                 reasons names a provider.
  *   uncertain   — the request left us and the hold stays until it reconciles.
@@ -129,6 +133,7 @@ export type ScrapedSite = {
 export type ScrapeSiteOutcome =
   | { kind: "scraped"; replayed: boolean; site: ScrapedSite }
   | { kind: "empty" }
+  | { kind: "not_found" }
   | { kind: "refused"; reason: RefundReason }
   | { kind: "uncertain" }
   | { kind: "unavailable" };
@@ -229,12 +234,38 @@ function providerReceipt(docs: readonly ProviderDocument[]): string {
 /* ------------------------------------------------------------------ */
 
 type ProviderFailure =
-  /** Provably not charged, or charged nothing. The money goes back. */
-  | { kind: "refund"; reason: RefundReason }
+  /**
+   * Provably not charged, or charged nothing. The money goes back.
+   *
+   * `hostUnresolved` marks the one refusal the caller phrases differently:
+   * nothing answers at that address at all, so "try again" is the wrong
+   * advice and "check it for a typo" is the right one. It rides here rather
+   * than on `RefundReason` because it changes only the sentence, never the
+   * money — every refund reason is settled identically.
+   */
+  | { kind: "refund"; reason: RefundReason; hostUnresolved?: true }
   /** It may have been metered. The hold stays until something proves otherwise. */
   | { kind: "uncertain" };
 
 const UNCERTAIN: ProviderFailure = { kind: "uncertain" };
+
+/**
+ * Does this provider message mean "that hostname does not exist"?
+ *
+ * The provider reports an unresolvable host as a 200 whose body explains the
+ * DNS failure in prose, so the only signal is the wording. Read here and
+ * nowhere else: the text never leaves this module (PLAN §4) — only the
+ * boolean does.
+ */
+const HOST_UNRESOLVED = /dns resolution failed|ENOTFOUND|could not be translated to an IP/i;
+
+function errorMessage(error: unknown): string {
+  const data =
+    typeof error === "object" && error !== null && "data" in error
+      ? (error as { data?: { message?: unknown } }).data
+      : undefined;
+  return typeof data?.message === "string" ? data.message : "";
+}
 
 function errorData(error: unknown): { code?: unknown; status?: unknown } {
   return typeof error === "object" && error !== null && "data" in error
@@ -265,8 +296,11 @@ function classifyProviderFailure(error: unknown): ProviderFailure {
   }
   if (status === 200) {
     // The provider answered and declined the page — a blocked site, a target
-    // it would not render. It reports those as unbilled.
-    return { kind: "refund", reason: "provider_charged_nothing" };
+    // it would not render, or a hostname that does not resolve. It reports
+    // all of those as unbilled; only the last one gets its own copy.
+    return HOST_UNRESOLVED.test(errorMessage(error))
+      ? { kind: "refund", reason: "provider_charged_nothing", hostUnresolved: true }
+      : { kind: "refund", reason: "provider_charged_nothing" };
   }
   if (status === 401 || status === 403) {
     return { kind: "refund", reason: "unauthorized" };
@@ -362,6 +396,12 @@ export async function scrapeSite(
   }
   const home = admitted.url;
 
+  // Set by the home-page fetch alone, and read after the settlement below:
+  // the money contract carries a reason, not a sentence, so this is how the
+  // one refusal that needs different words gets back out. A supporting page
+  // that does not resolve is never fatal, so it does not set this.
+  let hostUnresolved = false;
+
   const outcome = await withCredits<ScrapedSite | null>(
     ctx,
     {
@@ -377,6 +417,7 @@ export async function scrapeSite(
       } catch (error) {
         const failure = classifyProviderFailure(error);
         if (failure.kind === "refund") {
+          hostUnresolved = failure.hostUnresolved === true;
           return { outcome: "refunded", reason: failure.reason };
         }
         // Unknown outcome: let it out, so the hold is parked `uncertain`.
@@ -452,6 +493,11 @@ export async function scrapeSite(
     return { kind: "uncertain" };
   }
   if (outcome.kind === "refunded") {
+    // Nothing answers at that hostname, so there was never a site to read —
+    // "check the address" rather than "we read it and found nothing".
+    if (hostUnresolved) {
+      return { kind: "not_found" };
+    }
     // A provider that answered and charged nothing did READ the site; every
     // other refusal means we never got to.
     return outcome.reason === "provider_charged_nothing"
