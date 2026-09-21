@@ -36,8 +36,11 @@ export const vCompiledStrategy = v.object({
   rationale: v.string(),
   filters: vLeadFilters,
   excludeFilters: vLeadFilters,
-  /** A real count from a free count call — never an estimate (PLAN §2). */
+  /** A real count from a free count call — never a number we made up. */
   matchCount: v.number(),
+  /** Whether the provider counted or estimated it (spikes §3). An estimate is
+   *  shown as one; it is never dressed up as exact (PLAN §2). */
+  matchCountIsApproximate: v.boolean(),
   /** Whether the model would switch this one on. */
   recommended: v.boolean(),
 });
@@ -113,6 +116,10 @@ export const finishRecommendation = internalMutation({
         filters: strategy.filters,
         excludeFilters: strategy.excludeFilters,
         matchCount: strategy.matchCount,
+        // Stored only when it is true: absent means the count is exact.
+        ...(strategy.matchCountIsApproximate
+          ? { matchCountIsApproximate: true }
+          : {}),
         // The rule: nothing with zero matches starts switched on.
         enabled:
           strategy.recommended && strategyIsSelectable(strategy.matchCount),

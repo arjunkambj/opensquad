@@ -34,6 +34,9 @@ export type CheckCardProps = {
   count?: number | "loading"
   /** Word after the count, e.g. "matches". */
   countLabel?: string
+  /** Word before the count, e.g. "About" for a count the source estimated.
+   *  A number we cannot vouch for is never shown as an exact one. */
+  countPrefix?: string
   disabled?: boolean
   className?: string
 }
@@ -41,9 +44,11 @@ export type CheckCardProps = {
 function CheckCount({
   count,
   countLabel,
+  countPrefix,
 }: {
   count: number | "loading"
   countLabel?: string
+  countPrefix?: string
 }) {
   if (count === "loading") {
     // bg-foreground/10 rather than the default bg-muted: a checked card's
@@ -53,9 +58,9 @@ function CheckCount({
   }
   return (
     <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground tabular-nums">
-      {countLabel === undefined
-        ? count.toLocaleString()
-        : `${count.toLocaleString()} ${countLabel}`}
+      {[countPrefix, count.toLocaleString(), countLabel]
+        .filter((part): part is string => part !== undefined)
+        .join(" ")}
     </span>
   )
 }
@@ -69,6 +74,7 @@ export function CheckCard({
   infoLabel = "More information",
   count,
   countLabel,
+  countPrefix,
   disabled = false,
   className,
 }: CheckCardProps) {
@@ -122,7 +128,11 @@ export function CheckCard({
       </label>
 
       {count === undefined ? null : (
-        <CheckCount count={count} countLabel={countLabel} />
+        <CheckCount
+          count={count}
+          countLabel={countLabel}
+          countPrefix={countPrefix}
+        />
       )}
 
       {info ? (

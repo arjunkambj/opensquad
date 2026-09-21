@@ -114,6 +114,9 @@ export function SignalsCard({
                     <Chip>{SIGNAL_KIND_LABEL[row.signalKind]}</Chip>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
+                    {/* "About N" when the provider estimated the count rather
+                        than ran it — never an estimate shown as exact. */}
+                    {row.matchCountIsApproximate ? "About " : ""}
                     {row.matchCount.toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">

@@ -1210,6 +1210,11 @@ export default defineSchema({
       "prospectId",
       "state",
     ])
-    // The stale-operation sweep: still `requested`/`accepted` past its age.
+    // The stale-operation sweep AND the recovery sweep's reconcile pass: both
+    // want `uncertain`/`requested` holds oldest first, which is what decides
+    // whether a hold may be settled at all. A by-key index would order the
+    // recovery pass by operation key instead, letting young holds hide old
+    // ones, so this one range serves both (`agents/recovery.ts` tests the
+    // `<action>:` prefix in JS over it).
     .index("by_state_and_updatedAt", ["state", "updatedAt"]),
 });

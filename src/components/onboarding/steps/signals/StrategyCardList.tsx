@@ -42,6 +42,10 @@ export function StrategyCardList({
             checked={strategy.enabled}
             count={strategy.matchCount}
             countLabel={matchCountLabel(strategy.matchCount)}
+            // "About 12,000 matches" when the provider estimated the number
+            // rather than counted it — the screen never reads an estimate out
+            // as an exact figure.
+            countPrefix={strategy.matchCountIsApproximate ? "About" : undefined}
             disabled={disabled || !selectable}
             info={strategy.rationale}
             infoLabel={`Why we suggest ${strategy.title}`}

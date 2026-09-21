@@ -23,9 +23,9 @@
  */
 import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
-import { actionOfOperationKey } from "../billing/paidCall";
 import { RESEARCH_STALL_MS } from "../leads/researchState";
 import { SWEEP_BATCH_SIZE } from "../lib/limits";
+import type { PaidAction } from "../lib/limits";
 import { v } from "convex/values";
 
 /**
@@ -40,6 +40,25 @@ const REVEAL_RECONCILE_AFTER_MS = 5 * 60 * 1000;
 
 /** Due leads examined per org per pass. */
 const STALLED_LEAD_SCAN = 25;
+
+/**
+ * The email finder's own holds, by the prefix every key the credit wrapper
+ * writes carries: `<action>:<caller key>` (`composeOperationKey`).
+ *
+ * The pass reads the AGE range and tests this prefix in JS rather than
+ * ranging the key: age is what decides whether a hold may be reconciled at
+ * all, so an age-ordered range puts every eligible hold first and no young
+ * hold can hide an old one behind it.
+ */
+const REVEAL_ACTION: PaidAction = "get_email";
+const REVEAL_HOLD_PREFIX = `${REVEAL_ACTION}:`;
+
+/**
+ * Rows of the `uncertain` age range one pass reads. Other actions' old holds
+ * share the range and are stepped past, so the scan is wider than the batch
+ * it fills; the bound is what keeps the sweep inside one transaction.
+ */
+const REVEAL_SCAN_MAX = 5 * SWEEP_BATCH_SIZE;
 
 export const sweepStalledRuns = internalMutation({
   args: {},
@@ -118,18 +137,25 @@ export const sweepStalledRuns = internalMutation({
       );
     }
 
-    const holds = await ctx.db
+    // Every other action's hold is settled by its own path, or by the billing
+    // sweep's worst-case commit. Only the email finder has a job that can
+    // still be asked what it did, so only its holds are reconciled here.
+    //
+    // The cutoff is IN the range and the range is oldest-first, so every row
+    // read is already old enough: a hold that ages past the window is reached
+    // before any younger one, whatever its key. The scan is deliberately
+    // wider than the batch, because other actions' old holds share the range
+    // and reading exactly one batch would let them crowd this one out again.
+    const revealCutoff = now - REVEAL_RECONCILE_AFTER_MS;
+    const oldHolds = await ctx.db
       .query("providerOperations")
       .withIndex("by_state_and_updatedAt", (q) =>
-        q.eq("state", "uncertain").lt("updatedAt", now - REVEAL_RECONCILE_AFTER_MS),
+        q.eq("state", "uncertain").lt("updatedAt", revealCutoff),
       )
-      .take(SWEEP_BATCH_SIZE);
+      .take(REVEAL_SCAN_MAX);
     let holdsReconciled = 0;
-    for (const hold of holds) {
-      if (actionOfOperationKey(hold.operationKey) !== "get_email") {
-        // Every other action's hold is settled by its own path, or by the
-        // billing sweep's worst-case commit. Only the email finder has a job
-        // that can still be asked what it did.
+    for (const hold of oldHolds) {
+      if (!hold.operationKey.startsWith(REVEAL_HOLD_PREFIX)) {
         continue;
       }
       await ctx.scheduler.runAfter(
@@ -138,6 +164,9 @@ export const sweepStalledRuns = internalMutation({
         { orgId: hold.orgId, operationKey: hold.operationKey },
       );
       holdsReconciled += 1;
+      if (holdsReconciled >= SWEEP_BATCH_SIZE) {
+        break;
+      }
     }
 
     return {

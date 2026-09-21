@@ -129,6 +129,8 @@ export const finishOnboarding = internalMutation({
         filters: vLeadFilters,
         excludeFilters: vLeadFilters,
         matchCount: v.number(),
+        /** Whether the provider estimated that count (spikes §3). */
+        matchCountIsApproximate: v.optional(v.boolean()),
       }),
     ),
   },
@@ -169,6 +171,10 @@ export const finishOnboarding = internalMutation({
         filters: keyword.filters,
         excludeFilters: keyword.excludeFilters,
         matchCount: keyword.matchCount,
+        // Stored only when it is true: absent means the count is exact.
+        ...(keyword.matchCountIsApproximate === true
+          ? { matchCountIsApproximate: true }
+          : {}),
         enabled: true,
         source: "recommended",
         nextPage: 1,

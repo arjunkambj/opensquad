@@ -28,10 +28,13 @@
 import type { RefundReason } from "../../billing/paidCall";
 import { PLATFORM_PAUSED_ENV, readBooleanEnv } from "../../lib/limits";
 import type { OperationErrorCode } from "../../lib/validators";
+import { env } from "../../_generated/server";
 
 /** Production, despite the host name (spikes §3). */
 const ENRICH_BASE_URL = "https://dev.enrich.so/api/v3";
 
+/** Declared in `convex.config.ts` and read through the typed `env`; the name
+ *  is kept for the log line that says which setting is missing. */
 const ENRICH_API_KEY_ENV = "ENRICH_API_KEY";
 
 /**
@@ -162,11 +165,11 @@ export async function enrichRequest<T>(
   if (request.respectKillSwitch !== false && readBooleanEnv(PLATFORM_PAUSED_ENV)) {
     return { kind: "refused", reason: "kill_switch" };
   }
-  const apiKey = process.env[ENRICH_API_KEY_ENV];
+  const apiKey = env.ENRICH_API_KEY;
   if (apiKey === undefined || apiKey.trim() === "") {
     // A deployment mistake, not a provider verdict: nothing left this
     // deployment, so a paid caller refunds rather than holding the money.
-    console.error("lead-data client: no API key is configured");
+    console.error(`lead-data client: ${ENRICH_API_KEY_ENV} is not configured`);
     return { kind: "refused", reason: "not_configured" };
   }
 
@@ -239,7 +242,7 @@ async function attemptRequest<T>(
   }
 
   if (response.status === 429) {
-    const after = retryAfterMs(response);
+    const after = retryAfterMs(response, text);
     return {
       kind: "retry",
       rateLimited: true,
@@ -322,16 +325,38 @@ function parseEnvelope<T>(text: string): EnrichResult<T> | null {
 /**
  * The provider's own wait, in milliseconds, or `null` when it is longer than
  * an action should hold. `Retry-After` is documented in seconds and is also
- * echoed in the 429 body as `retryAfter`; the header is authoritative.
+ * echoed in the 429 body as `retryAfter`; the header is authoritative, and the
+ * body is read when it is missing — a header-less 429 answered with the base
+ * back-off retries straight back into the ban.
  */
-function retryAfterMs(response: Response): number | null {
+function retryAfterMs(response: Response, body: string): number | null {
   const header = response.headers.get("retry-after");
-  const seconds = header === null ? Number.NaN : Number(header);
+  const seconds = header === null ? retryAfterSecondsOf(body) : Number(header);
   if (!Number.isFinite(seconds) || seconds < 0) {
     return backoffMs(1);
   }
   const ms = seconds * 1_000;
   return ms > RETRY_AFTER_MAX_MS ? null : ms;
+}
+
+/** `retryAfter` out of the documented 429 body
+ *  (`{ statusCode, error, message, retryAfter }`, spikes §3), in seconds, or
+ *  `NaN` when the body is not one. */
+function retryAfterSecondsOf(body: string): number {
+  if (body.length > ERROR_BODY_SCAN_MAX) {
+    return Number.NaN;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return Number.NaN;
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return Number.NaN;
+  }
+  const retryAfter = (parsed as { retryAfter?: unknown }).retryAfter;
+  return typeof retryAfter === "number" ? retryAfter : Number.NaN;
 }
 
 /** Exponential back-off with a ceiling — bounded, so an action cannot stall. */

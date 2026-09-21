@@ -232,10 +232,14 @@ export const runSourcingStep = internalAction({
     }
     if (found.status === "refunded") {
       if (found.reason === "provider_charged_nothing") {
-        // The provider answered and this page holds nobody: the signal is out
-        // of results, and no later run should pay to ask again.
-        await record(ctx, args, { rows: [], exhausted: true, resume: true });
-        return { outcome: "empty" };
+        // The provider answered and this page holds nobody. That is the end of
+        // the signal only when the provider says so — no more pages, or a
+        // search with nobody in it at all. A page that came back empty with
+        // more behind it is a gap: the cursor moves past it and the next run
+        // reads the page after, rather than killing a signal on one bad page.
+        const exhausted = found.hasMore !== true || found.totalResults === 0;
+        await record(ctx, args, { rows: [], exhausted, resume: true });
+        return { outcome: exhausted ? "empty" : "empty_page" };
       }
       if (found.operationKey !== undefined) {
         // An operation row exists, so the request reached the boundary and

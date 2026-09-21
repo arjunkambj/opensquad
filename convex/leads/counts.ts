@@ -122,6 +122,8 @@ export const byStrategy = query({
       enabled: v.boolean(),
       leadsFound: v.number(),
       matchCount: v.number(),
+      /** True when the provider estimated that count rather than ran it. */
+      matchCountIsApproximate: v.boolean(),
       exhausted: v.boolean(),
       lastRunAt: v.optional(v.number()),
     }),
@@ -142,6 +144,7 @@ export const byStrategy = query({
         enabled: strategy.enabled,
         leadsFound: strategy.leadsFound,
         matchCount: strategy.matchCount,
+        matchCountIsApproximate: strategy.matchCountIsApproximate === true,
         exhausted: strategy.nextPage > MAX_SEARCH_PAGE,
         ...(strategy.lastRunAt !== undefined
           ? { lastRunAt: strategy.lastRunAt }

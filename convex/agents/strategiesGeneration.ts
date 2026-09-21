@@ -218,7 +218,7 @@ async function accepted(
  *  cards show. A failure keeps its own code so the screen can say whether the
  *  platform is paused or something simply did not answer. */
 type Counted =
-  | { ok: true; count: number }
+  | { ok: true; count: number; isApproximate: boolean }
   | { ok: false; code: OperationErrorCode };
 
 async function countOf(
@@ -231,7 +231,10 @@ async function countOf(
     { filters, excludeFilters },
   );
   return counted.status === "counted"
-    ? { ok: true, count: counted.count }
+    ? // The provider's own estimation signal travels with the number: a card
+      // that says "About 12,000" is the honest form of an estimate, and a
+      // number we cannot vouch for must never be shown as exact (PLAN §2).
+      { ok: true, count: counted.count, isApproximate: counted.isApproximate }
     : { ok: false, code: counted.code };
 }
 
@@ -249,10 +252,19 @@ async function adjustOnce(
     filters: LeadFilters;
     excludeFilters: LeadFilters;
     matchCount: number;
+    matchCountIsApproximate: boolean;
     roleFilters: LeadFilters;
   },
-): Promise<{ filters: LeadFilters; matchCount: number }> {
-  const keep = { filters: args.filters, matchCount: args.matchCount };
+): Promise<{
+  filters: LeadFilters;
+  matchCount: number;
+  matchCountIsApproximate: boolean;
+}> {
+  const keep = {
+    filters: args.filters,
+    matchCount: args.matchCount,
+    matchCountIsApproximate: args.matchCountIsApproximate,
+  };
   const candidate =
     args.matchCount < STRATEGY_MIN_USEFUL_MATCHES
       ? relaxFilters(args.filters, args.roleFilters)
@@ -273,7 +285,13 @@ async function adjustOnce(
     args.matchCount < STRATEGY_MIN_USEFUL_MATCHES
       ? counted.count > args.matchCount
       : counted.count > 0 && counted.count < args.matchCount;
-  return better ? { filters: candidate, matchCount: counted.count } : keep;
+  return better
+    ? {
+        filters: candidate,
+        matchCount: counted.count,
+        matchCountIsApproximate: counted.isApproximate,
+      }
+    : keep;
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,6 +355,7 @@ async function compileStrategies(
     filters: coreFilters,
     excludeFilters,
     matchCount: coreCount.count,
+    matchCountIsApproximate: coreCount.isApproximate,
     roleFilters,
   });
   const compiled: CompiledStrategy[] = [
@@ -347,6 +366,7 @@ async function compileStrategies(
       filters: adjustedCore.filters,
       excludeFilters,
       matchCount: adjustedCore.matchCount,
+      matchCountIsApproximate: adjustedCore.matchCountIsApproximate,
       recommended: true,
     },
   ];
@@ -390,6 +410,7 @@ async function compileStrategies(
       filters,
       excludeFilters: checked,
       matchCount: count.count,
+      matchCountIsApproximate: count.isApproximate,
       roleFilters,
     });
     compiled.push({
@@ -399,6 +420,7 @@ async function compileStrategies(
       filters: adjusted.filters,
       excludeFilters: checked,
       matchCount: adjusted.matchCount,
+      matchCountIsApproximate: adjusted.matchCountIsApproximate,
       recommended: strategy.recommended,
     });
   }

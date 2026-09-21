@@ -52,8 +52,9 @@ const vCountResult = v.union(
   v.object({
     status: v.literal("counted"),
     count: v.number(),
-    /** Read the flag; the documented "true above 10,000" threshold did not
-     *  hold on this account (spikes §3). */
+    /** Whether the number is an estimate, read from every signal the response
+     *  carries (`countIsApproximate`) — the flag alone was false at 89,731 on
+     *  this account (spikes §3). */
     isApproximate: v.boolean(),
   }),
   v.object({ status: v.literal("failed"), code: vOperationErrorCode }),
@@ -76,6 +77,11 @@ const vFindResult = v.union(
     status: v.literal("refunded"),
     reason: vRefundReason,
     operationKey: v.optional(v.string()),
+    /** Present only for `provider_charged_nothing`: the empty page's own
+     *  pagination, so the caller can tell the end of a signal from a page
+     *  that happened to hold nobody. */
+    hasMore: v.optional(v.boolean()),
+    totalResults: v.optional(v.number()),
   }),
   /** This exact search was already paid for; its rows were stored then. */
   v.object({ status: v.literal("replayed"), operationKey: v.string() }),
@@ -91,6 +97,7 @@ const vFindResult = v.union(
 type CountResponse = {
   count?: unknown;
   isApproximate?: unknown;
+  searchedTotalResult?: unknown;
 };
 
 type SearchResponse = {
@@ -100,8 +107,47 @@ type SearchResponse = {
     totalResults?: unknown;
     hasMore?: unknown;
     isApproximate?: unknown;
+    searchedTotalResult?: unknown;
   };
 };
+
+/** The provider's own pagination cap (doc.enrich.so, count + search). A count
+ *  standing at it was cut off there rather than counted past it, so what came
+ *  back is a floor and not the real total. */
+const PAGEABLE_CAP = 500_000;
+
+/**
+ * Whether the number the provider just handed back is an estimate.
+ *
+ * Only what the response itself says: the `isApproximate` flag where it is
+ * sent, and `searchedTotalResult` — the raw total, which EQUALS the pageable
+ * count whenever nothing was discounted or truncated, so a divergence is the
+ * provider saying the count was adjusted. The documented 500,000 cap is the
+ * third case, and it is a cap, not a guess about size.
+ *
+ * Nothing is inferred from how big the count is: the flag was false at 89,731
+ * on this account (spikes §3), so a large exact count stays exact. `searchType`
+ * is not a signal either — `unified` is the ordinary answer and was seen
+ * beside an exact count.
+ */
+function countIsApproximate(signals: {
+  flag: unknown;
+  count: number;
+  searchedTotalResult: unknown;
+}): boolean {
+  if (signals.flag === true) {
+    return true;
+  }
+  const raw = signals.searchedTotalResult;
+  if (
+    typeof raw === "number" &&
+    Number.isFinite(raw) &&
+    Math.trunc(raw) !== signals.count
+  ) {
+    return true;
+  }
+  return signals.count >= PAGEABLE_CAP;
+}
 
 /**
  * How many people match — free, and the honest way to test a strategy before
@@ -144,10 +190,15 @@ export const countLeads = internalAction({
     if (typeof count !== "number" || !Number.isFinite(count)) {
       return { status: "failed", code: "invalid_response" };
     }
+    const whole = Math.max(0, Math.trunc(count));
     return {
       status: "counted",
-      count: Math.max(0, Math.trunc(count)),
-      isApproximate: result.data.isApproximate === true,
+      count: whole,
+      isApproximate: countIsApproximate({
+        flag: result.data.isApproximate,
+        count: whole,
+        searchedTotalResult: result.data.searchedTotalResult,
+      }),
     };
   },
 });
@@ -197,6 +248,13 @@ export const findLeads = internalAction({
     });
 
     let unknownReason: EnrichUnknown | null = null;
+    /** The pagination of a page that came back empty — a refund carries no
+     *  result of its own, and the caller needs to know whether there are more
+     *  pages behind it. Held in a box because the search fills it in from
+     *  inside the credit wrapper. */
+    const empty: { page: { hasMore: boolean; totalResults: number } | null } = {
+      page: null,
+    };
     let outcome;
     try {
       outcome = await withCredits(
@@ -227,22 +285,33 @@ export const findLeads = internalAction({
             throw new Error("lead search outcome unknown");
           }
           const rows = sourcedLeadsOf(result.data.results);
+          const pagination = result.data.pagination ?? {};
+          const totalResults = wholeNumber(pagination.totalResults, rows.length);
           if (rows.length === 0) {
-            // The provider answered and charged nothing (PLAN §6).
+            // The provider answered and charged nothing (PLAN §6). Its own
+            // pagination travels with the refund: an empty page with more
+            // behind it is a gap, not the end of the results.
+            empty.page = {
+              hasMore: pagination.hasMore === true,
+              totalResults,
+            };
             return {
               outcome: "refunded" as const,
               reason: "provider_charged_nothing" as const,
             };
           }
-          const pagination = result.data.pagination ?? {};
           return {
             outcome: "billed" as const,
             result: {
               rows,
               page,
-              totalResults: wholeNumber(pagination.totalResults, rows.length),
+              totalResults,
               hasMore: pagination.hasMore === true,
-              isApproximate: pagination.isApproximate === true,
+              isApproximate: countIsApproximate({
+                flag: pagination.isApproximate,
+                count: totalResults,
+                searchedTotalResult: pagination.searchedTotalResult,
+              }),
             },
             // Pages 1–3 are free on this account, so the provider's credit
             // usage is zero and only our own search unit is consumed.
@@ -273,6 +342,12 @@ export const findLeads = internalAction({
         reason: outcome.reason,
         ...(outcome.operationId !== null
           ? { operationKey: outcome.operationKey }
+          : {}),
+        ...(empty.page !== null
+          ? {
+              hasMore: empty.page.hasMore,
+              totalResults: empty.page.totalResults,
+            }
           : {}),
       };
     }
@@ -313,7 +388,13 @@ type FindLeadsResult =
       presence: LeadFieldPresence;
       rows: SourcedLead[];
     }
-  | { status: "refunded"; reason: RefundReason; operationKey?: string }
+  | {
+      status: "refunded";
+      reason: RefundReason;
+      operationKey?: string;
+      hasMore?: boolean;
+      totalResults?: number;
+    }
   | { status: "replayed"; operationKey: string }
   | { status: "uncertain"; operationKey: string; code: OperationErrorCode }
   | { status: "failed"; code: OperationErrorCode };

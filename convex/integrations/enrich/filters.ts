@@ -87,7 +87,7 @@ const FILTER_SPECS: Record<string, FilterSpec> = {
   industryNaicsCode: { kind: "enum_list", maxItems: 50 },
   industryNaicsDescription: { kind: "enum_list", maxItems: 50 },
   revenueBuckets: { kind: "enum_list", maxItems: 6 },
-  companyEntityType: { kind: "enum_list", maxItems: 10 },
+  companyEntityType: { kind: "enum_list", maxItems: 20 },
   companyLegalType: { kind: "enum_list", maxItems: 16 },
   headquartersCountry: { kind: "enum_list", maxItems: 25 },
   locationCountry: { kind: "enum_list", maxItems: 25 },

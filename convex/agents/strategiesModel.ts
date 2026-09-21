@@ -508,10 +508,12 @@ export function relaxFilters(
   ) {
     return without(filters, ["employeeCountMin", "employeeCountMax"]);
   }
-  if (
-    filters["countryName"] !== undefined &&
-    filters["continent"] !== undefined
-  ) {
+  if (filters["countryName"] !== undefined) {
+    // The country goes whether or not a continent was picked alongside it: a
+    // country-only ICP is the commonest one there is, and requiring both
+    // filters left it with no geography rung at all. What remains — the
+    // continent if there was one, everywhere if there was not — is still the
+    // customer the user described, in more places than one country.
     return without(filters, ["countryName"]);
   }
   if (filters["companyEntityType"] !== undefined) {
@@ -538,6 +540,20 @@ export function tightenFilters(filters: LeadFilters): LeadFilters | null {
     // so multiplying always raises the bar.
     return { ...filters, [key]: value * STRATEGY_TIGHTEN_FACTOR };
   }
+  // Second rung: a values signal is an OR across everything in its list, so
+  // the list itself is the width. The model writes them best-first, so the
+  // back half is what goes — the signal keeps meaning the same thing, of
+  // fewer companies. Behind the numeric rung on purpose: raising a minimum
+  // takes no value away from the card's own promise.
+  for (const [key, value] of Object.entries(filters)) {
+    const spec = signalFilterSpec(key);
+    if (spec?.kind !== "values" || !Array.isArray(value) || value.length < 2) {
+      continue;
+    }
+    return { ...filters, [key]: value.slice(0, Math.ceil(value.length / 2)) };
+  }
+  // A single-value list and a flag are already as narrow as they go — a flag
+  // has no smaller form than `true` — so there is nothing left to tighten.
   return null;
 }
 

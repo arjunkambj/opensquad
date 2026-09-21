@@ -60,6 +60,9 @@ const vStrategyCard = v.object({
   rationale: v.string(),
   /** A real count from a free count call. Zero means zero. */
   matchCount: v.number(),
+  /** True when the provider estimated that count rather than ran it. The card
+   *  says "About N" instead of pretending to a precision nobody has. */
+  matchCountIsApproximate: v.boolean(),
   enabled: v.boolean(),
   source: vStrategySource,
 });
@@ -113,6 +116,7 @@ export const overview = query({
         signalKind: strategy.signalKind,
         rationale: strategy.rationale,
         matchCount: strategy.matchCount,
+        matchCountIsApproximate: strategy.matchCountIsApproximate === true,
         enabled: strategy.enabled,
         source: strategy.source,
       }));
@@ -393,7 +397,12 @@ export const confirm = action({
     // Free, and at most three of them: the ladder stops at the first place
     // these phrases actually find people (`strategiesModel.ts`).
     let keywordStrategy:
-      | { filters: LeadFilters; excludeFilters: LeadFilters; matchCount: number }
+      | {
+          filters: LeadFilters;
+          excludeFilters: LeadFilters;
+          matchCount: number;
+          matchCountIsApproximate: boolean;
+        }
       | undefined;
     for (const filters of context.keywordVariants) {
       const counted = await ctx.runAction(
@@ -405,6 +414,9 @@ export const confirm = action({
           filters,
           excludeFilters: context.excludeFilters,
           matchCount: counted.count,
+          // The card this becomes reads the number out loud, so whether the
+          // provider counted or estimated it travels with it.
+          matchCountIsApproximate: counted.isApproximate,
         };
         break;
       }
