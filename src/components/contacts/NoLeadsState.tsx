@@ -1,16 +1,4 @@
-/**
- * The empty table, which is never just an empty table.
- *
- * An org with no contacts has a reason, and the reason is actionable:
- * the agent has not run yet, the run is still going, or the signals it ran
- * returned nothing — in which case this names them, with the matches each one
- * claimed, and links to where they can be changed. "No leads yet" on its own
- * would leave the user with nothing to do.
- *
- * The reason lives in two subscriptions that resolve after the list does, so
- * this waits for them rather than reading a missing run as "never started":
- * mid-run, that sentence would send a user back to setup they have finished.
- */
+/** Wait for run and signal subscriptions before explaining an empty list; missing data is not a never-run agent. */
 import { Link } from "@tanstack/react-router"
 import { Target02Icon, UserGroupIcon } from "@hugeicons/core-free-icons"
 import type { FunctionReturnType } from "convex/server"
@@ -28,11 +16,8 @@ export function NoLeadsState({
   filtered,
   onClearFilters,
 }: {
-  /** The run this org last had, `null` for none — `undefined` while reading. */
   run: RunState | null | undefined
-  /** `undefined` while reading. */
   signals: Signals | undefined
-  /** True when a filter or search is narrowing the table. */
   filtered: boolean
   onClearFilters: () => void
 }) {

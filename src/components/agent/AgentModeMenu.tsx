@@ -1,13 +1,3 @@
-/**
- * The mode badge and its dropdown (reference 21), and the one control that
- * can ask for Autopilot.
- *
- * Every mode carries its one-line explanation in the menu, because "Review"
- * and "Autopilot" are not self-explanatory and the difference between them is
- * whether mail leaves without the user. Choosing Autopilot opens the consent
- * dialog rather than switching: the switch only happens from the dialog's
- * Accept, and the backend refuses it without the payload that Accept sends.
- */
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation } from "convex/react"

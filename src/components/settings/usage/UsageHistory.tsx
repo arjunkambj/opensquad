@@ -1,15 +1,3 @@
-/**
- * The credit history from the real ledger, newest first.
- *
- * Cursor pagination: the query hands back where
- * the next page starts, and the cursors already walked are kept here so Back
- * is a pop. Numbered pages would be a lie — a settling reservation changes
- * what lies between two of them.
- *
- * Every line is an action the user took, labelled through the one white-label
- * map. Nothing here knows which provider answered, because the query never
- * says.
- */
 import { useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
@@ -43,7 +31,6 @@ import {
 import { cn } from "@/lib/utils"
 import { Coins01Icon } from "@hugeicons/core-free-icons"
 
-/** Outcome styling, all through semantic tokens so it reads in both themes. */
 const OUTCOME_CLASS: Record<UsageOutcome, string> = {
   billed: "bg-muted text-muted-foreground",
   refunded: "bg-chart-2/15 text-foreground",

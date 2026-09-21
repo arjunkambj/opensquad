@@ -1,17 +1,3 @@
-/**
- * The seven rows of the review screen (reference 11).
- *
- * Every summary is read back from what was actually saved — the business
- * profile, the agent's ICP, its goal and tone, the strategies that are
- * switched on and the keywords that were picked. Nothing is defaulted for
- * display: a row with no answer says so in words, because "—" on a review
- * screen is how a user ends up confirming something they never chose.
- *
- * Each row names the step that wrote it, which is the one thing a review
- * screen owes: a way back. Building the control for that is the screen's job,
- * not this file's — rows are data, so nothing here renders or is handed a
- * callback.
- */
 import {
   BlockedIcon,
   Building01Icon,
@@ -43,7 +29,6 @@ export type ReviewSource = {
   keywords: string[]
 }
 
-/** A list read back as one line, or the sentence that says it is empty. */
 function readBack(values: readonly string[], empty: string): string {
   return values.length === 0 ? empty : values.join(", ")
 }
@@ -55,11 +40,8 @@ function optionTitle(
   return options.find((option) => option.value === value)?.title ?? value
 }
 
-/** A row of the review list, plus the way back to the step behind it. */
 export type ReviewRow = Omit<ReviewAccordionRow, "content"> & {
-  /** The step this answer was given on; "Change this" reopens it. */
   step: OnboardingStep
-  /** One line on what changing it affects. */
   hint: string
 }
 

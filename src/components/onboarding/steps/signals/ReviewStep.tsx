@@ -1,15 +1,4 @@
-/**
- * Onboarding dot 4, screen 3 — check everything, then go (reference 11).
- *
- * This is the last screen of setup, and the only one whose button changes
- * something outside the agent record: Confirm counts the keyword strategy for
- * free, writes it, and flips the agent live with its first run due now. It
- * spends no credits and starts nothing itself — the run loop picks the agent
- * up on its own, and Contacts shows that happening.
- *
- * Every row reads back real saved data and every row offers the way back to
- * the step that wrote it, which is the whole job of a review screen.
- */
+/** Confirm counts keywords and activates the agent; the run loop starts work when nextRunAt is due. */
 import { Target01Icon } from "@hugeicons/core-free-icons"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"
@@ -60,12 +49,7 @@ export function ReviewStep(props: OnboardingStepProps) {
   // screen, and only while the screen is still here.
   const attempts = useRef(0)
 
-  // A jump can be asked for again before the last one answered — an Edit link
-  // pressed twice, or a second row pressed while the first is saving. Same
-  // rule as Confirm below: only the latest ask may put anything on the screen,
-  // and only while the screen is still here. A successful jump unmounts this
-  // component, so the failure branch would otherwise be writing to a screen
-  // that is already gone.
+  // Only the latest jump may report failure, and only while this screen is mounted.
   const jumps = useRef(0)
 
   const jumpTo = (step: OnboardingStep) => {
@@ -109,13 +93,7 @@ export function ReviewStep(props: OnboardingStepProps) {
           })
           setConfirming(false)
         }
-        // Any other result means the agent is live and this screen has nothing
-        // left to do. WHERE setup ends is the container's call, and it waits
-        // for the agent row itself to read `done` before it moves: leaving on
-        // this result alone would arrive at a page whose gate reads that same
-        // row and be bounced back into setup for a frame. `confirming` stays
-        // true on purpose, so the button cannot be pressed again on the way
-        // out.
+        // Keep Confirm disabled until the parent sees done on the subscribed row and navigates away.
       } catch {
         if (mounted.current && attempts.current === attempt) {
           setFailure({ from: "confirm", message: CONFIRM_FALLBACK })

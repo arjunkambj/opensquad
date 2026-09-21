@@ -35,13 +35,11 @@ import { SWEEP_BATCH_SIZE } from "../lib/limits";
 import { agentRunsOutreach, selectStaleRevisionLeads, selectWriteTargets } from "./outreachPlan";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
 /* Per-pass bounds                                                     */
 /*                                                                     */
 /* These belong in `convex/lib/limits.ts` with the rest of the policy  */
 /* numbers; they are local constants only because that file is         */
 /* integrator-only (EXECUTION §0).                                     */
-/* ------------------------------------------------------------------ */
 
 /** Leads one agent may have approved in one pass. Free, so the bound is
  *  about transaction size rather than money. */

@@ -1,20 +1,9 @@
-/**
- * Ask for the signals to be worked out again — the only part of the signals
- * screen that spends credits, so it says what it costs before it is pressed
- * (PLAN §5).
- *
- * The price arrives already decided (`signals-model.ts`) and the reason it
- * cannot be afforded arrives already worded, because a disabled button with
- * no explanation is the one thing worse than no button.
- */
 import { Button } from "@/components/ui/button"
 
 export type SignalsRegenerateControlProps = {
-  /** "Regenerate", or "Try again" after a failed run. */
   label: string
   /** Credits this run costs; `0` while the free first run is still there. */
   price: number
-  /** Why it can't run, or `null`. */
   blockedReason: string | null
   disabled: boolean
   onRun: () => void

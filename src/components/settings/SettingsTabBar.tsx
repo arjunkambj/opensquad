@@ -1,13 +1,3 @@
-/**
- * The horizontal settings tab bar (reference 26).
- *
- * Links rather than a `Tabs` widget: `?tab=` is a deep link other screens
- * point at — a blocked send links to Sending, the sidebar's inbox status to
- * Inbox — so each tab has to be a real, shareable, back-button-able URL.
- *
- * The bar scrolls horizontally on a narrow screen instead of wrapping, which
- * keeps the row of section names reading as one row at every width.
- */
 import { Link } from "@tanstack/react-router"
 import {
   SETTINGS_TABS,

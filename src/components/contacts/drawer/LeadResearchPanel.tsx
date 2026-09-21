@@ -1,14 +1,3 @@
-/**
- * What research learned about this lead, in the drawer.
- *
- * A score exists only on a researched lead (PLAN §7), so this switches on the
- * research variant rather than rendering an absent score as zero: not
- * researched, running, failed and researched are four different things to say,
- * and only the last one has prose behind it.
- *
- * The hooks are `evidence` rows — observations with the page they came from.
- * Nothing here is synthesised on the client.
- */
 import { LinkSquare02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { LeadResearch } from "../../../../convex/lib/validators"

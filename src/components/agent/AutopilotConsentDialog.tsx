@@ -1,14 +1,4 @@
-/**
- * The Autopilot consent dialog (PLAN §9.3).
- *
- * This is the ONLY way Autopilot is ever turned on: its Accept is what sends
- * the consent payload `agents.settingsMode.setMode` requires, and the backend
- * refuses the mode without it. Nothing here is decorative — every sentence is
- * a thing the agent will then do without asking, and every number is the
- * agent's own stored cap and the real credit price, not an illustration.
- *
- * Presentational: the caller owns the mutation and its refusals.
- */
+/** Autopilot requires the explicit consent payload from this dialog; the server rejects it otherwise. */
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import type { ReactNode } from "react"

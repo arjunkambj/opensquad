@@ -4,14 +4,8 @@ import { Link } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import Logo from "@/components/layout/Logo"
 
-/**
- * The support address. Shared with the FAQ's documented fallback, so the
- * footer and the FAQ never disagree about where to write.
- */
 const SUPPORT_EMAIL = "support@openintent.ai"
 
-// Every entry points at a route or anchor that exists today. The anchors are
-// root-relative so they also work from a page other than the landing page.
 const productLinks = [
   { href: "/#how-it-works", name: "How it works" },
   { href: "/#features", name: "Features" },
@@ -27,12 +21,6 @@ const accountLinks = [
 const socialButtonClassName =
   "flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
 
-/**
- * Copies the support address instead of opening a mail client. The icon
- * flips to a tick for a moment so the click has visible feedback; the
- * address stays in the title attribute so it can still be copied by hand
- * when the clipboard is unavailable.
- */
 function CopyEmailButton({ email }: { email: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -70,11 +58,6 @@ function CopyEmailButton({ email }: { email: string }) {
   )
 }
 
-/**
- * A full-width band in the card color with content held to the page width,
- * so it lines up with every section above. An oversized wordmark sits behind
- * the content and is cropped by the footer's bottom edge.
- */
 export function Footer() {
   return (
     <footer className="relative isolate mt-24 w-full overflow-hidden bg-card text-card-foreground sm:mt-32">
@@ -94,7 +77,6 @@ export function Footer() {
               An AI sales agent that finds your leads and emails them from
               your own inbox.
             </p>
-            {/* -ml-2 lines the first icon up with the text above it. */}
             <div className="-ml-2 mt-4 flex items-center">
               <a
                 aria-label="OpenIntent on X"

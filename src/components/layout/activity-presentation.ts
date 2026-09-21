@@ -1,15 +1,4 @@
-/**
- * Activity kinds in words and icons, for the notification feed.
- *
- * The map is a TOTAL `Record` over the backend's kind union, so adding a kind
- * to `convex/lib/validators/activity.ts` fails this build until someone
- * decides how it should read. Storage keeps `kind` as a bounded string, so an
- * event written by an older or newer deployment still renders — through the
- * neutral fallback, never dropped and never mislabelled.
- *
- * Wording is white-label (PLAN §4): the user reads what happened, never which
- * company we bought it from.
- */
+/** Unknown activity kinds use neutral copy for compatibility with older or newer deployments. */
 import {
   Alert02Icon,
   Calendar03Icon,

@@ -1,14 +1,3 @@
-/**
- * Onboarding dot 3, sub-step 2 — goals (reference 05, PLAN §11 M1).
- *
- * Three answers, one save: what the buyers struggle with, what the outreach
- * is for, and how it should read. The pain points are pre-filled from the
- * business profile the ICP step generated and stay fully editable, as every
- * generated field does (PLAN §5).
- *
- * The container: it owns the profile read and the save, and hands plain props
- * to the kit's radio cards.
- */
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import type { ReactNode } from "react"
@@ -26,7 +15,6 @@ import {
 } from "./outreach-step-model"
 import { OutreachStepShell } from "./OutreachStepShell"
 
-/** Mirrors `COMPANY_PAIN_POINTS_MAX_LENGTH`, which validates the save. */
 const PAIN_POINTS_MAX_LENGTH = 2_000
 
 export function GoalsStep({

@@ -1,13 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton"
 
-/**
- * Stand-in for the dashboard shell while the session resolves.
- *
- * It must be STRUCTURALLY identical to the loaded shell at every width, or the
- * hand-off reads as a layout jump: a sidebar from `md` up, a header row only
- * below it — which is exactly where the real shell puts its sidebar trigger,
- * and at phone width that trigger is the only proof a sidebar exists at all.
- */
+/** Match the loaded shell at every breakpoint to avoid a layout jump while auth resolves. */
 export function DashboardLoadingSkeleton() {
   return (
     <div

@@ -88,10 +88,6 @@ export function mapProviderFailure(code: AgentMailErrorCode): {
   return failure("provider_unavailable", agentmailFailureMessage(code));
 }
 
-/* ------------------------------------------------------------------ */
-/* Reads                                                               */
-/* ------------------------------------------------------------------ */
-
 const vConnectionMember = v.object({
   orgId: v.id("orgs"),
   webhookToken: v.string(),

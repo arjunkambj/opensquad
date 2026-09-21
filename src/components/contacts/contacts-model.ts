@@ -1,18 +1,5 @@
-/**
- * The words the Contacts screen puts on a lead's state — one place, so a new
- * stage, refusal or skip reason fails the build until it has copy.
- *
- * Two of these maps carry rules rather than labels:
- *
- *   `refusalCopy` is PLAN §6's distinction, made once: an org can hold
- *   credits it is no longer allowed to spend, so the hidden trial cap says
- *   "Trial limit for emails reached" and an empty balance says "out of
- *   credits". Every paid button on this screen reports through it.
- *
- *   `LEAD_ERROR_COPY` turns the backend's error CODE into a sentence. The
- *   code is the contract (`convex/lib/errors.ts`); the message beside it is
- *   for operators and logs, and never reaches a user.
- */
+/** Map domain codes to user copy; provider messages are for operators only.
+ * Keep trial-cap refusals distinct from an empty credit balance. */
 import type { FunctionReturnType } from "convex/server"
 import type { ContactsSearch } from "@/routes/_dashboard/_org/contacts"
 import type { api } from "../../../convex/_generated/api"
@@ -26,12 +13,10 @@ import type {
 } from "../../../convex/lib/validators"
 import { withFilters } from "@/lib/search-params"
 
-/** One table row, as the backend projects it (`convex/leads/rows.ts`). */
 export type ContactRowData = FunctionReturnType<
   typeof api.leads.queries.list
 >["items"][number]
 
-/** The drawer's lead, with the prose the row leaves out. */
 export type ContactDetailData = FunctionReturnType<
   typeof api.leads.queries.getDetail
 >
@@ -56,7 +41,6 @@ export const APPROVAL_LABEL: Record<LeadApproval, string> = {
   rejected: "Rejected",
 }
 
-/** What we know about the address, in the user's words. */
 export const EMAIL_STATE_LABEL: Record<LeadEmailStatus, string> = {
   locked: "Not found yet",
   revealing: "Finding…",
@@ -64,7 +48,6 @@ export const EMAIL_STATE_LABEL: Record<LeadEmailStatus, string> = {
   not_found: "None on file",
 }
 
-/** Why a lead stopped, as the Retry button explains it. */
 export const LEAD_ERROR_COPY: Record<OperationErrorCode, string> = {
   rate_limited: "Research kept being throttled. Try again in a few minutes.",
   provider_unavailable: "Company research was unavailable. Try again.",
@@ -95,13 +78,11 @@ const REFUSAL_COPY: Record<DomainErrorCode, string> = {
   RATE_LIMITED: "Too many requests. Wait a moment and try again.",
 }
 
-/** The one mapping from a backend refusal to what the screen says. */
 export function refusalCopy(error: unknown, fallback: string): string {
   const code = domainErrorCode(error)
   return code === undefined ? fallback : REFUSAL_COPY[code]
 }
 
-/** Why a lead in a selection was left out of a paid action. */
 const SKIP_REASON_COPY: Record<string, string> = {
   already_found: "already has an address",
   in_flight: "already being looked up",
@@ -113,21 +94,12 @@ const SKIP_REASON_COPY: Record<string, string> = {
   provider_limit: "is beyond today's research allowance — try again tomorrow",
 }
 
-/**
- * One sentence for what a bulk action actually did. Honest about the leads it
- * left out: a button that silently does less than it was asked to is the
- * failure this exists to prevent.
- */
 export function outcomeSummary(
   verb: string,
   result: {
     started: number
     skipped: readonly { reason: string }[]
-    /**
-     * Leads that were only un-parked — already researched, so they cost
-     * nothing and start no new work. Counted separately because "started for
-     * 0 leads" would read as a no-op on a button that did something.
-     */
+    /** Count free un-parking separately from paid research so the result does not imply a no-op. */
     unparked?: number
   },
 ): string {
@@ -153,19 +125,11 @@ export function outcomeSummary(
   return reasons.length === 0 ? head : `${head} Skipped: ${reasons.join(", ")}.`
 }
 
-/** What the screen knows about the caller's ability to spend. */
 export type SpendContext = {
-  /** Credits left, or `null` while the balance is still being read. */
   remaining: number | null
 }
 
-/**
- * Why Get email cannot run for this lead, or `null` when it can.
- *
- * The visible balance is the only money fact a client may know: the hidden
- * per-org provider allowance is server-side (PLAN §6), so a trial that
- * has used its emails up is reported by the refusal, not predicted here.
- */
+/** The client knows credit balance, not hidden provider allowances; the server reports those refusals. */
 export function emailDisabledReason(
   lead: Pick<ContactRowData, "emailStatus" | "approval">,
   price: number,
@@ -189,14 +153,12 @@ export function emailDisabledReason(
   return null
 }
 
-/** The research state both the row and the drawer's lead carry. */
 type ResearchState = {
   research: {
     status: "not_researched" | "researching" | "researched" | "failed"
   }
 }
 
-/** Why Research cannot run for this lead, or `null` when it can. */
 export function researchDisabledReason(
   lead: ResearchState & Pick<ContactRowData, "approval">,
   price: number,
@@ -217,16 +179,7 @@ export function researchDisabledReason(
   return null
 }
 
-/**
- * What Retry costs for a parked lead, and why it cannot run.
- *
- * Retry on a parked lead means two different things depending on whether the
- * research it is retrying already happened. A lead that was scored and then
- * parked by a LATER step only needs un-parking — the server does that for
- * free — so charging for it, or greying the button out because
- * `researchDisabledReason` says it is "already researched", both lie about
- * what the button does. A parked lead with no research yet is the paid case.
- */
+/** Retry is free for a researched lead parked by a later step; only unfinished research costs credits. */
 export function retryAction(
   lead: ResearchState & Pick<ContactRowData, "approval">,
   price: number,
@@ -256,7 +209,6 @@ export function retryAction(
   }
 }
 
-/** Why a decision cannot be recorded for this lead, or `null` when it can. */
 export function decisionDisabledReason(
   lead: Pick<ContactRowData, "approval">,
   approval: LeadApproval,
@@ -266,7 +218,6 @@ export function decisionDisabledReason(
     : null
 }
 
-/** The person's name as the source gave it — a masked surname stays masked. */
 export function personName(lead: {
   firstName?: string
   lastName?: string
@@ -277,10 +228,7 @@ export function personName(lead: {
   return parts.length > 0 ? parts.join(" ") : "Name locked"
 }
 
-/**
- * A filter change: drop the cursor AND the page it counted, because page two
- * of one query is not page two of another.
- */
+/** Reset both cursor and page number whenever the filters change. */
 export function withContactFilters(
   current: ContactsSearch,
   patch: Partial<ContactsSearch>,
@@ -288,7 +236,6 @@ export function withContactFilters(
   return withFilters(current, { ...patch, page: undefined })
 }
 
-/** The one list mode the table is in — the three filters are exclusive. */
 export function exclusiveFilters(
   patch: Partial<ContactsSearch>,
 ): Partial<ContactsSearch> {

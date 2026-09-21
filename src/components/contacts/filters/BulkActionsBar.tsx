@@ -1,12 +1,3 @@
-/**
- * Bulk actions (ref 23, top right of the table).
- *
- * Every button says what it will do to how many leads and what that costs,
- * and a button that cannot run is disabled with the reason ON it rather than
- * greyed out in silence. The two paid ones also say how far the credit
- * balance actually reaches — "Get emails" on nine leads with credits for four
- * is honest about the four before it is pressed, not afterwards.
- */
 import { Mail01Icon, Target02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Button } from "@/components/ui/button"

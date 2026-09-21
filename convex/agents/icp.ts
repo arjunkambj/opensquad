@@ -38,10 +38,6 @@ import { EMPTY_ICP_OPTION_LISTS, readIcpOptionLists } from "./icpVocabulary";
 import { getOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* What the three screens may offer                                     */
-/* ------------------------------------------------------------------ */
-
 const vIcpOptions = v.object({
   industries: v.array(v.string()),
   /** Broad regions first, then countries. */
@@ -80,10 +76,6 @@ export const options = query({
       : { ...lists, ready: true };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Generating one                                                       */
-/* ------------------------------------------------------------------ */
 
 /**
  * Why a run is being asked for. It decides which rate-limit bucket pays for
@@ -183,10 +175,6 @@ export const startGeneration = mutation({
     return { status: "started", startedAt: now } as const;
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Editing one                                                          */
-/* ------------------------------------------------------------------ */
 
 /**
  * Save the ICP as the user has it on screen.

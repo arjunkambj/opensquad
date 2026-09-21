@@ -36,13 +36,11 @@ import type { LeadResearch, OperationErrorCode } from "../lib/validators";
 import { appendLeadEvent, findLeadEventByOperationKey } from "./events";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
 /* The ladder                                                          */
 /*                                                                     */
 /* The delays and the attempt ceiling are PLAN §9.1 policy and live in  */
 /* `convex/lib/limits.ts` with every other number; the stall window is  */
 /* this step's own watchdog and stays here.                             */
-/* ------------------------------------------------------------------ */
 
 /** How long a lead may sit in `researching` before the sweep calls its step
  *  lost. A Convex action cannot outlive ~10 minutes, so past this nothing is
@@ -63,10 +61,6 @@ const PARK_REASONS: Record<OperationErrorCode, string> = {
   timeout: "Research kept timing out.",
   unknown: "Research failed every time we tried.",
 };
-
-/* ------------------------------------------------------------------ */
-/* Claiming, applying, failing                                         */
-/* ------------------------------------------------------------------ */
 
 /**
  * Claim the lead for this step. The `researching` marker is also its
@@ -314,10 +308,6 @@ export const recoverStalledResearch = internalMutation({
     return { recovered: true };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Shared                                                              */
-/* ------------------------------------------------------------------ */
 
 /** The ladder, applied to one lead. Shared by the step and the sweep. */
 async function recordStepFailure(

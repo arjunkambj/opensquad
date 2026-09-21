@@ -1,16 +1,4 @@
-/**
- * Asking for the signals to be recommended, and knowing where that stands.
- *
- * It owns the automatic first run: entering dot 4 asks for one, and the
- * mutation is a no-op unless the agent has never had a recommendation — so
- * the request is safe on every mount, on every device, forever, and the run
- * it starts is the free one (PLAN §6).
- *
- * It also owns the only question the screen cannot answer on its own: whether
- * another run can be afforded. The price comes from what has already been
- * generated and the balance from the real ledger, so a button that cannot buy
- * anything is disabled with a reason rather than failing when pressed.
- */
+/** The automatic request is idempotent: the server starts it only if no recommendation exists. */
 import { useMutation, useQuery } from "convex/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
@@ -25,7 +13,6 @@ import {
 import type { SignalsGenerationView } from "@/components/onboarding/steps/signals/signals-model"
 import { useMountedRef } from "@/hooks/use-mounted"
 
-/** Why a run is being asked for. `initial` is the automatic free one. */
 export type SignalsRunReason = "initial" | "retry" | "regenerate"
 
 /** A refused request, with the run it was refusing — so Try again asks for
@@ -39,9 +26,7 @@ export type SignalsGenerationHandle = {
   view: SignalsGenerationView
   /** Credits the next run costs; `0` while the free first run is there. */
   price: number
-  /** Why another run cannot happen, or `null`. */
   blockedReason: string | null
-  /** A request is in flight. */
   starting: boolean
   refusal: SignalsStartRefusal | null
   clearRefusal: () => void
@@ -64,11 +49,7 @@ export function useStrategyRecommendation(
   const view = signalsGenerationView(status ?? null)
   const price = signalsGenerationPrice(view)
 
-  // A request can be asked for again — Try again, Regenerate — before the
-  // previous one has answered, and the screen belongs to the LATEST one. The
-  // attempt it was made at is what an answer checks before it speaks, so a
-  // stale refusal never lands on a run that is still going, and none of them
-  // land on a screen the user has already left.
+  // Only the latest attempt may update state, and only while the screen is mounted.
   const attempts = useRef(0)
 
   const start = useCallback(

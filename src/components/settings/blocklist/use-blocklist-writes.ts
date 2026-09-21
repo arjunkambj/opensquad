@@ -16,7 +16,6 @@ import { errorMessage } from "@/lib/convex-error"
 type BlocklistEntry = { kind: "email" | "domain"; value: string }
 
 export type BlocklistWrites = {
-  /** Which write is in flight, so one button's spinner cannot show on both. */
   busy: "add" | "remove" | null
   addError: string | null
   removeError: string | null

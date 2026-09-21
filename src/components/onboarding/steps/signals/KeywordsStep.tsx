@@ -1,14 +1,4 @@
-/**
- * Onboarding dot 4, screen 2 — the words to watch for (reference 10).
- *
- * Keywords are OPTIONAL, and the screen says so with a real path rather than
- * a disabled button: "No keywords needed" clears the list and moves on, and
- * the confirm step simply builds one strategy fewer.
- *
- * "Generate more" is the one control in setup that always costs credits —
- * `generate_keywords` has no free first run — so it states its price, checks
- * the balance before it offers itself, and says so when it cannot run.
- */
+/** Keywords are optional, but generate_keywords always costs credits, including its first run. */
 import { RefreshIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation, useQuery } from "convex/react"
@@ -22,12 +12,7 @@ import { useMountedRef } from "@/hooks/use-mounted"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 
-/**
- * How long the screen waits for a generation before it says the request did
- * not land. The run is a scheduled action with no status of its own, so the
- * arrival of new suggestions IS the completion signal — and this is the
- * honest end of waiting for one that never arrives.
- */
+/** New suggestions are the completion signal; stop waiting if the scheduled generation never returns. */
 const KEYWORD_GENERATION_TIMEOUT_MS = 45_000
 
 export function KeywordsStep(props: OnboardingStepProps) {

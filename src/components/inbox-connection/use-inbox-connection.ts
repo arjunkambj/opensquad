@@ -1,12 +1,4 @@
-/**
- * The Manage-inbox read, resolved against the active organization.
- *
- * `inbox.connection.getInboxConnection` refuses a request whose active
- * organization is not the one being asked about, so the query is skipped
- * until the two agree. That is what lets the connect flow, the settings tab
- * and the "connect inbox" banner all render an honest state instead of an
- * error boundary.
- */
+/** Subscribe only when the requested organization matches the active token tenant. */
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"

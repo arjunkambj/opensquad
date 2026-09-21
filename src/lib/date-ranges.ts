@@ -5,34 +5,8 @@ export type CalendarDateRange = {
   end: Date
 }
 
-/* ------------------------------------------------------------------ */
-/* Civil days in the org's zone                                        */
-/* ------------------------------------------------------------------ */
-
-/**
- * Two vocabularies, and the bug that comes of mixing them.
- *
- * A **civil date** is a wall-calendar day — "16 September 2026" — with no
- * instant attached. That is what a range pill selects and what the heading
- * names, and it travels here as a browser-local `Date` at midnight, because
- * that is what date-fns arithmetic speaks.
- *
- * An **instant** is an epoch millisecond, and it is what `activity.list`
- * filters on. Turning a civil day into instants requires a zone, and the zone
- * that matters is the **org's**, not the browser's — every timestamp in
- * the feed is printed with `formatInstant(…, org.timezone)`, and every
- * send allowance in this product is bucketed by `localDayKey(now,
- * org.timezone)`. Deriving the window from the browser instead meant an
- * operator in a different zone read a heading naming one day above rows
- * stamped with another, and missed a whole evening of receipts they would
- * swear had happened.
- *
- * This is the same conversion `localDayParts` / `localCivilToUtc` perform in
- * `convex/lib/validators/shared.ts`, reimplemented rather than imported: they are
- * value exports and importing them would pull the convex module graph into
- * the browser bundle. No timezone database is involved on either side —
- * `Intl` already carries one.
- */
+/** Calendar Dates represent civil days; query bounds are instants in the organization timezone.
+ * Keep this conversion client-side to avoid importing the Convex runtime into the bundle. */
 type CivilDate = { year: number; month: number; day: number }
 
 type ZonedParts = CivilDate & { minuteOfDay: number }
@@ -86,16 +60,8 @@ function localDateOf(civil: CivilDate): Date {
   return new Date(civil.year, civil.month - 1, civil.day)
 }
 
-/**
- * The instant of 00:00 on `civil` in `timezone`.
- *
- * Guess the civil time as UTC, measure the zone's offset at the guess and
- * correct; converges in two or three iterations. Across a DST gap — a local
- * midnight that never occurs, as in a handful of zones — it lands on the
- * boundary instant, which is right for a range bound. An unreadable zone
- * falls back to the browser's own midnight rather than throwing: a bad
- * timezone string must not take the feed down.
- */
+/** Resolve local midnight by correcting a UTC guess with the zone offset.
+ * For a DST gap use the boundary instant; an invalid zone falls back to browser-local midnight. */
 function zonedStartOfDayMs(civil: CivilDate, timezone: string): number {
   const desired = Date.UTC(civil.year, civil.month - 1, civil.day)
   let guess = desired
@@ -116,12 +82,7 @@ function zonedStartOfDayMs(civil: CivilDate, timezone: string): number {
   return guess
 }
 
-/**
- * The last instant of `civil` in `timezone`. `activity.list` treats `to` as an
- * inclusive `lte` bound, so this is the millisecond before the next local
- * midnight — derived from that boundary rather than from "23:59:59.999", which
- * is a different instant on any day the zone shifts.
- */
+/** The inclusive upper bound is one millisecond before the next local midnight, including DST changes. */
 function zonedEndOfDayMs(civil: CivilDate, timezone: string): number {
   const next = civilOf(addDays(localDateOf(civil), 1))
   return zonedStartOfDayMs(next, timezone) - 1
@@ -140,23 +101,10 @@ export function todayInZone(timezone: string, now = new Date()): Date {
   return zonedCalendarDay(now.getTime(), timezone)
 }
 
-/* ------------------------------------------------------------------ */
-/* Range bounds                                                        */
-/* ------------------------------------------------------------------ */
-
 export type ActivityRangeId = "today" | "7d" | "30d" | "custom"
 
-/**
- * The bounds to hand `activity.list`, which treats `from`/`to` as inclusive
- * epoch-millisecond range bounds on `createdAt`.
- *
- * `timezone` is the **org's** IANA zone, and the day boundaries are its
- * boundaries: the feed prints every row in that zone, so a window derived
- * from the browser's would name one day and list another's events.
- *
- * `?range=custom` missing either bound is not expressible, so it falls back to
- * the documented default rather than silently listing all of history.
- */
+/** Bounds are inclusive epoch milliseconds in the organization timezone.
+ * An incomplete custom range falls back to the default. */
 export function activityRangeToBounds(
   range: ActivityRangeId,
   from: number | undefined,

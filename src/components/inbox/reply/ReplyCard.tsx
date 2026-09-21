@@ -1,13 +1,4 @@
-/**
- * The reply waiting on this thread: the exact text that would go out, what is
- * stopping it, and the two things a person can do about it — edit it, or
- * approve it and let the send boundary run.
- *
- * Approving is not sending. `approvals.approve` records a verdict bound to
- * this exact revision and wakes the boundary, which re-runs every gate before
- * anything leaves. Editing writes a NEW revision, which is why an edit
- * withdraws the approval ask rather than changing an approved email.
- */
+/** Approval is bound to this revision; editing creates another revision and withdraws the old ask. */
 import { useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../../convex/_generated/api"
@@ -41,12 +32,7 @@ export function ReplyCard({
     api.outreach.approvals.listForDraft,
     draftId === undefined ? "skip" : { orgId, draftId },
   )
-  // The preflight's window and daily-allowance answers depend on the time, and
-  // a Convex query may not read the clock itself — it is not re-run because
-  // time passed. So the clock comes from here, rounded to the minute: the
-  // argument only changes once a minute, which keeps the subscription stable
-  // while "it is outside your sending hours" stops being true within a minute
-  // of the window opening.
+  // Refresh time-dependent preflight answers with a coarse client clock.
   const now = useMinuteClock()
   const preflight = useQuery(
     api.outreach.sendPreflight.preflight,

@@ -152,12 +152,6 @@ const leads = [
   },
 ] as const
 
-/**
- * A schematic of the week's pipeline: stat cards plus anonymous example
- * leads. Deliberately anonymous — roles and company shapes only, never a
- * person or company anyone could look up — and the figures are illustrative,
- * not results we are claiming.
- */
 export function HeroDashboardPreview() {
   return (
     <div className="w-full overflow-hidden rounded-2xl bg-background text-foreground shadow-xl shadow-foreground/10">

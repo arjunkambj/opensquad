@@ -1,14 +1,3 @@
-/**
- * The inline "Edit" on reference 20's Pipeline card.
- *
- * A deal size is the one number on this screen the data cannot supply — it is
- * a fact about the user's business — so until it is set the card says "Set
- * deal size" and shows no figure at all. Never a zero, never a dash standing
- * in for one: a pipeline of nothing and a pipeline nobody has told us how to
- * value are different states, and only one of them is a result.
- *
- * Presentational: local form state only. The save is the caller's mutation.
- */
 import { useState } from "react"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
@@ -27,7 +16,6 @@ export function DealSizeEditor({
   onSave,
 }: {
   dealSize: number | null
-  /** No permission to write, or the agent is not created yet. */
   disabled: boolean
   onSave: (dealSize: number) => Promise<void>
 }) {

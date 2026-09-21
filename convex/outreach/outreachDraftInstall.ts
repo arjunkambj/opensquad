@@ -118,10 +118,6 @@ export const installOutreachDraft = internalMutation({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Failure                                                             */
-/* ------------------------------------------------------------------ */
-
 /** One rung of the retry ladder for a write that failed (PLAN §9.1). */
 export const failOutreachWrite = internalMutation({
   args: {

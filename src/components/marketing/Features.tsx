@@ -12,7 +12,6 @@ import {
 } from "@/components/marketing/motion-variants"
 import { cn } from "@/lib/utils"
 
-/** The reader's question, styled like the prompt in an AI chat. */
 function Prompt({ children }: { children: React.ReactNode }) {
   return (
     <p className="ml-auto max-w-[85%] rounded-xl rounded-br-sm bg-foreground px-3.5 py-2.5 text-sm leading-snug text-background">
@@ -21,7 +20,6 @@ function Prompt({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** The agent's reply: a short lead line, compact rows, a takeaway. */
 function Answer({
   lead,
   rows,
@@ -167,9 +165,6 @@ function SendingMockup() {
   )
 }
 
-// Every mockup answers a question someone actually asks before signing up,
-// using only what the product does: signal searches, research notes with
-// 1–3 scores, and Review-mode approvals. Figures are illustrative.
 const features = [
   {
     eyebrow: "Finding",
@@ -203,10 +198,6 @@ const features = [
   },
 ] as const
 
-/**
- * Alternating rows: a large illustration panel beside its copy, switching
- * sides each row so the eye zigzags down the section.
- */
 export function Features() {
   const revealViewport = useRevealViewport()
 

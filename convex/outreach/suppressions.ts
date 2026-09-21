@@ -39,10 +39,6 @@ export const vSuppressionDoc = v.object({
   ...suppressionFields,
 });
 
-/* ------------------------------------------------------------------ */
-/* Shared helpers                                                      */
-/* ------------------------------------------------------------------ */
-
 /** Canonical suppression key for the given kind. */
 function normalizedSuppressionValue(
   kind: SuppressionKind,
@@ -103,10 +99,6 @@ export async function matchSuppression(
   }
   return null;
 }
-
-/* ------------------------------------------------------------------ */
-/* The Blocklist tab's read                                            */
-/* ------------------------------------------------------------------ */
 
 /**
  * How many of an org's suppression rows one request will read.
@@ -227,10 +219,6 @@ export const page = query({
     };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Writes                                                              */
-/* ------------------------------------------------------------------ */
 
 /**
  * Add a suppression (owner/operator; P11's inbound path calls the internal

@@ -1,18 +1,5 @@
-/**
- * The dashboard's four range pills (reference 20), expressed in the URL
- * contract the route already declares.
- *
- * Two of them — 7 days and 30 days — are relative labels `?range=` can name,
- * so a pasted link means "the last seven days" for whoever opens it. The
- * other two cannot be named relatively without lying about what they mean, so
- * they travel as absolute `from`/`to` instants.
- *
- * Every boundary is derived in the ORG's zone, never the browser's: the
- * numbers on this screen are counted in the org's days, so the window
- * that asks for them has to be cut on the same clock. Every function here is
- * day-granular, which is also what keeps the query arguments stable between
- * renders — an instant recomputed per render would re-subscribe every frame.
- */
+/** Resolve day boundaries in the organization timezone and keep them stable within the day.
+ * Custom pills store absolute bounds; 7d and 30d are relative to when the link opens. */
 import { addDays, startOfMonth, subMonths } from "date-fns"
 import {
   activityRangeToBounds,
@@ -29,7 +16,6 @@ export const DASHBOARD_RANGE_PILLS = ["7d", "30d", "3m", "mtd"] as const
 
 export type DashboardRangePill = (typeof DASHBOARD_RANGE_PILLS)[number]
 
-/** The pill's own label. */
 export const DASHBOARD_RANGE_LABEL: Record<DashboardRangePill, string> = {
   "7d": "7 days",
   "30d": "30 days",
@@ -37,7 +23,6 @@ export const DASHBOARD_RANGE_LABEL: Record<DashboardRangePill, string> = {
   mtd: "This month",
 }
 
-/** The same window as the line under a figure reads. */
 const DASHBOARD_RANGE_HINT: Record<DashboardRangePill, string> = {
   "7d": "Last 7 days",
   "30d": "Last 30 days",
@@ -45,7 +30,6 @@ const DASHBOARD_RANGE_HINT: Record<DashboardRangePill, string> = {
   mtd: "This month",
 }
 
-/** The civil days a pill covers, on the org's calendar. */
 function pillCalendar(
   pill: DashboardRangePill,
   timezone: string,
@@ -66,7 +50,6 @@ function pillCalendar(
   }
 }
 
-/** What clicking a pill writes into the URL. */
 function pillSearch(
   pill: DashboardRangePill,
   timezone: string,
@@ -81,11 +64,7 @@ function pillSearch(
   }
 }
 
-/**
- * The same choice in the shape `withFilters` writes to the URL: the default
- * window travels as an ABSENT `range`, so the clean state of the page is the
- * bare `/dashboard` and a `<Link to="/dashboard">` needs no search object.
- */
+/** Omit the default range from the URL so bare dashboard links remain valid. */
 export function pillFilters(
   pill: DashboardRangePill,
   timezone: string,
@@ -99,7 +78,6 @@ export function pillFilters(
   }
 }
 
-/** The instants a pill stands for — the arguments the queries take. */
 function pillBounds(
   pill: DashboardRangePill,
   timezone: string,
@@ -115,7 +93,6 @@ function pillBounds(
   )
 }
 
-/** The window the current URL asks for. */
 export function searchBounds(
   search: DashboardSearch,
   timezone: string,
@@ -130,12 +107,7 @@ export function searchBounds(
   )
 }
 
-/**
- * The pill the current URL matches, or `null` for a window none of them
- * names. Compared on the resolved instants rather than on the raw params, so
- * `?range=30d` and the absolute range covering the same thirty days both
- * light the same pill.
- */
+/** Compare resolved bounds so an equivalent custom range selects the same pill. */
 export function activePill(
   search: DashboardSearch,
   timezone: string,
@@ -150,17 +122,7 @@ export function activePill(
   )
 }
 
-/**
- * The window in words — the pill's own hint when it is one of the four, and
- * the two dates otherwise.
- *
- * Takes the already-resolved pill and bounds rather than re-deriving them:
- * every derivation here walks `Intl` several times, and the page needs the
- * same answer in half a dozen places on one render.
- *
- * Bounds are UTC instants, so read them back in the org's timezone to name
- * the same days the queries count.
- */
+/** Format UTC bounds in the organization timezone to name the days the queries count. */
 export function windowHint(
   pill: DashboardRangePill | null,
   bounds: { from: number; to: number },

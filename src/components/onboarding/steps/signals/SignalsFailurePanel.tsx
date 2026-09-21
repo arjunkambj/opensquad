@@ -1,14 +1,4 @@
-/**
- * What a failed recommendation looks like (PLAN §5 "Onboarding edge cases").
- *
- * It says in our own words what happened and offers the one thing that can
- * actually help: run it again. There is deliberately no "do it myself" escape
- * here — a strategy is a real query with a real match count behind it, so a
- * hand-written one would be a number nobody counted (PLAN §2).
- *
- * The wording arrives already chosen (`signals-copy.ts`); nothing here reads
- * a provider's error.
- */
+/** Strategies require a real provider count, so recovery offers retry rather than manual entry. */
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { SignalsMessage } from "@/components/onboarding/steps/signals/signals-copy"
@@ -18,7 +8,6 @@ export type SignalsFailurePanelProps = {
   message: SignalsMessage
   onRetry: () => void
   retryDisabled?: boolean
-  /** Why Try again can't run, when it can't. */
   retryBlockedReason?: string | null
 }
 

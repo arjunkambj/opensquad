@@ -1,20 +1,4 @@
-/**
- * One filter group on reference 07: an uppercase label, an exclusive "All …"
- * chip, the chips themselves, and — for the two vocabularies too long to show
- * — a dashed "+ Add" that searches the rest.
- *
- * Two rules it exists to keep:
- *
- *   "ALL" IS AN EMPTY LIST. A group with no values is a filter we do not send,
- *   which is the only thing "All industries" can honestly mean. So the stored
- *   value for that chip is `[]`, and the sentinel below never leaves this file.
- *
- *   NOTHING IS TYPED. Industries, locations and company types are the lead
- *   catalogue's own values: they are case-sensitive and a near-miss silently
- *   matches nobody (PLAN §3 step 2). The Add affordance therefore searches the
- *   allowed values rather than accepting free text, so a chip on screen is
- *   always a value a search can actually use.
- */
+/** An empty selection means All. Catalogue values are case-sensitive, so Add searches allowed values only. */
 import { Add01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useState } from "react"
@@ -37,15 +21,11 @@ import {
  *  the exclusive one. An empty selection is what "All …" means on the wire. */
 const ALL_CHIP = "__all__"
 
-/** How many matches the picker shows at once. The industry catalogue has 454
- *  values; a list that long is a wall, not a choice. */
 const PICKER_RESULTS = 40
 
 export type IcpChipGroupProps = {
   label: string
-  /** The exclusive chip's words, e.g. "All industries". */
   allLabel: string
-  /** Chips always on screen, whether or not they are picked. */
   options: ToggleChipOption[]
   selected: string[]
   onChange: (next: string[]) => void
@@ -53,7 +33,6 @@ export type IcpChipGroupProps = {
   catalogue?: ToggleChipOption[]
   addLabel?: string
   searchPlaceholder?: string
-  /** Upper bound; the Add affordance disappears once it is reached. */
   maxCount: number
   disabled?: boolean
 }

@@ -1,7 +1,3 @@
-/**
- * The questions people actually ask before signing up, answered from what the
- * product does today. Nothing here promises a feature that is not built.
- */
 export const faqItems = [
   {
     title: "What does it cost during the trial?",

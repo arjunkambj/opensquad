@@ -196,10 +196,6 @@ export const runOutreachWriteStep = internalAction({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* The two ways a step ends badly                                      */
-/* ------------------------------------------------------------------ */
-
 type StepArgs = {
   agentId: Id<"agents">;
   prospectId: Id<"prospects">;

@@ -1,26 +1,5 @@
-/**
- * The step the agent row says the user is on, and where setup ends.
- *
- * Progress lives on the agent row, so a refresh resumes on the same screen
- * and the browser holds nothing that could disagree with the server. This
- * container owns that read, the step change every screen asks for, and the
- * one navigation setup performs.
- *
- * LEAVING IS GATED ON THE ROW, AND ON NOTHING ELSE. The last screen's Confirm
- * flips the agent live, but `/contacts` sits behind a gate that reads the
- * same agent row: moving there on the action's result alone would arrive
- * before the row's `done` reached this client and be bounced straight back
- * into setup. So the move happens when the query itself reads `done`.
- *
- * A FINISHED AGENT ALWAYS LEAVES FOR THE SAME PLACE. The destination used to
- * depend on a flag the last screen set through a callback, which made it a
- * race: the row can reach `done` on this client before that callback runs,
- * and the screen that would have run it is already unmounted by then, so the
- * user landed somewhere else for reasons they could not see. `/contacts` is
- * where the first leads appear and is the only thing setup is owed, so it is
- * where setup ends — whether the user just pressed Confirm or opened
- * `/onboarding` again afterwards (PLAN §5 "after Confirm → /contacts").
- */
+/** Navigate to Contacts only when the subscribed agent reads done.
+ * Navigating on the action result can race the route guard and bounce back to setup. */
 import { Navigate } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"

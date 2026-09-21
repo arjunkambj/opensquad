@@ -69,10 +69,6 @@ import {
 import type { CompiledStrategy } from "./strategiesResult";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* What a recommendation needs before it can ask                        */
-/* ------------------------------------------------------------------ */
-
 const vRecommendationInput = v.union(
   v.null(),
   v.object({
@@ -163,10 +159,6 @@ export const recommendationInput = internalQuery({
     };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Checking and counting, both free                                     */
-/* ------------------------------------------------------------------ */
 
 /** A filter set the builder accepts, or `null`. No network, no credits. */
 async function accepted(
@@ -260,10 +252,6 @@ async function adjustOnce(
       }
     : keep;
 }
-
-/* ------------------------------------------------------------------ */
-/* The model's answer, turned into strategies                           */
-/* ------------------------------------------------------------------ */
 
 type RecommendationContext = {
   coreFilters: LeadFilters;
@@ -394,10 +382,6 @@ async function compileStrategies(
   return { ok: true, strategies: compiled };
 }
 
-/* ------------------------------------------------------------------ */
-/* The recommendation run                                               */
-/* ------------------------------------------------------------------ */
-
 export const recommend = internalAction({
   args: {
     orgId: v.id("orgs"),
@@ -481,10 +465,6 @@ export const recommend = internalAction({
     return null;
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* "Generate more" keywords (reference 10)                              */
-/* ------------------------------------------------------------------ */
 
 const vKeywordInput = v.union(
   v.null(),

@@ -1,15 +1,5 @@
-/**
- * The pagination footer (ref 23): "Showing x to y of z" on the left, the page
- * size on the right.
- *
- * `z` is a BOUNDED count — Convex has no count API, so the backend reads up to
- * a bound and says whether there is more. Past the bound the footer says
- * "200+" rather than a truncated number pretending to be a total.
- *
- * Going back needs the cursor of the previous page, which only this session
- * has. A link opened straight onto a later page can therefore go forward or
- * start over, and says so instead of offering a Previous that would lie.
- */
+/** Previous is available only for cursors visited in this session.
+ * A deep link to a later page can advance or start over. */
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Button } from "@/components/ui/button"
@@ -27,7 +17,6 @@ export function TableFooterBar({
   onBack,
   onForward,
 }: {
-  /** Rows on this page. */
   shown: number
   /** 1-based index of the first row on this page. */
   firstIndex: number

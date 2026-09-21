@@ -1,10 +1,3 @@
-/**
- * Drafts — editing the exact text of one outgoing message before it is
- * approved.
- *
- * The dialog owns its own mutation and request intent; approving or sending
- * belongs to the inbox and outreach surfaces, not here.
- */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
@@ -27,19 +20,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
 
-/**
- * Human editing of a draft revision — `drafts.revise`.
- *
- * The contract this dialog exists to honour: a draft row is immutable, so an
- * edit is never a patch — it writes revision N+1, supersedes the open
- * approval ask on N, and opens a fresh one on the new bytes. The dialog says
- * that before the click, because "an edit withdraws the old approval" is the
- * single most surprising consequence here (J3 ④).
- *
- * `expectedRevision` is the revision the reviewer read — a colleague's edit
- * between open and submit fails CONFLICT, and the typed text survives it in
- * the still-open dialog rather than being thrown away.
- */
+/** Editing creates a new revision and withdraws the old approval.
+ * Send the revision the editor opened; retain typed text if another edit causes a conflict. */
 export function EditDraftDialog({
   orgId,
   draft,

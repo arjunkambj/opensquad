@@ -1,11 +1,3 @@
-/**
- * The blocklist itself: what is blocked, why, since when, and the way to
- * take an entry off.
- *
- * Presentational. The value is shown in its normalised form — that is the
- * exact key the send boundary compares against, so showing anything else
- * would be showing a different fact from the one that blocks the mail.
- */
 import { Delete02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { Doc } from "../../../../convex/_generated/dataModel"
@@ -27,7 +19,6 @@ import {
 
 export type BlocklistTableProps = {
   entries: readonly Doc<"suppressions">[]
-  /** A removal is in flight; the confirm dialog holds which row it is. */
   removing: boolean
   onRemove: (entry: Doc<"suppressions">) => void
 }

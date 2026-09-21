@@ -1,13 +1,3 @@
-/**
- * ReviewAccordion — the ICP summary list on the review screen (ref 11).
- *
- * Each row is an icon, an uppercase field label, the current value read back
- * as one line, and a chevron onto the editor for that field. A row with no
- * `content` is not expandable and says so by being disabled, rather than
- * opening onto nothing.
- *
- * Data-free: rows, their summaries and their editors are all the caller's.
- */
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"

@@ -1,11 +1,3 @@
-/**
- * Onboarding dot 2, screen 3 — who to leave out (reference 08).
- *
- * Two different kinds of exclusion, and the screen keeps them apart because
- * they behave differently downstream: the profile options are a closed list
- * whose entries carry the words a search excludes, while competitors and
- * keywords really are just words the user knows and we do not.
- */
 import { useQuery } from "convex/react"
 import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { api } from "../../../../../convex/_generated/api"

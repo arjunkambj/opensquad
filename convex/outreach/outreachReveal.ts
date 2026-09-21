@@ -126,10 +126,6 @@ export const claimAutoReveals = internalMutation({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Who gets one, and how many                                          */
-/* ------------------------------------------------------------------ */
-
 /**
  * How many addresses Autopilot may still find today.
  *

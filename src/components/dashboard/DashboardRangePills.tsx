@@ -1,11 +1,3 @@
-/**
- * The range pills of reference 20 — 7 days / 30 days / 3 months / This month.
- *
- * They write the route's search params rather than component state, so the
- * window survives a reload and a pasted link reopens the same one. A window
- * none of the four names (an absolute range from an older link) lights no
- * pill instead of lighting the wrong one.
- */
 import { Button } from "@/components/ui/button"
 import {
   DASHBOARD_RANGE_LABEL,

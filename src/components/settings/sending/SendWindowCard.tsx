@@ -1,31 +1,5 @@
-/**
- * Settings → Sending, the window card: when the agent may send, and how much.
- *
- * It owns its own two mutations because the record has two owners: the
- * timezone belongs to the org record and the window and limit to the
- * sending policy, and both bump `policyVersion`. So a save that changes both
- * writes the timezone FIRST and then uses the version that write returned —
- * sending the version the form started from to the second call would be a
- * guaranteed CONFLICT against a change the same user just made.
- *
- * `expectedPolicyVersion` is the version the edit STARTED from, so a change
- * made in another session is refused rather than silently overwritten. A bump
- * invalidates approvals written against the old policy, which is why a save
- * that changes nothing must not happen — the server skips the write, and this
- * form disables Save until something is dirty.
- *
- * TWO WRITES MEANS A HALF-APPLIED SAVE IS REACHABLE, and no amount of client
- * code makes it atomic: the second call can fail, or lose a race with a
- * policy change from another session, after the first has already committed
- * and bumped `policyVersion`. So this form is honest about it instead —
- * success is reported only when both landed, a partial apply says which half
- * saved, keeps the other half on screen, and moves the expected version onto
- * what the first write produced so pressing Save again converges instead of
- * conflicting forever. The real fix is server-side and is one mutation:
- * `orgs.mutations.setSendingPolicy` taking an optional `timezone` beside the
- * window and the limit, writing all three in one transaction under one
- * `expectedPolicyVersion` and one bump.
- */
+/** Save timezone first and use its returned policyVersion for the sending-policy write.
+ * If the second write fails, retain the draft and new version so retry can finish the partial save. */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
@@ -151,11 +125,7 @@ export function SendWindowCard({ org }: { org: OrgView }) {
       })
     } catch (cause) {
       if (timezoneApplied) {
-        // Two writes, so there is a state where one of them landed. Say so
-        // rather than reporting a failure the record does not agree with, and
-        // keep the form dirty: the values still on screen are the half that
-        // did not save, and Save now retries exactly that half against the
-        // version the first write produced.
+        // Keep the unsaved half dirty and retry against the version returned by the committed write.
         setError(
           "Your time zone was saved, but the sending window and daily limit were not. They are still as you left them — press Save to finish.",
         )

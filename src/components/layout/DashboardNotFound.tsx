@@ -3,14 +3,6 @@ import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 
-/**
- * In-shell not-found: a mistyped or not-yet-built URL keeps the sidebar.
- *
- * The root's `notFoundComponent` renders outside the shell and strands the
- * user with no navigation, which is the wrong answer for a path inside the
- * app: the routes architecture §10 promises (`/contacts`, `/inbox`, `/dashboard`)
- * are typed into the address bar by people who already work here.
- */
 export function DashboardNotFound() {
   const { _splat } = useParams({ from: "/_dashboard/$" })
   const attempted = _splat === undefined ? undefined : `/${_splat}`

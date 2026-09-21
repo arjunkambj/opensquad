@@ -24,10 +24,6 @@ const navVariants = {
   initial: { opacity: 0, y: -20 },
 }
 
-/**
- * The landing page's sections. Root-relative so the same bar keeps working
- * from a page other than the landing page.
- */
 const marketingNavLinks = [
   { href: "/#how-it-works", name: "How it works" },
   { href: "/#features", name: "Features" },
@@ -41,7 +37,6 @@ const navLinkClassName =
 const sheetLinkClassName =
   "flex min-h-11 items-center rounded-xl px-3 text-base font-medium text-foreground transition-colors hover:bg-muted"
 
-/** Signed-out actions; also the Suspense fallback while the session resolves. */
 function SignedOutActions() {
   return (
     <>

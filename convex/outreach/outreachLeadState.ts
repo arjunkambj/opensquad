@@ -37,13 +37,11 @@ import {
 } from "../lib/validators";
 import type { OperationErrorCode } from "../lib/validators";
 
-/* ------------------------------------------------------------------ */
 /* Timing                                                              */
 /*                                                                     */
 /* The retry ladder is PLAN §9.1 policy and lives in                   */
 /* `convex/lib/limits.ts` with every other number; what stays here is  */
 /* this loop's own watchdog and scan bounds.                           */
-/* ------------------------------------------------------------------ */
 
 /**
  * How long a lead may sit claimed for a write before the loop calls the step
@@ -78,10 +76,6 @@ function stageReason(text: string): string {
   });
 }
 
-/* ------------------------------------------------------------------ */
-/* Which step a lead is on                                             */
-/* ------------------------------------------------------------------ */
-
 /**
  * The outreach step this lead is due for: 0 is the first touch, 1 and up are
  * the numbered follow-ups.
@@ -103,10 +97,6 @@ export function followUpDelayMs(
   const days = agent.followUpDays[step - 1];
   return days === undefined ? null : days * 24 * 60 * 60 * 1000;
 }
-
-/* ------------------------------------------------------------------ */
-/* Claim, rest, release                                                */
-/* ------------------------------------------------------------------ */
 
 /**
  * Claim this lead for one write step.
@@ -191,10 +181,6 @@ export async function releaseLeadClaim(
   });
 }
 
-/* ------------------------------------------------------------------ */
-/* The retry ladder                                                    */
-/* ------------------------------------------------------------------ */
-
 /**
  * One step-level failure: move the lead out along the ladder, or park it with
  * a reason. Convex does not re-run a failed action, so the next tick — which
@@ -240,10 +226,6 @@ export async function failOutreachStep(
   }
   return { attempts, parked };
 }
-
-/* ------------------------------------------------------------------ */
-/* The follow-up clock                                                 */
-/* ------------------------------------------------------------------ */
 
 /**
  * A provider accepted a send on this attempt, so the ladder moves on.

@@ -1,13 +1,4 @@
-/**
- * What a member may read about their own spending: the Settings → Usage tab
- * and the waitlist state, and nothing else.
- *
- * WHITE-LABEL (PLAN §4). Every line is an ACTION the user took — "get_email",
- * "find_leads" — with its credit price, its outcome and when it happened. The
- * provider-unit buckets, their metric names and the provider behind them are
- * server-side facts and never appear in a payload here. That is also why the
- * old raw-bucket `summary` is gone: it returned `enrich_credits` to a client.
- */
+/** Expose user actions and credits only; provider names, units and hidden caps stay server-side. */
 import { query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
 import { boundedLimit } from "../lib/validators";

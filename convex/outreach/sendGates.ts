@@ -103,9 +103,6 @@ export function sendResultCode(attempt: Doc<"sendAttempts">): SendResultCode {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Shared gate evaluation (the preflight checklist)                     */
-/* ------------------------------------------------------------------ */
 type GateBlock = { ok: false; code: SendBlockCode; reason: string };
 
 type GatePass = { ok: true; approval: Doc<"approvals"> };

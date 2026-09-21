@@ -32,13 +32,11 @@ import {
   outreachStepOf,
 } from "./outreachLeadState";
 
-/* ------------------------------------------------------------------ */
 /* Bounds                                                              */
 /*                                                                     */
 /* These belong in `convex/lib/limits.ts` with the rest of the policy  */
 /* numbers; they are local constants only because that file is         */
 /* integrator-only (EXECUTION §0).                                     */
-/* ------------------------------------------------------------------ */
 
 /** Leads one selection pass reads per index range. */
 const CANDIDATE_SCAN_MAX = 100;
@@ -51,10 +49,6 @@ const CANDIDATE_SCAN_MAX = 100;
  * hand-off note.
  */
 const STALE_STAGE_SCAN = 25;
-
-/* ------------------------------------------------------------------ */
-/* Does this agent run outreach at all?                                */
-/* ------------------------------------------------------------------ */
 
 /**
  * The liveness gate, re-read on every tick: a paused agent, a paused
@@ -78,10 +72,6 @@ export function agentRunsOutreach(
     !paidCallsPaused()
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Writing                                                             */
-/* ------------------------------------------------------------------ */
 
 export type WriteTarget = {
   prospectId: Id<"prospects">;

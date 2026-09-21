@@ -1,19 +1,7 @@
 import { useId } from "react"
 import { cn } from "@/lib/utils"
 
-/**
- * The OpenIntent mark: a solid rounded tile with a rising three-step signal
- * cut out of it — find, research, contact. The steps are masked, not drawn,
- * so the mark reads on light and dark surfaces with a single `currentColor`.
- *
- * Ours, not the reference's: the reference's own mark and wordmark are their
- * brand and are never reused (PLAN §2).
- *
- * The mask id is per-instance: several marks render on one page (sidebar,
- * sheet, footer, previews), and a shared literal id left the document holding
- * duplicate ids — invalid HTML, and every `url(#…)` resolving to whichever
- * mask mounted first.
- */
+/** Each instance needs a unique SVG mask ID; several logos can share a page. */
 export function LogoMark({
   className,
   title,

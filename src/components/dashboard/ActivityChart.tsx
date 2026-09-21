@@ -1,13 +1,3 @@
-/**
- * "Activity overview" (reference 20) — the card around the daily plot: title,
- * legend, and the three states the window can be in.
- *
- * Loading is its own state, never an empty chart. A window with no rows gets a
- * designed empty state that says what would appear there, never a flat line
- * along zero dressed as a measurement.
- *
- * Presentational: it is handed the series and draws them.
- */
 import { ChartLineData01Icon } from "@hugeicons/core-free-icons"
 import type { ReactNode } from "react"
 import {
@@ -23,9 +13,7 @@ export function ActivityChart({
   series,
   hint,
 }: {
-  /** `undefined` while the counts are still being read. */
   series: ActivitySeries | undefined
-  /** The window in words, for the subtitle and the accessible name. */
   hint: string
 }) {
   if (series === undefined) {

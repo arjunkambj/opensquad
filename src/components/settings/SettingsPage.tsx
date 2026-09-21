@@ -1,22 +1,4 @@
-/**
- * Settings (reference 26): a page title, one horizontal tab bar, and the
- * selected section as a stack of cards.
- *
- * This is the frame and the gate, nothing more: it resolves the signed-in
- * user, and `OrgSection` below resolves the organization every other tab
- * needs and hands it down as an id. The sections own their own Convex reads
- * and writes, because a tab that is not open must not be subscribed to
- * anything.
- *
- * THE GUARD IS PER TAB, WHICH IS WHY THE ROUTE SITS OUTSIDE `_org`. PLAN §5
- * puts `/settings` behind the same condition as `/dashboard` — an org whose
- * setup is finished — and every org-scoped tab here enforces exactly that.
- * Account is the one section that does not: it is an identity surface, and
- * someone with no organization, or one still half-set-up, must still be able
- * to see who they are signed in as and sign out. Gating the whole route would
- * take that away, so the route stays open and the sections that need an agent
- * say so themselves.
- */
+/** Account remains accessible without completed setup. Every org-scoped tab applies the setup gate. */
 import { useUser } from "@hexclave/react"
 import { Link, useSearch } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
@@ -121,7 +103,6 @@ function OrgSection({ tab }: { tab: SettingsTab }) {
   return <OrgTab tab={tab} org={current.org} />
 }
 
-/** The org-scoped sections. Account is rendered by the page above. */
 function OrgTab({ tab, org }: { tab: SettingsTab; org: OrgView }) {
   switch (tab) {
     case "company":

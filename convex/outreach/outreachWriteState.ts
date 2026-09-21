@@ -45,10 +45,6 @@ import {
 import { matchSuppression } from "./suppressions";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* Claim + context                                                     */
-/* ------------------------------------------------------------------ */
-
 const vOutreachWriteContext = v.union(
   /** Not writable right now; the lead has been left in an honest state. */
   v.object({ status: v.literal("skip"), reason: v.string() }),

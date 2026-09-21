@@ -1,17 +1,3 @@
-/**
- * The ONE place a dot-4 failure becomes words.
- *
- * The backend stores a mapped code and never provider text (PLAN §4), so the
- * sentences a user reads are written here and nowhere else. Three doors in:
- * `signalsFailureCopy` for a run that finished badly, `startRecommendationCopy`
- * for a request the server refused before a run began, and `confirmBlockCopy`
- * for the reasons setup cannot be finished yet.
- *
- * Unlike the ICP screens, there is no "fill it in myself" here: a strategy is
- * a provider query with a real match count behind it, and a hand-written one
- * would be a number we made up. So every message below ends in the thing the
- * user CAN do — try again, or go back and widen who they are looking for.
- */
 import { domainErrorCode } from "@/lib/convex-error"
 import type { OperationErrorCode } from "../../../../../convex/lib/validators"
 
@@ -20,7 +6,6 @@ export type SignalsMessage = {
   description: string
 }
 
-/** A run that failed, by the code `agents.strategyGeneration` stored. */
 export function signalsFailureCopy(code: OperationErrorCode): SignalsMessage {
   switch (code) {
     case "invalid_response":
@@ -72,7 +57,6 @@ export function signalsFailureCopy(code: OperationErrorCode): SignalsMessage {
   }
 }
 
-/** The codes `agents.strategies.startRecommendation` refuses with. */
 const START_REFUSALS: Record<string, SignalsMessage> = {
   INVALID: {
     title: "Your ideal customer isn't finished",
@@ -103,7 +87,6 @@ const START_FALLBACK: SignalsMessage = {
   description: "Try again in a moment.",
 }
 
-/** A refusal from the mutation itself, before any run began. */
 export function startRecommendationCopy(error: unknown): SignalsMessage {
   const code = domainErrorCode(error)
   return code === undefined
@@ -111,7 +94,6 @@ export function startRecommendationCopy(error: unknown): SignalsMessage {
     : (START_REFUSALS[code] ?? START_FALLBACK)
 }
 
-/** Why "Confirm & find leads" could not run. */
 export function confirmBlockCopy(
   reason: "no_agent" | "no_enabled_strategy",
 ): SignalsMessage {
@@ -127,7 +109,6 @@ export function confirmBlockCopy(
       }
 }
 
-/** A failed confirm that was not one of the blocks above. */
 export const CONFIRM_FALLBACK: SignalsMessage = {
   title: "We couldn't finish setup",
   description:

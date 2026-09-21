@@ -224,10 +224,6 @@ export const recoverLeadReveal = internalAction({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Shared                                                              */
-/* ------------------------------------------------------------------ */
-
 /** One poll result, written on the lead. Pending and unknown write nothing. */
 async function applyPoll(
   ctx: ActionCtx,

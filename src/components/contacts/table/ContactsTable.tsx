@@ -1,12 +1,4 @@
-/**
- * The dense Contacts table (ref 23): a select-all header, the sortable AI
- * score, and one row per lead.
- *
- * The score header is a real sort control only in the unfiltered list, which
- * is the one mode ordered by score. A stage, approval or score filter is its
- * own index with its own order, so the header states that order instead of
- * offering a control that would quietly do nothing.
- */
+/** Score sorting applies only to the unfiltered list; filtered modes use their own index ordering. */
 import { SortByDown01Icon, SortByUp01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { Id } from "../../../../convex/_generated/dataModel"
@@ -38,7 +30,6 @@ export function ContactsTable({
   busy: boolean
   spend: SpendContext
   prices: { email: number; research: number }
-  /** True in the one list mode the score order applies to. */
   sortable: boolean
   lowestScoreFirst: boolean
   onToggleSort: () => void

@@ -41,10 +41,6 @@ export function profileIsComplete(
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* What one analysis run pays under                                     */
-/* ------------------------------------------------------------------ */
-
 /** Enough of a hash to separate two websites, short enough to leave room in
  *  `OPERATION_KEY_MAX` once the action prefix is added. */
 const URL_TOKEN_LENGTH = 16;

@@ -1,13 +1,3 @@
-/**
- * The connected state of Manage inbox (PLAN §4: key status, sending address,
- * webhook health, sync status, Disconnect).
- *
- * Everything on it is a fact the backend reported — the key is shown as its
- * last four digits and never in full, and "last mail received" is the real
- * time of the last inbound message, or an honest "nothing yet".
- *
- * Presentational: the caller owns every action.
- */
 import { Chip } from "@/components/kit/Chip"
 import { DetailRow } from "@/components/kit/DetailRow"
 import { formatInstant, formatWaited } from "@/lib/presentation"

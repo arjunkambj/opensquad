@@ -11,13 +11,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-/**
- * The collapse control of reference 20, which becomes the expand control on
- * the icon rail of reference 24.
- *
- * Desktop only: at phone width the sidebar is a sheet, and collapsing a sheet
- * to a rail is meaningless — the header's trigger opens and closes it there.
- */
 export function SidebarCollapseButton() {
   const { state, toggleSidebar, isMobile } = useSidebar()
 

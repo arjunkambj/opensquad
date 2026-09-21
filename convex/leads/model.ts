@@ -42,10 +42,6 @@ export async function loadProspectForWrite(
   return prospect;
 }
 
-/* ------------------------------------------------------------------ */
-/* Un-parking — the one way out of `needs_attention`                    */
-/* ------------------------------------------------------------------ */
-
 /**
  * Put a parked lead back in the queue. THE writer for that transition,
  * whichever button asked for it.
@@ -102,10 +98,6 @@ export async function unparkLead(
   });
   return stage;
 }
-
-/* ------------------------------------------------------------------ */
-/* Sourcing — where a lead enters the table                            */
-/* ------------------------------------------------------------------ */
 
 /** What one upserted row did. `unchanged` is a page that found nobody new. */
 export type UpsertOutcome = "inserted" | "merged" | "unchanged";

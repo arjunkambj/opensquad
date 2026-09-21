@@ -19,10 +19,6 @@ import { COMPANY_PAIN_POINTS_MAX_LENGTH } from "../lib/validators";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* How much of each list one generation may produce                     */
-/* ------------------------------------------------------------------ */
-
 /** What the prompt asks for, and what `boundIcpGeneration` clamps to. The
  *  hard ceilings live in `lib/validators/agents.ts`; these are the numbers
  *  that make a chip row on reference 06–08 readable. */
@@ -37,10 +33,6 @@ export const ICP_EXCLUDE_KEYWORDS_MAX = 6;
 
 /** One chip's worth of text. Longer than this stops being a chip. */
 const ICP_ENTRY_MAX_LENGTH = 120;
-
-/* ------------------------------------------------------------------ */
-/* The answer                                                           */
-/* ------------------------------------------------------------------ */
 
 /**
  * What one generation produces.
@@ -82,10 +74,6 @@ export type IcpGenerationInput = {
     excludeProfiles: readonly string[];
   };
 };
-
-/* ------------------------------------------------------------------ */
-/* Keeping the allowed lists inside the input budget                    */
-/* ------------------------------------------------------------------ */
 
 /** Words too common to tell one industry from another. */
 const STOP_WORDS = new Set([
@@ -153,10 +141,6 @@ export function shortlistAllowedValues(
   }
   return [...matched, ...rest].slice(0, max);
 }
-
-/* ------------------------------------------------------------------ */
-/* The prompt                                                           */
-/* ------------------------------------------------------------------ */
 
 export const ICP_GENERATION_SYSTEM = [
   "You read a company's own profile and describe the people worth selling it",
@@ -230,10 +214,6 @@ export function icpGenerationInput(input: IcpGenerationInput): string {
     list(allowed.excludeProfiles),
   ].join("\n");
 }
-
-/* ------------------------------------------------------------------ */
-/* Making the answer safe to store                                      */
-/* ------------------------------------------------------------------ */
 
 function clamp(value: string, max: number): string {
   const trimmed = value.trim();

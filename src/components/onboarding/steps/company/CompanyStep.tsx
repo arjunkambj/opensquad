@@ -1,14 +1,3 @@
-/**
- * Onboarding dot 1 — the company we are selling FOR (references 01 and 02).
- *
- * The container for this step: it owns every Convex call on the screen, holds
- * the editable values, and hands presentational pieces what they need. The
- * profile and the credit balance are live queries, so the form fills itself in
- * while the analysis runs without this component polling anything.
- *
- * Four paths, all real (PLAN §5): analyze a website, skip it and type the
- * profile, retry a failure, or regenerate an existing profile for credits.
- */
 import { useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
@@ -264,8 +253,6 @@ export function CompanyStep({
   )
 }
 
-/** The shape of the profile, while it is being written. Never a blank form
- *  presented as a result (PLAN §2 "no placeholders"). */
 function AnalyzingSkeleton() {
   return (
     <div

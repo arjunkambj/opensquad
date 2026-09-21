@@ -13,10 +13,6 @@
 import { checkPublicHttpUrl, isSameOrigin } from "../lib/urlSafety";
 import type { SafeUrl } from "../lib/urlSafety";
 
-/* ------------------------------------------------------------------ */
-/* Character budgets                                                    */
-/* ------------------------------------------------------------------ */
-
 /** Markdown kept from the home page — the one page every scrape fetches. */
 export const SCRAPE_HOME_MARKDOWN_MAX = 10_000;
 
@@ -34,10 +30,6 @@ export const SCRAPE_EXTRA_PAGES_MAX = 3;
 
 /** Links from the home page the scorer will look at, in document order. */
 export const SCRAPE_LINK_SCAN_MAX = 300;
-
-/* ------------------------------------------------------------------ */
-/* One retrieved page                                                   */
-/* ------------------------------------------------------------------ */
 
 /** One page as it leaves this boundary: bounded markdown, never raw HTML. */
 export type ScrapedPage = {
@@ -80,10 +72,6 @@ export function combineSiteMarkdown(pages: readonly ScrapedPage[]): string {
   return boundMarkdown(sections.join("\n\n---\n\n"), SCRAPE_SITE_MARKDOWN_MAX)
     .text;
 }
-
-/* ------------------------------------------------------------------ */
-/* Choosing the supporting pages                                        */
-/* ------------------------------------------------------------------ */
 
 /**
  * What a page is worth to a company profile, highest first. Scored on the

@@ -67,10 +67,6 @@ export async function recordActivityEvent(
   return row;
 }
 
-/* ------------------------------------------------------------------ */
-/* The header bell (PLAN §5)                                           */
-/* ------------------------------------------------------------------ */
-
 /**
  * The bell is specified to show four things — a new reply, a meeting booked,
  * a run finished, credits low — and each has exactly ONE writer, below.

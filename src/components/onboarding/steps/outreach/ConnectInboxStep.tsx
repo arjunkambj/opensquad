@@ -1,18 +1,5 @@
-/**
- * Onboarding dot 3, sub-step 1 — connect the sending inbox (reference 04,
- * PLAN §11 M1).
- *
- * One card, not two: lead data needs no connection of the user's, so the
- * reference's second card, its location select and its LinkedIn path are all
- * cut (PLAN §2 coverage table). What is left is the email card with its
- * benefit bullets, the connect flow inline, and "Connect later".
- *
- * SKIPPING CHANGES NOTHING. The agent is already in `sourcing_only` and stays
- * there (PLAN §9.3) — it keeps finding and researching leads and contacts
- * nobody until an inbox is attached, which the banner on Agent and Contacts
- * says. Connecting does not change the mode either: Review and Autopilot are
- * the user's explicit choice on the Agent page.
- */
+/** Connecting or skipping an inbox keeps the agent in sourcing_only.
+ * Review and Autopilot require an explicit mode change on the Agent page. */
 import { MailValidation01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ConnectCard } from "@/components/kit/ConnectCard"

@@ -1,14 +1,3 @@
-/**
- * ToggleChipGroup — an uppercase group label over a wrap of toggle chips
- * (ref 07: INDUSTRY, LOCATION, COMPANY TYPES, COMPANY SIZE).
- *
- * The optional "All …" chip is exclusive: picking it clears the specific
- * choices, picking a specific one clears it, and clearing the last specific
- * choice falls back to it — so the group can never mean "nothing", which for
- * a lead filter would silently mean "everything".
- *
- * Data-free: options, selection and the callback all come from the caller.
- */
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 

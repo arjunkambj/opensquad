@@ -90,10 +90,6 @@ export async function retireConversationDrafts(
   return superseded;
 }
 
-/* ------------------------------------------------------------------ */
-/* A reply arrived                                                     */
-/* ------------------------------------------------------------------ */
-
 /**
  * THE "a reply arrived" helper (PLAN §9.1): cancel this conversation's queued
  * follow-ups and supersede its unsent drafts.
@@ -133,10 +129,6 @@ export const retireOutreachForReply = internalMutation({
     return { draftsSuperseded };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* The agent's wording changed                                         */
-/* ------------------------------------------------------------------ */
 
 /**
  * Retire the mail one lead has queued under a superseded agent revision, and

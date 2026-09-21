@@ -1,14 +1,3 @@
-/**
- * The ONE place a website-analysis failure becomes words.
- *
- * The backend stores a mapped code and never provider text (PLAN §4), so the
- * sentences a user reads are written here and nowhere else. Two doors in:
- * `analysisFailureCopy` for a run that finished badly, and
- * `startAnalysisCopy` for a request the server refused before a run began.
- *
- * Every message ends with something the user can do, because every one of
- * these states also offers Retry and "Fill in manually".
- */
 import { domainErrorCode } from "@/lib/convex-error"
 import type { DomainErrorCode } from "../../convex/lib/errors"
 import type { OperationErrorCode } from "../../convex/lib/validators"
@@ -18,7 +7,6 @@ export type AnalysisMessage = {
   description: string
 }
 
-/** A run that failed, by the code `businessProfiles.analysisStatus` stored. */
 export function analysisFailureCopy(
   code: OperationErrorCode,
 ): AnalysisMessage {
@@ -80,15 +68,7 @@ export function analysisFailureCopy(
   }
 }
 
-/**
- * The codes `company.mutations.startAnalysis` can refuse with.
- *
- * TOTAL over the backend's error vocabulary on purpose: a code added to
- * `convex/lib/errors.ts` fails the build here until someone decides what this
- * screen says about it, rather than quietly arriving as the fallback. Codes
- * this mutation cannot reach today still get copy, because "cannot reach"
- * is a fact about today's handler and not something the type can hold.
- */
+/** Keep copy exhaustive over backend error codes, including currently unreachable refusals. */
 const START_REFUSALS: Record<DomainErrorCode, AnalysisMessage> = {
   INVALID: {
     title: "That doesn't look like a website address",
@@ -164,7 +144,6 @@ const START_FALLBACK: AnalysisMessage = {
     "Try again in a moment, or fill your profile in yourself and carry on.",
 }
 
-/** A refusal from the mutation itself, before any run began. */
 export function startAnalysisCopy(error: unknown): AnalysisMessage {
   const code = domainErrorCode(error)
   return code === undefined ? START_FALLBACK : START_REFUSALS[code]

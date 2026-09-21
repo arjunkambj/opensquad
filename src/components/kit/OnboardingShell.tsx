@@ -1,20 +1,4 @@
-/**
- * OnboardingShell — the frame every onboarding screen sits in (refs 01–11).
- *
- * It owns the four things that are identical on every one of those screens:
- * the warm gradient ground, the centred logo, the dot stepper, and the single
- * rounded card with its "Step n of m" counter and Previous / Next footer.
- * Everything inside the card is the caller's.
- *
- * Two independent counters exist on these screens and are deliberately kept
- * apart: `currentDot` is which of the macro stages the user is in (the dots),
- * while `step` / `stepCount` is the sub-step inside that stage (the top-right
- * label). The connector leaving the current dot fills with the sub-step
- * progress, which is what makes the stepper move on every screen rather than
- * only once per stage.
- *
- * Data-free: labels, logo and callbacks all arrive as props.
- */
+/** currentDot is the macro stage; step/stepCount tracks progress within that stage. */
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"

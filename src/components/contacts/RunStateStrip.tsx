@@ -1,12 +1,3 @@
-/**
- * What the agent is doing, above the table.
- *
- * The honest version of "Finding your first leads…": `running` is the run
- * lease being LIVE, not merely present, so this strip disappears the moment
- * nothing is actually working — and the counts beside it are the rows the run
- * has produced so far, which is why the table fills in underneath while it is
- * shown.
- */
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { FunctionReturnType } from "convex/server"

@@ -1,14 +1,3 @@
-/**
- * "Connect inbox to start sending" — the banner the Agent and Contacts
- * screens carry while the org cannot send (PLAN §5 "Inbox step is
- * skippable", §9.3 `sourcing_only`).
- *
- * It states the consequence rather than the setting: leads keep being found
- * and researched; nothing goes out until an inbox is attached.
- *
- * Presentational — `InboxConnectionBanner` is the container that decides
- * whether it should appear at all.
- */
 import { MailValidation01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { ReactNode } from "react"
@@ -23,7 +12,6 @@ export function ConnectInboxBanner({
 }: {
   title: string
   description: string
-  /** The link or button that resolves it. */
   action: ReactNode
   /** `attention` for a connection that broke, rather than one never made. */
   tone?: "primary" | "attention"

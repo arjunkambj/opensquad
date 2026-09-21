@@ -1,11 +1,3 @@
-/**
- * Why the org could not be prepared, and what to do about it.
- *
- * Each refusal `orgs.ensureOrg` returns is a real condition with a real
- * answer (PLAN §6 "Closing the ways in"), so each gets a designed state here
- * rather than a raw error. The only live read is whether the trial has room
- * again, which decides if the waitlist state may offer Try again at all.
- */
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { OnboardingEntryRefusal } from "@/components/onboarding/onboarding-model"

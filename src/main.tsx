@@ -11,11 +11,6 @@ import { routeTree } from "./routeTree.gen";
 
 const router = createRouter({ routeTree });
 
-/**
- * First paint before the providers resolve. Deliberately just the page ground:
- * anything with a spinner or a message is a guess about what is loading, and
- * this fallback covers auth, Convex and the router alike.
- */
 function AppBootFallback() {
   return <div className="min-h-svh bg-background" aria-busy="true" />;
 }

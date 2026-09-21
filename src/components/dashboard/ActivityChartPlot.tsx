@@ -1,12 +1,3 @@
-/**
- * The plot itself — gridlines, one filled line per series, one point per day
- * that has something on it, and a date axis.
- *
- * Hand-drawn SVG rather than a charting dependency: the reference asks for one
- * simple line per series, and the colours are the global `--chart-*` tokens
- * applied as Tailwind classes, so the drawing follows the theme in both light
- * and dark without a single literal colour.
- */
 import {
   CHART_HEIGHT,
   CHART_PADDING,
@@ -24,9 +15,7 @@ export function ActivityChartPlot({
   description,
 }: {
   days: readonly ActivityDay[]
-  /** The series with rows in this window; never empty. */
   drawn: readonly SeriesSpec[]
-  /** The accessible name — what this chart is of, and over which window. */
   description: string
 }) {
   const scale = chartScale(days, drawn)

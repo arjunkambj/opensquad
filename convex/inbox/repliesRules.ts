@@ -36,10 +36,6 @@ import {
 } from "../lib/validators";
 import type { OptOutSignal } from "../lib/validators";
 
-/* ------------------------------------------------------------------ */
-/* Reading one stored message                                          */
-/* ------------------------------------------------------------------ */
-
 /**
  * The bounded projection of one inbound message these rules read.
  *
@@ -163,10 +159,6 @@ export function readInboundMessageText(row: unknown): InboundMessageText {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* The verdict                                                         */
-/* ------------------------------------------------------------------ */
-
 /**
  * What a free rule concluded.
  *
@@ -189,10 +181,6 @@ export type ReplyRuleKind = (typeof REPLY_RULE_KINDS)[number];
 
 /** A rule fired, named by the rule rather than by a slice of the message. */
 export type ReplyRuleVerdict = { kind: ReplyRuleKind; rule: string };
-
-/* ------------------------------------------------------------------ */
-/* Bounces                                                             */
-/* ------------------------------------------------------------------ */
 
 /** Local parts a mail system reports failures from. */
 const DAEMON_LOCAL_PARTS: readonly string[] = [
@@ -255,10 +243,6 @@ function bounceRule(
   return fromDaemon ? { kind: "auto_reply", rule: "delivery_notice" } : null;
 }
 
-/* ------------------------------------------------------------------ */
-/* Automatic answers                                                   */
-/* ------------------------------------------------------------------ */
-
 /** Subject wording almost every mail client puts on a vacation responder. */
 const AUTO_REPLY_SUBJECT_PHRASES: readonly string[] = [
   "out of office",
@@ -315,10 +299,6 @@ function autoReplyRule(
   }
   return null;
 }
-
-/* ------------------------------------------------------------------ */
-/* The one entry point                                                 */
-/* ------------------------------------------------------------------ */
 
 /** Lower-case and collapse whitespace; nothing else, and always bounded. */
 function scanText(value: string | undefined): string {

@@ -1,13 +1,3 @@
-/**
- * The two things a person does with a suggested reply.
- *
- * Edit writes a NEW revision (`drafts.revise`), which is why editing an
- * approved email is not a thing that can happen: the approval was recorded
- * against the old bytes and a new revision needs its own.
- *
- * Approve records the verdict and wakes the send boundary, which re-runs
- * every gate before anything leaves — approving is never itself a send.
- */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"

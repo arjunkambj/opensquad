@@ -21,10 +21,6 @@ import {
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* The fixed industry vocabulary                                        */
-/* ------------------------------------------------------------------ */
-
 /**
  * The industries a profile may carry. A closed list, not free text, because
  * three things downstream read it: the ICP generator (T21), the strategy
@@ -61,10 +57,6 @@ export type CompanyIndustry = Infer<typeof vCompanyIndustry>;
 export const COMPANY_INDUSTRIES: readonly CompanyIndustry[] =
   vCompanyIndustry.members.map((member) => member.value);
 
-/* ------------------------------------------------------------------ */
-/* The answer                                                           */
-/* ------------------------------------------------------------------ */
-
 /** Practical bounds the prompt asks for. The hard ceilings in
  *  `lib/validators/company.ts` are what the write is clamped to; these are
  *  what makes the answer readable in a form field. */
@@ -88,10 +80,6 @@ export const vWebsiteAnalysis = v.object({
 });
 
 export type WebsiteAnalysis = Infer<typeof vWebsiteAnalysis>;
-
-/* ------------------------------------------------------------------ */
-/* The prompt                                                           */
-/* ------------------------------------------------------------------ */
 
 export const WEBSITE_ANALYSIS_SYSTEM = [
   "You read a company's own website and write the profile a salesperson would",
@@ -126,10 +114,6 @@ export function websiteAnalysisInput(combinedMarkdown: string): string {
     combinedMarkdown,
   ].join("\n");
 }
-
-/* ------------------------------------------------------------------ */
-/* Making the answer safe to store                                      */
-/* ------------------------------------------------------------------ */
 
 function clamp(value: string, max: number): string {
   const trimmed = value.trim();

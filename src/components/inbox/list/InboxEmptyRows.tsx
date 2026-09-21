@@ -1,13 +1,7 @@
-/**
- * The list's several different nothings, told apart: a search that matched no
- * company, a page link that has run past the end, and a pill that is simply
- * empty — each with the next step it actually has.
- */
 import type { InboxPill } from "@/components/inbox/inbox-presentation"
 import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 
-/** Nothing to show — and which of the several reasons it is. */
 export function InboxEmptyRows({
   pill,
   searched,

@@ -1,9 +1,3 @@
-/**
- * Dashboard — the dated receipt feed of what the org has done.
- *
- * Read-only: every row is an activity event the backend recorded, never a
- * derived guess, and the date range comes from the route's search contract.
- */
 import { CatchBoundary, useNavigate, useSearch } from "@tanstack/react-router"
 import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
@@ -26,16 +20,7 @@ import {
 
 const DASHBOARD_ROUTE = "/_dashboard/_org/dashboard"
 
-/**
- * Dated receipts — the feed the sidebar bell's "See all activity" leads to,
- * at the foot of the dashboard.
- *
- * It reads the SAME window the range pills chose for everything above it,
- * handed down as `bounds` rather than re-derived, so the page can never head
- * one window and list another's receipts. Only the page cursor is its own,
- * and that is the one part of this screen worth pasting: `?range=30d&cursor=…`
- * reopens the same page of the same window.
- */
+/** Use the parent's bounds so activity and dashboard figures share the same window. */
 export function ActivityFeed({
   orgId,
   timezone,
@@ -43,11 +28,8 @@ export function ActivityFeed({
   hint,
 }: {
   orgId: Id<"orgs">
-  /** The org's zone — every row below is stamped on its clock. */
   timezone: string
-  /** The window the range pills chose, in the org's own days. */
   bounds: { from: number; to: number }
-  /** That window in words, e.g. "Last 30 days". */
   hint: string
 }) {
   const search = useSearch({ from: DASHBOARD_ROUTE })
@@ -62,9 +44,7 @@ export function ActivityFeed({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {/* The `activity.list` query lives inside this boundary so a stale or
-            foreign `?cursor=` throws HERE — never the whole dashboard — the
-            same arrangement the leads and inbox lists use. */}
+        {/* Contain stale-cursor failures in the feed boundary. */}
         <CatchBoundary
           getResetKey={() =>
             `${bounds.from}:${bounds.to}:${search.cursor ?? ""}`
@@ -200,12 +180,7 @@ function ActivityFeedBody({
   )
 }
 
-/**
- * Expired/foreign cursor or a failed page — inside the feed, not the route.
- * A stale cursor re-throws on every bare `reset`, so the recovery navigates
- * to the first page (which also remounts the boundary via `getResetKey`)
- * rather than retrying a query that can never succeed.
- */
+/** Recover stale cursors by navigating to page one and remounting the boundary; retrying the cursor cannot succeed. */
 function ActivityFeedError({ error, reset }: ErrorComponentProps) {
   const navigate = useNavigate()
   const search = useSearch({ from: DASHBOARD_ROUTE })

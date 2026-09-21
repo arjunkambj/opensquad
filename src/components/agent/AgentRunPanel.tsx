@@ -1,15 +1,3 @@
-/**
- * "Run now", and what the run loop is doing (PLAN §9.1).
- *
- * Every word here is a stored fact: `running` is the run LEASE being live,
- * not merely present, and the last and next times are the agent's own
- * `lastRunAt` / `nextRunAt`. Nothing is predicted — a run that has no due
- * time says so rather than inventing one.
- *
- * The button is the public half of the single-flight door: a second click
- * while a run holds the lease is answered "already running" instead of
- * starting a second one, and the per-user rate limit refuses a burst.
- */
 import { PlayIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation } from "convex/react"

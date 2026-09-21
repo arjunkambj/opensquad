@@ -20,18 +20,8 @@ import {
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 
-/**
- * The support address. The footer carries no contact email (only an X
- * link), so the documented fallback stands in here too.
- */
 const SUPPORT_EMAIL = "support@openintent.ai"
 
-/**
- * Copies the support address instead of opening a mail client. The icon
- * flips to a tick for a moment so the click has visible feedback; when
- * the clipboard is unavailable the address itself is shown as fallback
- * text so it can still be copied by hand.
- */
 function CopyEmailButton({ email }: { email: string }) {
   const [copied, setCopied] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -103,12 +93,6 @@ export function FAQ() {
           viewport={revealViewport}
           whileInView="animate"
         >
-          {/*
-            The UI accordion is a bordered, divided list; the marketing FAQ is
-            a single column of separate raised tiles with generous spacing, so
-            the root drops its border and each item paints its own surface.
-            Base UI opens one item at a time by default.
-          */}
           <Accordion className="flex w-full flex-col gap-4 overflow-visible rounded-none border-0">
             {faqItems.map((item) => (
               <motion.div

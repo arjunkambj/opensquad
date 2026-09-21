@@ -27,10 +27,8 @@ import { Button } from "@/components/ui/button"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import { useEscapeToParent } from "@/hooks/use-queue-navigation"
 
-/** Retries a failed read-clear gets before the badge is left alone. */
 const MARK_READ_MAX_RETRIES = 3
 
-/** Base delay between those retries; it grows with each failure. */
 const MARK_READ_RETRY_MS = 2_000
 
 export function ConversationPane({
@@ -53,21 +51,8 @@ export function ConversationPane({
   )
   const markRead = useMutation(api.inbox.conversationLifecycle.markRead)
 
-  // Opening a thread clears its unread counter. A read is not a change any
-  // draft was written against, so this deliberately does not move
-  // `contextVersion`, and a failure here must not break the pane.
-  //
-  // The effect still watches the count, because a reply that arrives while the
-  // thread is open must clear too — but it remembers what it already cleared
-  // for this thread, so the re-render its own write causes does not call the
-  // mutation a second time.
-  //
-  // MARKED CLEARED ONLY ONCE THE WRITE LANDS. Recording it before the call
-  // meant a transient failure — a dropped socket, a moment offline — left the
-  // guard saying "already cleared" for a thread whose badge was still lit,
-  // and nothing tried again until a NEW reply arrived. Now the ref is written
-  // in the `then`, a failure schedules a bounded retry, and an attempt in
-  // flight is tracked separately so the retry cannot double-fire.
+  // Mark as cleared only after the write succeeds; track in-flight attempts and retry failures with a bound.
+  // Clearing unread does not bump contextVersion or invalidate drafts.
   const unread = detail?.conversation.unreadCount ?? 0
   const cleared = useRef<{ conversationId: string; count: number } | null>(null)
   const clearing = useRef(false)
@@ -105,11 +90,7 @@ export function ConversationPane({
         failures.current = 0
       })
       .catch(() => {
-        // Nothing is recorded as cleared, so the next render of this effect
-        // is free to try again — and a bounded retry makes sure there IS a
-        // next render even if nothing else changes. Three tries, backing off,
-        // then the badge simply stays until the user does something else:
-        // a stuck badge is a small wrong, and a retry loop is a bigger one.
+        // Leave the count uncleared on failure. Retry with bounded backoff, then leave the badge for the next interaction.
         failures.current += 1
         if (failures.current <= MARK_READ_MAX_RETRIES) {
           retry = setTimeout(() => {

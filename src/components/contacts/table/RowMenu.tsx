@@ -1,8 +1,3 @@
-/**
- * The row menu (ref 23's ⋮): everything the row itself does not have space
- * for, and nothing that is not real. Each paid item states its price, and an
- * item that cannot run right now is disabled with the reason on it.
- */
 import {
   LinkSquare02Icon,
   Mail01Icon,
@@ -22,7 +17,6 @@ import {
 
 export type RowMenuAction = {
   label: string
-  /** Why it cannot run now; the item is disabled and says so. */
   disabledReason: string | null
   run: () => void
 }

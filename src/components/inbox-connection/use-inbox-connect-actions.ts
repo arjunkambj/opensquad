@@ -1,18 +1,4 @@
-/**
- * The write half of Manage inbox: verify, connect, rotate, disconnect, and
- * resume a failed import — plus the flow state that says which of them the
- * screen is offering.
- *
- * It lives beside the container rather than inside it so the container stays
- * a rendering decision. Two rules are enforced here:
- *
- *   THE KEY IS NEVER RETAINED. A pasted key is an argument and nothing else —
- *   never state, never a ref, never a toast.
- *
- *   FAILURES ARE OURS. The actions answer with a closed set of codes plus an
- *   operator-facing message; only the code is read, and the copy comes from
- *   `inbox-connection-model` (PLAN §4 white-label rule).
- */
+/** Never retain pasted keys in state or refs. Map failure codes to copy instead of showing provider messages. */
 import { useAction } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"

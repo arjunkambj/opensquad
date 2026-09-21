@@ -1,9 +1,3 @@
-/**
- * The settings tab vocabulary (PLAN §5).
- *
- * Shared by the route's `?tab=` contract, the tab bar and the page's own
- * subtitle, so adding a tab is one edit and the three can never disagree.
- */
 export const SETTINGS_TABS = [
   "company",
   "inbox",
@@ -18,7 +12,6 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 export const DEFAULT_SETTINGS_TAB: SettingsTab = "company"
 
-/** The tab bar's labels, in the order PLAN §5 lists them. */
 export const SETTINGS_TAB_LABEL: Record<SettingsTab, string> = {
   company: "Company",
   inbox: "Inbox",
@@ -29,13 +22,6 @@ export const SETTINGS_TAB_LABEL: Record<SettingsTab, string> = {
   account: "Account",
 }
 
-/**
- * The page subtitle, which changes with the tab.
- *
- * One sentence saying what the open section governs — the reference's
- * "Manage your company information and profile settings" line, told
- * truthfully for each section rather than once for all seven.
- */
 export const SETTINGS_TAB_DESCRIPTION: Record<SettingsTab, string> = {
   company:
     "The company your agent sells for, and the website it was written from.",

@@ -175,10 +175,6 @@ function platformCapacityError(metric: TrialMeteredMetric) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* The platform breaker                                                */
-/* ------------------------------------------------------------------ */
-
 /**
  * The marker added to a budget's `used` to trip it. Far above any real usage,
  * so "tripped" is unambiguous and removing it restores the true figure rather
@@ -246,10 +242,6 @@ export async function setPlatformBreaker(
   });
   return true;
 }
-
-/* ------------------------------------------------------------------ */
-/* Signup capacity                                                     */
-/* ------------------------------------------------------------------ */
 
 export function maxTrialOrgs(): number {
   return readIntEnv(MAX_TRIAL_ORGS_ENV, MAX_TRIAL_ORGS_DEFAULT);

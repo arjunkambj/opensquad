@@ -1,14 +1,4 @@
-/**
- * Add an address or a whole domain to the blocklist.
- *
- * The reason is always "added by hand" and is not offered as a choice:
- * `unsubscribe`, `bounce` and `provider` rows are written by the backend from
- * things that actually happened, and a form that could mint them would let a
- * person fabricate an opt-out record.
- *
- * Presentational — the container owns the mutation, the busy flag and the
- * error.
- */
+/** Manual entries always use the manual reason; unsubscribe and bounce evidence comes from the backend. */
 import { useState } from "react"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"

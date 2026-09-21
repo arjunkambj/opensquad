@@ -1,10 +1,3 @@
-/**
- * Whether the chips on screen are on the server yet.
- *
- * Small on purpose: the user is clicking chips, not filling a form with a
- * Save button, so the only thing worth saying is "saving", "saved" or "that
- * didn't save". It is a live region, so a screen reader hears the same.
- */
 import { Alert02Icon, Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IcpSaveState } from "@/components/onboarding/steps/icp/use-icp-draft"

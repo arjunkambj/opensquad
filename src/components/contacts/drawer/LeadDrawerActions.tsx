@@ -1,13 +1,4 @@
-/**
- * The drawer's actions: approve, reject, find the address, research — and
- * Retry for a lead the retry ladder parked, which is the same research step
- * with the reason it failed printed above it.
- *
- * Approving here is LEAD approval (PLAN §9.3): it authorises finding the
- * address and drafting, and sends nothing. The buttons say so, because two
- * different approvals that look the same is exactly how someone mails a
- * stranger by accident.
- */
+/** Lead approval authorizes address lookup and drafting; it does not authorize sending. */
 import { Mail01Icon, Refresh01Icon, Target02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Button } from "@/components/ui/button"

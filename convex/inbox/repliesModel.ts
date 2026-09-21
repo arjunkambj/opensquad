@@ -19,10 +19,6 @@ import type { ReplyDisposition } from "../lib/validators";
 import { recordConversationNote } from "./conversationNotes";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* How far this message may be taken                                   */
-/* ------------------------------------------------------------------ */
-
 /**
  * The three depths reply handling runs at, decided once by the gates and
  * carried to the step that does the work.
@@ -43,10 +39,6 @@ export const vReplyHandlingMode = v.union(
 );
 
 export type ReplyHandlingMode = typeof vReplyHandlingMode.type;
-
-/* ------------------------------------------------------------------ */
-/* Keys and limits                                                     */
-/* ------------------------------------------------------------------ */
 
 /**
  * PLAN §9.3: "at most 2 automatic replies per thread, then the thread is
@@ -175,10 +167,6 @@ export async function automaticReplyCount(
   return keys.size;
 }
 
-/* ------------------------------------------------------------------ */
-/* The three writes every branch shares                                */
-/* ------------------------------------------------------------------ */
-
 /**
  * Stamp what this reply was.
  *
@@ -264,10 +252,6 @@ export async function noteOnThread(
     body,
   });
 }
-
-/* ------------------------------------------------------------------ */
-/* Getting the step started                                            */
-/* ------------------------------------------------------------------ */
 
 /**
  * Hand this thread's latest inbound message to reply handling.

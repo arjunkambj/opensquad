@@ -4,20 +4,12 @@ import { Link } from "@tanstack/react-router"
 import { LogoMark } from "@/components/layout/Logo"
 import { cn } from "@/lib/utils"
 
-/**
- * Section eyebrow: an icon tile beside a label badge.
- *
- * Each section passes its own icon so the chips read as a set without
- * repeating the product mark. `tone="inverted"` flips the tile for chips
- * that sit on a foreground-colored surface, such as the closing CTA.
- */
 export function MarketingChip({
   icon,
   label,
   href,
   tone = "default",
 }: {
-  /** A section icon, or "logo" to use the OpenIntent mark as the tile. */
   icon: IconSvgElement | "logo"
   label: string
   href?: string

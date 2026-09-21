@@ -1,16 +1,3 @@
-/**
- * Settings → Account (reference 26, PLAN §2 — members, security, billing, API
- * and MCP are cut).
- *
- * The sign-in identity, presented AS identity. The email is the canonical row
- * (an `identityKey` is `iss|sub`, never an email) and the display
- * name is a label, not a credential.
- *
- * Nothing here is an editable field: the auth provider owns profile edits
- * through its own handler, and a read-only input pretending otherwise is the
- * lie this card exists to avoid. The control goes where the change can
- * actually be made.
- */
 import { Logout03Icon, UserCircleIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp } from "@hexclave/react"

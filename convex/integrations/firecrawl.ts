@@ -83,10 +83,6 @@ function asComponentCtx(ctx: ActionCtx): ComponentActionCtx {
   return adapted as unknown as ComponentActionCtx;
 }
 
-/* ------------------------------------------------------------------ */
-/* What a caller asks for, and what it gets back                        */
-/* ------------------------------------------------------------------ */
-
 /** The two paid actions that read a website (`lib/limits.ts` prices them). */
 export type ScrapeAction = "analyze_website" | "research_lead";
 
@@ -135,10 +131,6 @@ export type ScrapeSiteOutcome =
   | { kind: "refused"; reason: RefundReason }
   | { kind: "uncertain" }
   | { kind: "unavailable" };
-
-/* ------------------------------------------------------------------ */
-/* One page from the provider                                           */
-/* ------------------------------------------------------------------ */
 
 /** One provider answer, already re-admitted by the URL policy. */
 type ProviderDocument = {
@@ -244,10 +236,6 @@ function providerReceipt(docs: readonly ProviderDocument[]): string {
   return `pages=${docs.length};cache=${cache}`;
 }
 
-/* ------------------------------------------------------------------ */
-/* Failure classification — the difference between a refund and a hold  */
-/* ------------------------------------------------------------------ */
-
 type ProviderFailure =
   /**
    * Provably not charged, or charged nothing. The money goes back.
@@ -335,10 +323,6 @@ function classifyProviderFailure(error: unknown): ProviderFailure {
   return UNCERTAIN;
 }
 
-/* ------------------------------------------------------------------ */
-/* Stored markdown — what a replayed operation hands back               */
-/* ------------------------------------------------------------------ */
-
 /**
  * Keep the bounded markdown where the operation row can point at it.
  *
@@ -386,10 +370,6 @@ async function readStoredSite(
     return null;
   }
 }
-
-/* ------------------------------------------------------------------ */
-/* The one operation                                                    */
-/* ------------------------------------------------------------------ */
 
 /**
  * Read a website and return bounded markdown, paying for it exactly once.

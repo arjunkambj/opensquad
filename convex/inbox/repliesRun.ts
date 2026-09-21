@@ -196,10 +196,6 @@ export const runReplyHandling = internalAction({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Reading the message                                                 */
-/* ------------------------------------------------------------------ */
-
 /**
  * The one stored inbound row for this message.
  *

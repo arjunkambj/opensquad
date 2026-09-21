@@ -1,13 +1,3 @@
-/**
- * The geometry and vocabulary behind the activity chart.
- *
- * Separated from the drawing so the component stays a component: this file
- * holds the series list, the plot box and the two scales, and knows nothing
- * about React.
- *
- * Every colour is a `--chart-*` token from the global stylesheet, named as the
- * Tailwind class that applies it. Nothing here carries a literal colour.
- */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 
@@ -22,18 +12,11 @@ type SeriesKey = "leadsCreated" | "contacted" | "replies"
 export type SeriesSpec = {
   key: SeriesKey
   label: string
-  /** Tailwind classes over the global chart tokens. */
   line: string
   dot: string
   area: string
 }
 
-/**
- * The three series, in legend order. A series is drawn only when its rows
- * exist (see `drawnSeries`): before the first send, "Contacted" and "Replies"
- * would be flat lines along the axis, which reads as a measured zero rather
- * than as work that has not started.
- */
 const ACTIVITY_SERIES: readonly SeriesSpec[] = [
   {
     key: "leadsCreated",
@@ -58,16 +41,12 @@ const ACTIVITY_SERIES: readonly SeriesSpec[] = [
   },
 ]
 
-/** The series that have at least one non-zero day in this window. */
 export function drawnSeries(days: readonly ActivityDay[]): SeriesSpec[] {
   return ACTIVITY_SERIES.filter((series) =>
     days.some((day) => day[series.key] > 0),
   )
 }
 
-/* The drawing box, in fixed user units scaled to the card's width by the
-   viewBox. Plain arithmetic below, and labels that scale with the line
-   instead of stretching away from it. */
 export const CHART_WIDTH = 720
 export const CHART_HEIGHT = 220
 export const CHART_PADDING = { top: 12, right: 12, bottom: 28, left: 34 }
@@ -75,14 +54,12 @@ const PLOT_WIDTH = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
 const PLOT_HEIGHT =
   CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
 
-/** At most this many date labels, so a ninety-day window stays legible. */
 const MAX_AXIS_LABELS = 12
 
 export type ChartScale = {
   x: (index: number) => number
   y: (value: number) => number
   ticks: number[]
-  /** Label every nth day. */
   labelEvery: number
 }
 
@@ -114,11 +91,7 @@ const dayLabelFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 })
 
-/**
- * `YYYY-MM-DD` as "Sep 18". Read back as UTC on purpose: the key is a civil
- * date the server already cut in the ORG's zone, so running it through
- * the browser's zone would shift half the labels by a day.
- */
+/** Read the civil YYYY-MM-DD key as UTC; browser-local parsing would shift labels across timezones. */
 export function dayLabel(dayKey: string): string {
   const at = Date.parse(`${dayKey}T00:00:00Z`)
   return Number.isNaN(at) ? dayKey : dayLabelFormatter.format(new Date(at))

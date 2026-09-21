@@ -1,11 +1,4 @@
-/**
- * Onboarding dot 2, screen 1 — the people to reach (reference 06).
- *
- * Job titles are the one ICP list that really is free text: the lead search
- * matches titles by contains, not against a closed vocabulary, so a title the
- * user types is as good as one we generated. Hence a plain `ChipInput` here
- * and a searched picker on the next screen.
- */
+/** Job titles support free-text matching; other ICP fields require catalogue values. */
 import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpVocabulary"
 import { ChipInput } from "@/components/kit/ChipInput"
 import type { OnboardingStepProps } from "@/components/onboarding/onboarding-model"

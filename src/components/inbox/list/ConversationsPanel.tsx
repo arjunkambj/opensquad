@@ -1,11 +1,3 @@
-/**
- * The conversation list of reference 24: the "Conversations" header with its
- * count and search, the four filter pills, and the rows themselves.
- *
- * This is the container — it owns the one Convex read behind all of it and
- * the URL contract the pills, the search box and the cursor travel in. The
- * pieces below it are presentational.
- */
 import {
   CatchBoundary,
   useNavigate,

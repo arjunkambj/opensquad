@@ -791,10 +791,6 @@ function eventPayloadTimestamp(
   return numberField(event, "timestamp");
 }
 
-/* ------------------------------------------------------------------ */
-/* Callback totality helpers                                           */
-/* ------------------------------------------------------------------ */
-
 /**
  * THE rule both callbacks below obey: **never throw**.
  *

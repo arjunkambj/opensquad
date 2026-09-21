@@ -33,10 +33,6 @@ import { shortlistAllowedValues } from "./generateIcp";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* How much one recommendation may produce                              */
-/* ------------------------------------------------------------------ */
-
 /** PLAN §3 step 3: "3–5 strategies … plus 6–10 suggested keywords". */
 export const RECOMMENDED_STRATEGIES_MIN = 3;
 export const RECOMMENDED_STRATEGIES_MAX = 5;
@@ -56,10 +52,6 @@ const FILTER_ENTRY_VALUES_MAX = 10;
 /** Allowed values offered per filter. The longest signal list is 28 values
  *  (funding rounds); anything longer is shortlisted against the profile. */
 const SIGNAL_VALUE_CHOICES = 30;
-
-/* ------------------------------------------------------------------ */
-/* The signal catalogue                                                 */
-/* ------------------------------------------------------------------ */
 
 /**
  * How a filter carries its value: a list of allowed values, a numeric
@@ -360,10 +352,6 @@ export const EXCLUDE_FILTER_KEYS: readonly string[] = [
   "domain",
 ];
 
-/* ------------------------------------------------------------------ */
-/* The answer                                                           */
-/* ------------------------------------------------------------------ */
-
 /**
  * One filter, as the model may state it. Exactly one of the three value
  * members is answered and the other two come back null — the only shape a
@@ -408,10 +396,6 @@ export const vKeywordSuggestions = v.object({
   keywords: v.array(v.string()),
 });
 
-/* ------------------------------------------------------------------ */
-/* What a recommendation reads                                          */
-/* ------------------------------------------------------------------ */
-
 /** One signal filter as it is offered to the model, with its allowed values
  *  already shortlisted by the domain. */
 export type SignalFilterOffer = SignalFilterSpec & {
@@ -445,10 +429,6 @@ export function shortlistSignalValues(
 ): string[] {
   return shortlistAllowedValues(values, profileText, SIGNAL_VALUE_CHOICES);
 }
-
-/* ------------------------------------------------------------------ */
-/* The prompt                                                           */
-/* ------------------------------------------------------------------ */
 
 export const RECOMMEND_STRATEGIES_SYSTEM = [
   "You choose the searches a sales agent runs. The user has already described",
@@ -511,10 +491,6 @@ export const GENERATE_KEYWORDS_SYSTEM = [
   "  seller's product name and not a job title.",
   "- Write in the language of the company profile.",
 ].join("\n");
-
-/* ------------------------------------------------------------------ */
-/* The user half of each call                                           */
-/* ------------------------------------------------------------------ */
 
 function list(entries: readonly string[], empty: string): string {
   return entries.length === 0 ? empty : entries.join(", ");
@@ -584,10 +560,6 @@ export function keywordGenerationInput(input: {
     list(input.existing, "(none yet)"),
   ].join("\n");
 }
-
-/* ------------------------------------------------------------------ */
-/* Making the answer safe to store                                      */
-/* ------------------------------------------------------------------ */
 
 function clamp(value: string, max: number): string {
   const trimmed = value.trim();

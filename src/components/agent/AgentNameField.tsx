@@ -1,11 +1,3 @@
-/**
- * The agent's name, edited in place (reference 21).
- *
- * The name is generated from the ICP at onboarding ("Title · Region ·
- * Industry"); this is the pencil beside it. An agent onboarding has not named
- * yet shows "Your agent" — a stated fallback, never a fabricated title, and
- * the field still opens empty so the user writes their own.
- */
 import { PencilEdit02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useState } from "react"

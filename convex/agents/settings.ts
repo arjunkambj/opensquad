@@ -39,13 +39,11 @@ import {
 import { requireOrgAgent, vAgentDoc } from "./model";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
 /* Bounds                                                              */
 /*                                                                     */
 /* These belong in `convex/lib/limits.ts` with the rest of the policy  */
 /* numbers; they are local constants only because that file is         */
 /* integrator-only (EXECUTION §0).                                     */
-/* ------------------------------------------------------------------ */
 
 /** At most three follow-ups per thread, and none further out than a quarter:
  *  past that the first mail is not a thread the recipient remembers. An empty
@@ -58,10 +56,6 @@ export const FOLLOW_UP_DAY_MAX = 90;
 
 /** A deal size is a figure the dashboard multiplies, not a currency string. */
 export const DEAL_SIZE_MAX = 10_000_000;
-
-/* ------------------------------------------------------------------ */
-/* The one writer                                                      */
-/* ------------------------------------------------------------------ */
 
 export type AgentEditContext = {
   agent: Doc<"agents">;
@@ -107,10 +101,6 @@ export async function patchAgent(
   }
   return updated;
 }
-
-/* ------------------------------------------------------------------ */
-/* The basics                                                          */
-/* ------------------------------------------------------------------ */
 
 /**
  * Rename the agent. The name is generated from the ICP at onboarding and is

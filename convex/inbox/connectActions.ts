@@ -201,10 +201,6 @@ async function webhookRegistrationFailure(
   return webhookFailure(args.code, lost);
 }
 
-/* ------------------------------------------------------------------ */
-/* Step 1 — verify and store the key                                   */
-/* ------------------------------------------------------------------ */
-
 const vVerifyResult = v.union(
   v.object({
     ok: v.literal(true),
@@ -282,11 +278,6 @@ export const verifyAndStoreKey = action({
     };
   },
 });
-
-
-/* ------------------------------------------------------------------ */
-/* Steps 2–5 — pick or create the inbox, register the webhook, claim   */
-/* ------------------------------------------------------------------ */
 
 const vConnectResult = v.union(
   v.object({
@@ -470,10 +461,6 @@ async function findInbox(
   return { found: false as const };
 }
 
-/* ------------------------------------------------------------------ */
-/* Step 7 — rotate and disconnect                                      */
-/* ------------------------------------------------------------------ */
-
 /** Attempts a best-effort webhook delete gets before it is given up on. */
 const WEBHOOK_DELETE_ATTEMPTS = 3;
 
@@ -642,7 +629,6 @@ export const rotateKey = action({
     return { ok: true as const };
   },
 });
-
 
 /**
  * Disconnect: delete the webhook with the key that created it (best effort),

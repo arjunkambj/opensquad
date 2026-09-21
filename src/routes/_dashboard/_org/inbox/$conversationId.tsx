@@ -8,13 +8,7 @@ export const Route = createFileRoute(
   component: ConversationRoute,
 })
 
-/**
- * One thread at its own URL — a conversation is a record someone pastes to a
- * colleague, so it is a path segment rather than a pane state.
- *
- * No error boundary here: `_dashboard` already renders a foreign or malformed
- * id as an in-shell empty state, which keeps the sidebar and the list.
- */
+/** The parent dashboard boundary handles foreign or malformed IDs without removing the shell. */
 function ConversationRoute() {
   const { conversationId } = useParams({
     from: "/_dashboard/_org/inbox/$conversationId",

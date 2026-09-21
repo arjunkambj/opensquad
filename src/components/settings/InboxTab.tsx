@@ -1,11 +1,3 @@
-/**
- * Settings → Inbox: Manage inbox (PLAN §4, reference 26).
- *
- * The tab is a frame — one card carrying the shared `InboxConnection`, which
- * owns the whole connect / sync / disconnect flow and is the same component
- * onboarding dot 3 renders. Nothing about the connection is duplicated here,
- * so the two places can never drift apart.
- */
 import { Link } from "@tanstack/react-router"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { InboxConnection } from "@/components/inbox-connection/InboxConnection"

@@ -1,14 +1,3 @@
-/**
- * "Latest hot leads" (reference 20) — the researched leads that scored 3 in
- * this window, newest first, with "View more" into Contacts.
- *
- * Person fields are optional on a sourced lead and are printed only when the
- * row carries them: an unnamed lead reads as "Unnamed lead" rather than
- * borrowing a name from its company or its email. The flame score comes from
- * the shared kit component, so it matches the Contacts table exactly.
- *
- * Presentational: the container owns the query.
- */
 import { ArrowRight01Icon, UserGroupIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
@@ -28,7 +17,6 @@ export function LatestHotLeads({
   leads,
   hint,
 }: {
-  /** `undefined` while the query is still reading. */
   leads: HotLeads | undefined
   hint: string
 }) {

@@ -1,15 +1,3 @@
-/**
- * Leads the agent gave up on, and the button that puts one back in the queue
- * (PLAN §9.1 "Retries").
- *
- * A lead reaches `needs_attention` after three failed attempts at the same
- * step; the row says which, in our words, never the provider's. Retry clears
- * the ladder and makes the lead due again — it does not perform the step, so
- * nothing is spent by pressing it.
- *
- * The card renders nothing at all when no lead is parked: a permanently
- * present "nothing needs you" panel is chrome.
- */
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import type { FunctionReturnType } from "convex/server"
@@ -27,14 +15,12 @@ import {
 } from "@/components/ui/card"
 import { agentErrorCopy, OPERATION_ERROR_COPY } from "./agent-model"
 
-/** How many parked leads the card lists before pointing at Contacts. */
 const PARKED_SHOWN = 5
 
 type ParkedLead = FunctionReturnType<
   typeof api.leads.queries.list
 >["items"][number]
 
-/** The person as the source named them; a masked surname stays masked. */
 function leadName(lead: ParkedLead): string {
   const parts = [lead.firstName, lead.lastName].filter(
     (part): part is string => part !== undefined && part.length > 0,
@@ -45,10 +31,6 @@ function leadName(lead: ParkedLead): string {
   return lead.companyName ?? "A lead"
 }
 
-/**
- * Why it stopped. The stored `stageReason` is the sentence the backend wrote
- * when it parked the lead; the error code is the fallback, mapped here.
- */
 function parkedReason(lead: ParkedLead): string {
   if (lead.stageReason !== undefined && lead.stageReason.length > 0) {
     return lead.stageReason

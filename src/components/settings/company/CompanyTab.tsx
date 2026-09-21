@@ -1,15 +1,3 @@
-/**
- * Settings → Company (reference 26, PLAN §5).
- *
- * The container for the tab: it owns every Convex call on the screen — the
- * profile, the credit balance, the analysis trigger and the save — and hands
- * the two cards below values and callbacks only.
- *
- * The analysis is live rather than awaited: `startAnalysis` schedules the
- * work and returns, and `businessProfiles.analysisStatus` is what the screen
- * reads, so the fields fill themselves in when it lands and a reload mid-run
- * still shows "analyzing".
- */
 import { useMutation, useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"

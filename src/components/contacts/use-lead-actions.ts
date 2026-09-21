@@ -1,17 +1,4 @@
-/**
- * The four things a person can do to a lead from this screen, in one hook so
- * the row, the bulk bar and the drawer behave identically.
- *
- * Every call reports back in words: what it started, what it skipped and why
- * (`outcomeSummary`), or the backend's refusal mapped to copy in the one place
- * that does that (`refusalCopy`). A paid button that fails silently, or that
- * quietly does less than it was asked to, is the failure this hook exists to
- * prevent.
- *
- * `requestId` is a logical INTENT, not a click: the same selection and the
- * same verdict keep the same id, so a retry after a failure records one
- * decision rather than two.
- */
+/** Reuse the request ID for the same selection and verdict so retries record one decision. */
 import { useMutation } from "convex/react"
 import { useCallback, useState } from "react"
 import { api } from "../../../convex/_generated/api"

@@ -1,13 +1,4 @@
-/**
- * Setup itself, once an organization is active in the auth provider.
- *
- * THERE IS NO ORGANIZATION SCREEN. The identity provider already gives every
- * account its own organization when it signs up, and it owns who belongs to
- * one; our org row is only what app data hangs off, so it is created silently
- * for whichever organization is active and the user is never asked to name,
- * choose or create one. What CAN stop that creation is a real condition with
- * a real answer, and `EntryRefusalState` puts words on each of those.
- */
+/** Provision app data for the auth provider's active organization; the provider owns organization creation. */
 import type { CurrentUser } from "@hexclave/react"
 import { useMutation } from "convex/react"
 import { useEffect, useRef, useState } from "react"
@@ -22,7 +13,6 @@ import { LoadingState } from "@/components/states/states"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import { detectLocalTimezone } from "@/lib/org-time"
 
-/** The provider's organization name, as `ensureOrg` will accept it. */
 function boundedOrgName(displayName: string | null | undefined): string | null {
   const trimmed = (displayName ?? "").trim().slice(0, 100)
   return trimmed.length === 0 ? null : trimmed
@@ -48,11 +38,7 @@ export function SetupForActiveOrg({ user }: { user: CurrentUser }) {
       return
     }
     requested.current = attempt
-    // The answer belongs to the ATTEMPT, not to this run of the effect: the
-    // effect re-runs (its dependencies change identity, and StrictMode runs
-    // it twice in development) while the request is still in flight, and the
-    // re-run returns early above. A per-run "still live" flag would therefore
-    // drop the refusal and leave the screen spinning forever.
+    // Track request attempts across effect reruns; per-effect cleanup would discard in-flight refusals.
     void (async () => {
       try {
         await ensureOrg({

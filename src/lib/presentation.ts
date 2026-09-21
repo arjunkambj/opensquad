@@ -1,19 +1,8 @@
-/**
- * Presentation helpers used by more than one component domain: relative and
- * absolute times and the small typed projections around them.
- *
- * Pure and data-free — no JSX, nothing here calls Convex or knows which
- * screen renders it.
- */
 const RELATIVE_TIME = new Intl.RelativeTimeFormat(undefined, {
   numeric: "auto",
 })
 
-/**
- * How long something has waited. Deliberately coarse and deliberately
- * backward looking: these screens never render a countdown or an ETA, because
- * nothing in the backend promises when waiting work will be picked up.
- */
+/** Elapsed time only: the backend does not promise an ETA for queued work. */
 export function formatWaited(since: number, now: number = Date.now()): string {
   const minutes = Math.floor(Math.max(0, now - since) / 60_000)
   if (minutes < 1) {
@@ -29,12 +18,7 @@ export function formatWaited(since: number, now: number = Date.now()): string {
   return RELATIVE_TIME.format(-Math.floor(hours / 24), "day")
 }
 
-/**
- * An absolute instant. `timezone` is the org's IANA zone, because a send
- * window and a daily allowance are evaluated there — showing the reader's own
- * zone for a policy boundary would be a different number from the one the
- * backend will use.
- */
+/** Use the organization timezone for policy and allowance boundaries. */
 export function formatInstant(at: number, timezone?: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -43,10 +27,7 @@ export function formatInstant(at: number, timezone?: string): string {
   }).format(at)
 }
 
-/**
- * Who caused an activity row. `actor` is an identityKey for human actions and
- * a reserved word otherwise; the identityKey itself is never rendered.
- */
+/** Human actors are identity keys; never render the key itself. */
 export function actorLabel(actor: string): string {
   if (actor === "workflow") {
     return "automation"

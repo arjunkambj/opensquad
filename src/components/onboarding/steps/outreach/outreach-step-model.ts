@@ -1,24 +1,11 @@
-/**
- * Dot 3's vocabulary: the props both sub-steps take, and the option tables
- * the goals screen draws (reference 05).
- *
- * The goal and tone unions come from the agent record the backend returns, so
- * adding a member there fails this build until the screen offers it.
- */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../../convex/_generated/api"
 import type { Id } from "../../../../../convex/_generated/dataModel"
 
-/** The org's agent, as `api.agents.queries.get` returns it. */
 type OnboardingAgent = NonNullable<
   FunctionReturnType<typeof api.agents.queries.get>
 >
 
-/**
- * What every onboarding sub-step is handed. It matches the shared
- * `OnboardingStepProps` the stepper defines; it is spelled out here so this
- * folder compiles on its own branch.
- */
 export type OutreachStepProps = {
   orgId: Id<"orgs">
   agent: OnboardingAgent
@@ -35,7 +22,6 @@ export type ChoiceOption<TValue extends string> = {
   description: string
 }
 
-/** Campaign goal (reference 05, top group). */
 export const GOAL_OPTIONS: readonly ChoiceOption<AgentGoal>[] = [
   {
     value: "start_conversations",
@@ -51,7 +37,6 @@ export const GOAL_OPTIONS: readonly ChoiceOption<AgentGoal>[] = [
   },
 ]
 
-/** Message tone (reference 05, bottom group). */
 export const TONE_OPTIONS: readonly ChoiceOption<AgentTone>[] = [
   {
     value: "professional",
@@ -66,7 +51,6 @@ export const TONE_OPTIONS: readonly ChoiceOption<AgentTone>[] = [
   { value: "direct", title: "Direct", description: "Bold, confident" },
 ]
 
-/** Narrow a radio group's string back onto its union, or keep the current one. */
 export function pickChoice<TValue extends string>(
   options: readonly ChoiceOption<TValue>[],
   value: string,

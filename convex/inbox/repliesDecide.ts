@@ -38,10 +38,6 @@ import {
   vReplyHandlingMode,
 } from "./repliesModel";
 
-/* ------------------------------------------------------------------ */
-/* What the answer may change                                          */
-/* ------------------------------------------------------------------ */
-
 const vApplyDecisionResult = v.object({ outcome: v.string() });
 
 type ApplyDecisionResult = typeof vApplyDecisionResult.type;
@@ -252,10 +248,6 @@ async function recordProposedBooking(
   // proposal was recorded"; only a row created here changes what the note says.
   return recorded.recorded;
 }
-
-/* ------------------------------------------------------------------ */
-/* When the step cannot finish                                         */
-/* ------------------------------------------------------------------ */
 
 const vReplyFailureCode = v.union(
   /** The gateway completed and neither answer survived validation. */

@@ -1,12 +1,3 @@
-/**
- * The container for `ConnectInboxBanner`: it reads the org's inbox
- * connection and renders the banner only while the org cannot send.
- *
- * Mounted by the Agent and Contacts screens (EXECUTION T31, T32). A connected
- * org renders nothing at all — a banner that says "you are fine" is
- * chrome, and the reference screens do not carry one. Neither does a reader
- * who cannot act on it: the connect screen is owner-only.
- */
 import { Link } from "@tanstack/react-router"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { Button } from "@/components/ui/button"

@@ -51,10 +51,6 @@ const THREAD_CHAR_BUDGET = 5_000;
 /** Output tokens: a subject and a short body, with room to finish a sentence. */
 export const WRITE_OUTREACH_MAX_OUTPUT_TOKENS = 1_024;
 
-/* ------------------------------------------------------------------ */
-/* The opt-out line (PLAN §12)                                          */
-/* ------------------------------------------------------------------ */
-
 /**
  * The sentence every outbound mail carries. Deliberately an instruction the
  * recipient can act on with a plain reply: the inbound opt-out rule in
@@ -100,10 +96,6 @@ export function boundOutreachResult(
   );
   return { subject, body };
 }
-
-/* ------------------------------------------------------------------ */
-/* The prompt                                                          */
-/* ------------------------------------------------------------------ */
 
 export const WRITE_OUTREACH_SYSTEM = [
   "You write short B2B outreach emails on behalf of a company.",

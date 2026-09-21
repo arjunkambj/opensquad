@@ -1,11 +1,4 @@
-/**
- * The rows the bulk bar acts on.
- *
- * Deliberately not in the URL, unlike the filters and the open lead: a
- * selection is a gesture, not shared context, and it is cleared by anything
- * that changes which rows are on screen — a filter, a page, a finished bulk
- * action — so the bar can never act on a row the user can no longer see.
- */
+/** Clear selection when visible rows change so bulk actions cannot target hidden rows. */
 import { useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
 
@@ -14,7 +7,6 @@ export function useLeadSelection() {
 
   return {
     selected,
-    /** The selection as the order-independent list the mutations take. */
     ids: [...selected],
     clear: () => setSelected(new Set()),
     toggle: (prospectId: Id<"prospects">) =>

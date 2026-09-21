@@ -35,10 +35,6 @@ import type {
 } from "../lib/validators";
 import { companySizeBand, excludeProfileOption } from "./icpVocabulary";
 
-/* ------------------------------------------------------------------ */
-/* What counts as a usable strategy                                     */
-/* ------------------------------------------------------------------ */
-
 /**
  * Fewer matches than this and a strategy is not worth a page of search: the
  * run buys 25 rows a page, so a handful of matches is one page and then
@@ -68,10 +64,6 @@ export function strategyIsSelectable(matchCount: number): boolean {
  */
 export const STRATEGY_GENERATION_STALE_AFTER_MS = 5 * 60_000;
 
-/* ------------------------------------------------------------------ */
-/* The key one run pays under                                           */
-/* ------------------------------------------------------------------ */
-
 /**
  * The idempotency key one paid run spends under. It carries `startedAt` and
  * the purpose, so Regenerate really re-asks the model and a keyword run never
@@ -91,10 +83,6 @@ export async function strategyOperationKey(args: {
   const short = digest.slice("sha256:".length, "sha256:".length + 16);
   return `${args.orgId}:${args.purpose}:${short}`;
 }
-
-/* ------------------------------------------------------------------ */
-/* The cached catalogue                                                 */
-/* ------------------------------------------------------------------ */
 
 /**
  * The newest cached filter catalogue, or `null` when it has never been
@@ -119,10 +107,6 @@ function catalogueValues(
 ): readonly string[] {
   return options[filter]?.values ?? [];
 }
-
-/* ------------------------------------------------------------------ */
-/* The core half: the ideal customer as provider filters                */
-/* ------------------------------------------------------------------ */
 
 /** Ceilings the provider states per filter (`integrations/enrich/filters.ts`);
  *  a longer list is refused at search time, far too late to tell anyone. */
@@ -276,10 +260,6 @@ export function compileExcludeFilters(icp: AgentIcp): LeadFilters {
   return excludeFilters;
 }
 
-/* ------------------------------------------------------------------ */
-/* The keyword strategy                                                 */
-/* ------------------------------------------------------------------ */
-
 /**
  * Where the user's keywords are looked for, best place first.
  *
@@ -323,10 +303,6 @@ export function boundedKeywords(values: readonly string[]): string[] {
   }
   return out;
 }
-
-/* ------------------------------------------------------------------ */
-/* The signal half: the model's answer, checked                         */
-/* ------------------------------------------------------------------ */
 
 /**
  * Turn the model's filter LIST into the record a strategy stores, keeping
@@ -413,10 +389,6 @@ export function mergeExcludeFilters(
   }
   return merged;
 }
-
-/* ------------------------------------------------------------------ */
-/* One relax pass, in plain code                                        */
-/* ------------------------------------------------------------------ */
 
 /** Cues that place a written job title on the provider's six-value ladder.
  *  Checked longest first so "vice president" never reads as "president". */
@@ -637,10 +609,6 @@ export function tightenFilters(filters: LeadFilters): LeadFilters | null {
   // strategy whose only signal is a list or a flag is left as it is.
   return null;
 }
-
-/* ------------------------------------------------------------------ */
-/* Words on the cards                                                   */
-/* ------------------------------------------------------------------ */
 
 /** The always-present strategy, when the model failed to name it. PLAN §3:
  *  "Best-fit roles in your ICP" — always present. */

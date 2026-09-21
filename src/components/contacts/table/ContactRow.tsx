@@ -1,10 +1,3 @@
-/**
- * One row of the Contacts table (ref 23): who they are, which signal found
- * them, what research thinks, whether we have an address, where they stand
- * and the decision that authorises contacting them.
- *
- * Presentational: every action is a callback the container owns.
- */
 import { LinkSquare02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { Id } from "../../../../convex/_generated/dataModel"

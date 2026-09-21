@@ -1,13 +1,3 @@
-/**
- * The signal cards of reference 09 — one `CheckCard` per search strategy.
- *
- * Every number on this screen is a real count from a free count call made
- * when the strategies were recommended (PLAN §3 step 4), which is why a card
- * that matches nobody says so and cannot be ticked: switching it on would
- * spend one of the agent's searches on an empty page.
- *
- * Data-free: the rows, the selection and the handler are all the caller's.
- */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../../convex/_generated/api"
 import type { Id } from "../../../../../convex/_generated/dataModel"
@@ -67,8 +57,6 @@ export function StrategyCardList({
   )
 }
 
-/** The shape of the cards while they are being worked out. Never an empty row
- *  presented as a result (PLAN §2 "no placeholders"). */
 export function StrategyCardSkeletons({ rows = 4 }: { rows?: number }) {
   return (
     <div aria-live="polite" className="flex flex-col gap-3" role="status">

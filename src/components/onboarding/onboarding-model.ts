@@ -1,12 +1,4 @@
-/**
- * The shape of onboarding: which screen belongs to which dot, how a step moves
- * to the next one, and our own words for the refusals the entry to setup can
- * return.
- *
- * Progress is the agent row's `onboardingStep` (PLAN §5). Nothing here reads a
- * URL or browser storage, so a refresh, another device or a sign-out and back
- * all resume on the same screen.
- */
+/** Onboarding progress comes from the agent row, never the URL or browser storage. */
 import type { ComponentType } from "react"
 import { ConvexError } from "convex/values"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
@@ -24,14 +16,8 @@ import { KeywordsStep } from "@/components/onboarding/steps/signals/KeywordsStep
 import { ReviewStep } from "@/components/onboarding/steps/signals/ReviewStep"
 import { StrategiesStep } from "@/components/onboarding/steps/signals/StrategiesStep"
 
-/* ------------------------------------------------------------------ */
-/* Where a step sits in the four dots                                   */
-/* ------------------------------------------------------------------ */
-
-/** The four macro stages of PLAN §11 M1: company, ICP, outreach, signals. */
 export const ONBOARDING_DOT_COUNT = 4
 
-/** What a step tells `OnboardingShell` about its own position. */
 type OnboardingProgress = {
   dot: number
   dotCount: number
@@ -40,7 +26,6 @@ type OnboardingProgress = {
   stepCount: number
 }
 
-/** Everything a step screen is given. One shape for all four dots. */
 export type OnboardingStepProps = {
   orgId: Id<"orgs">
   agent: Doc<"agents">
@@ -49,9 +34,7 @@ export type OnboardingStepProps = {
   goNext: () => void
   /** Absent on the very first screen, which has nothing behind it. */
   goBack?: () => void
-  /** A step change is being saved. */
   moving: boolean
-  /** Our copy for a refused step change, or `null`. */
   moveError: string | null
 }
 
@@ -60,20 +43,10 @@ export type OnboardingStepEntry = {
   dot: number
   /** Its position inside that dot, 1-based. */
   stepInDot: number
-  /** How many screens that dot has in total. */
   stepsInDot: number
   Component: ComponentType<OnboardingStepProps>
 }
 
-/**
- * Every screen in setup.
- *
- * TOTAL on purpose, now that the last dot has landed: the type is every
- * `OnboardingStep` except `done`, which is not a screen but the state the
- * `/onboarding` guard redirects away from. Adding a step to
- * `ONBOARDING_STEPS` without a screen for it now fails the build, which is
- * the only moment anyone would notice.
- */
 export const ONBOARDING_STEP_REGISTRY: Record<
   Exclude<OnboardingStep, "done">,
   OnboardingStepEntry
@@ -129,16 +102,7 @@ export const ONBOARDING_STEP_REGISTRY: Record<
   },
 }
 
-/* ------------------------------------------------------------------ */
-/* Moving between steps                                                 */
-/* ------------------------------------------------------------------ */
-
-/**
- * The step after this one, or `null` when there is none to move to.
- *
- * `done` is never returned: finishing onboarding is the last dot's Confirm,
- * which does more than change a step, and the server refuses it here too.
- */
+/** Only Confirm may finish onboarding; ordinary step navigation must never return done. */
 export function nextOnboardingStep(
   step: OnboardingStep,
 ): OnboardingStep | null {
@@ -146,7 +110,6 @@ export function nextOnboardingStep(
   return next === undefined || next === "done" ? null : next
 }
 
-/** The step before this one, or `null` on the first screen. */
 export function previousOnboardingStep(
   step: OnboardingStep,
 ): OnboardingStep | null {
@@ -154,15 +117,7 @@ export function previousOnboardingStep(
   return index <= 0 ? null : (ONBOARDING_STEPS[index - 1] ?? null)
 }
 
-/* ------------------------------------------------------------------ */
-/* Getting into setup at all                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Why the org could not be prepared. These are the typed refusals
- * `orgs.ensureOrg` returns (PLAN §6 "Closing the ways in"); every
- * other failure is `unknown` and gets the retryable error state.
- */
+/** Map ensureOrg refusals to entry states; unexpected errors remain retryable. */
 export type OnboardingEntryRefusal =
   | "ACCOUNT_RESTRICTED"
   | "TRIAL_CAPACITY_REACHED"
@@ -173,7 +128,6 @@ const ENTRY_REFUSALS = [
   "TRIAL_CAPACITY_REACHED",
 ] as const
 
-/** Read the backend's code off a failed `ensureOrg` call. */
 export function entryRefusalOf(error: unknown): OnboardingEntryRefusal {
   if (error instanceof ConvexError) {
     const data: unknown = error.data

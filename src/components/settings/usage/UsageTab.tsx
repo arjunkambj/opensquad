@@ -1,15 +1,3 @@
-/**
- * Settings → Usage (reference 26, PLAN §6).
- *
- * The one credit number a member sees, and what it went on. Neutral by
- * construction: the balance query returns granted / remaining / pending and
- * the history returns an action key, so no provider name, provider unit or
- * hidden cap can reach this screen.
- *
- * There is no refill, no upgrade and no price list, because there is none —
- * one lifetime grant per org (PLAN §6), and a button offering more
- * would be a button that does nothing.
- */
 import { Coins01Icon } from "@hugeicons/core-free-icons"
 import { useQuery } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
@@ -31,8 +19,6 @@ export function UsageTab({ orgId }: { orgId: Id<"orgs"> }) {
         description="One grant per organization. Browsing, approving, sending and handling unsubscribes are free and never touch it."
       />
 
-      {/* `null` is not zero: the org holds no grant at all, so every
-          paid step refuses for a different reason than an empty balance. */}
       {balance === null ? (
         <EmptyState
           title="No credits granted"

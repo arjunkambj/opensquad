@@ -1,13 +1,3 @@
-/**
- * The sending-window fields: timezone, days, hours and the daily ceiling.
- *
- * Presentational controlled fields — the card above parses and validates them
- * before the backend call, which re-validates authoritatively.
- *
- * The daily limit's max is the trial's real ceiling and the field says so:
- * the server clamps anything higher, and a control that accepts 200 and
- * silently stores 30 would be lying about what the agent will do.
- */
 import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/prices"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"

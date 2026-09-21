@@ -53,10 +53,6 @@ import { gatewayTokenMintable, MODELS, modelForTier } from "./models";
 import type { ModelTier } from "./models";
 import { parseStructured, strictJsonSchema } from "./structured";
 
-/* ------------------------------------------------------------------ */
-/* Bounded cost                                                        */
-/* ------------------------------------------------------------------ */
-
 /** Characters of task input one call may carry. Scraped pages and threads
  *  are unbounded in the wild; a model bill must not be. */
 const AI_INPUT_CHAR_BUDGET = 24_000;
@@ -109,10 +105,6 @@ const AI_RETRY_NUDGE =
   "\n\nThe previous answer did not match the required shape. Answer again, " +
   "using exactly the required fields and nothing else.";
 
-/* ------------------------------------------------------------------ */
-/* What a completed generation is worth                                */
-/* ------------------------------------------------------------------ */
-
 /** The gateway's own accounting for a call: what it read, wrote and charged.
  *  Server-side only — it is recorded on `providerOperations`, never returned
  *  to a client. */
@@ -153,10 +145,6 @@ export type RunStructuredArgs<T extends Validator<unknown, "required", string>> 
   operationKey: string;
   maxOutputTokens?: number;
 };
-
-/* ------------------------------------------------------------------ */
-/* Reading a completed generation                                      */
-/* ------------------------------------------------------------------ */
 
 function finiteOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -212,10 +200,8 @@ function truncateInput(input: string): string {
   return head + AI_INPUT_TRUNCATION_MARK + tail;
 }
 
-/* ------------------------------------------------------------------ */
 /* The platform breaker for AI (PLAN §6 "Platform-wide circuit         */
 /* breakers")                                                          */
-/* ------------------------------------------------------------------ */
 
 /**
  * A 402 from the gateway is not this org's problem: it says the PLATFORM's
@@ -266,10 +252,6 @@ async function tripAiGatewayBreaker(ctx: ActionCtx): Promise<void> {
     });
   }
 }
-
-/* ------------------------------------------------------------------ */
-/* The call                                                            */
-/* ------------------------------------------------------------------ */
 
 /**
  * Run one schema-constrained generation as a paid call.

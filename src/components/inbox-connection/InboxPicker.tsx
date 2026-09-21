@@ -1,13 +1,3 @@
-/**
- * Step 2 of the connect flow: which mailbox this org sends from
- * (PLAN §4 "Manage inbox" step 2).
- *
- * Either an inbox that already exists on the pasted key's account, or a new
- * one the provider creates from a username. An account with no inboxes yet
- * skips straight to the create form rather than showing an empty list.
- *
- * Presentational: the caller owns the action, the busy flag and the error.
- */
 import { useState } from "react"
 import { RadioCard } from "@/components/kit/RadioCard"
 import { FormError } from "@/components/states/states"

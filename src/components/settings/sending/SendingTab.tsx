@@ -1,12 +1,3 @@
-/**
- * Settings → Sending (reference 26, PLAN §5).
- *
- * Two cards, in the order a reader needs them: the window your agent may send
- * inside, then the switch that decides whether it runs at all.
- *
- * The org record arrives from the page, so there is no second read
- * here; each card owns the mutation that writes its own half.
- */
 import { Clock01Icon } from "@hugeicons/core-free-icons"
 import { Link } from "@tanstack/react-router"
 import { AutomationCard } from "@/components/settings/sending/AutomationCard"

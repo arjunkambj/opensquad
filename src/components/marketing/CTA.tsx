@@ -10,11 +10,6 @@ import {
 } from "@/components/marketing/motion-variants"
 import { Button } from "@/components/ui/button"
 
-/**
- * Schematic emails waiting on a decision. Anonymous on purpose — roles and
- * company shapes, never a person anyone could look up — and decorative
- * (the panel is aria-hidden), so nothing here reads as a result we claim.
- */
 const waitingEmails = [
   {
     subject: "Worth fifteen minutes next week?",
@@ -26,11 +21,6 @@ const waitingEmails = [
   },
 ] as const
 
-/**
- * The approval moment, sketched: the reader asks what goes out, the agent
- * answers with the emails it wrote, and everything waits on approval.
- * Static spans, not buttons — there is nothing to click in a preview.
- */
 function ApprovalPreview() {
   return (
     <div className="w-full overflow-hidden rounded-2xl bg-background text-foreground shadow-xl shadow-foreground/10 sm:min-h-[520px]">

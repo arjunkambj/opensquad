@@ -33,13 +33,11 @@ import { SWEEP_BATCH_SIZE } from "../lib/limits";
 import { planNextStep } from "./runPlan";
 import { v } from "convex/values";
 
-/* ------------------------------------------------------------------ */
 /* Run timing                                                          */
 /*                                                                     */
 /* These belong in `convex/lib/limits.ts` with the rest of the policy  */
 /* numbers; they are local constants only because that file is         */
 /* integrator-only (EXECUTION §0).                                     */
-/* ------------------------------------------------------------------ */
 
 /** PLAN §9.1: "Lease 5 min, renewed per step". A crashed run is reclaimable
  *  once it expires, and no step takes anything like this long. */
@@ -49,10 +47,6 @@ export const AGENT_RUN_LEASE_MS = 5 * 60 * 1000;
  *  matter are daily, and an hour is short enough that a user who edits a
  *  signal sees new leads the same afternoon. */
 export const AGENT_RUN_INTERVAL_MS = 60 * 60 * 1000;
-
-/* ------------------------------------------------------------------ */
-/* Lease and revision fencing — the helpers later steps program against */
-/* ------------------------------------------------------------------ */
 
 /** Is this agent's lease still live at `at`? */
 export function runLeaseIsLive(agent: Doc<"agents">, at: number): boolean {
@@ -153,10 +147,6 @@ export async function finishRun(
     finishedAt: now,
   });
 }
-
-/* ------------------------------------------------------------------ */
-/* Entry points                                                        */
-/* ------------------------------------------------------------------ */
 
 const vRunRequest = v.object({
   started: v.boolean(),

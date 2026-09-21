@@ -1,18 +1,5 @@
-/**
- * OpenIntent schema — PLAN §7. Org and configuration tables, the agent
- * and its search strategies, the person-level lead store, the correspondence
- * tables and the usage/provider-accounting tables.
- * Component-owned mail/crawl tables never enter this schema. Every table is
- * declared exactly once: a module that writes rows imports the `*Fields` map,
- * it does not re-declare the table.
- *
- * Notation: `ms` timestamps are integer UTC epoch milliseconds. Indexes use
- * application timestamp fields; uniqueness invariants are enforced inside the
- * mutating transaction, not by the index itself (Convex has no unique index).
- *
- * The exported `*Fields` maps are the single source of truth for both
- * `defineTable` and per-module `returns` doc validators.
- */
+/** Field maps are shared by schema and return validators. Timestamps use UTC epoch milliseconds.
+ * Indexes are not unique; mutations enforce uniqueness transactionally. */
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
@@ -115,14 +102,7 @@ export const orgFields = {
   updatedAt: v.number(),
   /** AgentMail inbox reference; unique when present, claimed transactionally. */
   inboxRef: v.optional(v.string()),
-  /**
-   * The mailbox ADDRESS of `inboxRef`, as the provider reported it at connect
-   * (`Inbox.email`). The provider documents the id and the address as separate
-   * fields, so the two are stored separately rather than one being assumed to
-   * be the other: this is what "is this message from us?" compares against
-   * (`inbox/replyGate.ts`, `leads/mutations.ts`) and what Manage inbox shows.
-   * Absent until an inbox is connected.
-   */
+  /** The provider mailbox address is distinct from inboxRef and is used to recognize our own messages. */
   inboxAddress: v.optional(v.string()),
   /** The webhook this org registered on the user's own account. */
   agentmailWebhookId: v.optional(v.string()),
@@ -138,14 +118,6 @@ export const orgFields = {
   defaultInstructions: v.optional(v.string()),
 };
 
-/**
- * The company we are selling FOR — filled by website analysis at onboarding
- * dot 1 and fully editable afterwards (PLAN §7, §11 M1).
- *
- * `analysisStatus` is a variant, not a boolean pair: "never analyzed",
- * "analyzing now", "ready" and "failed with a mapped code" are four different
- * screens, and the failure code is OURS — provider wording never reaches it.
- */
 export const businessProfileFields = {
   orgId: v.id("orgs"),
   /** Absent for the "I don't have a website" path (PLAN §5). */
@@ -166,19 +138,8 @@ export const businessProfileFields = {
   updatedAt: v.number(),
 };
 
-/**
- * The agent — one per org (PLAN §7), replacing pre-pivot `campaigns`.
- *
- * One agent per org is enforced in the create mutation (read the
- * org's agents, refuse if one exists), not by an index: Convex has no
- * unique index, and mutations are serializable, so the read-then-write in one
- * transaction is the constraint.
- *
- * `revision` is the fence every queued step and draft records itself against
- * (PLAN §9.1 "Revision fencing"): it increments whenever instructions, tone,
- * goal, ICP or mode change, and work written under an older revision is
- * superseded rather than sent.
- */
+/** One agent per org, enforced transactionally. Revision changes fence off queued work and drafts
+ * created under old instructions, tone, goal, ICP or mode. */
 export const agentFields = {
   orgId: v.id("orgs"),
   /** Generated from the ICP ("Title · Region · Industry"), editable. */
@@ -212,14 +173,7 @@ export const agentFields = {
   /** When the cron should pick this agent up. Absent means "not scheduled". */
   nextRunAt: v.optional(v.number()),
   lastRunAt: v.optional(v.number()),
-  /**
-   * Leads THIS RUN LOOP researched in one org-local day, against
-   * `dailyResearchCap` (PLAN §9.2 step 5). Its own counter on purpose: the
-   * day-keyed page allowance it used to be read from also carries the
-   * owner's website re-analysis, which made a re-analyse day silently cost
-   * the agent its research. `periodKey` is the org's local day, the same key
-   * the usage ledger uses.
-   */
+  /** Count run-loop research separately from website analysis, using the organization's local day. */
   researchDay: v.optional(
     v.object({ periodKey: v.string(), count: v.number() }),
   ),
@@ -231,16 +185,7 @@ export const agentFields = {
   suggestedKeywords: v.optional(v.array(v.string())),
 };
 
-/**
- * A named, explainable lead search (PLAN §3). Each is the core ICP filters
- * AND one signal; the cards show `matchCount` from a free count call and the
- * model's one-line `rationale`.
- *
- * `nextPage` is the paging cursor the run advances so a second run does not
- * re-buy page 1, and `leadsFound` is what the Agent page's per-signal table
- * reports — both are facts of this strategy, which is why they live here and
- * not on the agent.
- */
+/** Persist nextPage to avoid buying the same search page twice. */
 export const strategyFields = {
   orgId: v.id("orgs"),
   agentId: v.id("agents"),
@@ -260,14 +205,7 @@ export const strategyFields = {
   createdAt: v.number(),
   updatedAt: v.number(),
   lastRunAt: v.optional(v.number()),
-  /**
-   * Why the run PARKED this signal: a search refused its filter set, which a
-   * later run cannot fix by asking again (the catalogue moved, or the values
-   * were never cacheable). A parked signal is skipped by the planner — so one
-   * unusable signal can no longer stop the whole run — stays visible with its
-   * reason on the agent page, and is un-parked by switching it off and on.
-   * Absent means healthy.
-   */
+  /** Invalid filters park a signal until it is toggled off and on. Absent means healthy. */
   lastError: v.optional(vOperationError),
 };
 
@@ -308,13 +246,7 @@ export const orgSecretFields = {
   previousValidUntil: v.optional(v.number()),
 };
 
-/**
- * Platform-wide circuit breakers (PLAN §6). The credit wrapper debits the
- * org bucket AND the platform bucket in the same transaction, so the
- * worst case per day is a number we chose rather than a function of how many
- * people sign up. `provider` is server-side vocabulary and never reaches a
- * client payload.
- */
+/** Reserve org and platform capacity in the same transaction to cap total provider spend. */
 export const platformBudgetFields = {
   provider: vProviderKind,
   /** `lifetime`, or a UTC day/month key — whatever the budget is stated in. */
@@ -323,10 +255,6 @@ export const platformBudgetFields = {
   used: v.number(),
   updatedAt: v.number(),
 };
-
-/* ------------------------------------------------------------------ */
-/* Org activity feed                                             */
-/* ------------------------------------------------------------------ */
 
 /**
  * Activity events — the org-wide append-only feed behind the header
@@ -346,33 +274,8 @@ export const activityEventFields = {
   conversationId: v.optional(v.string()),
 };
 
-/* ------------------------------------------------------------------ */
-/* Leads, bookings and evidence                                        */
-/*                                                                     */
-/* THE single declaration site for `prospects`, `leadEvents`,          */
-/* `bookings` and `evidence`.                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Prospects — the person-level lead (`prospects` is the backend name; the UI
- * says Contacts). PLAN §7.
- *
- * Two unions carry what used to be optional columns, so an incomplete lead is
- * a valid document rather than a row full of holes:
- *   `origin`   — a provider id exists only on a sourced lead.
- *   `research` — a score exists only on a researched one. Nothing reads a
- *                bare `aiScore`; readers switch on `research.status`.
- *
- * `stage` + `nextActionAt` is the whole state machine (PLAN §7): the cron
- * picks up whatever is due, and no other field encodes progress.
- *
- * `scoreKey` and `sourceLeadKey` are DENORMALISED INDEX KEYS. Convex indexes
- * top-level fields and cannot reach into a nested object, so these two mirror
- * `research.aiScore` and `origin.sourceLeadId`. The invariant — enforced by
- * writing `scoreKey` through `leadScoreKey` in the same patch as the research
- * value it mirrors — is that neither is ever written alone or read as the
- * value itself.
- */
+/** stage and nextActionAt drive the run loop. scoreKey and sourceLeadKey mirror research and origin
+ * for indexing; update each key atomically with its source value. */
 export const prospectFields = {
   orgId: v.id("orgs"),
   agentId: v.id("agents"),
@@ -397,13 +300,7 @@ export const prospectFields = {
   nextActionAt: v.optional(v.number()),
   /** The last failed step; drives the retry ladder (PLAN §9.1). */
   lastError: v.optional(vOperationError),
-  /**
-   * Failures so far PER STEP, because PLAN §9.1 counts "step-level attempts"
-   * and a lead can fail at more than one of them. `lastError.attempts` is the
-   * count of whichever step failed last — what the drawer prints — and this
-   * is what each ladder reads before deciding to wait or to park, so research
-   * failing twice can no longer spend the outreach writer's ladder.
-   */
+  /** Count failures per step so one step cannot exhaust another's retry budget. */
   stepAttempts: v.optional(
     v.object({
       research: v.optional(v.number()),
@@ -437,16 +334,8 @@ export const prospectFields = {
   stageReason: v.optional(v.string()),
 };
 
-/**
- * Lead events — the append-only lead history. Rows are never edited or
- * deleted: a stage correction appends a row preserving `fromStage`, it does
- * not rewrite one. Every business update and its event are written in ONE
- * transaction, so the history can never disagree with the lead.
- *
- * `actor` is a discriminated union so "comes from auth or from the agent run"
- * is structural — model output and email content can never name an actor.
- * `operationKey` is unique per org, enforced in the inserting mutation.
- */
+/** Append history in the same transaction as the lead update.
+ * Derive actors from auth or the run, never model output or email content. */
 export const leadEventFields = {
   orgId: v.id("orgs"),
   prospectId: v.id("prospects"),
@@ -462,19 +351,8 @@ export const leadEventFields = {
   details: v.optional(vLeadEventDetails),
 };
 
-/**
- * Bookings — meeting records. At most one `proposed` or `confirmed` booking
- * per lead, checked transactionally through `by_prospectId_and_state`. A
- * proposal implies NO confirmation: a sent link, an offered slot or a model's
- * reading of a reply all leave the row `proposed`.
- *
- * `meeting_booked` is set ONLY by the user (PLAN §9.5), which is why
- * `startsAt`/`endsAt`/`timezone` are REQUIRED once the state is `confirmed`,
- * together with `confirmationSource: manual`, an authenticated
- * `confirmedBy`/`confirmedAt` and a short stated `confirmationNote`.
- * None of this CRUD sends an
- * invitation or alters a remote calendar.
- */
+/** At most one live proposal or confirmed booking per lead, enforced transactionally.
+ * Only a person confirms a meeting, with time, timezone and evidence; this does not create a calendar event. */
 export const bookingFields = {
   orgId: v.id("orgs"),
   prospectId: v.id("prospects"),
@@ -518,11 +396,9 @@ export const evidenceFields = {
   createdAt: v.number(),
 };
 
-/* ------------------------------------------------------------------ */
 /* Correspondence — conversations, immutable drafts, approvals, send    */
 /* attempts, suppressions and provider-event receipts.                  */
 /* `prospects`/`leadEvents`/`bookings`/`evidence` in the block above.   */
-/* ------------------------------------------------------------------ */
 
 /**
  * Conversations — one mail thread. Drafts, approvals and send attempts all
@@ -574,13 +450,7 @@ export const conversationFields = {
    */
   lastDisposition: v.optional(vReplyDisposition),
   lastDispositionAt: v.optional(v.number()),
-  /**
-   * Normalized sender of the most recent inbound message, when it parsed as
-   * one address. Stored as DATA: it never selects an org or a
-   * conversation and never becomes a send recipient. `conversations.resume`
-   * compares it against the associated lead's contact, where a mismatch
-   * BLOCKS the resume — it can refuse, never grant.
-   */
+  /** Untrusted sender data may block resume on mismatch; it never chooses a tenant, thread or recipient. */
   lastInboundFrom: v.optional(v.string()),
   /** Per-inbox provider thread id (AgentMail thread ids are per-inbox). */
   providerThreadRef: v.optional(v.string()),
@@ -590,18 +460,7 @@ export const conversationFields = {
   lastMessageAt: v.optional(v.number()),
 };
 
-/**
- * Internal notes on a conversation (P11) — the per-thread audit trail.
- *
- * `kind: "system"` rows are lifecycle records (intake, takeover, association,
- * closure); `kind: "note"` rows are human annotations. Rows are append-only,
- * and a note can NEVER resolve a business approval: this table has no path to
- * approval state.
- *
- * Notes do not bump `conversations.contextVersion`. Architecture §8 limits
- * bumps to inbound replies, takeover/assignment/closure and explicit context
- * changes; a private annotation must not invalidate every live approval.
- */
+/** Append-only annotations and lifecycle records. Notes neither resolve approvals nor bump contextVersion. */
 export const conversationNoteFields = {
   orgId: v.id("orgs"),
   conversationId: v.id("conversations"),
@@ -612,14 +471,8 @@ export const conversationNoteFields = {
   createdAt: v.number(),
 };
 
-/**
- * Drafts — immutable revisions of the exact send payload (§8). Every send
- * field is frozen per row; `payloadHash` commits to the canonical
- * serialization of {endpointOperation, inboxRef, normalizedRecipient,
- * subject, body, replyToMessageRef}. A revision can never be edited in
- * place — `drafts.revise`/`draftRevisions.createRevision` insert a new row and move
- * `conversations.currentDraftId`.
- */
+/** Draft payloads are immutable. Editing inserts a revision and moves currentDraftId;
+ * payloadHash binds all send fields, including the recipient and reply target. */
 export const draftFields = {
   orgId: v.id("orgs"),
   conversationId: v.id("conversations"),
@@ -667,16 +520,8 @@ export const draftFields = {
   requestId: v.optional(v.string()),
 };
 
-/**
- * Approvals — one immutable verdict per draft approval, bound to the exact
- * payloadHash + normalizedRecipient + contextVersion. A later edit supersedes
- * applicability, not the record.
- *
- * This is EMAIL approval — "yes, send this text" — never lead approval, which
- * lives on `prospects.approval` (PLAN §9.3). Autopilot does not bypass it: it
- * writes a row here with `actor: "autopilot"` bound to the draft id and
- * revision, and the send goes through the same ledger.
- */
+/** Email approval binds the exact draft, recipient and context version.
+ * Autopilot records the same approval; lead approval is separate. */
 export const approvalFields = {
   orgId: v.id("orgs"),
   actor: vApprovalActor,
@@ -695,13 +540,8 @@ export const approvalFields = {
   requestId: v.string(),
 };
 
-/**
- * Send attempts — the ONE logical send per draft revision (§8.3). Durable
- * intent (`reserved`) is committed before any network I/O; `requesting`
- * marks the dispatch boundary — no local action can retract an HTTP request
- * already sent. `providerDeliveryFacts` carries verified webhook facts only,
- * never a second transport-truth store.
- */
+/** Commit reserved intent before network I/O. requesting cannot be retracted locally.
+ * Delivery facts come only from verified webhooks. */
 export const sendAttemptFields = {
   orgId: v.id("orgs"),
   draftId: v.id("drafts"),
@@ -761,16 +601,8 @@ export const suppressionFields = {
   sourceConversationId: v.optional(v.id("conversations")),
 };
 
-/**
- * Provider event receipts (§4.3): the application's dedupe/replay record for
- * verified provider events. `applicationKey` dedupes the business effect
- * (`incoming:<inbox>:<message>` for inbound; `outbound:<messageRef>:<type>`
- * for delivery facts); `providerEventId` dedupes delivery. Delivery events
- * that arrive before the send attempt recorded its providerMessageRef stay
- * `pending` and are folded in by the send-outcome path afterwards. P11 consumes the
- * pending rows fully; `providerFacts` holds only necessary verified fields —
- * never another copy of message bodies.
- */
+/** providerEventId dedupes delivery; applicationKey dedupes business effects.
+ * Delivery events wait pending until a send records its message ref. Bodies remain in component storage. */
 export const emailEventReceiptFields = {
   orgId: v.id("orgs"),
   inboxRef: v.string(),
@@ -786,14 +618,7 @@ export const emailEventReceiptFields = {
    * backfill never downgrades a `live` row.
    */
   source: vMessageSource,
-  /**
-   * Which half of the mail path this row belongs to, derived from
-   * `applicationKey` by `directionForApplicationKey` so the two can never
-   * disagree. It exists to keep the inbound drain's filter INSIDE its index
-   * range: the two halves settle by different routes, so an outbound receipt
-   * whose message ref never lands on a send attempt stays `pending` forever
-   * and would otherwise fill the oldest-first scan window.
-   */
+  /** Derive direction from applicationKey so stranded outbound receipts cannot fill the inbound drain window. */
   direction: vEmailEventDirection,
   handlingState: vEmailEventHandlingState,
   /** Bounded projection of the verified event (≤4 KiB enforced on write). */
@@ -803,23 +628,8 @@ export const emailEventReceiptFields = {
   error: v.optional(v.string()),
 };
 
-/**
- * Quarantined provider events (§4.3, integrations.md §G3 "Unknown inboxes are
- * quarantined").
- *
- * `emailEventReceipts.orgId` is required, and it should stay required —
- * every consumer of that table reads it inside an org. But a verified
- * event for an inbox no org claims has no org to be filed under,
- * and dropping it loses the mail permanently: the component has already
- * marked the `event_id` ingested, so the provider's retry returns before
- * enqueueing any callback, and nothing else records that the message existed.
- *
- * So the unattributable ones land here instead — PROVIDER IDENTIFIERS ONLY,
- * the same discipline as the receipt table and the log lines. The body stays
- * where it already is, in the component's own `inboundMessages` row, which is
- * what makes a replay possible once the assignment is corrected without this
- * table becoming the second message store §4.3 forbids.
- */
+/** Keep verified events for unclaimed inboxes so assignment can replay them later.
+ * The component has already deduped delivery, so provider retries cannot recover them. Store identifiers only. */
 export const quarantinedEmailEventFields = {
   inboxRef: v.string(),
   providerEventId: v.string(),
@@ -842,20 +652,8 @@ export const quarantinedEmailEventFields = {
   note: v.optional(v.string()),
 };
 
-/* ------------------------------------------------------------------ */
-/* Usage ledger (PLAN §6) — buckets, reservations, provider operations. */
-/* ------------------------------------------------------------------ */
-
-/**
- * Usage buckets — atomic capacity counters. `reserved + committed +
- * uncertain <= limit` is enforced inside the reserving transaction, which is
- * why concurrent calls cannot overspend.
- *
- * `periodKey` is `lifetime` for the granted trial allowances and the
- * org-local day for the daily caps (PLAN §6 "Ledger"). No bucket means
- * every paid call refuses — the grant is part of creating the org,
- * never implied.
- */
+/** Reserve atomically under reserved + committed + uncertain <= limit.
+ * Daily caps use the org-local day. A missing bucket refuses paid work. */
 export const usageBucketFields = {
   orgId: v.id("orgs"),
   /** `org` for org-wide metrics; `agent:<id>` when an agent
@@ -870,25 +668,8 @@ export const usageBucketFields = {
   updatedAt: v.number(),
 };
 
-/**
- * The claim document behind PLAN §6's "one trial grant per user".
- *
- * A user can create any number of organizations in the auth provider, so the
- * grant cannot follow the organization — it follows the identity. This row is
- * that rule made into a CONSTRAINT rather than a hope: the granting
- * transaction reads `by_identityKey` AND writes this row, so two parallel
- * `ensureOrg` calls for two different organizations of one account cannot
- * both observe an empty claim. The loser's read range contains the winner's
- * insert, so Convex conflicts it and retries it against the committed row.
- *
- * It is also what `MAX_TRIAL_ORGS` counts: the cap bounds how many trials we
- * FUND, and an org created with no grant costs the platform nothing.
- *
- * Trial identity is `tokenIdentifier` (`iss|sub`), not a verified email: a
- * second auth `sub` for the same person is a second grant. Accepted, because
- * the cap still bounds the total and nothing here may treat an email as an
- * identity.
- */
+/** Claim the trial by tokenIdentifier in the granting transaction, preventing concurrent orgs
+ * from funding the same identity twice. MAX_TRIAL_ORGS counts claims, not organizations. Email is not identity. */
 export const trialGrantFields = {
   /** `tokenIdentifier` (`iss|sub`) of the identity this grant belongs to. */
   identityKey: v.string(),
@@ -908,19 +689,8 @@ export const usageReservationFields = {
   providerReference: v.optional(v.string()),
 };
 
-/**
- * §4.4 `providerOperations` — the dedupe/accounting record for ONE paid
- * provider invocation. G2's gateway contract item 3 requires that "a
- * duplicate invocation ID returns its recorded result or status" and that
- * "ambiguous failures consume the reservation until reconciled"; before this
- * table there was nowhere to record either.
- *
- * The row is written in the SAME transaction as the `billing.reserve` it owns,
- * before the provider is contacted, so there is no window in which a paid
- * call exists with no record of it. `reservationIds` names the reservations
- * the settle path must move, so a caller can never settle a different debit
- * than the one it took.
- */
+/** Record provider operations and their reservations in one transaction before contacting the provider.
+ * Retries reuse the record; ambiguous outcomes keep capacity reserved until reconciled. */
 export const providerOperationFields = {
   orgId: v.id("orgs"),
   provider: vProviderKind,
@@ -948,7 +718,6 @@ export const providerOperationFields = {
   resultDigest: v.optional(v.string()),
   error: v.optional(v.object({ code: v.string(), message: v.string() })),
 };
-
 
 export default defineSchema({
   orgs: defineTable(orgFields)

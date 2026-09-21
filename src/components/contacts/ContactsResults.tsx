@@ -1,11 +1,3 @@
-/**
- * The loaded table and its footer, as one block.
- *
- * Presentational: it takes the page the container read and the handlers the
- * container owns, so the rows, the select-all, the sort header and the
- * pagination all speak about the same page and never read anything
- * themselves.
- */
 import type { Id } from "../../../convex/_generated/dataModel"
 import type { PageSize } from "@/lib/search-params"
 import type { ContactRowData, SpendContext } from "./contacts-model"
@@ -31,13 +23,11 @@ export function ContactsResults({
   busy: boolean
   spend: SpendContext
   prices: { email: number; research: number }
-  /** True in the one list mode the score order applies to. */
   sortable: boolean
   lowestScoreFirst: boolean
   onToggleSort: () => void
   onToggleAll: (checked: boolean) => void
   handlers: ContactRowHandlers
-  /** What the footer counts from, and where it can go. */
   pagination: {
     firstIndex: number
     total: { count: number; hasMore: boolean }

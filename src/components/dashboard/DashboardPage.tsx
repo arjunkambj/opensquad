@@ -1,21 +1,4 @@
-/**
- * `/dashboard` — reference 20: what the agent has done in a window you pick,
- * and the one thing waiting on a person.
- *
- * This is the container (PLAN §10): it owns every Convex call on the screen
- * and hands plain props down, so the panels below stay presentational and
- * know nothing about Convex.
- *
- * ONE WINDOW, ONE CLOCK. The range pills write the route's search params, and
- * every query on this page is given the same two instants, derived in the
- * ORG's zone. That is what makes the acceptance check possible: each
- * figure counts rows Contacts and the Inbox can be filtered to over the same
- * window (`convex/dashboard/leadReads.ts` and `outcomeReads.ts` name the rows
- * behind each one exactly).
- *
- * A brand-new org reaches every panel's designed empty state. Nothing
- * here renders a zero that was not counted, and nothing renders sample rows.
- */
+/** All dashboard queries share one window resolved in the organization timezone. */
 import { useUser } from "@hexclave/react"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
@@ -43,10 +26,8 @@ import { withFilters } from "@/lib/search-params"
 
 const DASHBOARD_ROUTE = "/_dashboard/_org/dashboard"
 
-/** How many rows each bottom panel lists before "View more". */
 const PANEL_ROWS = 5
 
-/** The greeting of reference 20 — the user's own name, or nobody's. */
 function firstName(displayName: string | null): string | null {
   const first = displayName?.trim().split(/\s+/)[0]
   return first === undefined || first.length === 0 ? null : first

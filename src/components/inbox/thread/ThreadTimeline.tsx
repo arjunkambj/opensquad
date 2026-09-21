@@ -1,14 +1,5 @@
-/**
- * The merged thread: inbound replies and the mail we sent, oldest first.
- *
- * The query returns the most recent entries newest-first and cannot page two
- * heterogeneous sources under one cursor, so this reverses that page for
- * reading and says plainly when older entries are not on it.
- *
- * Bodies render as plain text — the backend never projects `html`, which
- * removes raw-HTML injection and remote tracking pixels at the source rather
- * than trusting a sanitizer here.
- */
+/** Reverse the newest-first bounded page for chronological reading.
+ * Render bodies as plain text to exclude HTML injection and tracking pixels. */
 import type { Id } from "../../../../convex/_generated/dataModel"
 import type { MessageSource } from "../../../../convex/lib/validators"
 import type { ThreadEntry } from "@/components/inbox/inbox-presentation"

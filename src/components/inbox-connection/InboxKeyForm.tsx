@@ -1,15 +1,5 @@
-/**
- * The one place an AgentMail key is typed — first connect and key rotation
- * both use it.
- *
- * THE KEY IS NEVER HELD. The field is uncontrolled: the value lives in the
- * DOM node, is read once on submit, handed to the caller's request, and wiped
- * from the node in the same tick. Nothing here keeps it in React state, logs
- * it, or renders it back — a stored key is only ever shown as its last four
- * digits, by the connected view.
- *
- * Presentational: the caller owns the action, the busy flag and the error.
- */
+/** Read the uncontrolled key once on submit and clear the DOM value immediately.
+ * Never retain it in React state or logs. */
 import { useRef, useState } from "react"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
@@ -18,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 
 export type InboxKeyFormProps = {
-  /** Unique per rendered instance — two forms can share a page. */
   id: string
   label: string
   description: string
@@ -27,7 +16,6 @@ export type InboxKeyFormProps = {
   /** Called with the pasted key, which the caller must not retain either. */
   onSubmit: (apiKey: string) => void
   error: string | null
-  /** Shown beside Submit when the form can be abandoned. */
   onCancel?: () => void
   cancelLabel?: string
   disabled?: boolean

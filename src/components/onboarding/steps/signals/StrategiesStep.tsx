@@ -1,16 +1,4 @@
-/**
- * Onboarding dot 4, screen 1 — the signals to track (reference 09).
- *
- * A signal is the user's ideal customer AND one reason to contact them now,
- * and every card carries the real number of people that combination matches.
- * That number is the whole point of the screen: it is what turns "recently
- * funded companies" from a nice idea into a decision the user can make, and
- * it is why a card with none is switched off and stays off.
- *
- * The selection is written straight through. Each tick is one small mutation
- * rather than a draft flushed on Next, so leaving by Previous, by Next or by
- * closing the tab all leave the same thing behind.
- */
+/** Save each selection immediately so leaving without Next still preserves it. */
 import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { useMutation, useQuery } from "convex/react"
 import { useRef, useState } from "react"

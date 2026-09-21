@@ -1,13 +1,3 @@
-/**
- * The default-instructions editor (PLAN §1, "templates as one instructions
- * field").
- *
- * One bounded textarea with a live character count, because the value is
- * concatenated into every outreach prompt and a reader should be able to see
- * how close to the ceiling they are before the server refuses.
- *
- * Presentational: the container owns the value, the save and the permission.
- */
 import { InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { DEFAULT_INSTRUCTIONS_MAX_LENGTH } from "../../../../convex/lib/validators"
 import { InfoBanner } from "@/components/kit/InfoBanner"

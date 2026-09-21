@@ -1,13 +1,3 @@
-/**
- * RadioCard — one option of a single-choice set drawn as a card
- * (ref 05: Campaign Goal, Message Tone).
- *
- * It wraps a real `<input type="radio">` rather than a `role="radio"` button,
- * so arrow-key navigation, form semantics and the "one of `name` wins" rule
- * come from the browser instead of being re-implemented. The input is
- * visually hidden; the drawn dot mirrors its state, and the focus ring lives
- * on the card so keyboard users see what they are on.
- */
 import { cn } from "@/lib/utils"
 
 export type RadioCardProps = {

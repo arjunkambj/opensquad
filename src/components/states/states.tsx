@@ -1,10 +1,3 @@
-/**
- * States — the shared loading, empty and error renderings.
- *
- * One vocabulary for "nothing yet", "still reading" and "this failed", so a
- * new screen never invents its own. Data-free: callers pass the copy and the
- * action, and nothing here knows about Convex.
- */
 import { Alert02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
@@ -19,12 +12,6 @@ import {
 } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
-
-/**
- * Shared empty/loading/error states (V11). Page-level components should use
- * these instead of ad-hoc "…" placeholders so a loading view can never be
- * mistaken for completed-but-empty work.
- */
 
 export function LoadingState({
   title = "Loading",
@@ -54,31 +41,17 @@ export function LoadingState({
 }
 
 export type EmptyStateProps = {
-  /** A Hugeicon for the standard treatment. */
   icon?: IconSvgElement
   /** A richer illustration, rendered instead of `icon` when given. */
   illustration?: ReactNode
   title: string
   description?: ReactNode
-  /** The one thing to do next. */
   action?: ReactNode
-  /**
-   * `outlined`, the default, is the dashed block a screen shows where a whole
-   * page has nothing on it. `plain` is the card-interior form of reference 26
-   * ("No custom templates yet"), for a card that already has its own border.
-   */
+  /** Use outlined for page-level states and plain inside cards that already have a border. */
   variant?: "outlined" | "plain"
   className?: string
 }
 
-/**
- * Empty is a designed state, not a blank area: an icon or illustration, what
- * is missing, why it matters, and the one action that fills it. The action is
- * a slot, so the caller keeps the mutation and the permission check.
- *
- * One component with two skins rather than two components — there used to be a
- * second copy in `kit/`, and a screen picked whichever it happened to import.
- */
 export function EmptyState({
   icon,
   illustration,
@@ -177,7 +150,6 @@ export function ErrorState({
   )
 }
 
-/** Inline mutation error line used below forms. */
 export function FormError({ message }: { message: string | null }) {
   if (message === null) {
     return null

@@ -26,10 +26,6 @@ import type { AgentIcp } from "../lib/validators";
 import { ICP_GROUP_MAX_ITEMS } from "./icpVocabulary";
 import type { IcpOptionLists } from "./icpVocabulary";
 
-/* ------------------------------------------------------------------ */
-/* Checking one ICP                                                     */
-/* ------------------------------------------------------------------ */
-
 /** Trim, drop blanks, drop case-insensitive duplicates, keep the order. */
 function tidy(values: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -177,10 +173,6 @@ export function boundedPainPoints(value: string): string {
   });
 }
 
-/* ------------------------------------------------------------------ */
-/* Comparing and emptiness                                              */
-/* ------------------------------------------------------------------ */
-
 const ICP_GROUPS = [
   "jobTitles",
   "industries",
@@ -205,10 +197,6 @@ export function sameIcp(a: AgentIcp, b: AgentIcp): boolean {
       a[group].every((value, index) => value === b[group][index]),
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* What one generation run pays under                                   */
-/* ------------------------------------------------------------------ */
 
 /**
  * The key one run spends under. It always carries `startedAt`, so Retry and

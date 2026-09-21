@@ -16,16 +16,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSidebar } from "@/components/ui/sidebar"
 
-/** The feed is a glance, not a page: the newest few, then the dashboard. */
 const FEED_LIMIT = 8
 
-/**
- * The bell of reference 20 — the org's newest activity, on the spot.
- *
- * Every row is an event the backend recorded (`activity.queries.list`), never
- * a derived guess, and the kind is rendered through a total map so a new kind
- * is a build failure rather than a blank row.
- */
 export function NotificationsBell({
   orgId,
 }: {
@@ -62,7 +54,6 @@ export function NotificationsBell({
   )
 }
 
-/** `undefined` while the subscription is still loading. */
 type Feed = FunctionReturnType<typeof api.activity.queries.list> | undefined
 
 function NotificationsFeed({ feed }: { feed: Feed }) {

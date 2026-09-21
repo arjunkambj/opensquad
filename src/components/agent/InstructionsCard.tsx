@@ -1,15 +1,4 @@
-/**
- * What the agent is told to say — the one instructions field that replaces
- * templates (PLAN §1).
- *
- * Saved explicitly, never on every keystroke: a change here bumps
- * `agents.revision`, which supersedes every draft written under the old
- * wording and has them rewritten on the next pass. That is not something to
- * do per character.
- *
- * Empty means the org default from Settings → Outreach applies, which
- * the card says rather than leaving the user to discover.
- */
+/** Save explicitly: each revision invalidates existing drafts. Empty instructions use the org default. */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { Link } from "@tanstack/react-router"

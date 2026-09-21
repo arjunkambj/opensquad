@@ -6,7 +6,6 @@ import { DashboardLoadingSkeleton } from "@/components/layout/DashboardLoadingSk
 import { DashboardRouteError } from "@/components/layout/DashboardRouteError"
 import { DashboardShell } from "@/components/layout/DashboardShell"
 
-/** The signed-in shell: suspend until the session resolves, then render it. */
 export function DashboardLayout() {
   return (
     <Suspense fallback={<DashboardLoadingSkeleton />}>
@@ -17,11 +16,7 @@ export function DashboardLayout() {
 
 function AuthedDashboard() {
   const user = useUser({ or: "redirect" })
-  // Reset the boundary on any location change, SEARCH INCLUDED — not just the
-  // pathname. Several failures here are caused by a search param rather than a
-  // route: a stale pagination cursor throws, and `reset` alone would re-render
-  // the same bad cursor forever. Keying on the full href means clearing the
-  // offending param is a real recovery.
+  // Reset on the full href, including search, so clearing a stale cursor recovers the boundary.
   const href = useRouterState({ select: (state) => state.location.href })
 
   return (
@@ -36,10 +31,7 @@ function AuthedDashboard() {
         getResetKey={() => href}
         errorComponent={DashboardRouteError}
       >
-        {/* Nothing inside reads anything until an organization is active:
-            every query is answered for the token's organization, so rendering
-            a screen before one is selected would show another organization's
-            data for a frame. */}
+        {/* Wait for an active organization before mounting tenant queries. */}
         <OrgBoundary user={user} fallback={<DashboardLoadingSkeleton />}>
           <Outlet />
         </OrgBoundary>

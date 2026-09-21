@@ -1,8 +1,3 @@
-/**
- * The four filter pills of reference 24. Each is a link over one search
- * param, so a filtered inbox is a view someone can paste to a colleague and
- * Back walks through the filters that were tried.
- */
 import {
   ClockIcon,
   InboxIcon,

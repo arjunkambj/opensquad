@@ -1,10 +1,3 @@
-/**
- * The card around each of reference 20's two bottom panels: a tinted icon
- * tile, a title and subtitle, and one action on the right.
- *
- * One frame for both panels so "Latest hot leads" and "Latest replies" cannot
- * drift apart, and so each panel file holds only its own rows.
- */
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"

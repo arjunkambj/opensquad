@@ -1,16 +1,3 @@
-/**
- * Onboarding dot 2, screen 2 — the companies those people work at
- * (reference 07).
- *
- * Four groups, each with its own "All …" chip. Three of them draw on the lead
- * catalogue's allowed values and one on our own headcount bands; either way
- * every chip carries a value a search can use, which is why nothing on this
- * screen is typed (PLAN §3 step 2).
- *
- * Locations come back as the broad regions first and then the countries. The
- * regions are few and useful, so they are always on screen; a country is
- * reached through Add, and stays as a chip once it is picked.
- */
 import { useQuery } from "convex/react"
 import { api } from "../../../../../convex/_generated/api"
 import { ICP_GROUP_MAX_ITEMS } from "../../../../../convex/agents/icpVocabulary"
@@ -21,7 +8,6 @@ import { useIcpDraft } from "@/components/onboarding/steps/icp/use-icp-draft"
 import { InfoBanner } from "@/components/kit/InfoBanner"
 import { Skeleton } from "@/components/ui/skeleton"
 
-/** A catalogue value is its own label: these are already plain words. */
 function chips(values: readonly string[]) {
   return values.map((value) => ({ value, label: value }))
 }
@@ -108,7 +94,6 @@ export function CompanyFiltersStep(props: OnboardingStepProps) {
   )
 }
 
-/** The shape of the four groups while the allowed values load. */
 function FiltersSkeleton() {
   return (
     <div aria-live="polite" className="flex flex-col gap-6" role="status">

@@ -1,14 +1,4 @@
-/**
- * Settings → Sending, the automation switch.
- *
- * Two states, each stated as what it MEANS rather than as a label: active is
- * "the agent may start work within the policy above", paused is "it starts
- * nothing new". Pausing is not a recall — mail already handed to the provider
- * is gone — and the card says so before the button, not after it.
- *
- * `pauseReason: "onboarding_pending"` is not a manual pause, so it offers the
- * way to finish setup instead of a resume that would immediately be undone.
- */
+/** onboarding_pending requires finishing setup, not manually resuming automation. */
 import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"

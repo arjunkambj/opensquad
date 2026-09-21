@@ -1,17 +1,3 @@
-/**
- * "Latest replies" (reference 20) — threads someone replied in during this
- * window, newest reply first.
- *
- * There is no message body on a conversation row, so there is no preview line
- * here. What the row does carry is who replied, when, and the classification
- * the reply handler recorded; a one-line summary of someone's email would
- * have to be invented, and that is the one thing this panel must not print.
- *
- * Two empty states, because they mean different things: no inbox connected is
- * a thing to go and do, and a connected but quiet inbox is simply quiet.
- *
- * Presentational: the container owns the query.
- */
 import { BubbleChatIcon, MailAdd01Icon } from "@hugeicons/core-free-icons"
 import { Link } from "@tanstack/react-router"
 import type { FunctionReturnType } from "convex/server"
@@ -28,10 +14,6 @@ export type LatestRepliesData = FunctionReturnType<
   typeof api.dashboard.panels.latestReplies
 >
 
-/**
- * What the reply handler concluded, in words — a total map over the union, so
- * a disposition added to the backend fails this build until it has a label.
- */
 const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
   interested: "Interested",
   question: "Question",
@@ -47,10 +29,8 @@ export function LatestReplies({
   hint,
   timezone,
 }: {
-  /** `undefined` while the query is still reading. */
   replies: LatestRepliesData | undefined
   hint: string
-  /** The org's zone — every timestamp on this screen is on its clock. */
   timezone: string
 }) {
   return (

@@ -32,10 +32,6 @@ import type { AgentGoal, AgentTone, ReplyDisposition } from "../lib/validators";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* The answer                                                          */
-/* ------------------------------------------------------------------ */
-
 /**
  * The seven classes PLAN §8 names. They are the MODEL's vocabulary, which is
  * deliberately finer than the product's `REPLY_DISPOSITIONS`: `objection` is
@@ -133,10 +129,6 @@ export function boundResumeDays(days: number | undefined): number {
   }
   return Math.min(RESUME_DAYS_MAX, Math.max(RESUME_DAYS_MIN, Math.round(days)));
 }
-
-/* ------------------------------------------------------------------ */
-/* The prompt                                                          */
-/* ------------------------------------------------------------------ */
 
 export const HANDLE_REPLY_SYSTEM = [
   "You read one reply to a B2B sales email and decide two things: what kind",

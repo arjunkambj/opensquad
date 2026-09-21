@@ -1,16 +1,5 @@
-/**
- * The tenant gate of the signed-in app.
- *
- * Every Convex request is answered for the organization ACTIVE in the auth
- * provider (PLAN §4), so a session with none active can read nothing. That is
- * not an error state and never a question for the user: the provider gives
- * every account a personal organization on sign-up, so this selects the first
- * one and waits for the refreshed token.
- *
- * It renders `fallback` while that is happening, because a screen rendered
- * against the old token would read the previous organization for a moment and
- * then swap under the user.
- */
+/** Select the first organization when none is active, then wait for a refreshed token
+ * before rendering tenant data. */
 import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import type { CurrentUser } from "@hexclave/react"

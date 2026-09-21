@@ -1,16 +1,3 @@
-/**
- * The website row at the top of onboarding step 1 (references 01 and 02): one
- * address field with the action sitting inside it, the price of that action
- * underneath, and the way past it for someone who has no website.
- *
- * One button, two jobs. Before there is a profile it reads **Analyze**; once
- * the site has been read it reads **Regenerate** and carries its price, which
- * is the honest way to say that pressing it again reads the site again and
- * costs credits (PLAN §5).
- *
- * Presentational: it never calls Convex and never decides whether the user can
- * afford anything — the step container hands it the price and the reason.
- */
 import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Button } from "@/components/ui/button"
@@ -63,8 +50,6 @@ export function WebsiteAnalyzeField({
   return (
     <Field>
       <FieldLabel htmlFor="company-website">Website</FieldLabel>
-      {/* h-10 to match the profile fields below it, so the column reads as one
-          form rather than as a control bolted above one. */}
       <InputGroup className="h-10">
         <InputGroupInput
           aria-describedby={noteId}

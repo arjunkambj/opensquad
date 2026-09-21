@@ -1,15 +1,3 @@
-/**
- * ChipInput — a list of removable chips followed by a dashed "+ Add" chip that
- * turns into an inline text field (refs 06 job titles, 07 "+ Add" inside a
- * filter group, 08 companies to avoid).
- *
- * Keyboard: Enter or comma commits, comma-separated paste commits each part,
- * Backspace on an empty field removes the last chip, Escape abandons the
- * draft. Duplicates are dropped case-insensitively and `maxCount` stops the
- * Add affordance rather than silently truncating a typed value.
- *
- * Data-free: `values` in, `onChange` out. It never seeds itself.
- */
 import { Add01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useState } from "react"

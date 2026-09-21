@@ -190,10 +190,6 @@ export async function evaluateReplyAutomation(
   return { start: true };
 }
 
-/* ------------------------------------------------------------------ */
-/* "Never answer history" (PLAN §9.4)                                   */
-/* ------------------------------------------------------------------ */
-
 /**
  * Why reply handling did not even LOOK at this message.
  *
@@ -354,10 +350,6 @@ export async function evaluateReplyHistory(
   }
   return { handle: true };
 }
-
-/* ------------------------------------------------------------------ */
-/* May the agent speak?                                                 */
-/* ------------------------------------------------------------------ */
 
 /**
  * The automation gate plus the verified-sender check `conversations.resume`

@@ -1,11 +1,3 @@
-/**
- * Confirm taking an entry off the blocklist.
- *
- * Removal is confirmed rather than instant because the consequence is
- * invisible and asymmetric: nothing happens on screen, and the next run may
- * mail someone who asked not to be mailed. The dialog says which of those a
- * row is — a bounce is a delivery fact, an unsubscribe is a person's request.
- */
 import type { Doc } from "../../../../convex/_generated/dataModel"
 import { BLOCK_REASON_LABEL } from "@/components/settings/blocklist/blocklist-copy"
 import { FormError } from "@/components/states/states"
@@ -21,7 +13,6 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 
 export type RemoveBlockDialogProps = {
-  /** The row being removed, or `null` when the dialog is closed. */
   entry: Doc<"suppressions"> | null
   busy: boolean
   error: string | null

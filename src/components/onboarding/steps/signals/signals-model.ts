@@ -20,10 +20,6 @@ const SIGNALS_GENERATION_CREDITS =
 export const KEYWORDS_GENERATION_CREDITS =
   ACTION_PRICES.generate_keywords.credits
 
-/* ------------------------------------------------------------------ */
-/* Where a run stands                                                   */
-/* ------------------------------------------------------------------ */
-
 export type SignalsGenerationView =
   | { state: "never" }
   | { state: "generating" }
@@ -37,7 +33,6 @@ export type SignalsGenerationView =
   | { state: "ready" }
   | { state: "failed"; code: OperationErrorCode }
 
-/** The agent's `strategyGeneration`, with "absent" and "lost" spelled out. */
 export function signalsGenerationView(
   status: GenerationStatus | null,
 ): SignalsGenerationView {
@@ -58,13 +53,7 @@ export function signalsGenerationView(
   }
 }
 
-/**
- * What the NEXT run will cost, as far as the browser can tell.
- *
- * The ledger is the authority (`billing/reserve.ts` prices from the first
- * settled operation, not from this), so this is what the button says and what
- * the affordability check uses — never what is charged.
- */
+/** Display-only pricing; the ledger determines the charge from settled operations. */
 export function signalsGenerationPrice(view: SignalsGenerationView): number {
   switch (view.state) {
     case "never":
@@ -81,18 +70,10 @@ export function signalsGenerationPrice(view: SignalsGenerationView): number {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Reading a match count out loud                                       */
-/* ------------------------------------------------------------------ */
-
-/** The word beside a card's count. Singular matters: "1 matches" reads like
- *  a bug in a screen whose whole job is to be believed. */
 export function matchCountLabel(count: number): string {
   return count === 1 ? "match" : "matches"
 }
 
-/** True when a strategy can be switched on at all. A strategy that matches
- *  nobody would spend a search on an empty page, and the server refuses it. */
 export function strategyIsSelectable(matchCount: number): boolean {
   return matchCount > 0
 }

@@ -29,9 +29,6 @@ export const REQUEST_STALE_SWEEP_MS = 120_000;
  */
 export const RECONCILE_WINDOW_MS = 23 * 60 * 60 * 1000;
 
-/* ------------------------------------------------------------------ */
-/* Loaders + helpers                                                    */
-/* ------------------------------------------------------------------ */
 type AttemptContext = {
   org: Doc<"orgs">;
   conversation: Doc<"conversations">;

@@ -39,16 +39,6 @@ const getInitials = (value: string | null) =>
     .map((part) => part[0]?.toUpperCase())
     .join("")
 
-/**
- * The signed-in user at the foot of the sidebar (reference 20): the real
- * account, the organization being worked in, and the menu that leads out of
- * the app.
- *
- * It sits here rather than in a top bar because the reference has no top bar
- * and because this is where a user looks for "who am I signed in as" — and
- * the collapsed rail keeps the avatar, which is the one part still legible at
- * 3rem.
- */
 export function SidebarUser({ user }: { user: ProfileUser }) {
   const navigate = useNavigate()
   const app = useHexclaveApp()
@@ -122,9 +112,7 @@ export function SidebarUser({ user }: { user: ProfileUser }) {
         <DropdownMenuSeparator />
         {account === null ? null : (
           <>
-            {/* Its own boundary: the organizations come from a suspending SDK
-                hook, and a cold cache here must not take the whole shell down
-                to a skeleton while a menu is open. */}
+            {/* The suspending organization hook must not replace the whole shell while this menu opens. */}
             <Suspense
               fallback={<DropdownMenuLabel>Organization</DropdownMenuLabel>}
             >

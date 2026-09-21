@@ -1,17 +1,7 @@
-/**
- * The blocklist's page footer: how many entries match, and the way through
- * them.
- *
- * Keyset pagination, so the controls are Back and Next rather than numbered
- * pages: the query knows where the NEXT page starts, and the pages already
- * walked are remembered by the caller. There is no page number to show that
- * would survive a row being added while someone reads.
- */
 import { Button } from "@/components/ui/button"
 import { CardFooter } from "@/components/ui/card"
 
 export type BlocklistPagerProps = {
-  /** Entries matching the current filter, across every page. */
   matched: number
   filtered: boolean
   canGoBack: boolean

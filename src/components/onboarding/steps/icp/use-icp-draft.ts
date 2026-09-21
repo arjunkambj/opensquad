@@ -1,18 +1,4 @@
-/**
- * The ICP as the user is editing it, and the promise that it is saved.
- *
- * Dot 2 has three screens over one record, so "every edit persists" has to
- * survive three things: a chip clicked and then a refresh, a chip clicked and
- * then Next, and the generation landing underneath an open screen.
- *
- *   - every change is written after a short pause, so a run of clicks is one
- *     round trip rather than five;
- *   - `flush` makes the pending write happen NOW and says whether it landed,
- *     which is what Previous and Next wait on;
- *   - the authoritative agent row is adopted whenever it changes and the user
- *     has nothing unsaved, which is how the generated chips appear without
- *     this hook polling anything.
- */
+/** Debounce edits, flush before navigation, and adopt server updates only when the draft is clean. */
 import { useMutation } from "convex/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../../../../../convex/_generated/api"
@@ -21,15 +7,12 @@ import type { IcpDraft } from "@/components/onboarding/steps/icp/icp-model"
 import { sameIcpDraft } from "@/components/onboarding/steps/icp/icp-model"
 import { errorMessage } from "@/lib/convex-error"
 
-/** Long enough to collapse a run of chip clicks, short enough that a refresh
- *  a moment later still finds the edit on the server. */
 const ICP_SAVE_DEBOUNCE_MS = 600
 
 export type IcpSaveState = "idle" | "saving" | "saved" | "error"
 
 export type IcpDraftHandle = {
   draft: IcpDraft
-  /** Replace one or more groups. Saves itself shortly afterwards. */
   change: (patch: Partial<IcpDraft>) => void
   /** Write anything pending right now; `true` when the record is up to date. */
   flush: () => Promise<boolean>
@@ -77,11 +60,7 @@ export function useIcpDraft(
     [],
   )
 
-  // ONE WRITE AT A TIME. The debounce and the `flush` behind Next can ask to
-  // save in the same moment — the timer fires, and the user presses Next
-  // before its write comes back. Two overlapping `updateIcp` calls would land
-  // in an order neither of them chose, so every ask is queued behind the one
-  // before it instead of racing it.
+  // Serialize debounce and navigation flushes so overlapping writes cannot land out of order.
   const chain = useRef<Promise<unknown>>(Promise.resolve())
   /** The draft the last write put on the record, so a queued ask that is
    *  already satisfied does not write it a second time. */

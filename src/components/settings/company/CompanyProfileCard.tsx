@@ -1,11 +1,3 @@
-/**
- * Settings → Company, the profile card: the same fields and the same
- * completeness rule as onboarding dot 1, with a Save instead of a Next.
- *
- * Presentational — it renders the shared form and the save row, and says in
- * one line why Save is off when the form is short of what the rest of the
- * product needs.
- */
 import { CompanyProfileForm } from "@/components/kit/CompanyProfileForm"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
@@ -23,7 +15,6 @@ export type CompanyProfileCardProps = {
   value: CompanyForm
   onChange: (patch: Partial<CompanyForm>) => void
   onSave: () => void
-  /** Fields are frozen while an analysis is rewriting them. */
   analyzing: boolean
   complete: boolean
   dirty: boolean

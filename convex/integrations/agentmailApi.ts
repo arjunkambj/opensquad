@@ -288,10 +288,6 @@ async function agentmailRequest(args: {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Inboxes                                                             */
-/* ------------------------------------------------------------------ */
-
 export type AgentMailInbox = {
   inboxId: string;
   /** The mailbox address. AgentMail inbox ids ARE addresses; `email` is the
@@ -380,10 +376,6 @@ export async function createInbox(
     : { ok: true, value: inbox };
 }
 
-/* ------------------------------------------------------------------ */
-/* Webhooks                                                            */
-/* ------------------------------------------------------------------ */
-
 export type AgentMailWebhook = {
   webhookId: string;
   url: string;
@@ -464,10 +456,6 @@ export async function deleteWebhook(
   }
   return result.ok ? { ok: true, value: null } : result;
 }
-
-/* ------------------------------------------------------------------ */
-/* Threads and messages — the 30-day backfill                          */
-/* ------------------------------------------------------------------ */
 
 export type AgentMailThreadRef = {
   threadId: string;

@@ -1,11 +1,3 @@
-/**
- * The lead's conversations and its history, at the bottom of the drawer.
- *
- * The threads come from the inbox domain's own query — the drawer asks who
- * owns conversations rather than keeping a second copy of the summary — and
- * the history is the append-only `leadEvents` trail, which is what proves a
- * stage, an approval or a charge happened.
- */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../convex/_generated/api"
 import { formatWaited } from "@/lib/presentation"

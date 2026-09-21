@@ -1,13 +1,4 @@
-/**
- * The Contacts URL, as a hook: the filters, the search box, the page the
- * table is on and the lead whose drawer is open.
- *
- * All of it lives in the URL because a filtered table with a lead open is
- * shared context — someone pastes that link to a colleague. The two pieces
- * that cannot are here in state and say so: the debounced search text, which
- * would otherwise write a history entry per keystroke, and the trail of page
- * cursors, which only this session ever had.
- */
+/** Filters and the open lead live in the URL. Debounced text and visited cursors stay local. */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
@@ -19,7 +10,6 @@ const CONTACTS_ROUTE = "/_dashboard/_org/contacts"
 
 const DEFAULT_PAGE_SIZE: PageSize = 25
 
-/** How long the search box waits before it becomes a query (and a URL). */
 const SEARCH_DEBOUNCE_MS = 350
 
 export function useContactsSearch() {
@@ -27,12 +17,7 @@ export function useContactsSearch() {
   const navigate = useNavigate()
 
   const [text, setText] = useState(search.q ?? "")
-  /**
-   * The cursor of each page already visited, so Previous can return to one.
-   * `null` is page one, which has no cursor. A link opened straight onto a
-   * later page has no trail, and the footer offers "start over" rather than a
-   * Previous that would land somewhere else.
-   */
+  /** Only visited pages have a Previous cursor. A deep link starts without that trail. */
   const [trail, setTrail] = useState<(string | null)[]>([])
 
   const goTo = (patch: Partial<ContactsSearch>) => {
@@ -78,7 +63,6 @@ export function useContactsSearch() {
     filtered,
     canGoBack: trail.length > 0,
 
-    /** One filter at a time — the others are cleared with it. */
     applyFilter: (patch: Partial<ContactsSearch>) => {
       setTrail([])
       // The company-search index filters on stage and approval only, so

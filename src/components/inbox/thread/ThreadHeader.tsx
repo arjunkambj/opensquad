@@ -1,7 +1,3 @@
-/**
- * The reading pane's header: who the thread is with, what state it is in and
- * which agent's work runs on it.
- */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../convex/_generated/api"
 import type { Doc } from "../../../../convex/_generated/dataModel"

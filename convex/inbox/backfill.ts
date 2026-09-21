@@ -163,10 +163,6 @@ async function writeProgress(
   });
 }
 
-/* ------------------------------------------------------------------ */
-/* The client-visible sync status                                      */
-/* ------------------------------------------------------------------ */
-
 export const vInboxSync = v.object({
   state: v.union(
     v.literal("idle"),
@@ -218,10 +214,6 @@ export async function readInboxSync(
       : {}),
   };
 }
-
-/* ------------------------------------------------------------------ */
-/* The chain                                                           */
-/* ------------------------------------------------------------------ */
 
 const vStepContext = v.union(
   v.object({

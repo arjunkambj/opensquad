@@ -11,17 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-/**
- * "Credits · n remaining" — the one number the user sees (PLAN §6 layer 1).
- *
- * No refill date, no upgrade button, no price: there is one plan and no
- * billing surface, so the block states the balance and stops. Provider units
- * and provider names never reach this query.
- *
- * `null` from the balance query is NOT zero. Zero means the grant is spent;
- * `null` means the org never got one, which is a different sentence and
- * a different fix (PLAN §6 — no bucket, every paid call refuses).
- */
+/** A null balance means no grant; zero means the existing grant is spent. */
 export function SidebarCredits({
   orgId,
 }: {

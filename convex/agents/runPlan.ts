@@ -21,13 +21,11 @@ import { MAX_SEARCH_PAGE, SEARCH_PAGE_SIZE } from "../integrations/enrich/search
 import { ACTION_PRICES } from "../lib/limits";
 import { LEAD_SCORE_MIN } from "../lib/validators";
 
-/* ------------------------------------------------------------------ */
 /* Bounds and batch sizes                                              */
 /*                                                                     */
 /* These belong in `convex/lib/limits.ts` with every other number the  */
 /* product spends against; they are local constants only because that  */
 /* file is integrator-only (EXECUTION §0).                             */
-/* ------------------------------------------------------------------ */
 
 /** PLAN §9.2 step 3: "the top 8 overall … minimum 1 per strategy, maximum 10".
  *  The floor is 8; an agent with more signals than that researches one per
@@ -49,10 +47,6 @@ const RESEARCH_HISTORY_SCAN = 100;
 
 /** How many approved leads the email reserve is measured over. */
 const APPROVED_SCAN_MAX = 100;
-
-/* ------------------------------------------------------------------ */
-/* The answer                                                          */
-/* ------------------------------------------------------------------ */
 
 /**
  * Why a run has nothing to do. Every member is a fact an operator can act on
@@ -147,10 +141,6 @@ export async function planNextStep(
   return sourcing.reason === "pages_exhausted" ? research : sourcing;
 }
 
-/* ------------------------------------------------------------------ */
-/* Sourcing                                                            */
-/* ------------------------------------------------------------------ */
-
 /**
  * The next page to buy, if any.
  *
@@ -221,10 +211,6 @@ async function nextStrategyPage(
 function pageOf(strategy: Doc<"strategies">): number {
   return Math.max(1, Math.trunc(strategy.nextPage));
 }
-
-/* ------------------------------------------------------------------ */
-/* Research                                                            */
-/* ------------------------------------------------------------------ */
 
 /**
  * The next lead to research, if the budget and the credits allow one.

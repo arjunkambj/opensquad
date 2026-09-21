@@ -54,7 +54,6 @@ const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
     "The meeting this email offers has changed, so what it proposes is out of date.",
 }
 
-/** The copy for a code the preflight returned, whatever the client's age. */
 export function sendBlockCopy(code: string | undefined): string {
   if (code === undefined) {
     return "This reply cannot go out yet."

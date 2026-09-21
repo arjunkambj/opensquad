@@ -11,12 +11,6 @@ const groups = [
   },
 ] as const
 
-/**
- * What the agent needs and what it does, in place of a logo wall.
- * Rendered inside the hero, which handles its padding and entrance motion.
- *
- * Text-only badges: vendor marks are never ours to show.
- */
 export function WorksWith() {
   return (
     <div

@@ -24,7 +24,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-/** The trial credit prices, straight from the ledger the app charges against. */
 const prices = [
   { action: "Find leads — one page of results, up to 25 people", cost: "2" },
   { action: "Research and score one lead", cost: "3" },
@@ -34,7 +33,6 @@ const prices = [
   { action: "Re-run a setup step, or ask for more keywords", cost: "3" },
 ] as const
 
-/** Everything that costs nothing, so the app stays usable at a zero balance. */
 const free = [
   "The whole first pass of setup",
   "Match counts, before you run a search",
@@ -65,7 +63,6 @@ export function Trial() {
         <motion.div className="h-full min-w-0" variants={revealItemVariants}>
           <Card className="h-full rounded-4xl">
             <CardHeader>
-              {/* One wrapper so the rows below set their own rhythm with margins. */}
               <div>
                 <CardTitle>
                   <h3 className="text-xl font-medium tracking-tight">

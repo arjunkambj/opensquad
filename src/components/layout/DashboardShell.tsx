@@ -1,10 +1,3 @@
-/**
- * Layout — the signed-in shell: sidebar, header, page frame and the
- * boundaries around a page that fails.
- *
- * It owns chrome only. No screen's data lives here; a page container fetches
- * its own and renders inside `children`.
- */
 import type { ReactNode } from "react"
 import { useCallback, useState } from "react"
 import { AppSidebar } from "@/components/layout/AppSidebar"
@@ -13,14 +6,7 @@ import type { ProfileUser } from "@/components/layout/SidebarUser"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
-/**
- * Whether this viewer keeps the sidebar expanded or on the icon rail.
- *
- * Per viewer and per browser, which is what makes `localStorage` the right
- * home for it: it is a preference about this screen, not org state, and
- * nothing server-side should care. Every access is guarded — a private window
- * or blocked site data throws on read, and the shell must still render.
- */
+/** Sidebar state is a browser preference. Storage can throw in private or restricted contexts. */
 const SIDEBAR_STORAGE_KEY = "sidebar:expanded"
 
 function readStoredSidebarOpen(): boolean {

@@ -13,12 +13,7 @@ function getSnapshot() {
   return window.matchMedia(MOBILE_QUERY).matches
 }
 
-/**
- * Whether the viewport is phone-width.
- *
- * `useSyncExternalStore`, not state-plus-effect: reading the media query
- * during render keeps the first painted frame honest on a phone.
- */
+/** Read the media query through useSyncExternalStore so the first painted frame uses the viewport size. */
 export function useIsMobile() {
   return React.useSyncExternalStore(subscribe, getSnapshot, () => false)
 }

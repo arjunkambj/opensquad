@@ -1,13 +1,3 @@
-/**
- * The reading pane before a thread is chosen (reference 24's right half).
- *
- * Two different nothings, never conflated:
- *
- * - no inbox connected → the connect card, because nothing can arrive until
- *   one is. `InboxConnection` is owner-guarded inside and shows a non-owner
- *   the permission note instead of a form they cannot submit.
- * - connected → the prompt to pick a conversation.
- */
 import { Message01Icon } from "@hugeicons/core-free-icons"
 import { InboxConnection } from "@/components/inbox-connection/InboxConnection"
 import { EmptyState, LoadingState } from "@/components/states/states"

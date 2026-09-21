@@ -1,14 +1,4 @@
-/**
- * What a credit line is called on screen.
- *
- * WHITE-LABEL (PLAN §4). The ledger stores an ACTION the user took, never the
- * provider that answered, and this is the one place those keys become words.
- * Every label names the user's own step — "Website analysis", "Lead search" —
- * and no label may ever name a vendor, a provider unit or a metric.
- *
- * The record is total over the union, so pricing a new paid action forces a
- * label for it rather than letting it fall through to "Other".
- */
+/** Labels describe user actions, never provider names or internal billing units. */
 import type { PaidAction } from "../../../../convex/lib/prices"
 
 export type UsageAction = PaidAction | "other"

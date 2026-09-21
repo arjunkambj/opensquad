@@ -1,13 +1,3 @@
-/**
- * The signals the agent sources from, and what each one has produced —
- * reference 25's "leads generated per signal" table, which lives here.
- *
- * `leadsFound` is a counter the run itself maintains, so a weak signal is
- * visible and can be switched off; `matchCount` is the free count the signal
- * was validated with. Switching one off needs nothing scheduled: the planner
- * reads `strategies.enabled` before every step, so the NEXT run simply stops
- * searching it, and the leads it already found stay.
- */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
@@ -108,10 +98,7 @@ export function SignalsCard({
                           Every page of this search has been read.
                         </span>
                       ) : null}
-                      {/* A parked signal is skipped by the run until it is
-                          switched off and on again — so the row has to say
-                          so, or the agent silently sources less than the
-                          list on screen implies. */}
+                      {/* Toggling off and on resumes a parked signal. */}
                       {row.parkedReason === undefined ? null : (
                         <span className="text-xs text-destructive">
                           Paused: this search stopped working. Switch it off
@@ -124,8 +111,6 @@ export function SignalsCard({
                     <Chip>{SIGNAL_KIND_LABEL[row.signalKind]}</Chip>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {/* "About N" when the provider estimated the count rather
-                        than ran it — never an estimate shown as exact. */}
                     {row.matchCountIsApproximate ? "About " : ""}
                     {row.matchCount.toLocaleString()}
                   </TableCell>

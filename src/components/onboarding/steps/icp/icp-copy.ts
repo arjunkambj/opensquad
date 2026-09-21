@@ -1,14 +1,3 @@
-/**
- * The ONE place an ICP generation failure becomes words.
- *
- * The backend stores a mapped code and never provider text (PLAN §4), so the
- * sentences a user reads are written here and nowhere else. Two doors in:
- * `icpFailureCopy` for a run that finished badly, and `startGenerationCopy`
- * for a request the server refused before a run began.
- *
- * Every message ends with something the user can do, because every one of
- * these states also offers Try again and "Fill it in myself".
- */
 import { domainErrorCode } from "@/lib/convex-error"
 import type { OperationErrorCode } from "../../../../../convex/lib/validators"
 
@@ -17,7 +6,6 @@ export type IcpMessage = {
   description: string
 }
 
-/** A run that failed, by the code `agents.icpGeneration` stored. */
 export function icpFailureCopy(code: OperationErrorCode): IcpMessage {
   switch (code) {
     case "invalid_response":
@@ -72,7 +60,6 @@ export function icpFailureCopy(code: OperationErrorCode): IcpMessage {
   }
 }
 
-/** The codes `agents.icp.startGeneration` refuses with. */
 const START_REFUSALS: Record<string, IcpMessage> = {
   INVALID: {
     title: "Your company profile isn't finished",
@@ -104,7 +91,6 @@ const START_FALLBACK: IcpMessage = {
   description: "Try again in a moment, or fill it in yourself and carry on.",
 }
 
-/** A refusal from the mutation itself, before any run began. */
 export function startGenerationCopy(error: unknown): IcpMessage {
   const code = domainErrorCode(error)
   return code === undefined

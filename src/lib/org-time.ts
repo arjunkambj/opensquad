@@ -36,7 +36,6 @@ export function minutesToTimeString(minutes: number): string {
   return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`
 }
 
-/** The browser's best guess for the local IANA timezone. */
 export function detectLocalTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
@@ -68,12 +67,7 @@ const FALLBACK_TIMEZONES: readonly string[] = [
   "Pacific/Auckland",
 ]
 
-/**
- * Selectable IANA timezone options. Uses the runtime's full database when
- * `Intl.supportedValuesOf` exists, else a curated common-zone fallback. The
- * `extra` value (e.g. a stored zone) is always present so a saved value never
- * disappears from the picker.
- */
+/** Always include the saved timezone, even when it is absent from the available options. */
 export function timezoneOptions(extra?: string): string[] {
   let zones: readonly string[] = FALLBACK_TIMEZONES
   try {

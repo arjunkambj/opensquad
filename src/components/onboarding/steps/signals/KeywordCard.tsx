@@ -1,11 +1,3 @@
-/**
- * The keyword panel of reference 10 — the chips the user has chosen, the
- * suggestions they have not, and the field for one of their own.
- *
- * Presentational: values in, callbacks out. The "Generate more" control is an
- * `action` slot rather than a prop of this component, because what it costs
- * and whether it can be afforded is a question only the screen can answer.
- */
 import { InformationCircleIcon, Tag01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { ReactNode } from "react"
@@ -22,7 +14,6 @@ export type KeywordCardProps = {
   keywords: string[]
   suggestions: string[]
   onChange: (next: string[]) => void
-  /** Right-aligned slot beside the suggestion label. */
   action?: ReactNode
   disabled?: boolean
 }

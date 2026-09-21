@@ -1,15 +1,4 @@
-/**
- * The frame all three ICP screens share (references 06–08).
- *
- * Each screen renders its own `OnboardingShell`, as dot 1 does, and this sits
- * between them and it so the four things that are identical on all three are
- * written once: the AI-generated badge, the live state of the generation, the
- * Regenerate control with its real price, and the saving indicator.
- *
- * Leaving the screen — forwards or backwards — waits for the draft to be
- * written, so Previous and Next can never lose a chip that was clicked a
- * moment earlier.
- */
+/** Wait for the draft to flush before either Previous or Next leaves the screen. */
 import { useState } from "react"
 import type { ReactNode } from "react"
 import { AiGeneratedBadge } from "@/components/kit/AiGeneratedBadge"
@@ -39,9 +28,7 @@ export type IcpStepShellProps = Pick<
   draft: IcpDraftHandle
   title: string
   description: ReactNode
-  /** Blocks Next while this screen's own answer is missing. */
   nextDisabled?: boolean
-  /** Says what is missing, when Next is blocked. */
   hint?: ReactNode
   children: ReactNode
 }
@@ -183,8 +170,6 @@ export function IcpStepShell({
   )
 }
 
-/** The shape of the chips, while they are being written. Never an empty row
- *  presented as a result (PLAN §2 "no placeholders"). */
 function GeneratingChips() {
   return (
     <div aria-live="polite" className="flex flex-col gap-4" role="status">

@@ -1,13 +1,3 @@
-/**
- * RowListField — a labelled list of short lines, each on its own row with a
- * delete button, followed by one "add" row (reference 02: Key features, Social
- * Proof).
- *
- * A row list rather than `ChipInput`: these lines are sentences, not tags, and
- * the reference gives each one a full-width field it can be edited in place.
- *
- * Data-free: `values` in, `onChange` out.
- */
 import { Delete02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useId, useState } from "react"

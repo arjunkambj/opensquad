@@ -48,11 +48,7 @@ export function AssociateLeadCard({
   const [prospectId, setProspectId] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // The link is a write the pane does not own: leaving the thread while it is
-  // in flight leaves the mutation to finish on its own, and the answer it
-  // brings back belongs to a card that is no longer on screen. The toast is
-  // not guarded — it is global, and the success is worth saying wherever the
-  // user went.
+  // Guard local state after unmount; the global success toast can still report the completed write.
   const mounted = useMountedRef()
 
   const submit = () => {

@@ -299,10 +299,6 @@ export const runResearchStep = internalAction({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* The four ways a step ends                                           */
-/* ------------------------------------------------------------------ */
-
 type StepArgs = {
   agentId: Id<"agents">;
   leaseId: string;

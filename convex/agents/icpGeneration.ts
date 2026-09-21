@@ -27,10 +27,6 @@ import { EMPTY_ICP_OPTION_LISTS, readIcpOptionLists } from "./icpVocabulary";
 import { v } from "convex/values";
 import type { Infer } from "convex/values";
 
-/* ------------------------------------------------------------------ */
-/* How much vocabulary one call carries                                 */
-/* ------------------------------------------------------------------ */
-
 /**
  * The industry catalogue has 454 values and the country list 249 (spikes §3).
  * Sending both in full would take most of the call's character budget and
@@ -39,10 +35,6 @@ import type { Infer } from "convex/values";
  */
 const ICP_INDUSTRY_CHOICES = 120;
 const ICP_LOCATION_CHOICES = 60;
-
-/* ------------------------------------------------------------------ */
-/* What the action needs before it can ask                              */
-/* ------------------------------------------------------------------ */
 
 const vGenerationInput = v.union(
   v.null(),
@@ -118,10 +110,6 @@ export const generationInput = internalQuery({
     };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* The run                                                              */
-/* ------------------------------------------------------------------ */
 
 export const generate = internalAction({
   args: {

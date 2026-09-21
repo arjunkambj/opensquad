@@ -1,14 +1,4 @@
-/**
- * "Mark as booked" — the ONE place a meeting becomes real (PLAN §9.5).
- *
- * `bookings.confirmations.confirm` records an agreement, so it asks for the
- * agreement: the time the two of them settled on, the zone that time was
- * stated in, and a one-line basis for it. The meeting must be upcoming.
- *
- * `confirm` can only advance a live proposal, so a lead that holds none gets
- * one for exactly the agreed slot first. Both calls carry a stable request id,
- * so a double submit records one meeting.
- */
+/** Create a proposal if needed, then confirm it with stable request IDs. Only a person can book a meeting. */
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
@@ -44,7 +34,6 @@ export function MarkAsBookedDialog({
   orgId: Id<"orgs">
   prospectId: Id<"prospects">
   conversationId: Id<"conversations">
-  /** The lead's live proposal, when it already has one. */
   existingProposal: Doc<"bookings"> | null
   open: boolean
   onOpenChange: (open: boolean) => void

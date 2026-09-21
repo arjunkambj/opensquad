@@ -26,15 +26,6 @@ export function MarketingSection({
   )
 }
 
-/**
- * The shared section header: eyebrow chip, display headline, one-line
- * description, then any extra content such as a call to action.
- *
- * Every marketing section opens with this so the chip, headline size, and
- * vertical rhythm match from "How it works" down to the FAQ. `spacing="none"`
- * drops the bottom margin for layouts that place the header beside the
- * content instead of above it.
- */
 export function MarketingSectionIntro({
   align = "start",
   children,

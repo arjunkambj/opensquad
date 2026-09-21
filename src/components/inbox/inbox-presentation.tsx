@@ -7,12 +7,6 @@ import type {
 } from "../../../convex/lib/validators"
 import { Chip } from "@/components/kit/Chip"
 
-/**
- * The inbox's shared vocabulary: every state is a word, never a colour alone.
- * The strings are written for someone who has not read the schema.
- */
-
-/** The four slices of the conversation list (reference 24). */
 export const INBOX_PILLS = ["received", "interested", "unread", "all"] as const
 
 export type InboxPill = (typeof INBOX_PILLS)[number]
@@ -24,7 +18,6 @@ export const PILL_LABEL: Record<InboxPill, string> = {
   all: "All",
 }
 
-/** What the reply pipeline made of the latest inbound message. */
 const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
   interested: "Interested",
   question: "Question",
@@ -35,7 +28,6 @@ const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
   needs_review: "Needs review",
 }
 
-/** Where the lead stands, in the same words the Contacts table uses. */
 const STAGE_LABEL: Record<LeadStage, string> = {
   found: "Found",
   researched: "Researched",
@@ -96,12 +88,10 @@ export const MARK_INTERESTED_COPY = {
   label: "Mark interested",
   pending: "Marking…",
   success: "Marked interested — the lead moved to Interested",
-  /** Shown instead of the button once the thread already carries the tag. */
   already: "Marked interested. Use Mark as booked when a time is agreed.",
   failure: "Could not mark this conversation interested.",
 } as const
 
-/** The marker a Review-mode user looks for: an email waiting on their yes. */
 export function NeedsApprovalChip() {
   return <Chip className="bg-primary/10 text-primary">Needs your approval</Chip>
 }
@@ -119,12 +109,10 @@ export function sourceNote(source: MessageSource): string | undefined {
     : undefined
 }
 
-/** One merged thread entry, as `inbox.conversationThread.thread` returns it. */
 export type ThreadEntry = FunctionReturnType<
   typeof api.inbox.conversationThread.thread
 >["items"][number]
 
-/** One inbox row, as `inbox.inboxList.list` returns it. */
 export type InboxRowData = FunctionReturnType<
   typeof api.inbox.inboxList.list
 >["items"][number]
@@ -153,7 +141,6 @@ export function outboundStateLabel(
   }
 }
 
-/** The person behind a row, as much of them as we are allowed to show. */
 export function leadDisplayName(lead: {
   firstName?: string
   lastName?: string

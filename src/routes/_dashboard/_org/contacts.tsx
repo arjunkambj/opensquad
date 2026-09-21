@@ -11,29 +11,8 @@ import {
   type PageSize,
 } from "@/lib/search-params"
 
-/**
- * The contacts URL contract, declared once on the route.
- *
- * The params and what each one is FOR — a value the backend cannot honour is
- * never sent, because a filter must never silently post-filter a page:
- *
- * - `stage` — one lead stage, on `by_orgId_and_stage_and_updatedAt`.
- * - `approval` — the approval queue, on `by_orgId_and_approval`.
- * - `score` — one flame score, on `by_orgId_and_scoreKey`.
- * - `q` — company-name search text, on `search_company_name`.
- * - `sort` — `lowest` flips the default best-score-first order. It applies to
- *   the unfiltered list; every other mode has the order its own index gives.
- * - `lead` — the contact whose drawer is open (PLAN §5). A drawer over a
- *   filtered table is shared context: the link has to reopen the same row
- *   over the same page, so it travels in the URL and every filter change
- *   spreads it through rather than dropping it.
- * - `cursor`, `page`, `limit` — pagination. `page` is what the footer counts
- *   from; it moves with the cursor and is dropped with it on any filter
- *   change.
- *
- * `stage`, `approval` and `score` are separate list modes because each has its
- * own index; the list sends whichever one is set, never two.
- */
+/** Stage, approval and score select separate indexed list modes; only one may be active.
+ * Keep the open lead in the URL, and reset pagination when filters change. */
 const LEAD_APPROVALS: readonly LeadApproval[] = [
   "pending",
   "approved",
@@ -56,17 +35,11 @@ export type ContactsSearch = {
   limit?: PageSize
 }
 
-/** One flame score, or absent. Anything else falls back to "every score". */
 function optionalScore(value: unknown): LeadScoreFilter | undefined {
   const parsed = typeof value === "string" ? Number(value) : value
   return parsed === 1 || parsed === 2 || parsed === 3 ? parsed : undefined
 }
 
-/**
- * The 1-based page the footer counts from. Only a whole page number within a
- * sane range survives; a hand-edited link falls back to page one, which is
- * also the only page a bare path can mean.
- */
 function pageNumber(value: unknown): number | undefined {
   const parsed = typeof value === "string" ? Number(value) : value
   return typeof parsed === "number" &&
@@ -77,15 +50,7 @@ function pageNumber(value: unknown): number | undefined {
     : undefined
 }
 
-/**
- * The one active filter, by precedence.
- *
- * The backend refuses a combination no index supports, so a hand-edited link
- * carrying two of them would otherwise make the page throw. Narrowing here
- * means a pasted URL always opens: it is simply read as the narrowest filter
- * it names. `score` is not a filter field of the company-search index, so a
- * search drops it rather than silently returning unscored matches.
- */
+/** The backend supports one indexed filter mode at a time. Company search cannot combine with score. */
 function oneFilter(search: Record<string, unknown>, searching: boolean) {
   const score = searching ? undefined : optionalScore(search.score)
   if (score !== undefined) {

@@ -56,9 +56,6 @@ export function AppSidebar({ user }: { user: ProfileUser }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="gap-3 px-3 py-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-2">
-        {/* One row when expanded; the rail of reference 24 stacks the same
-            three controls instead, because 3rem cannot hold them side by
-            side. */}
         <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
           <Link
             aria-label="OpenIntent"
@@ -85,9 +82,6 @@ export function AppSidebar({ user }: { user: ProfileUser }) {
                 const active = isActive(item)
                 return (
                   <SidebarMenuItem key={item.name} className="relative">
-                    {/* The left accent bar of reference 20. It is drawn
-                        beside the pill rather than inside it so the collapsed
-                        rail keeps the same mark at the same x position. */}
                     {active ? (
                       <span
                         aria-hidden="true"
@@ -104,16 +98,9 @@ export function AppSidebar({ user }: { user: ProfileUser }) {
                       <HugeiconsIcon icon={item.icon} />
                       <span>{item.name}</span>
                     </SidebarMenuButton>
-                    {/* The wording is in the DOM, not in an attribute:
-                        `SidebarMenuBadge` is a bare `<div>` with no role, and
-                        ARIA does not name a generic element, so an
-                        `aria-label` there reaches a screen reader as a bare
-                        number stripped of what it counts. */}
+                    {/* A generic div ignores aria-label; keep the badge description in the DOM. */}
                     {item.href === "/inbox" && inboxAttention !== undefined ? (
                       <SidebarMenuBadge>
-                        {/* `attentionCounts` caps at MAX_LIST_LIMIT — render
-                            the bounded form, never an exact-looking "50" that
-                            is really "50+". */}
                         {boundedCount(
                           inboxAttention.needsAttention,
                           inboxAttention.needsAttentionHasMore,

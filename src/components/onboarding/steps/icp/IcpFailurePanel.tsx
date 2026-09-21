@@ -1,10 +1,3 @@
-/**
- * What a failed ICP generation looks like (PLAN §5 "Onboarding edge cases").
- *
- * It says in our own words what happened and offers the two ways forward the
- * plan requires: try again, or write it yourself. The wording arrives already
- * chosen (`icp-copy.ts`) — nothing here reads a provider's error.
- */
 import { Alert02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IcpMessage } from "@/components/onboarding/steps/icp/icp-copy"
@@ -14,9 +7,7 @@ export type IcpFailurePanelProps = {
   message: IcpMessage
   onRetry: () => void
   retryDisabled?: boolean
-  /** Why Try again can't run, when it can't. */
   retryBlockedReason?: string | null
-  /** Dismisses the panel and leaves the chips to the user. */
   onFillManually: () => void
 }
 

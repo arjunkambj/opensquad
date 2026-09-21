@@ -27,10 +27,6 @@
 import type { QueryCtx } from "../_generated/server";
 import type { AgentIcp, LeadFilterOption } from "../lib/validators";
 
-/* ------------------------------------------------------------------ */
-/* Which catalogue filter each closed group draws on                    */
-/* ------------------------------------------------------------------ */
-
 /** The catalogue's industry list (454 values, `maxSelections` 20). */
 const INDUSTRY_FILTER = "linkedinIndustry";
 
@@ -42,10 +38,6 @@ const LOCATION_FILTERS = ["continent", "countryName"] as const;
 
 /** The catalogue's organisation-kind list (10 values). */
 const COMPANY_TYPE_FILTER = "companyEntityType";
-
-/* ------------------------------------------------------------------ */
-/* Company size — our own bands                                         */
-/* ------------------------------------------------------------------ */
 
 /**
  * The headcount bands of reference 07, as the one typed constant that owns
@@ -79,10 +71,6 @@ export type CompanySizeBand = (typeof COMPANY_SIZE_BANDS)[number];
 export function companySizeBand(value: string): CompanySizeBand | undefined {
   return COMPANY_SIZE_BANDS.find((band) => band.value === value);
 }
-
-/* ------------------------------------------------------------------ */
-/* Who to leave out — our own vocabulary                                */
-/* ------------------------------------------------------------------ */
 
 /**
  * The kinds of person who look like a match and never buy (reference 08).
@@ -130,10 +118,6 @@ export function excludeProfileOption(
   return ICP_EXCLUDE_PROFILE_OPTIONS.find((option) => option.value === value);
 }
 
-/* ------------------------------------------------------------------ */
-/* How long each list may be                                            */
-/* ------------------------------------------------------------------ */
-
 /**
  * The ceiling per group, in the units the provider accepts downstream:
  * `linkedinIndustry` takes 20 values, `jobTitle` 25, the exclusion lists 10
@@ -149,10 +133,6 @@ export const ICP_GROUP_MAX_ITEMS = {
   excludeProfiles: 10,
   excludeKeywords: 10,
 } as const satisfies Record<keyof AgentIcp, number>;
-
-/* ------------------------------------------------------------------ */
-/* The option lists the three screens offer                             */
-/* ------------------------------------------------------------------ */
 
 /**
  * The neutral vocabularies onboarding dot 2 shows. No filter names, no

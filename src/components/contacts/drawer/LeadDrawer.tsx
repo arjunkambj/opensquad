@@ -1,14 +1,3 @@
-/**
- * The lead drawer behind `/contacts?lead=…` (PLAN §5).
- *
- * It owns its own reads — the lead detail and the lead's threads — so the
- * table does not carry prose it never shows, and a shared link opens the same
- * lead over the same filtered page.
- *
- * A lead id from a hand-edited or stale link resolves to NOT_FOUND on the
- * backend; the drawer says the record is gone rather than sitting on a
- * spinner, and closing it drops the param.
- */
 import { useNavigate } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../../convex/_generated/api"

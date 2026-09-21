@@ -42,10 +42,6 @@ export const vLeadEventDoc = v.object({
   ...leadEventFields,
 });
 
-/* ------------------------------------------------------------------ */
-/* The one write path                                                  */
-/* ------------------------------------------------------------------ */
-
 /**
  * Append one CRM history row, idempotently. `operationKey` is unique per
  * org and the index is a lookup, so the read happens in the SAME

@@ -36,9 +36,6 @@ export function blockResult(
   return { action: "blocked", code, reason };
 }
 
-/* ------------------------------------------------------------------ */
-/* beginDispatch — the commit point (§8 step 4)                          */
-/* ------------------------------------------------------------------ */
 export const vSendPayload = v.object({
   to: v.string(),
   subject: v.optional(v.string()),

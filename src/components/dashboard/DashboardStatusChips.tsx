@@ -1,12 +1,3 @@
-/**
- * The two status chips of reference 20's header: how many signals the agent
- * is sourcing from, and whether the sending inbox is attached.
- *
- * Both are links to the page that changes the thing they report, which is the
- * only reason a status chip earns a place in a header. Neither invents a
- * state: the signal count is still loading until its query answers, and the
- * inbox line is the org's own `inboxConnection` in words.
- */
 import { CheckmarkCircle02Icon, MailAdd01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
@@ -14,10 +5,6 @@ import type { InboxConnection } from "../../../convex/lib/validators"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
-/**
- * The connection states in words, as a total map over the union — a state
- * added to `vInboxConnection` fails this build until it has a line.
- */
 const INBOX_LABEL: Record<InboxConnection, string> = {
   none: "Connect your inbox",
   connected: "Inbox connected",
@@ -28,7 +15,6 @@ export function DashboardStatusChips({
   activeSignals,
   inboxConnection,
 }: {
-  /** `undefined` while the signals query is still loading. */
   activeSignals: number | undefined
   inboxConnection: InboxConnection
 }) {

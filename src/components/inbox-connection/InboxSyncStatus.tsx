@@ -1,11 +1,4 @@
-/**
- * The 30-day import's progress line (PLAN §4 "Manage inbox" step 5).
- *
- * Four states, all designed: preparing, "Syncing n threads…", synced, and a
- * failed import that offers to resume. A failed import never reads as an
- * outage — new mail keeps arriving through the webhook either way, and the
- * line says so.
- */
+/** A failed historical import does not stop new mail arriving through the webhook. */
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import type { InboxSyncView } from "./inbox-connection-model"
@@ -17,7 +10,6 @@ export function InboxSyncStatus({
   retrying = false,
 }: {
   sync: InboxSyncView
-  /** Resume a failed import. Omit where the caller cannot run it. */
   onRetry?: () => void
   retrying?: boolean
 }) {

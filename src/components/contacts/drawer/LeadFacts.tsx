@@ -1,10 +1,3 @@
-/**
- * The facts under the drawer's header: where the person works, what we know
- * about the company, which signals found them and what we have of an address.
- *
- * Every line is a stored fact or nothing at all — an absent company size is
- * left out rather than rendered as a dash with an invented meaning.
- */
 import type { ContactDetailData } from "../contacts-model"
 import { EMAIL_STATE_LABEL } from "../contacts-model"
 import { SignalCell } from "../table/SignalCell"

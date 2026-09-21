@@ -31,10 +31,8 @@ export function ContactsFilters({
   onFilter,
 }: {
   search: ContactsSearch
-  /** The live search box value; the container debounces it into the URL. */
   text: string
   onText: (value: string) => void
-  /** Applies ONE filter, clearing the others (see the file header). */
   onFilter: (patch: Partial<ContactsSearch>) => void
 }) {
   const active: { label: string; clear: () => void }[] = []

@@ -30,10 +30,6 @@ import type { ReplyHandlingMode } from "./repliesModel";
 import { resolveOutboundRecipient } from "./conversationsModel";
 import { evaluateReplyAnswerGate, evaluateReplyHistory } from "./replyGate";
 
-/* ------------------------------------------------------------------ */
-/* The gate, and the dispatch                                          */
-/* ------------------------------------------------------------------ */
-
 const vHandleInboundReplyResult = v.object({
   outcome: v.string(),
   mode: v.optional(vReplyHandlingMode),
@@ -132,10 +128,6 @@ export const handleInboundReply = internalMutation({
     return { outcome: `dispatched:${mode}`, mode };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* What a rule that fired does                                         */
-/* ------------------------------------------------------------------ */
 
 const vFreeRuleKind = v.union(
   v.literal("unsubscribe"),
@@ -276,10 +268,6 @@ export const applyFreeRuleOutcome = internalMutation({
     return { applied: true };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Shared writes                                                       */
-/* ------------------------------------------------------------------ */
 
 async function suppress(
   ctx: MutationCtx,

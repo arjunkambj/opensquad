@@ -1,11 +1,3 @@
-/**
- * One conversation in the list: who it is with, the company, when the last
- * message moved, whether it is unread, what the reply was read as, and
- * whether an email on it is waiting for the user's approval.
- *
- * A real link, so Enter opens it, middle-click opens it in a tab and the row
- * is announced as a link rather than as a highlighted index.
- */
 import { Link } from "@tanstack/react-router"
 import {
   DispositionChip,

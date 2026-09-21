@@ -1,17 +1,3 @@
-/**
- * The organization switcher, inside the sidebar's account menu.
- *
- * The tenant is whichever organization is active in the auth provider, so
- * this writes there and nowhere else: it never creates, renames or leaves an
- * organization, and it never writes a tenant of its own. Picking one mints a
- * fresh token, which re-points every live Convex query at that organization's
- * data — `getCurrent` re-resolves and each screen's queries follow it — and
- * then lands on the dashboard, from where the setup gate forwards an
- * organization that has not finished setting up.
- *
- * The SDK ships a ready-made switcher; it is not used because its own styling
- * cannot be expressed in this app's theme tokens.
- */
 import { Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useNavigate } from "@tanstack/react-router"

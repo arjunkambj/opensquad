@@ -1,11 +1,3 @@
-/**
- * The vocabulary of the Agent screen: the words for every mode, signal kind
- * and refusal, and the two derivations the card's figures come from.
- *
- * Data-free — no Convex calls, no React. Every `Record` below is total over a
- * union taken from the backend, so a mode, a signal kind or a refusal added in
- * `convex/` fails this build until someone writes copy for it.
- */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import type {
@@ -37,10 +29,6 @@ export type ModeRefusal = Extract<
 export type RunNowReason = FunctionReturnType<
   typeof api.agents.settingsRun.runNow
 >["reason"]
-
-/* ------------------------------------------------------------------ */
-/* Words                                                               */
-/* ------------------------------------------------------------------ */
 
 export const MODE_LABEL: Record<AgentMode, string> = {
   sourcing_only: "Sourcing only",
@@ -125,10 +113,6 @@ export function agentErrorCopy(error: unknown, fallback: string): string {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Figures                                                             */
-/* ------------------------------------------------------------------ */
-
 export type AgentFunnel = {
   total: number
   contacted: number
@@ -138,19 +122,8 @@ export type AgentFunnel = {
   bounded: boolean
 }
 
-/**
- * The card's three figures, from the stage counts (PLAN §2, reference 21).
- *
- * A lead's stage moves FORWARD through the pipeline, so everyone sitting past
- * `contacted` was contacted and everyone past `replied` replied — that is what
- * makes a funnel readable from one stage column. `closed_lost` sits outside
- * that order, so it counts towards the total and towards nothing else; we
- * cannot tell from the stage alone how far it got.
- *
- * There is NO "Opened" figure here, and there is no zero or dash standing in
- * for one: PLAN §9.6 says the metric appears only once open events are
- * verified, and this build does not have them.
- */
+/** Stages after contacted/replied contribute to those funnel counts.
+ * closed_lost contributes only to the total because its prior stage is unknown. */
 export function agentFunnel(counts: FunnelCounts): AgentFunnel {
   const { stages } = counts
   const sum = (...parts: { count: number }[]) =>

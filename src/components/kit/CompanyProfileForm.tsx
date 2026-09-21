@@ -1,17 +1,3 @@
-/**
- * The editable company profile (reference 02).
- *
- * Presentational: it holds no Convex call and no state of its own. Whichever
- * container renders it — onboarding dot 1 or Settings → Company — owns the
- * values, the save and the analysis that fills them in. The field limits and
- * the industry list reach it through `lib/company-form`, so nothing in `kit/`
- * imports from `convex/` (PLAN §10).
- *
- * Everything the analysis writes is editable, and the required markers name
- * exactly the four fields the rest of the product cannot run without — social
- * proof is not one of them, because a young company honestly has none and an
- * invented proof is worse than a blank field.
- */
 import { RowListField } from "@/components/kit/RowListField"
 import { COMPANY_FIELD_LIMITS, industryOptions } from "@/lib/company-form"
 import type { CompanyForm } from "@/lib/company-form"

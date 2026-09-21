@@ -1,9 +1,3 @@
-/**
- * Onboarding dot 2, in the client's terms: where a generation stands, what
- * another run costs, and the seven lists the three screens edit between them.
- *
- * The words a failure is shown in live next door, in `icp-copy.ts`.
- */
 import { ICP_GENERATION_STALE_AFTER_MS } from "../../../../../convex/agents/icpModel"
 import type { Doc } from "../../../../../convex/_generated/dataModel"
 import { ACTION_PRICES } from "../../../../../convex/lib/prices"
@@ -12,12 +6,7 @@ import type {
   OperationErrorCode,
 } from "../../../../../convex/lib/validators"
 
-/** What a regeneration costs once the free first run is gone. */
 const ICP_GENERATION_CREDITS = ACTION_PRICES.generate_icp.credits
-
-/* ------------------------------------------------------------------ */
-/* Where a run stands                                                   */
-/* ------------------------------------------------------------------ */
 
 export type IcpGenerationView =
   | { state: "never" }
@@ -32,7 +21,6 @@ export type IcpGenerationView =
   | { state: "ready" }
   | { state: "failed"; code: OperationErrorCode }
 
-/** The agent's `icpGeneration`, with "absent" and "lost" spelled out. */
 export function icpGenerationView(agent: Doc<"agents">): IcpGenerationView {
   const status = agent.icpGeneration
   if (status === undefined) {
@@ -52,15 +40,7 @@ export function icpGenerationView(agent: Doc<"agents">): IcpGenerationView {
   }
 }
 
-/**
- * What the NEXT run will cost, as far as the browser can tell.
- *
- * The ledger is the authority (`billing/reserve.ts` prices from the first
- * settled operation, not from this), so this is what the button says and what
- * the affordability check uses — never what is charged. The one case it can
- * read wrong is a run whose outcome is still `uncertain`: it shows free, and
- * if the sweep later commits it the server charges and says so.
- */
+/** Display-only pricing: the ledger decides charges. An uncertain run may later settle and change the price. */
 export function icpGenerationPrice(view: IcpGenerationView): number {
   switch (view.state) {
     case "never":
@@ -77,11 +57,6 @@ export function icpGenerationPrice(view: IcpGenerationView): number {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* The draft itself                                                     */
-/* ------------------------------------------------------------------ */
-
-/** The seven lists the three screens edit between them. */
 export type IcpDraft = AgentIcp
 
 const ICP_GROUPS = [
@@ -94,8 +69,6 @@ const ICP_GROUPS = [
   "excludeKeywords",
 ] as const satisfies readonly (keyof IcpDraft)[]
 
-/** True when two drafts say the same thing, so a debounce that fired with
- *  nothing new can skip the round trip. */
 export function sameIcpDraft(a: IcpDraft, b: IcpDraft): boolean {
   return ICP_GROUPS.every(
     (group) =>

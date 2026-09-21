@@ -1,31 +1,3 @@
-/**
- * Search strategies — the public half of onboarding dot 4 (PLAN §3,
- * references 09–11).
- *
- * Six functions, and the boundary each one guards:
- *
- *   `overview`             everything the three screens render, from real
- *                          rows: the cards with their real match counts, the
- *                          live state of the recommendation, the suggested
- *                          and chosen keywords.
- *   `startRecommendation`  the only authenticated part of a paid run. It
- *                          checks the organization, spends a rate-limit token,
- *                          records `generating` so the screen shows live
- *                          status from its own reactive query, and schedules
- *                          the internal action that may spend money.
- *   `setSelection`         which strategies are switched on during setup. A
- *                          strategy that matches nobody cannot be switched
- *                          on, whatever the client sends.
- *   `saveKeywords`         the words the user picked, bounded and deduped.
- *   `generateMoreKeywords` the one button on dot 4 that always costs credits.
- *   `confirm`              the end of setup. It counts the keyword strategy
- *                          for free and flips the agent live in one
- *                          transaction; it starts nothing and spends nothing.
- *
- * The paid halves live in `strategiesGeneration.ts`, the fenced writes that
- * end them in `strategiesResult.ts`, the confirmation in
- * `strategiesConfirm.ts`, and the plain logic in `strategiesModel.ts`.
- */
 import { internal } from "../_generated/api";
 import { action, mutation, query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
@@ -48,10 +20,6 @@ import {
   strategyOperationKey,
 } from "./strategiesModel";
 import { v } from "convex/values";
-
-/* ------------------------------------------------------------------ */
-/* What the three screens read                                          */
-/* ------------------------------------------------------------------ */
 
 const vStrategyCard = v.object({
   _id: v.id("strategies"),
@@ -130,10 +98,6 @@ export const overview = query({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Recommending them                                                    */
-/* ------------------------------------------------------------------ */
-
 /**
  * Why a run is being asked for. It decides which rate-limit bucket pays for
  * it and, more importantly, when the request is a no-op: the signals screen
@@ -158,18 +122,7 @@ const vStartResult = v.union(
   }),
 );
 
-/**
- * Start a recommendation run.
- *
- * The free first run is the automatic one: nothing here prices the call — the
- * credit wrapper does, from the ledger — so pressing Regenerate is what costs
- * three credits and the screen only has to say so.
- *
- * Only while the agent is a DRAFT. Once setup is confirmed the strategies
- * have page cursors and leads behind them, and replacing them wholesale is
- * not something a Regenerate button may do; the Agent page edits them one at
- * a time instead.
- */
+/** Regeneration is draft-only: live strategies have paging cursors and sourced leads that must be preserved. */
 export const startRecommendation = mutation({
   args: {
     orgId: v.id("orgs"),
@@ -238,20 +191,7 @@ export const startRecommendation = mutation({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Choosing them                                                        */
-/* ------------------------------------------------------------------ */
-
-/**
- * Which strategies are switched on, as the cards on reference 09 have them.
- *
- * Whole-set rather than per-card: the screen holds one selection and sends it,
- * which is what makes Previous, Next and a refresh all show the same thing.
- *
- * This is the SETUP control. After setup the Agent page toggles one signal at
- * a time (`agents/settings.ts`), which is a different act with a different
- * consequence — it changes what the next run does.
- */
+/** Replace the whole selection during setup. Live agents toggle individual signals through settings. */
 export const setSelection = mutation({
   args: {
     orgId: v.id("orgs"),
@@ -294,10 +234,6 @@ export const setSelection = mutation({
     return { enabled };
   },
 });
-
-/* ------------------------------------------------------------------ */
-/* Keywords                                                             */
-/* ------------------------------------------------------------------ */
 
 /** The words the user picked on reference 10. Empty is a real answer: "No
  *  keywords needed" skips the screen entirely. */
@@ -359,36 +295,14 @@ export const generateMoreKeywords = mutation({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Finishing setup                                                      */
-/* ------------------------------------------------------------------ */
-
 const vConfirmResult = v.union(
   v.object({ status: v.literal("confirmed") }),
   v.object({ status: v.literal("already_done") }),
   v.object({ status: v.literal("blocked"), reason: vConfirmBlock }),
 );
 
-/**
- * "Confirm & find leads" (reference 11).
- *
- * An action rather than a mutation for exactly one reason: the keyword
- * strategy is COUNTED before it is stored, and a count is a network call. The
- * count is free and the flip that follows it is one transaction, so
- * confirming still spends nothing and starts nothing — the run loop picks the
- * agent up on its own once `nextRunAt` is due.
- *
- * A user who picked no keywords, or whose keywords match nobody, is confirmed
- * exactly the same way with one strategy fewer — and that is why every
- * variant is CHECKED against the cached catalogue before it is counted: a
- * catalogue refresh that dropped a value the keyword strategy used would
- * otherwise throw out of the last screen of setup instead of confirming with
- * one signal fewer.
- *
- * Rate-limited like its two paid siblings, from the identity `confirmContext`
- * resolved: it buys nothing, but it is a public door that reaches a provider
- * up to three times per press.
- */
+/** Count keyword matches before activation; network I/O requires an action.
+ * Invalid or empty keyword searches are omitted without blocking setup. Rate-limit the free provider calls too. */
 export const confirm = action({
   args: { orgId: v.id("orgs") },
   returns: vConfirmResult,

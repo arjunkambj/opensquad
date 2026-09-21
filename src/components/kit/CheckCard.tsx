@@ -1,16 +1,4 @@
-/**
- * CheckCard — a checkbox drawn as a card, with an optional info tooltip and a
- * trailing count (refs 08 "Exclude these profiles", 09 signal strategies).
- *
- * The label wraps a real `<input type="checkbox">` so the whole row toggles
- * and the browser owns the keyboard behaviour. The info button and the count
- * sit *outside* that label — a button nested inside a label would toggle the
- * checkbox on its way to opening the tooltip.
- *
- * `count` has three legitimate shapes because a strategy's match count is
- * fetched: a number, "loading" while it is being fetched, or absent when the
- * caller has nothing to show. It never renders a zero it made up.
- */
+/** Keep the tooltip button outside the checkbox label so opening it does not toggle selection. */
 import { InformationCircleIcon, Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Skeleton } from "@/components/ui/skeleton"

@@ -46,11 +46,7 @@ export function SignInForm() {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
     try {
-      // No explicit `returnTo`: the SDK then lands back on the CURRENT URL —
-      // `/sign-in?after_auth_return_to=…` — where SignInGate forwards a
-      // signed-in user to the sanitized target. Pinning `afterSignIn` here
-      // instead carried the param onto `/dashboard`, which never reads it, so a
-      // bounced visitor lost the page they were headed for.
+      // Let the SDK return to sign-in so SignInGate can honor the sanitized after_auth_return_to target.
       await app.signInWithOAuth("google")
     } catch {
       toast.add({

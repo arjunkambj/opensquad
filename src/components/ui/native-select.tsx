@@ -1,11 +1,6 @@
 import * as React from "react"
 import { cn } from "cn"
 
-/**
- * Styled native <select>. The shadcn/Base-UI Select primitive is not installed
- * in this project; where a simple option picker is needed (timezone, member
- * role) a real <select> keeps keyboard/screen-reader behavior for free.
- */
 function NativeSelect({ className, ...props }: React.ComponentProps<"select">) {
   return (
     <select

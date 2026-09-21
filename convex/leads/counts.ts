@@ -1,16 +1,3 @@
-/**
- * The numbers three screens ask for: is the agent still finding leads
- * (Contacts), how many did each signal generate (Agent), and where do the
- * leads sit (Dashboard).
- *
- * Every count is an EXACT index range with a stated bound, and every one
- * returns `hasMore` beside it: Convex has no count API, so a count is a
- * bounded read, and a screen that renders "100+" is telling the truth while
- * a screen that renders a silently truncated 100 is not.
- *
- * Read-only, member-guarded, and free. No provider is named here — a signal
- * is the user's own saved search, and that is all these queries say.
- */
 import { query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
@@ -29,16 +16,6 @@ import { COUNT_SCAN_BOUND } from "../lib/limits";
 import type { LeadStage } from "../lib/validators";
 import { v } from "convex/values";
 
-/**
- * How far any one count reads. A trial org's whole table is smaller
- * than this, so in practice `hasMore` is false everywhere — the bound is what
- * keeps a query honest if that stops being true.
- *
- * Shared with the dashboard's own scan bound, so the two screens stop
- * counting at the same place: two different bounds meant the same leads
- * produced different totals on Contacts and on the dashboard once either
- * one was passed.
- */
 export const LEAD_COUNT_BOUND = COUNT_SCAN_BOUND;
 
 const vCount = v.object({ count: v.number(), hasMore: v.boolean() });
@@ -59,24 +36,7 @@ const vStageCounts = v.object({
   needs_attention: vCount,
 });
 
-/**
- * What the agent is doing right now — the state Contacts renders as "Finding
- * your first leads…" while the first run is still in progress.
- *
- * `running` is the run lease being LIVE, not merely present: an expired lease
- * belongs to an action that is already dead, and telling the user it is still
- * working would be the one piece of fiction on the screen.
- *
- * "Live" is measured against the caller's `now`, never `Date.now()` read in
- * here: a query that reads the wall clock answers differently for the same
- * arguments, so its subscription would keep showing "working…" long after the
- * lease died and would never re-run to correct itself. `leaseUntil` travels
- * too, so a screen can count down without asking again. With no `now` the
- * answer is the honest weaker one — a lease exists — which the recovery
- * sweep clears within ten minutes. Callers should pass a COARSE clock (a
- * value that changes every few seconds at most): a per-millisecond argument
- * is a new subscription key every render.
- */
+/** Pass a coarse client clock to expire stale leases reactively. Without now, running means only that a lease exists. */
 export const runState = query({
   args: { orgId: v.id("orgs"), now: v.optional(v.number()) },
   returns: v.union(
@@ -125,19 +85,7 @@ export const runState = query({
   },
 });
 
-/**
- * Leads generated per signal — the Agent page's table, from the counter the
- * run itself records (`strategies.leadsFound`), so a weak signal is visible
- * and can be switched off.
- *
- * `exhausted` is the honest reason a signal stopped growing: its free pages
- * are used up, which is a different thing from a signal that found nobody.
- *
- * `parkedReason` is the other honest reason: a search refused this signal's
- * filters, so the run skips it until a person switches it off and on again
- * (`agents/sourcing.ts#parkStrategy`). Without it the row would say
- * "enabled" and produce nothing for ever, with nothing to read.
- */
+/** Parked signals resume only after being toggled off and on. Exhausted signals have consumed their free pages. */
 export const byStrategy = query({
   args: { orgId: v.id("orgs") },
   returns: v.array(

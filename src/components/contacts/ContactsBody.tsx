@@ -1,12 +1,3 @@
-/**
- * The Contacts container: every Convex read this screen makes, the selection
- * the bulk bar acts on, and the URL state behind the filters
- * (`use-contacts-search.ts`).
- *
- * Everything below it is presentational and takes plain props. The list is a
- * live subscription, which is what makes rows appear while a run is in
- * progress.
- */
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"

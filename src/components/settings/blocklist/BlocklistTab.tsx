@@ -1,15 +1,3 @@
-/**
- * Settings → Blocklist (reference 26, PLAN §5).
- *
- * The addresses and domains the agent may never contact. Not a preference
- * list: it is the same `suppressions` table the send boundary checks before
- * every send and before a paused conversation resumes, so anything added here
- * refuses mail immediately.
- *
- * The container owns the page query and, through `use-blocklist-writes`, both
- * mutations; the filters, the table, the pager, the empty state and the two
- * dialogs are presentational.
- */
 import { Add01Icon, ShieldBanIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useQuery } from "convex/react"

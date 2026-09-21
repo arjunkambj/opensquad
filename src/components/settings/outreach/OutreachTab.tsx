@@ -1,14 +1,3 @@
-/**
- * Settings → Outreach (reference 26, PLAN §1).
- *
- * One default-instructions field, not a template library: the reference's
- * "Outreach Templates" section header with its primary action, and its
- * illustrated empty state, saying what the agent writes when nothing is set.
- *
- * The container owns the read and the write. Editing is a mode rather than a
- * separate screen, so an org with no default shows the empty state until
- * someone asks to write one.
- */
 import { MagicWand01Icon, Note01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation, useQuery } from "convex/react"

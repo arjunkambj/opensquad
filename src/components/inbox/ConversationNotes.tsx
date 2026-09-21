@@ -18,16 +18,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
 
-/**
- * Internal notes on one thread (`conversationNotes`).
- *
- * `note` rows are human annotations; `system` rows are the lifecycle trail a
- * unassigned thread would otherwise have nowhere to put.
- * Neither can resolve a business approval — a note never approves a draft —
- * so the composer sits under its own heading, deliberately away from the
- * takeover/resume controls, exactly as a comment sits outside the
- * approve/reject group on a draft (§4.2 / J3 ③).
- */
 export function ConversationNotes({
   orgId,
   conversation,

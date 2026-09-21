@@ -1,11 +1,3 @@
-/**
- * The signal column (ref 23): the saved search that found this person, and a
- * badge for the others.
- *
- * A person found by more than one signal is a stronger lead — the score's
- * multi-signal boost says so — so the badge names the rest on hover rather
- * than only counting them.
- */
 export function SignalCell({
   signals,
 }: {

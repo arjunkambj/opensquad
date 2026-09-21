@@ -1,17 +1,3 @@
-/**
- * Manage inbox — the one component behind both onboarding dot 3 and
- * Settings → Inbox (PLAN §4 "Manage inbox", EXECUTION T22).
- *
- * It chooses which state of the flow to show — paste key → verify → pick or
- * create an inbox → the import's progress → the connected state, with Replace
- * key and Disconnect — and hands plain props to the presentational parts
- * beside it. The reads come from `use-inbox-connection`, the writes from
- * `use-inbox-connect-actions`; nothing about the connection is decided twice.
- *
- * THE READ IS OWNER-GUARDED, so the role is resolved before the query runs: a
- * non-owner gets the permission note rather than a thrown query that would
- * take the whole screen down.
- */
 import { useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { InfoBanner } from "@/components/kit/InfoBanner"

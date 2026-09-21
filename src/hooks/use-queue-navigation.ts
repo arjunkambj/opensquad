@@ -9,19 +9,8 @@ const focusRow = (key: string) => {
   row?.focus()
 }
 
-/**
- * Queue navigation for the two screens whose whole job is working a list:
- * `/inbox` and `/contacts`.
- *
- * `j`/`k` move DOM focus between the row links — the rows are real links, so
- * once a row is focused, Enter opens it natively and a screen reader announces
- * an actual element rather than a highlighted index. Escape belongs to the
- * detail, not the list, so it is not handled here.
- *
- * Focus restore on close tracks the row's id, not a DOM ref: the Convex
- * subscription may re-render the list while the detail is open, and a stale
- * element reference restores focus to nothing.
- */
+/** Track focus by row ID because subscriptions may replace DOM nodes while the detail is open.
+ * J/K focus real links; Enter opens them and Escape belongs to the detail. */
 export function useQueueNavigation<T>({
   items,
   keyOf,
@@ -125,11 +114,7 @@ export function useQueueNavigation<T>({
   }
 }
 
-/**
- * Escape on a detail navigates back to the parent list rather than just
- * blurring — `plan/ux.md` §6: "Escape navigates to the parent route, not just
- * blurs, or the URL and the view disagree."
- */
+/** Escape navigates to the parent route so the URL stays aligned with the visible detail. */
 export function useEscapeToParent(to: string) {
   const navigate = useNavigate()
   useEffect(() => {

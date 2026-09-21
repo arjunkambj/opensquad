@@ -1,23 +1,5 @@
-/**
- * Every number the product spends money against, in one place (PLAN §6, §10
- * "No magic numbers"). Nothing here reads the database: these are the policy
- * constants a call site looks up, so retuning a price or a cap is a one-line
- * change here and never a hunt through handlers.
- *
- * Three layers live side by side because a paid call must pass all of them:
- *   1. the visible credit price of an action (what the user sees spend),
- *   2. the hidden per-org provider caps in the provider's own units,
- *   3. the platform-wide budgets and the kill switch, which bound OUR bill
- *      whatever any one org does.
- *
- * SERVER-SIDE ONLY: this file names providers and deployment settings, so no
- * file under `src/` may import it (PLAN §4 "White-label rule"). The part of
- * layer 1 a screen shows lives in `prices.ts`, which the browser imports and
- * this file re-exports, so backend code keeps importing `lib/limits`.
- *
- * There is one plan, `trial`. When a real plan map arrives it replaces the
- * lookups below, not their call sites.
- */
+/** Server-only pricing attribution, provider caps and platform budgets.
+ * Browser code imports public credit prices from prices.ts instead. */
 import type { RateLimitConfig } from "@convex-dev/rate-limiter";
 import { env } from "../_generated/server";
 import { ACTION_PRICES as POSTED_PRICES } from "./prices";
@@ -27,19 +9,7 @@ import type { ProviderKind } from "./validators";
 export { PAID_ACTIONS, TRIAL_DAILY_SEND_LIMIT_MAX } from "./prices";
 export type { PaidAction } from "./prices";
 
-/* ------------------------------------------------------------------ */
-/* The deployment settings this file reads                             */
-/* ------------------------------------------------------------------ */
-
-/**
- * Every tunable name, as a union.
- *
- * The readers at the bottom index the TYPED `env` with this, and every name
- * is declared in `convex.config.ts`, so a misspelling is a build failure.
- * That is the whole point: an undeclared name still reaches `process.env`, so
- * `PLATFORM_PAUSE` would have compiled and left the kill switch OPEN, and a
- * mistyped budget would have fallen silently back to its default ceiling.
- */
+/** Keep names aligned with convex.config.ts so typed env reads catch misspellings. */
 export type TunableEnvName =
   | "PLATFORM_PAUSED"
   | "ENRICH_DAILY_CREDIT_BUDGET"
@@ -50,10 +20,6 @@ export type TunableEnvName =
   | "ENRICH_BALANCE_FLOOR"
   | "PAID_CALL_STALE_MS"
   | "UNCERTAIN_HOLD_MAX_AGE_MS";
-
-/* ------------------------------------------------------------------ */
-/* Layer 1 · visible credits                                           */
-/* ------------------------------------------------------------------ */
 
 /**
  * A paid action's posted price (`prices.ts`) plus the attribution only the
@@ -84,25 +50,9 @@ export const ACTION_PRICES: Record<PaidAction, ActionPrice> = {
 /** The lifetime grant, made with the org and never refilled (PLAN §6). */
 export const TRIAL_CREDIT_GRANT = 300;
 
-/**
- * The balances that put "credits low" in the header bell (PLAN §5).
- *
- * ASCENDING — the reader takes the FIRST level the balance is at or below,
- * so a call that goes straight from 60 to 0 announces "out of credits"
- * rather than the level it flew past. Each one fires AT MOST ONCE per org:
- * the feed writer keys its event on the threshold, so a member is told once
- * that the balance has fallen under 50 and once that it has run out, rather
- * than on every paid call afterwards.
- *
- * 50 is chosen against the layer-1 prices: three more emails found, or a
- * dozen researched leads — enough warning to be worth having, late enough
- * not to be noise on a 300-credit grant.
- */
+/** Keep thresholds ascending: the first match must report out-of-credits after a large drop.
+ * Each threshold event is emitted once per org. */
 export const CREDITS_LOW_THRESHOLDS: readonly number[] = [0, 50];
-
-/* ------------------------------------------------------------------ */
-/* Layer 2 · hidden provider caps per org                        */
-/* ------------------------------------------------------------------ */
 
 /**
  * The metrics a paid call reserves in the provider's own units. `credits` is
@@ -135,10 +85,6 @@ export const TRIAL_METRIC_CAPS: Record<
   ai_calls: { lifetime: 400, daily: 40 },
   scrapes: { lifetime: 80, daily: 15 },
 };
-
-/* ------------------------------------------------------------------ */
-/* Layer 3 · platform-wide budgets, kill switch and signup capacity    */
-/* ------------------------------------------------------------------ */
 
 /**
  * Deployment env var whose value, when exactly `"true"`, stops every paid
@@ -208,29 +154,8 @@ export const MAX_TRIAL_ORGS_ENV: TunableEnvName = "MAX_TRIAL_ORGS";
 
 export const MAX_TRIAL_ORGS_DEFAULT = 50;
 
-/* ------------------------------------------------------------------ */
-/* Counted reads                                                       */
-/* ------------------------------------------------------------------ */
-
-/**
- * How far ANY counted read scans before it answers "n+" instead of "n".
- *
- * One number, in one place, because the acceptance for the Dashboard is that
- * its figures reconcile with the screen each came from: a funnel that stopped
- * counting at 100 beside a stat row that stopped at 200 makes two true
- * numbers that disagree, and nothing on either screen says why. Convex has no
- * count API, so a count is a bounded read — the bound is a product decision,
- * not a per-query one.
- *
- * A trial org's whole table is smaller than this, so `hasMore` is false in
- * practice; the bound is what keeps every screen honest once that stops being
- * true.
- */
+/** Shared scan bound keeps counts consistent across screens. Report hasMore instead of a truncated total. */
 export const COUNT_SCAN_BOUND = 100;
-
-/* ------------------------------------------------------------------ */
-/* Recovery timing                                                     */
-/* ------------------------------------------------------------------ */
 
 /**
  * A paid call whose operation row has not moved in this long lost its action
@@ -270,39 +195,15 @@ export function uncertainHoldMaxAgeMs(): number {
 /** Rows one sweep pass settles, so a pass stays inside one transaction. */
 export const SWEEP_BATCH_SIZE = 50;
 
-/* ------------------------------------------------------------------ */
-/* The step-level retry ladder (PLAN §9.1 "Retries")                   */
-/* ------------------------------------------------------------------ */
-
-/**
- * How far out a failed step moves the lead before it is tried again:
- * 5 min → 30 min → 4 h, exactly as PLAN §9.1 writes it. Convex does not
- * re-run a failed action, so the delay is the retry: the lead comes back due
- * and the next run — or the recovery sweep — picks it up.
- *
- * One ladder, shared by every per-lead step (research, outreach), so "what
- * happens after a failure" is one number in one place rather than a constant
- * per domain that quietly drifts from the plan.
- */
+/** The run loop retries due leads using this shared per-step schedule; failed actions do not retry themselves. */
 export const STEP_RETRY_DELAYS_MS: readonly number[] = [
   5 * 60 * 1000,
   30 * 60 * 1000,
   4 * 60 * 60 * 1000,
 ];
 
-/**
- * Failures a step may take before the lead is parked as `needs_attention`
- * with a reason and a Retry button: the first attempt plus the three the
- * ladder waits for. The attempt that has no rung left is the one that parks.
- *
- * COUNTED PER STEP, per lead (`prospects.stepAttempts`): research failing
- * twice must not spend the outreach writer's ladder, and vice versa.
- */
+/** Count attempts per step and lead so failures in research do not consume outreach retries. */
 export const STEP_MAX_ATTEMPTS = STEP_RETRY_DELAYS_MS.length + 1;
-
-/* ------------------------------------------------------------------ */
-/* Per-user rate limits                                                */
-/* ------------------------------------------------------------------ */
 
 /**
  * Token buckets per user on every credit-spending entry point (PLAN §6
@@ -341,10 +242,6 @@ export const RATE_LIMITS = {
 
 export type RateLimitName = keyof typeof RATE_LIMITS;
 
-/* ------------------------------------------------------------------ */
-/* Agent defaults (PLAN §7)                                            */
-/* ------------------------------------------------------------------ */
-
 /** Leads a live agent may source in one org-local day. */
 export const AGENT_DAILY_LEAD_CAP_DEFAULT = 25;
 
@@ -360,19 +257,7 @@ export const AGENT_AUTO_APPROVE_MIN_SCORE_DEFAULT = 2;
 /** Days after the previous mail that a follow-up goes out. */
 export const AGENT_FOLLOW_UP_DAYS_DEFAULT: readonly number[] = [3, 7];
 
-/* ------------------------------------------------------------------ */
-/* Env readers                                                         */
-/* ------------------------------------------------------------------ */
-
-/**
- * A non-negative integer deployment setting, or `fallback` when unset. An
- * unreadable value is a deployment mistake, not a reason to spend without a
- * ceiling, so it throws rather than falling back silently.
- *
- * Read through the typed `env`, never `process.env`: the name is checked
- * against `convex.config.ts` at build time, and a variable the deployment
- * never set still yields exactly `fallback`, as it always did.
- */
+/** Unset settings use the fallback; malformed values throw to avoid silently weakening spending limits. */
 export function readIntEnv(name: TunableEnvName, fallback: number): number {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") {

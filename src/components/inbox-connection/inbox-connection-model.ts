@@ -1,20 +1,8 @@
-/**
- * The vocabulary of the Manage-inbox screen: the shapes the backend returns,
- * and OUR copy for every way the connect flow can refuse.
- *
- * WHY THE COPY LIVES HERE. `verifyAndStoreKey` and friends answer with a
- * closed set of codes plus an operator-facing `message` that may quote the
- * mail provider. The message is never rendered; the code is mapped below, in
- * one `Record` over the union taken from the generated types — so a new
- * backend code fails this build until someone writes copy for it.
- *
- * Data-free: no Convex calls, no React.
- */
+/** Render mapped codes only; provider messages may contain operator-only details. */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import { domainErrorCode } from "@/lib/convex-error"
 
-/** The whole Manage-inbox read surface (PLAN §4 "Manage inbox"). */
 export type InboxConnectionView = FunctionReturnType<
   typeof api.inbox.connection.getInboxConnection
 >
@@ -25,7 +13,6 @@ type VerifyResult = FunctionReturnType<
   typeof api.inbox.connectActions.verifyAndStoreKey
 >
 
-/** One mailbox on the pasted key's account, offered for the user to pick. */
 export type VerifiedInbox = Extract<
   VerifyResult,
   { ok: true }
@@ -33,11 +20,7 @@ export type VerifiedInbox = Extract<
 
 export type InboxConnectErrorCode = Extract<VerifyResult, { ok: false }>["code"]
 
-/**
- * Our words for every refusal the connect flow can return. AgentMail is named
- * because the user pastes that key themselves (PLAN §4 white-label rule); no
- * other provider is, and no provider sentence is passed through.
- */
+/** AgentMail is named because users supply its key. Other provider names and raw errors stay private. */
 export const INBOX_CONNECT_ERROR_COPY: Record<InboxConnectErrorCode, string> = {
   key_rejected:
     "That key was refused. Check you pasted the whole key, then try again.",
@@ -58,21 +41,13 @@ export const INBOX_CONNECT_ERROR_COPY: Record<InboxConnectErrorCode, string> = {
   not_connected: "Connect an inbox before replacing its key.",
 }
 
-/**
- * Copy for a THROWN refusal — the guards and the per-user rate limit, which
- * are `ConvexError`s rather than a returned failure. The backend's own
- * message is for logs, so it is never rendered.
- */
+/** Thrown domain codes also use mapped copy, never the operator-facing error message. */
 export function requestErrorCopy(error: unknown, fallback: string): string {
   const code = domainErrorCode(error)
   switch (code) {
     case "RATE_LIMITED":
       return "Too many attempts in a row. Wait a moment and try again."
-    // No owner-only copy here. The tenant is the organization and we keep no
-    // roles of our own, so every member of the active organization may change
-    // the sending inbox — the server guard is membership, and it refuses a
-    // non-member with NOT_FOUND rather than FORBIDDEN. A sentence promising an
-    // owner-only restriction would be both unreachable and untrue.
+    // Any member of the active organization can manage its inbox; non-members receive NOT_FOUND.
     case "FORBIDDEN":
       return "You do not have access to this organization's sending inbox."
     case "UNAUTHENTICATED":
@@ -84,7 +59,6 @@ export function requestErrorCopy(error: unknown, fallback: string): string {
   }
 }
 
-/** The status pill beside "Sending inbox". */
 export function connectionStatusLabel(view: InboxConnectionView): string {
   switch (view.connection) {
     case "connected":
@@ -96,7 +70,6 @@ export function connectionStatusLabel(view: InboxConnectionView): string {
   }
 }
 
-/** The import's state in words (PLAN §4 step 5: "Syncing n threads…"). */
 export function syncLabel(sync: InboxSyncView): string {
   switch (sync.state) {
     case "idle":
@@ -116,7 +89,6 @@ export function syncLabel(sync: InboxSyncView): string {
   }
 }
 
-/** Trimmed inbox username, as the create form will send it. */
 export function normalizeUsername(value: string): string {
   return value.trim().toLowerCase()
 }

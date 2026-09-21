@@ -1,10 +1,3 @@
-/**
- * The lead behind the thread, in one line, with the way to the full record.
- *
- * Everything else about this person — research, signals, the email reveal —
- * lives in the Contacts drawer, so this links there rather than reproducing
- * it beside the messages.
- */
 import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"

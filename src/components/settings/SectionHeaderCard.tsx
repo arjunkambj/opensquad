@@ -1,13 +1,3 @@
-/**
- * The section header card of reference 26: a tinted icon, the section's name,
- * one sentence saying what it controls, and the section's primary action on
- * the right.
- *
- * It carries the action rather than the card below it because the reference
- * puts the one thing you came to do at eye level, before the content it acts
- * on. Presentational — the caller keeps the mutation and the permission check,
- * and simply passes no `action` where the reader may not act.
- */
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
@@ -22,7 +12,6 @@ export type SectionHeaderCardProps = {
   icon: IconSvgElement
   title: string
   description: ReactNode
-  /** The section's primary action, or nothing when there is none to offer. */
   action?: ReactNode
 }
 

@@ -1,10 +1,3 @@
-/**
- * The blocklist's search box and scope filter.
- *
- * Both narrow the SERVER query rather than the rendered page — a list that
- * spans pages cannot be filtered honestly in the browser, because the match
- * a reader is looking for may be on a page they have not asked for.
- */
 import { Search01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {

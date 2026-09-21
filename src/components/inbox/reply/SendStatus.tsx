@@ -1,13 +1,4 @@
-/**
- * What became of the approved reply — read off the send ledger, never
- * inferred.
- *
- * Each attempt state has exactly one honest sentence and at most one action:
- * a reserved intent can still be cancelled because nothing has left the
- * building; an uncertain one can be reconciled with the provider; a failed or
- * cancelled one can be tried again. An acknowledged send says "sent", which
- * means the provider accepted it — never "delivered".
- */
+/** Sent means provider-accepted, not delivered. Uncertain attempts require reconciliation before retry. */
 import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { useState } from "react"

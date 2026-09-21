@@ -1,14 +1,3 @@
-/**
- * The "Ready to outreach?" card of reference 20, made state-aware.
- *
- * The reference offers one fixed call to action. Ours offers the step the
- * org is actually on — finish setup, connect the inbox, choose how the
- * agent sends, approve what is waiting, hand it the wheel, or nothing at all
- * — decided on the server from real rows (`dashboard.queries.nextStep`) and
- * only put into words here.
- *
- * Presentational: it renders the state it is handed and owns no query.
- */
 import { Link } from "@tanstack/react-router"
 import type { FunctionReturnType } from "convex/server"
 import type { ReactNode } from "react"

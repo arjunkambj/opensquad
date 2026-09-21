@@ -119,10 +119,6 @@ export async function loadRepliedConversations(
   return { rows, bounded: { count: rows.length, hasMore } };
 }
 
-/* ------------------------------------------------------------------ */
-/* Meetings                                                            */
-/* ------------------------------------------------------------------ */
-
 /**
  * Meetings, counted the way PLAN §9.5 defines them: CONFIRMED bookings only,
  * whose meeting time falls inside the window. A confirmed booking always

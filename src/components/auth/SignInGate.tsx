@@ -4,9 +4,6 @@ import { useEffect } from "react"
 import { SignInForm } from "@/components/auth/SignInForm"
 import { Spinner } from "@/components/ui/spinner"
 
-/**
- * Sends an already-signed-in visitor on, and shows the form to everyone else.
- */
 export function SignInGate() {
   const user = useUser()
   const { after_auth_return_to } = useSearch({ from: "/sign-in" })
