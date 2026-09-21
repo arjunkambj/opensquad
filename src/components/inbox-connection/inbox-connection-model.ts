@@ -78,8 +78,13 @@ export function requestErrorCopy(error: unknown, fallback: string): string {
   switch (code) {
     case "RATE_LIMITED":
       return "Too many attempts in a row. Wait a moment and try again."
+    // No owner-only copy here. The tenant is the organization and we keep no
+    // roles of our own, so every member of the active organization may change
+    // the sending inbox — the server guard is membership, and it refuses a
+    // non-member with NOT_FOUND rather than FORBIDDEN. A sentence promising an
+    // owner-only restriction would be both unreachable and untrue.
     case "FORBIDDEN":
-      return "Only the organization owner can change the sending inbox."
+      return "You do not have access to this organization's sending inbox."
     case "UNAUTHENTICATED":
       return "Your session expired. Sign in again to change the sending inbox."
     case "INVALID":
