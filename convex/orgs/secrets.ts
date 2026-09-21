@@ -19,6 +19,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { activeHexclaveOrgId, expectedUsersIssuer } from "../lib/auth";
 import {
   boundedString,
   domainError,
@@ -79,20 +80,43 @@ export function summariseSecret(
 }
 
 /**
- * The ciphertext an action needs, plus the rotation overlap when one is still
- * open. Internal only — an action decrypts it and never returns the plaintext.
+ * The ciphertext an action needs. Internal only — an action decrypts it and
+ * never returns the plaintext.
  */
-export const vSecretEnvelopeRow = v.object({
+const secretEnvelopeFields = {
   ciphertext: v.string(),
   iv: v.string(),
   status: vSecretStatus,
   last4: v.string(),
+};
+
+/** The CURRENT envelope alone: no rotation overlap, and therefore nothing in
+ *  it that depends on what time it is. */
+export const vSecretEnvelopeCurrent = v.object(secretEnvelopeFields);
+
+export type SecretEnvelopeCurrent = typeof vSecretEnvelopeCurrent.type;
+
+/** The current envelope plus the rotation overlap when one is still open. */
+export const vSecretEnvelopeRow = v.object({
+  ...secretEnvelopeFields,
   previous: v.optional(
     v.object({ ciphertext: v.string(), iv: v.string(), validUntil: v.number() }),
   ),
 });
 
 export type SecretEnvelopeRow = typeof vSecretEnvelopeRow.type;
+
+/** The stored envelope with no time in it. */
+export function currentEnvelopeOf(
+  row: Doc<"orgSecrets">,
+): SecretEnvelopeCurrent {
+  return {
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    status: row.status,
+    last4: row.last4,
+  };
+}
 
 export function envelopeOf(
   row: Doc<"orgSecrets">,
@@ -104,10 +128,7 @@ export function envelopeOf(
     row.previousValidUntil !== undefined &&
     row.previousValidUntil > at;
   return {
-    ciphertext: row.ciphertext,
-    iv: row.iv,
-    status: row.status,
-    last4: row.last4,
+    ...currentEnvelopeOf(row),
     ...(overlapOpen
       ? {
           previous: {
@@ -120,16 +141,63 @@ export function envelopeOf(
   };
 }
 
-/** Read one stored envelope. Callers are internal actions only. */
+/**
+ * Defence in depth on the envelope reader.
+ *
+ * Nothing in Convex lets a browser call an internal function, so today the
+ * only callers are our own actions and every one of them guards first. That
+ * is a property of the current call sites, not of this function, and a reader
+ * that hands out ciphertext should not depend on every future caller
+ * remembering.
+ *
+ * So: a call that carries NO identity is a scheduled internal action — the
+ * backfill step, an outreach tick — and is allowed, because there is no user
+ * for it to be acting outside of. A call that DOES carry one must be acting
+ * for a member of that org, which is the same question `requireOrgMember`
+ * asks: the token's active organization, and the issuer that signs real
+ * accounts. A caller that skipped its own check is refused here, and it is
+ * refused as `NOT_FOUND`, so nothing learns that another org's row exists.
+ */
+async function assertEnvelopeReadable(
+  ctx: QueryCtx,
+  orgId: Id<"orgs">,
+): Promise<void> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) {
+    return;
+  }
+  const org = await ctx.db.get("orgs", orgId);
+  if (
+    org === null ||
+    identity.issuer !== expectedUsersIssuer() ||
+    activeHexclaveOrgId(identity) !== org.hexclaveOrgId
+  ) {
+    throw domainError("NOT_FOUND", "organization not found");
+  }
+}
+
+/**
+ * Read one stored envelope. Callers are internal actions only, and the guard
+ * above holds whichever of them calls it.
+ *
+ * It answers with the CURRENT secret and never the rotation overlap, which is
+ * what keeps a query out of the wall clock: whether an overlap is still open
+ * is a question about `Date.now()`, and a query that reads the clock returns a
+ * different answer for the same arguments without anything having changed
+ * (`convex_rules.txt`). The one caller that needs both halves is the inbound
+ * webhook route, which reads the row and calls `envelopeOf` from its HTTP
+ * action — where the clock is legal and the answer is used immediately.
+ */
 export const getEnvelope = internalQuery({
   args: {
     orgId: v.id("orgs"),
     provider: vSecretProvider,
   },
-  returns: v.union(vSecretEnvelopeRow, v.null()),
+  returns: v.union(vSecretEnvelopeCurrent, v.null()),
   handler: async (ctx, args) => {
+    await assertEnvelopeReadable(ctx, args.orgId);
     const row = await readOrgSecret(ctx, args.orgId, args.provider);
-    return row === null ? null : envelopeOf(row, Date.now());
+    return row === null ? null : currentEnvelopeOf(row);
   },
 });
 

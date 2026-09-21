@@ -12,8 +12,13 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { createDraftAgent } from "../agents/model";
 import { trialCapacityOpen } from "../billing/platformBudgets";
-import { grantTrialBuckets } from "../billing/trialBuckets";
+import {
+  claimTrialGrant,
+  findTrialClaim,
+  grantTrialBuckets,
+} from "../billing/trialBuckets";
 import { activeHexclaveOrgId, requireVerifiedUser } from "../lib/auth";
+import { requireRateLimit } from "../lib/rateLimits";
 import {
   assertIanaTimezone,
   boundedInt,
@@ -111,7 +116,7 @@ type EnsureOrgArgs = {
  *   FIRST org a given verified identity initialises is granted credits.
  *   Every later one is created in the already-designed "no credit grant"
  *   state, where each paid call refuses with `NO_CREDIT_GRANT`.
- *   TRIAL CAPACITY. `MAX_TRIAL_ORGS` refuses a NEW row once the platform is
+ *   TRIAL CAPACITY. `MAX_TRIAL_ORGS` refuses a new GRANT once the platform is
  *   full; an organization that already has its row is returned it regardless,
  *   so the cap never locks anyone out of what they already have.
  */
@@ -120,6 +125,11 @@ export async function ensureOrgImpl(
   args: EnsureOrgArgs,
 ): Promise<{ orgId: Id<"orgs">; created: boolean }> {
   const { identity, identityKey } = await requireVerifiedUser(ctx);
+  // The credit grant is handed out on this path, and a draft agent is
+  // written with it, so it is rate-limited per identity like every other
+  // credit-spending entry point (PLAN §6 "Closing the ways in"). At the TOP,
+  // before a single read: a refused call must leave nothing behind.
+  await requireRateLimit(ctx, "ensureOrg", identityKey);
   const hexclaveOrgId = activeHexclaveOrgId(identity);
   if (hexclaveOrgId === null) {
     throw domainError(
@@ -138,25 +148,35 @@ export async function ensureOrgImpl(
     return { orgId: existing._id, created: false };
   }
 
-  // Only a NEW row is subject to the platform's signup capacity.
-  if (!(await trialCapacityOpen(ctx))) {
+  // The money rule (PLAN §6): the grant is per IDENTITY, not per
+  // organization, because creating organizations is free and unlimited in the
+  // auth provider.
+  //
+  // The CLAIM ROW is what makes that a constraint. Reading `orgs` by the
+  // creator and then inserting a DIFFERENT org left the rule resting on an
+  // inference about what Convex conflicts; this reads and WRITES one document
+  // keyed by the identity, so the second of two parallel calls is conflicted
+  // by the first's insert into the range it read, retried, and then sees the
+  // committed claim.
+  //
+  // Trial identity is `tokenIdentifier` (`iss|sub`), NOT a verified email: a
+  // person who signs in under a second auth `sub` is a second identity and
+  // would be granted again. Accepted and documented rather than papered over
+  // — `MAX_TRIAL_ORGS` still bounds the total, and an email is a claim the
+  // provider does not promise to keep stable.
+  const claim = await findTrialClaim(ctx, identityKey);
+  const grantTrial = claim === null;
+
+  // Only a grant is subject to the platform's signup capacity: the cap bounds
+  // the trials we FUND. An org created with no grant can spend nothing, so
+  // waitlisting it would protect no money and would lock an account out of
+  // its own second organization.
+  if (grantTrial && !(await trialCapacityOpen(ctx))) {
     throw domainError(
       "TRIAL_CAPACITY_REACHED",
       "the trial is full; new organizations are waitlisted",
     );
   }
-
-  // The money rule (PLAN §6): the grant is per USER, not per organization,
-  // because creating organizations is free and unlimited in the auth
-  // provider. Read before the insert so this org is not counted as its own
-  // predecessor.
-  const earlier = await ctx.db
-    .query("orgs")
-    .withIndex("by_createdByIdentityKey", (q) =>
-      q.eq("createdByIdentityKey", identityKey),
-    )
-    .first();
-  const grantTrial = earlier === null;
 
   const name =
     args.name !== undefined
@@ -198,8 +218,11 @@ export async function ensureOrgImpl(
   });
 
   // The trial grant is part of creating the FIRST org, never implied and
-  // never lazy: no bucket means every paid call refuses (PLAN §6).
+  // never lazy: no bucket means every paid call refuses (PLAN §6). The claim
+  // is taken in the same transaction as the buckets, so the two can never
+  // disagree about who has been funded.
   if (grantTrial) {
+    await claimTrialGrant(ctx, identityKey, orgId);
     await grantTrialBuckets(ctx, orgId);
   }
 

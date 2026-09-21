@@ -83,17 +83,24 @@ export async function applyReservationTransition(
 }
 
 /**
- * Shrink a still-`reserved` debit before settling it — the "commit the
- * provider's actual, release the rest" half of PLAN §6. The freed capacity
- * returns to the bucket immediately, so a worst-case reservation never blocks
- * more than the provider really charged.
+ * Shrink an unsettled debit before settling it — the "commit the provider's
+ * actual, release the rest" half of PLAN §6. The freed capacity returns to
+ * the bucket immediately, so a worst-case reservation never blocks more than
+ * the provider really charged.
+ *
+ * An `uncertain` hold may be reduced too, and by the same rule: reconciliation
+ * is the one door that learns what an ambiguous call really cost, and holding
+ * a provably smaller charge at its worst case blocks capacity we know was
+ * never spent. Only the counter differs — an uncertain hold sits in the
+ * bucket's `uncertain`, not its `reserved`. A `committed` or `released` row
+ * is terminal and still refuses.
  */
 export async function reduceReservation(
   ctx: MutationCtx,
   reservation: Doc<"usageReservations">,
   quantity: number,
 ): Promise<Doc<"usageReservations">> {
-  if (reservation.state !== "reserved") {
+  if (reservation.state !== "reserved" && reservation.state !== "uncertain") {
     throw domainError(
       "CONFLICT",
       `reservation is ${reservation.state} and can no longer be reduced`,
@@ -113,8 +120,11 @@ export async function reduceReservation(
     throw domainError("NOT_FOUND", "usage bucket not found");
   }
   const now = Date.now();
+  const freed = reservation.quantity - quantity;
   await ctx.db.patch("usageBuckets", bucket._id, {
-    reserved: bucket.reserved - (reservation.quantity - quantity),
+    ...(reservation.state === "uncertain"
+      ? { uncertain: bucket.uncertain - freed }
+      : { reserved: bucket.reserved - freed }),
     updatedAt: now,
   });
   await ctx.db.patch("usageReservations", reservation._id, {

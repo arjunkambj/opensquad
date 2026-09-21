@@ -25,7 +25,6 @@ import {
   USAGE_PERIOD_LIFETIME,
   USAGE_SCOPE_ORG,
 } from "../lib/validators";
-import type { ProviderKind } from "../lib/validators";
 import {
   bucketRemaining,
   dailyPeriodKey,
@@ -117,24 +116,29 @@ async function availableInBucket(
  * Has this org ever been BILLED for this action? The first-run-free
  * actions of PLAN §6 are free exactly once, and a free run records a
  * commit-settled operation, so the second run is priced from the same fact.
+ *
+ * The index answers it EXACTLY: `settlement` pins the commits and the
+ * operation key carries the `<action>:` prefix `composeOperationKey` writes,
+ * so ONE row decides it. The bounded scan this replaces sampled the org's
+ * operations, so an org with more rows than the bound was handed a second
+ * free run — a question about money must never be answered by a sample.
  */
 async function actionAlreadyBilled(
   ctx: QueryCtx,
   orgId: Id<"orgs">,
-  provider: ProviderKind,
   action: string,
 ): Promise<boolean> {
-  const rows = await ctx.db
+  const billed = await ctx.db
     .query("providerOperations")
-    .withIndex("by_orgId_and_provider_and_operationKey", (q) =>
+    .withIndex("by_orgId_and_settlement_and_operationKey", (q) =>
       q
         .eq("orgId", orgId)
-        .eq("provider", provider)
+        .eq("settlement", "commit")
         .gte("operationKey", `${action}:`)
         .lt("operationKey", `${action}:\uffff`),
     )
-    .take(256);
-  return rows.some((row) => row.settlement === "commit");
+    .first();
+  return billed !== null;
 }
 
 /**
@@ -201,7 +205,7 @@ export const beginPaidCall = internalMutation({
 
     const credits =
       price.firstRunFree &&
-      !(await actionAlreadyBilled(ctx, args.orgId, provider, args.action))
+      !(await actionAlreadyBilled(ctx, args.orgId, args.action))
         ? 0
         : price.credits;
 

@@ -147,7 +147,22 @@ export async function settlePaidCallImpl(
       }
       const meteredMetric = metric as TrialMeteredMetric;
       maxInto(worstCase, meteredMetric, reservation.quantity);
-      if (reservation.state === "reserved") {
+      if (
+        reservation.state === "reserved" ||
+        reservation.state === "uncertain"
+      ) {
+        // PLAN §6: provider units commit at the provider's REPORTED ACTUAL
+        // and the rest of the worst case is released — org bucket and
+        // platform budget alike.
+        //
+        // An `uncertain` hold settles by the same rule, and only because of
+        // where this figure comes from: `reconcilePaidCall` is the door a
+        // provider task knocks on once it has LOOKED THE OPERATION UP, so an
+        // `actualUnits` for an ambiguous call is proof, not a guess. With no
+        // figure to go on the hold keeps its worst case, which is what
+        // "never release money that may have been spent" means — that is
+        // also the path the 24-hour sweep takes, since it settles with no
+        // `actualUnits` at all.
         const requested = args.actualUnits?.[meteredMetric];
         const actual =
           requested === undefined
@@ -167,16 +182,6 @@ export async function settlePaidCallImpl(
           );
         }
         maxInto(charged, meteredMetric, actual);
-      } else if (reservation.state === "uncertain") {
-        // An uncertain hold resolves at its worst case: the capacity was
-        // blocked precisely because we could not prove a smaller number.
-        await applyReservationTransition(
-          ctx,
-          reservation,
-          "committed",
-          args.providerReference,
-        );
-        maxInto(charged, meteredMetric, reservation.quantity);
       } else if (reservation.state === "committed") {
         maxInto(charged, meteredMetric, reservation.quantity);
       }

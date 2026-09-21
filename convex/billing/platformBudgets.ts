@@ -150,13 +150,28 @@ export async function creditPlatformBudget(
   });
 }
 
-/** A neutral refusal: the client says "at capacity today", never which
- *  provider ran out or how much of it is left. `metric` names no provider
- *  (PLAN §4) and the message carries no counts. */
+/**
+ * What a metric is called in a message a CLIENT may read.
+ *
+ * The metric names are server vocabulary and two of them carry the lead-data
+ * provider's name, which nothing client-visible may say (PLAN §4
+ * "White-label"). This maps each one to the capability the user recognises
+ * before the refusal can leave the server.
+ */
+const CAPACITY_LABELS: Record<TrialMeteredMetric, string> = {
+  enrich_credits: "finding contact details",
+  enrich_searches: "lead search",
+  ai_calls: "writing and scoring",
+  scrapes: "web research",
+};
+
+/** A neutral refusal: the client says "at capacity", never which provider ran
+ *  out or how much of it is left. The message names no provider (PLAN §4) and
+ *  carries no counts. */
 function platformCapacityError(metric: TrialMeteredMetric) {
   return domainError(
     "PLATFORM_CAPACITY",
-    `platform budget for ${metric} is spent for this period`,
+    `${CAPACITY_LABELS[metric]} is at capacity for now`,
   );
 }
 
@@ -169,17 +184,29 @@ export function maxTrialOrgs(): number {
 }
 
 /**
- * Is there room for one more trial org?
+ * Is there room for one more trial GRANT?
  *
- * Reads at most `max + 1` rows and answers a boolean: the exact number of
+ * It counts `trialGrants`, not `orgs`. The cap bounds how many trials we
+ * FUND: an org created with no grant can spend nothing (every paid call
+ * refuses with `NO_CREDIT_GRANT`), so counting rows in `orgs` would let an
+ * account mint no-grant organizations until the platform waitlisted real
+ * users — the opposite of what the cap is for.
+ *
+ * Reads at most `max` rows and answers a boolean: the exact number of
  * tenants is not something a signed-out visitor — or a member — gets to
- * learn from the waitlist screen.
+ * learn from the waitlist screen. `max` claims present means the cap is
+ * REACHED, so the answer is `length < max`, not `<=`.
+ *
+ * The read range is also the serialisation point. Below the cap the range
+ * covers every claim there is, so a concurrent grant's insert falls inside it
+ * and conflicts this transaction, which then retries against the committed
+ * count.
  */
 export async function trialCapacityOpen(ctx: QueryCtx): Promise<boolean> {
   const max = maxTrialOrgs();
   if (max === 0) {
     return false;
   }
-  const rows = await ctx.db.query("orgs").take(max + 1);
-  return rows.length <= max;
+  const claims = await ctx.db.query("trialGrants").take(max);
+  return claims.length < max;
 }

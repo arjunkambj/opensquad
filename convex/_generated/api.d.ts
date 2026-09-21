@@ -154,7 +154,6 @@ import type * as orgs_mutations from "../orgs/mutations.js";
 import type * as orgs_outreachDefaults from "../orgs/outreachDefaults.js";
 import type * as orgs_queries from "../orgs/queries.js";
 import type * as orgs_secrets from "../orgs/secrets.js";
-import type * as orgs_trialGrant from "../orgs/trialGrant.js";
 import type * as outreach_approvals from "../outreach/approvals.js";
 import type * as outreach_approvalsModel from "../outreach/approvalsModel.js";
 import type * as outreach_autopilotApproval from "../outreach/autopilotApproval.js";
@@ -339,7 +338,6 @@ declare const fullApi: ApiFromModules<{
   "orgs/outreachDefaults": typeof orgs_outreachDefaults;
   "orgs/queries": typeof orgs_queries;
   "orgs/secrets": typeof orgs_secrets;
-  "orgs/trialGrant": typeof orgs_trialGrant;
   "outreach/approvals": typeof outreach_approvals;
   "outreach/approvalsModel": typeof outreach_approvalsModel;
   "outreach/autopilotApproval": typeof outreach_autopilotApproval;

@@ -39,11 +39,22 @@ import { v } from "convex/values";
 export const ENRICH_BALANCE_FLOOR_ENV = "ENRICH_BALANCE_FLOOR";
 
 /**
- * Enough to cover a full day of the platform credit budget (200) plus the
- * reveals that may already be in flight. Conservative on purpose: stopping
- * early is an inconvenience, an overdraft is a bill.
+ * A floor a HEALTHY account clears.
+ *
+ * It is sized against what one paid call can hold — a reveal holds ten units
+ * — with room for a few in flight, so the breaker fires when the wallet can
+ * no longer cover the work already on its way. It is deliberately NOT sized
+ * against a whole day of the platform credit budget: a fresh provider account
+ * is funded with a two-figure free grant, so a floor above that would find
+ * every new deployment "below the floor" on its first hourly pass and keep
+ * the breaker tripped for good — lead search refusing for everyone while the
+ * account was working exactly as intended. A day is already bounded by the
+ * platform budgets and the per-org caps; this guard exists for the drift
+ * between our ledger and theirs, which is a small number by definition.
+ *
+ * `ENRICH_BALANCE_FLOOR` raises it on a funded account without a deploy.
  */
-export const ENRICH_BALANCE_FLOOR_DEFAULT = 300;
+export const ENRICH_BALANCE_FLOOR_DEFAULT = 25;
 
 /**
  * The marker added to a budget's `used` to trip it. Far above any real
@@ -184,10 +195,24 @@ export const checkPlatformBalance = internalAction({
       internal.billing.platformBalance.setLeadDataBreaker,
       { tripped },
     );
-    if (tripped && applied.changed.length > 0) {
+    // A tripped breaker refuses with the neutral `PLATFORM_CAPACITY` code, so
+    // the only place the REASON exists is here. It is therefore logged on
+    // every pass that finds the balance low, not only on the pass that
+    // flipped it: an operator reading the last hour of logs must be able to
+    // see why lead search is refusing, not have to guess that it was tripped
+    // at some earlier hour. The release is recorded for the same reason.
+    if (tripped) {
       console.error("platform balance below the floor: paid lead calls stopped", {
         balance: read.data.balance,
         floor,
+        changed: applied.changed,
+        alreadyTripped: applied.changed.length === 0,
+      });
+    } else if (applied.changed.length > 0) {
+      console.warn("platform balance back above the floor: paid lead calls resumed", {
+        balance: read.data.balance,
+        floor,
+        changed: applied.changed,
       });
     }
     return {

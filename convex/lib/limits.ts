@@ -240,6 +240,10 @@ export const SWEEP_BATCH_SIZE = 50;
  * burst is genuinely part of the flow.
  */
 export const RATE_LIMITS = {
+  // Creating an org is the door the trial grant comes through, so it is
+  // rate-limited like any other credit-spending entry: the grant is handed
+  // out here, and the scheduler is handed a draft agent with it.
+  ensureOrg: { kind: "token bucket", rate: 5, period: 60_000, capacity: 5 },
   analyzeWebsite: { kind: "token bucket", rate: 3, period: 60_000, capacity: 3 },
   generateIcp: { kind: "token bucket", rate: 3, period: 60_000, capacity: 3 },
   recommendSignals: {

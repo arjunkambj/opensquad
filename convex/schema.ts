@@ -872,6 +872,33 @@ export const usageBucketFields = {
   updatedAt: v.number(),
 };
 
+/**
+ * The claim document behind PLAN §6's "one trial grant per user".
+ *
+ * A user can create any number of organizations in the auth provider, so the
+ * grant cannot follow the organization — it follows the identity. This row is
+ * that rule made into a CONSTRAINT rather than a hope: the granting
+ * transaction reads `by_identityKey` AND writes this row, so two parallel
+ * `ensureOrg` calls for two different organizations of one account cannot
+ * both observe an empty claim. The loser's read range contains the winner's
+ * insert, so Convex conflicts it and retries it against the committed row.
+ *
+ * It is also what `MAX_TRIAL_ORGS` counts: the cap bounds how many trials we
+ * FUND, and an org created with no grant costs the platform nothing.
+ *
+ * Trial identity is `tokenIdentifier` (`iss|sub`), not a verified email: a
+ * second auth `sub` for the same person is a second grant. Accepted, because
+ * the cap still bounds the total and nothing here may treat an email as an
+ * identity.
+ */
+export const trialGrantFields = {
+  /** `tokenIdentifier` (`iss|sub`) of the identity this grant belongs to. */
+  identityKey: v.string(),
+  /** The org the one grant funded. */
+  orgId: v.id("orgs"),
+  grantedAt: v.number(),
+};
+
 /** One debit lifecycle per logical operation/bucket (§4.4). */
 export const usageReservationFields = {
   orgId: v.id("orgs"),
@@ -931,7 +958,9 @@ export default defineSchema({
     // The tenant lookup: one row per Hexclave org, made a constraint by
     // `ensureOrg` reading this range in the same transaction as the insert.
     .index("by_hexclaveOrgId", ["hexclaveOrgId"])
-    // The one-trial-per-user rule reads this range before it grants credits.
+    // Audit: every org a given identity initialised. The one-trial-per-user
+    // rule is NOT decided here — it reads and writes `trialGrants`, so the
+    // claim is one document rather than an inference over this range.
     .index("by_createdByIdentityKey", ["createdByIdentityKey"])
     // One org per inbox: a lookup, made a constraint by the claim
     // mutation reading it in the same transaction as the write (PLAN §9.4).
@@ -1181,6 +1210,13 @@ export default defineSchema({
       "periodKey",
     ]),
 
+  trialGrants: defineTable(trialGrantFields)
+    // One claim per identity, read AND written inside the granting
+    // transaction so a second concurrent grant conflicts and retries. Also
+    // the table `MAX_TRIAL_ORGS` counts, because the cap bounds funded
+    // trials rather than rows in `orgs`.
+    .index("by_identityKey", ["identityKey"]),
+
   usageReservations: defineTable(usageReservationFields)
     // One debit lifecycle per logical operation/bucket, enforced
     // transactionally.
@@ -1197,6 +1233,16 @@ export default defineSchema({
     .index("by_orgId_and_provider_and_operationKey", [
       "orgId",
       "provider",
+      "operationKey",
+    ])
+    // "Has this org ever been BILLED for this action?" — the first-run-free
+    // question, answered EXACTLY by one range read rather than a bounded
+    // scan: `settlement` pins the commits and `operationKey` carries the
+    // `<action>:` prefix the wrapper composes, so a single `.first()`
+    // decides it however many operations the org has accumulated.
+    .index("by_orgId_and_settlement_and_operationKey", [
+      "orgId",
+      "settlement",
       "operationKey",
     ])
     // Callback correlation for a provider that answers asynchronously.

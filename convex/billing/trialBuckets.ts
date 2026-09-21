@@ -11,8 +11,8 @@
  * org-local day, so they are created on first use by the reserve that
  * needs them, with the cap from `lib/limits.ts`.
  */
-import type { Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   TRIAL_CREDIT_GRANT,
   TRIAL_METERED_METRICS,
@@ -21,6 +21,46 @@ import {
 import { USAGE_PERIOD_LIFETIME, USAGE_SCOPE_ORG } from "../lib/validators";
 import type { UsageMetric } from "../lib/validators";
 import { findBucket } from "./model";
+
+/**
+ * The one grant this identity has already been given, or `null`.
+ *
+ * TRIAL IDENTITY IS `tokenIdentifier` (`iss|sub`), not a verified email. A
+ * person who signs in under a second auth `sub` is a second identity here and
+ * would be granted again; that is accepted, because `MAX_TRIAL_ORGS` still
+ * bounds the total and treating an email as an identity would trust a claim
+ * the provider does not guarantee to be stable.
+ */
+export async function findTrialClaim(
+  ctx: QueryCtx,
+  identityKey: string,
+): Promise<Doc<"trialGrants"> | null> {
+  return await ctx.db
+    .query("trialGrants")
+    .withIndex("by_identityKey", (q) => q.eq("identityKey", identityKey))
+    .first();
+}
+
+/**
+ * Take this identity's one trial grant for `orgId`.
+ *
+ * The caller must have read `findTrialClaim` in the SAME transaction: that
+ * read plus this write are what make the rule a constraint. Two parallel
+ * `ensureOrg` calls for two organizations of one account both read the empty
+ * range, and the loser's read range then contains the winner's insert, so
+ * Convex conflicts it and retries it against the committed claim.
+ */
+export async function claimTrialGrant(
+  ctx: MutationCtx,
+  identityKey: string,
+  orgId: Id<"orgs">,
+): Promise<void> {
+  await ctx.db.insert("trialGrants", {
+    identityKey,
+    orgId,
+    grantedAt: Date.now(),
+  });
+}
 
 /** One lifetime bucket the grant creates, with the limit it starts at. */
 export type TrialBucketGrant = { metric: UsageMetric; limit: number };
