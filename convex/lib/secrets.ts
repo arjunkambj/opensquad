@@ -22,6 +22,7 @@
  * client query may show.
  */
 import { domainError } from "./validators";
+import { env } from "../_generated/server";
 
 /** Deployment env var holding the base64 AES-256 key. */
 export const SECRETS_ENCRYPTION_KEY_ENV = "SECRETS_ENCRYPTION_KEY";
@@ -69,7 +70,7 @@ function fromBase64(value: string, field: string): Uint8Array {
  * instead of failing at the moment a real key has already been pasted.
  */
 export function isSecretStorageConfigured(): boolean {
-  const raw = process.env[SECRETS_ENCRYPTION_KEY_ENV];
+  const raw = env.SECRETS_ENCRYPTION_KEY;
   if (raw === undefined) {
     return false;
   }
@@ -82,7 +83,7 @@ export function isSecretStorageConfigured(): boolean {
 }
 
 async function deploymentKey(): Promise<CryptoKey> {
-  const raw = process.env[SECRETS_ENCRYPTION_KEY_ENV];
+  const raw = env.SECRETS_ENCRYPTION_KEY;
   if (raw === undefined || raw.trim().length === 0) {
     // FORBIDDEN, not INVALID: nothing the caller sent is wrong. The same code
     // `lib/auth.expectedUsersIssuer` uses for a missing deployment setting.

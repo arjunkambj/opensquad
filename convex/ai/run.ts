@@ -43,7 +43,7 @@ import { domainError } from "../lib/validators";
 import { classifyGatewayError } from "./failures";
 import { gatewayModel, MODELS, modelForTier } from "./models";
 import type { ModelTier } from "./models";
-import { parseStructured, strictJsonSchema } from "./schema";
+import { parseStructured, strictJsonSchema } from "./structured";
 
 /* ------------------------------------------------------------------ */
 /* Bounded cost                                                        */

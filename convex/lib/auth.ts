@@ -23,6 +23,7 @@
  */
 import type { Auth, GenericDatabaseReader, UserIdentity } from "convex/server";
 import type { DataModel, Doc, Id } from "../_generated/dataModel";
+import { env } from "../_generated/server";
 import { domainError } from "./validators";
 
 /** Minimal context shape shared by query and mutation handlers. */
@@ -47,7 +48,7 @@ export type OrgContext = AuthenticatedUser & {
  * `convex/auth.config.ts`; a missing value fails closed.
  */
 export function expectedUsersIssuer(): string {
-  const projectId = process.env.VITE_HEXCLAVE_PROJECT_ID;
+  const projectId = env.VITE_HEXCLAVE_PROJECT_ID;
   if (projectId === undefined || projectId === "") {
     throw domainError(
       "FORBIDDEN",

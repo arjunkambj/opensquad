@@ -217,9 +217,13 @@ export const list = query({
  * org count: `hasMore` means the number is the bound, not the total, so
  * the UI renders "50+". Leads with no due time can never satisfy the range,
  * so they can never inflate it either.
+ *
+ * `now` is an argument, never `Date.now()` read in here: a query that reads
+ * the wall clock returns a different answer for the same arguments, which
+ * makes the result uncacheable and the subscription stale.
  */
 export const countDue = query({
-  args: { orgId: v.id("orgs") },
+  args: { orgId: v.id("orgs"), now: v.number() },
   returns: v.object({
     count: v.number(),
     hasMore: v.boolean(),
@@ -227,14 +231,13 @@ export const countDue = query({
   }),
   handler: async (ctx, args) => {
     await requireOrgMember(ctx, args.orgId);
-    const now = Date.now();
     const rows = await ctx.db
       .query("prospects")
       .withIndex("by_orgId_and_nextActionAt", (q) =>
         q
           .eq("orgId", args.orgId)
           .gte("nextActionAt", 0)
-          .lte("nextActionAt", now),
+          .lte("nextActionAt", args.now),
       )
       .take(MAX_LIST_LIMIT + 1);
     return {

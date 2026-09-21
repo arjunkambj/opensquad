@@ -7,11 +7,27 @@ import rateLimiter from "@convex-dev/rate-limiter/convex.config";
 import staticHosting from "@convex-dev/static-hosting/convex.config";
 
 const app = defineApp({
+  // Declared here so backend code reads them through the typed `env` from
+  // `./_generated/server` instead of untyped `process.env`. Every one is
+  // OPTIONAL on purpose: a deployment that is missing a key must fail closed
+  // at the call site with our own error copy, not refuse to deploy at all.
+  // `CONVEX_SITE_URL` / `CONVEX_CLOUD_URL` are platform-provided and must
+  // never be redeclared here.
   env: {
     // P04: Firecrawl component credentials. Server-only; declared on the app
     // so they can be bound to the component's typed env by reference.
     FIRECRAWL_API_KEY: v.string(),
     FIRECRAWL_WEBHOOK_SECRET: v.optional(v.string()),
+    // Hexclave project id — the issuer `lib/auth.ts` expects on every token.
+    VITE_HEXCLAVE_PROJECT_ID: v.optional(v.string()),
+    // Base64 AES-256 key that encrypts the provider keys an org pastes in.
+    SECRETS_ENCRYPTION_KEY: v.optional(v.string()),
+    // Lead-data provider credentials (`integrations/enrich/client.ts`).
+    ENRICH_API_KEY: v.optional(v.string()),
+    // Mail provider: the Svix secret on `/agentmail/webhook`, and the base
+    // URL override the adapter uses for staging/mock runs.
+    AGENTMAIL_WEBHOOK_SECRET: v.optional(v.string()),
+    AGENTMAIL_BASE_URL: v.optional(v.string()),
   },
 });
 

@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { registerStaticRoutes } from "@convex-dev/static-hosting";
-import { httpAction } from "./_generated/server";
+import { env, httpAction } from "./_generated/server";
 import { components } from "./_generated/api";
 import { agentmail } from "./integrations/agentmail";
 import {
@@ -58,7 +58,7 @@ http.route({
   path: "/agentmail/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const secret = process.env.AGENTMAIL_WEBHOOK_SECRET;
+    const secret = env.AGENTMAIL_WEBHOOK_SECRET;
     if (secret === undefined || secret.length === 0) {
       return unauthorizedResponse();
     }

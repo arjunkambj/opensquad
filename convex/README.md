@@ -16,7 +16,10 @@ convex/
     rateLimits.ts per-user token buckets on credit-spending entry points
     validators/   shared.ts + one file per domain, re-exported from index.ts
   integrations/   the ONLY place that talks HTTP to a provider
-    agentmail.ts  firecrawl.ts
+    agentmail.ts  agentmailApi.ts  firecrawl.ts
+    enrich/       the lead-data provider: client.ts (auth, retries, envelopes),
+                  search.ts (count/search/reveal), filters.ts (the allowed
+                  filter catalogue), types.ts
   orgs/           the org record, its policy, secrets, the trial grant
   billing/        credits, the usage ledger, platform budgets, `withCredits`
   company/        the business profile we are selling FOR
@@ -74,6 +77,7 @@ operation replays its recorded outcome instead of buying the work again.
 | `platformBudgets.ts` | the kill switch, platform budgets, signup capacity |
 | `trialBuckets.ts` | the grant a first organization is created with |
 | `sweeps.ts` | the belts: park a lost call, commit a hold nothing reconciled |
+| `platformBalance.ts` | the hourly wallet read and the lead-data breaker it trips |
 | `credits.ts`, `queries.ts` | the balance, the Usage tab, the waitlist state |
 
 An `uncertain` hold is only ever RELEASED with proof — that is

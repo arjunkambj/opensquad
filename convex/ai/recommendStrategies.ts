@@ -15,7 +15,7 @@
  * a strategy that comes back malformed costs one card, never the whole ICP.
  *
  * FILTERS ARE A LIST, NOT AN OBJECT. The stored filter set is an open record,
- * which a strict JSON schema cannot express (`ai/schema.ts`), so the model
+ * which a strict JSON schema cannot express (`ai/structured.ts`), so the model
  * answers with a bounded LIST of `{ key, values | atLeast | flag }` entries
  * drawn from the vocabulary it is handed, and the domain turns that list into
  * the record — dropping anything it did not offer. Values are case-sensitive

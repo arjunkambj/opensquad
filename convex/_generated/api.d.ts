@@ -42,6 +42,7 @@ import type * as ai_models from "../ai/models.js";
 import type * as ai_recommendStrategies from "../ai/recommendStrategies.js";
 import type * as ai_researchLead from "../ai/researchLead.js";
 import type * as ai_run from "../ai/run.js";
+import type * as ai_structured from "../ai/structured.js";
 import type * as ai_writeOutreach from "../ai/writeOutreach.js";
 import type * as billing_credits from "../billing/credits.js";
 import type * as billing_model from "../billing/model.js";
@@ -230,6 +231,7 @@ declare const fullApi: ApiFromModules<{
   "ai/recommendStrategies": typeof ai_recommendStrategies;
   "ai/researchLead": typeof ai_researchLead;
   "ai/run": typeof ai_run;
+  "ai/structured": typeof ai_structured;
   "ai/writeOutreach": typeof ai_writeOutreach;
   "billing/credits": typeof billing_credits;
   "billing/model": typeof billing_model;

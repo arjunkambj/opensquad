@@ -71,9 +71,12 @@ crons.interval(
 // silently returns zero rows, so the catalogue behind every strategy is
 // refreshed on a schedule rather than trusted to stay right. A failed
 // refresh keeps the previous cache; it never empties it.
-crons.weekly(
+// `crons.cron`, not the `weekly` helper: the cron guidelines allow only
+// `interval` and `cron`, and the expression says the same thing — 04:00 UTC
+// every Monday.
+crons.cron(
   "lead-filter-options-refresh",
-  { dayOfWeek: "monday", hourUTC: 4, minuteUTC: 0 },
+  "0 4 * * 1",
   internal.agents.filterOptions.refreshFilterOptions,
   {},
 );
