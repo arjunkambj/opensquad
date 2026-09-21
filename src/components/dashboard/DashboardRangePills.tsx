@@ -1,10 +1,11 @@
-import { Button } from "@/components/ui/button"
 import {
   DASHBOARD_RANGE_LABEL,
   DASHBOARD_RANGE_PILLS,
   type DashboardRangePill,
 } from "@/components/dashboard/dashboard-range"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
+/** `active` is null for a custom window, which leaves no tab selected. */
 export function DashboardRangePills({
   active,
   onSelect,
@@ -13,22 +14,14 @@ export function DashboardRangePills({
   onSelect: (pill: DashboardRangePill) => void
 }) {
   return (
-    <div
-      role="group"
-      aria-label="Date range"
-      className="flex flex-wrap items-center gap-1.5"
-    >
-      {DASHBOARD_RANGE_PILLS.map((pill) => (
-        <Button
-          key={pill}
-          size="sm"
-          variant={pill === active ? "default" : "ghost"}
-          aria-pressed={pill === active}
-          onClick={() => onSelect(pill)}
-        >
-          {DASHBOARD_RANGE_LABEL[pill]}
-        </Button>
-      ))}
-    </div>
+    <Tabs value={active} onValueChange={(pill: DashboardRangePill) => onSelect(pill)}>
+      <TabsList aria-label="Date range">
+        {DASHBOARD_RANGE_PILLS.map((pill) => (
+          <TabsTrigger key={pill} value={pill}>
+            {DASHBOARD_RANGE_LABEL[pill]}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }

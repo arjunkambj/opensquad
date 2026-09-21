@@ -50,7 +50,6 @@ export function drawnSeries(days: readonly ActivityDay[]): SeriesSpec[] {
 export const CHART_WIDTH = 720
 export const CHART_HEIGHT = 220
 export const CHART_PADDING = { top: 12, right: 12, bottom: 28, left: 34 }
-const PLOT_WIDTH = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
 const PLOT_HEIGHT =
   CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
 
@@ -66,18 +65,21 @@ export type ChartScale = {
 export function chartScale(
   days: readonly ActivityDay[],
   drawn: readonly SeriesSpec[],
+  /** The drawn width in pixels; the height stays fixed. */
+  width: number = CHART_WIDTH,
 ): ChartScale {
+  const plotWidth = width - CHART_PADDING.left - CHART_PADDING.right
   const max = Math.max(
     1,
     ...days.flatMap((day) => drawn.map((series) => day[series.key])),
   )
-  const step = days.length > 1 ? PLOT_WIDTH / (days.length - 1) : 0
+  const step = days.length > 1 ? plotWidth / (days.length - 1) : 0
   const middle = Math.round(max / 2)
   return {
     x: (index) =>
       days.length > 1
         ? CHART_PADDING.left + index * step
-        : CHART_PADDING.left + PLOT_WIDTH / 2,
+        : CHART_PADDING.left + plotWidth / 2,
     y: (value) =>
       CHART_PADDING.top + PLOT_HEIGHT - (value / max) * PLOT_HEIGHT,
     ticks: middle > 0 && middle < max ? [0, middle, max] : [0, max],

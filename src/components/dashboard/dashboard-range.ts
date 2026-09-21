@@ -1,5 +1,5 @@
 /** Resolve day boundaries in the organization timezone and keep them stable within the day.
- * Custom pills store absolute bounds; 7d and 30d are relative to when the link opens. */
+ * Custom pills store absolute bounds; today, 7d and 30d are relative to when the link opens. */
 import { addDays, startOfMonth, subMonths } from "date-fns"
 import {
   activityRangeToBounds,
@@ -10,13 +10,14 @@ import {
 import {
   DASHBOARD_DEFAULTS,
   type DashboardSearch,
-} from "@/routes/_dashboard/_org/dashboard"
+} from "@/routes/_dashboard/_org/overview"
 
-export const DASHBOARD_RANGE_PILLS = ["7d", "30d", "3m", "mtd"] as const
+export const DASHBOARD_RANGE_PILLS = ["today", "7d", "30d", "3m", "mtd"] as const
 
 export type DashboardRangePill = (typeof DASHBOARD_RANGE_PILLS)[number]
 
 export const DASHBOARD_RANGE_LABEL: Record<DashboardRangePill, string> = {
+  today: "Today",
   "7d": "7 days",
   "30d": "30 days",
   "3m": "3 months",
@@ -24,6 +25,7 @@ export const DASHBOARD_RANGE_LABEL: Record<DashboardRangePill, string> = {
 }
 
 const DASHBOARD_RANGE_HINT: Record<DashboardRangePill, string> = {
+  today: "Today",
   "7d": "Last 7 days",
   "30d": "Last 30 days",
   "3m": "Last 3 months",
@@ -37,6 +39,8 @@ function pillCalendar(
 ): CalendarDateRange {
   const today = todayInZone(timezone, now)
   switch (pill) {
+    case "today":
+      return { start: today, end: today }
     case "7d":
       return { start: addDays(today, -6), end: today }
     case "30d":
@@ -55,7 +59,7 @@ function pillSearch(
   timezone: string,
   now = new Date(),
 ): Pick<DashboardSearch, "range" | "from" | "to"> {
-  if (pill === "7d" || pill === "30d") {
+  if (pill === "today" || pill === "7d" || pill === "30d") {
     return { range: pill, from: undefined, to: undefined }
   }
   return {

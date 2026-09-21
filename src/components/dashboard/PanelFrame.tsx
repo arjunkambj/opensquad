@@ -1,7 +1,10 @@
-import { HugeiconsIcon } from "@hugeicons/react"
 import type { IconSvgElement } from "@hugeicons/react"
 import type { ReactNode } from "react"
+import { FramedPanel } from "@/components/kit/FramedPanel"
+import { Hint } from "@/components/kit/Hint"
+import { Skeleton } from "@/components/ui/skeleton"
 
+/** A dashboard list panel. Rows bring their own padding, so the body has none. */
 export function PanelFrame({
   icon,
   title,
@@ -11,34 +14,54 @@ export function PanelFrame({
 }: {
   icon: IconSvgElement
   title: string
+  /** What the panel counts; shown on hover so the strip stays one line. */
   description: string
   action?: ReactNode
   children: ReactNode
 }) {
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-start justify-between gap-3 px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <HugeiconsIcon
-              icon={icon}
-              strokeWidth={2}
-              className="size-4 text-primary"
-              aria-hidden="true"
-            />
-          </span>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <h2 className="font-heading text-base font-semibold text-foreground">
-              {title}
-            </h2>
-            <p className="truncate text-xs text-muted-foreground">
-              {description}
-            </p>
-          </div>
-        </div>
-        {action}
-      </div>
+    <FramedPanel
+      icon={icon}
+      title={<Hint content={description}>{title}</Hint>}
+      action={action}
+      bodyClassName="overflow-hidden p-0 py-1"
+    >
       {children}
-    </section>
+    </FramedPanel>
+  )
+}
+
+/** Mirrors a panel row: a name over a detail line, and an optional trailing mark, at the row's own padding. */
+export function PanelRowsSkeleton({
+  rows = 3,
+  trailing,
+}: {
+  rows?: number
+  /** The right-hand mark each row carries; omit for none. */
+  trailing?: "chip" | "score"
+}) {
+  return (
+    <ul className="flex flex-col" aria-hidden="true">
+      {Array.from({ length: rows }, (_, index) => (
+        <li
+          key={index}
+          className="flex items-center justify-between gap-3 border-t border-border px-5 py-2.5 first:border-t-0"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="flex h-5 items-center">
+              <Skeleton shape="full" className="h-3.5 w-32" />
+            </div>
+            <div className="flex h-4 items-center">
+              <Skeleton shape="full" className="h-3 w-48 max-w-full" />
+            </div>
+          </div>
+          {trailing === "chip" ? (
+            <Skeleton shape="lg" className="h-6 w-20 shrink-0" />
+          ) : trailing === "score" ? (
+            <Skeleton shape="lg" className="h-4 w-14 shrink-0" />
+          ) : null}
+        </li>
+      ))}
+    </ul>
   )
 }

@@ -1,7 +1,8 @@
-import { CheckmarkCircle02Icon, MailAdd01Icon } from "@hugeicons/core-free-icons"
+import { AudioLinesIcon, InboxIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import type { InboxConnection } from "../../../convex/lib/validators"
+import { Hint } from "@/components/kit/Hint"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -22,31 +23,40 @@ export function DashboardStatusChips({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {activeSignals === undefined ? (
-        <Skeleton className="h-7 w-32 rounded-2xl" />
+        <Skeleton shape="xl" className="h-8 w-36" />
       ) : (
-        <Button render={<Link to="/agent" />} size="sm" variant="outline">
-          <HugeiconsIcon
-            icon={CheckmarkCircle02Icon}
-            data-icon="inline-start"
-            className={activeSignals > 0 ? "text-primary" : undefined}
-          />
-          {activeSignals === 0
-            ? "No active signals"
-            : `${activeSignals} active signal${activeSignals === 1 ? "" : "s"}`}
-        </Button>
+        <Hint content="Signals are the searches your agent runs to find leads. Open to switch them on or off.">
+          <Button render={<Link to="/signals" />} variant="outline">
+            <HugeiconsIcon
+              icon={AudioLinesIcon}
+              data-icon="inline-start"
+              className={activeSignals > 0 ? "text-primary" : undefined}
+            />
+            {activeSignals === 0
+              ? "No active signals"
+              : `${activeSignals} active signal${activeSignals === 1 ? "" : "s"}`}
+          </Button>
+        </Hint>
       )}
-      <Button
-        render={<Link to="/settings" search={{ tab: "inbox" }} />}
-        size="sm"
-        variant="outline"
+      <Hint
+        content={
+          connected
+            ? "Outreach is sent from this AgentMail inbox, and replies come back to your Inbox."
+            : "Your agent can find and research leads, but nothing is sent until an inbox is connected."
+        }
       >
-        <HugeiconsIcon
-          icon={connected ? CheckmarkCircle02Icon : MailAdd01Icon}
-          data-icon="inline-start"
-          className={connected ? "text-primary" : "text-muted-foreground"}
-        />
-        {INBOX_LABEL[inboxConnection]}
-      </Button>
+        <Button
+          render={<Link to="/integrations" />}
+          variant="outline"
+        >
+          <HugeiconsIcon
+            icon={InboxIcon}
+            data-icon="inline-start"
+            className={connected ? "text-primary" : "text-muted-foreground"}
+          />
+          {INBOX_LABEL[inboxConnection]}
+        </Button>
+      </Hint>
     </div>
   )
 }

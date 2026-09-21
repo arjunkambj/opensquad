@@ -5,13 +5,15 @@ import { useMutation, useQuery } from "convex/react"
 import { useMemo } from "react"
 import { api } from "../../../convex/_generated/api"
 import { ActivityChart } from "@/components/dashboard/ActivityChart"
-import { ActivityFeed } from "@/components/dashboard/ActivityFeed"
+import { DashboardPageSkeleton } from "@/components/dashboard/DashboardPageSkeleton"
 import { DashboardRangePills } from "@/components/dashboard/DashboardRangePills"
-import { DashboardStats } from "@/components/dashboard/DashboardStats"
+import {
+  DashboardStats,
+  PipelineStat,
+} from "@/components/dashboard/DashboardStats"
 import { DashboardStatusChips } from "@/components/dashboard/DashboardStatusChips"
-import { LatestHotLeads } from "@/components/dashboard/LatestHotLeads"
 import { LatestReplies } from "@/components/dashboard/LatestReplies"
-import { NextStepCard } from "@/components/dashboard/NextStepCard"
+import { NextStepCard, type NextStep } from "@/components/dashboard/NextStepCard"
 import {
   activePill,
   pillFilters,
@@ -19,14 +21,19 @@ import {
   windowHint,
 } from "@/components/dashboard/dashboard-range"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
-import { LoadingState } from "@/components/states/states"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import type { OrgView } from "@/lib/org-view"
 import { withFilters } from "@/lib/search-params"
 
-const DASHBOARD_ROUTE = "/_dashboard/_org/dashboard"
+const DASHBOARD_ROUTE = "/_dashboard/_org/overview"
 
 const PANEL_ROWS = 5
+
+const NEXT_STEP_SHOWN: ReadonlySet<NextStep["kind"]> = new Set([
+  "approve_leads",
+  "start_sending",
+  "enable_autopilot",
+])
 
 function firstName(displayName: string | null): string | null {
   const first = displayName?.trim().split(/\s+/)[0]
@@ -42,17 +49,7 @@ export function DashboardPage() {
   // with no organization row to setup — but loading is the only honest render
   // for a case that resolves elsewhere.
   if (current.status !== "ready") {
-    return (
-      <div className="flex flex-col gap-6">
-        <DashboardPageTitle
-          title={name === null ? "Welcome back" : `Welcome back, ${name}`}
-        />
-        <LoadingState
-          title="Loading dashboard"
-          description="Reading your organization."
-        />
-      </div>
-    )
+    return <DashboardPageSkeleton />
   }
 
   return (
@@ -89,10 +86,6 @@ function DashboardBody({
 
   const summary = useQuery(api.dashboard.queries.summary, scope)
   const series = useQuery(api.dashboard.queries.activitySeries, scope)
-  const hotLeads = useQuery(api.dashboard.panels.latestHotLeads, {
-    ...scope,
-    limit: PANEL_ROWS,
-  })
   const replies = useQuery(api.dashboard.panels.latestReplies, {
     ...scope,
     limit: PANEL_ROWS,
@@ -125,7 +118,7 @@ function DashboardBody({
           active={pill}
           onSelect={(chosen) =>
             void navigate({
-              to: "/dashboard",
+              to: "/overview",
               // A window change is a filter change, so the receipt feed's
               // cursor goes with it: page two of one window must never render
               // as page two of another.
@@ -135,36 +128,32 @@ function DashboardBody({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="h-full sm:col-span-2 lg:col-span-1">
-          <NextStepCard next={next} />
-        </div>
-        <DashboardStats
-          summary={summary}
-          hint={hint}
-          canEditDealSize={agentId !== undefined}
-          onSaveDealSize={async (dealSize) => {
-            if (agentId === undefined) {
-              return
-            }
-            await updateAgent({ orgId, agentId, dealSize })
-          }}
-        />
-      </div>
+      <DashboardStats summary={summary} hint={hint} />
 
       <ActivityChart series={series} hint={hint} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <LatestHotLeads leads={hotLeads} hint={hint} />
+        <div className="flex flex-col gap-4">
+          <PipelineStat
+            className="flex-1"
+            summary={summary}
+            hint={hint}
+            canEditDealSize={agentId !== undefined}
+            onSaveDealSize={async (dealSize) => {
+              if (agentId === undefined) {
+                return
+              }
+              await updateAgent({ orgId, agentId, dealSize })
+            }}
+          />
+          {/* Only steps that need a decision here; connecting the inbox
+              belongs to the inbox. */}
+          {next !== undefined && NEXT_STEP_SHOWN.has(next.kind) ? (
+            <NextStepCard next={next} />
+          ) : null}
+        </div>
         <LatestReplies replies={replies} hint={hint} timezone={timezone} />
       </div>
-
-      <ActivityFeed
-        orgId={orgId}
-        timezone={timezone}
-        bounds={bounds}
-        hint={hint}
-      />
     </div>
   )
 }

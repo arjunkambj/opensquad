@@ -5,6 +5,8 @@ import {
   type ActivitySeries,
 } from "@/components/dashboard/activity-chart-model"
 import { ActivityChartPlot } from "@/components/dashboard/ActivityChartPlot"
+import { FramedPanel } from "@/components/kit/FramedPanel"
+import { Hint } from "@/components/kit/Hint"
 import { EmptyState } from "@/components/states/states"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -19,7 +21,7 @@ export function ActivityChart({
   if (series === undefined) {
     return (
       <ChartFrame hint={hint}>
-        <Skeleton className="h-56 w-full rounded-2xl bg-foreground/10" />
+        <Skeleton className="h-55 w-full" />
       </ChartFrame>
     )
   }
@@ -83,19 +85,13 @@ function ChartFrame({
   children: ReactNode
 }) {
   return (
-    <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card px-5 py-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="font-heading text-base font-semibold text-foreground">
-            Activity overview
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            What your agent did each day · {hint}
-          </p>
-        </div>
-        {legend}
-      </div>
+    <FramedPanel
+      icon={ChartLineData01Icon}
+      title={<Hint content={`What your agent did each day · ${hint}`}>Activity</Hint>}
+      action={legend}
+      bodyClassName="gap-4"
+    >
       {children}
-    </section>
+    </FramedPanel>
   )
 }

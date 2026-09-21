@@ -7,6 +7,7 @@ import {
   type ActivityDay,
   type SeriesSpec,
 } from "@/components/dashboard/activity-chart-model"
+import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 
 export function ActivityChartPlot({
@@ -18,13 +19,34 @@ export function ActivityChartPlot({
   drawn: readonly SeriesSpec[]
   description: string
 }) {
-  const scale = chartScale(days, drawn)
+  // Draw at the real width so text and strokes stay their true size and the
+  // height stays fixed, instead of the whole picture scaling with the card.
+  const frame = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(CHART_WIDTH)
+  useEffect(() => {
+    const node = frame.current
+    if (node === null) {
+      return
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined && entry.contentRect.width > 0) {
+        setWidth(Math.round(entry.contentRect.width))
+      }
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  const scale = chartScale(days, drawn, width)
   const baseline = scale.y(0)
 
   return (
+    <div ref={frame} className="w-full">
     <svg
-      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-      className="h-auto w-full"
+      width={width}
+      height={CHART_HEIGHT}
+      viewBox={`0 0 ${width} ${CHART_HEIGHT}`}
+      className="block"
       role="img"
       aria-label={description}
     >
@@ -32,7 +54,7 @@ export function ActivityChartPlot({
         <g key={tick}>
           <line
             x1={CHART_PADDING.left}
-            x2={CHART_WIDTH - CHART_PADDING.right}
+            x2={width - CHART_PADDING.right}
             y1={scale.y(tick)}
             y2={scale.y(tick)}
             className="stroke-border"
@@ -42,7 +64,7 @@ export function ActivityChartPlot({
             x={CHART_PADDING.left - 8}
             y={scale.y(tick) + 3}
             textAnchor="end"
-            className="fill-muted-foreground text-[9px]"
+            className="fill-muted-foreground text-2xs"
           >
             {tick}
           </text>
@@ -94,12 +116,13 @@ export function ActivityChartPlot({
             x={scale.x(index)}
             y={CHART_HEIGHT - 8}
             textAnchor="middle"
-            className="fill-muted-foreground text-[9px]"
+            className="fill-muted-foreground text-2xs"
           >
             {dayLabel(day.dayKey)}
           </text>
         ) : null,
       )}
     </svg>
+    </div>
   )
 }

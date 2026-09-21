@@ -1,3 +1,10 @@
+import {
+  Calendar03Icon,
+  ChartIncreaseIcon,
+  InboxIcon,
+  MailSend01Icon,
+  StarIcon,
+} from "@hugeicons/core-free-icons"
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import { DealSizeEditor } from "@/components/dashboard/DealSizeEditor"
@@ -14,25 +21,23 @@ const amountFormatter = new Intl.NumberFormat("en", {
   maximumFractionDigits: 1,
 })
 
+/** The four headline counts, one row. */
 export function DashboardStats({
   summary,
   hint,
-  canEditDealSize,
-  onSaveDealSize,
 }: {
   summary: DashboardSummary | undefined
   hint: string
-  canEditDealSize: boolean
-  onSaveDealSize: (dealSize: number) => Promise<void>
 }) {
   const loading = summary === undefined
   const count = (figure: { count: number; hasMore: boolean } | undefined) =>
     figure === undefined ? "" : boundedCount(figure.count, figure.hasMore)
 
   return (
-    <>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
         label="Hot leads"
+        icon={StarIcon}
         loading={loading}
         value={count(summary?.hotLeads)}
         sublabel="Researched and scored 3 of 3"
@@ -40,6 +45,7 @@ export function DashboardStats({
       />
       <StatCard
         label="Contacted"
+        icon={MailSend01Icon}
         loading={loading}
         value={count(summary?.contacted)}
         sublabel={
@@ -51,6 +57,7 @@ export function DashboardStats({
       />
       <StatCard
         label="Conversations"
+        icon={InboxIcon}
         loading={loading}
         value={count(summary?.conversations)}
         sublabel="Threads someone replied in"
@@ -58,6 +65,7 @@ export function DashboardStats({
       />
       <StatCard
         label="Meetings"
+        icon={Calendar03Icon}
         loading={loading}
         value={count(summary?.meetings)}
         sublabel={
@@ -69,14 +77,33 @@ export function DashboardStats({
         }
         hint={hint}
       />
-      <StatCard
+    </div>
+  )
+}
+
+export function PipelineStat({
+  summary,
+  hint,
+  canEditDealSize,
+  onSaveDealSize,
+  className,
+}: {
+  summary: DashboardSummary | undefined
+  hint: string
+  canEditDealSize: boolean
+  onSaveDealSize: (dealSize: number) => Promise<void>
+  className?: string
+}) {
+  const loading = summary === undefined
+  return (
+    <StatCard
+        className={className}
         label="Pipeline"
+        icon={ChartIncreaseIcon}
         loading={loading}
         value={
           summary === undefined || summary.pipeline === null ? (
-            <span className="text-base font-medium text-muted-foreground">
-              Set deal size
-            </span>
+            <span className="text-muted-foreground">—</span>
           ) : (
             `${summary.pipeline.atLeast ? "≥ " : ""}${amountFormatter.format(summary.pipeline.amount)}`
           )
@@ -85,7 +112,7 @@ export function DashboardStats({
           summary === undefined
             ? undefined
             : summary.dealSize === null
-              ? "Tell us what a deal is worth to see this"
+              ? "Set a deal size to see this"
               : `${amountFormatter.format(summary.dealSize)} × ${summary.interested.count + summary.meetings.count} interested and booked`
         }
         hint={hint}
@@ -99,6 +126,5 @@ export function DashboardStats({
           )
         }
       />
-    </>
   )
 }

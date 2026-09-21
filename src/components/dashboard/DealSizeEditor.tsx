@@ -93,13 +93,12 @@ export function DealSizeEditor({
           </div>
           {error === null ? null : <FormError message={error} />}
           <div className="flex items-center gap-2">
-            <Button type="submit" size="sm" disabled={saving}>
-              {saving ? <Spinner className="size-3.5" /> : null}
+            <Button type="submit" disabled={saving}>
+              {saving ? <Spinner data-icon="inline-start" /> : null}
               Save
             </Button>
             <Button
               type="button"
-              size="sm"
               variant="ghost"
               onClick={() => setOpen(false)}
             >

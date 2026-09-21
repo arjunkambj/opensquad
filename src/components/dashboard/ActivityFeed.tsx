@@ -4,12 +4,9 @@ import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { actorLabel, formatInstant } from "@/lib/presentation"
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-} from "@/components/states/states"
+import { EmptyState, ErrorState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Card,
   CardContent,
@@ -18,7 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-const DASHBOARD_ROUTE = "/_dashboard/_org/dashboard"
+const DASHBOARD_ROUTE = "/_dashboard/_org/overview"
 
 /** Use the parent's bounds so activity and dashboard figures share the same window. */
 export function ActivityFeed({
@@ -90,10 +87,13 @@ function ActivityFeedBody({
   return (
     <>
       {page === undefined ? (
-          <LoadingState
-            title="Loading activity"
-            description={`Reading receipts for ${label}.`}
-          />
+          <ul className="flex flex-col gap-2" aria-hidden="true">
+            {[0, 1, 2, 3].map((row) => (
+              <li key={row}>
+                <Skeleton className="h-13.5 w-full" />
+              </li>
+            ))}
+          </ul>
         ) : page.items.length === 0 ? (
           search.cursor !== undefined ? (
             <EmptyState
@@ -102,10 +102,9 @@ function ActivityFeedBody({
               action={
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() =>
                     void navigate({
-                      to: "/dashboard",
+                      to: "/overview",
                       search: { ...search, cursor: undefined },
                     })
                   }
@@ -124,7 +123,7 @@ function ActivityFeedBody({
           <ul className="flex flex-col gap-2">
             {page.items.map((event) => (
               <li key={event._id}>
-                <div className="flex flex-col gap-0.5 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 px-4 py-2">
+                <div className="flex flex-col gap-0.5 rounded-card bg-muted/40 px-4 py-2">
                   <span className="text-sm text-foreground">
                     {event.summary}
                   </span>
@@ -143,10 +142,9 @@ function ActivityFeedBody({
             {search.cursor === undefined ? null : (
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() =>
                   void navigate({
-                    to: "/dashboard",
+                    to: "/overview",
                     search: { ...search, cursor: undefined },
                   })
                 }
@@ -157,10 +155,9 @@ function ActivityFeedBody({
             {page.hasMore && page.cursor !== null ? (
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() =>
                   void navigate({
-                    to: "/dashboard",
+                    to: "/overview",
                     search: { ...search, cursor: page.cursor ?? undefined },
                   })
                 }
@@ -201,7 +198,7 @@ function ActivityFeedError({ error, reset }: ErrorComponentProps) {
         cursorProblem
           ? () =>
               void navigate({
-                to: "/dashboard",
+                to: "/overview",
                 search: { ...search, cursor: undefined },
               })
           : reset

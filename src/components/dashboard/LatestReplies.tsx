@@ -1,14 +1,14 @@
-import { BubbleChatIcon, MailAdd01Icon } from "@hugeicons/core-free-icons"
+import { InboxIcon } from "@hugeicons/core-free-icons"
 import { Link } from "@tanstack/react-router"
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import type { ReplyDisposition } from "../../../convex/lib/validators"
 import { EmptyState } from "@/components/states/states"
-import { PanelFrame } from "@/components/dashboard/PanelFrame"
+import { PanelFrame, PanelRowsSkeleton } from "@/components/dashboard/PanelFrame"
+import { DISPOSITION_VARIANT } from "@/components/inbox/inbox-presentation"
 import { Chip } from "@/components/kit/Chip"
 import { formatInstant } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 
 export type LatestRepliesData = FunctionReturnType<
   typeof api.dashboard.panels.latestReplies
@@ -35,45 +35,30 @@ export function LatestReplies({
 }) {
   return (
     <PanelFrame
-      icon={BubbleChatIcon}
+      icon={InboxIcon}
       title="Latest replies"
       description={`People who wrote back · ${hint}`}
       action={
         replies !== undefined && replies.items.length > 0 ? (
-          <Button render={<Link to="/inbox" />} size="sm" variant="ghost">
+          <Button render={<Link to="/inbox" />} size="xs" variant="ghost">
             Open inbox
           </Button>
         ) : null
       }
     >
       {replies === undefined ? (
-        <div className="flex flex-col gap-2 px-5 pb-5">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-        </div>
-      ) : replies.inboxConnection !== "connected" &&
-        replies.items.length === 0 ? (
-        <EmptyState
-          variant="plain"
-          icon={MailAdd01Icon}
-          title="Connect your inbox to never miss a reply"
-          description="Replies land here as soon as your agent is sending from your own inbox."
-          action={
-            <Button
-              render={<Link to="/settings" search={{ tab: "inbox" }} />}
-              size="sm"
-            >
-              Connect your inbox
-            </Button>
-          }
-        />
+        <PanelRowsSkeleton trailing="chip" />
       ) : replies.items.length === 0 ? (
         <EmptyState
           variant="plain"
-          icon={BubbleChatIcon}
-          title="No replies in this window"
-          description="Your inbox is connected and quiet. Every reply your agent receives shows up here."
+          icon={InboxIcon}
+          title="No replies yet"
+          description="Replies to your outreach will show up here."
+          action={
+            <Button render={<Link to="/inbox" />} variant="outline">
+              Open inbox
+            </Button>
+          }
         />
       ) : (
         <ul className="flex flex-col">
@@ -85,7 +70,7 @@ export function LatestReplies({
               <Link
                 to="/inbox/$conversationId"
                 params={{ conversationId: reply.conversationId }}
-                className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-muted/40"
+                className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-muted/40"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="truncate text-sm font-medium text-foreground">
@@ -98,7 +83,9 @@ export function LatestReplies({
                   </span>
                 </div>
                 {reply.disposition === undefined ? null : (
-                  <Chip>{DISPOSITION_LABEL[reply.disposition]}</Chip>
+                  <Chip variant={DISPOSITION_VARIANT[reply.disposition]}>
+                    {DISPOSITION_LABEL[reply.disposition]}
+                  </Chip>
                 )}
               </Link>
             </li>

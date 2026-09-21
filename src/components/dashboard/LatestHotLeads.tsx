@@ -5,9 +5,8 @@ import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../convex/_generated/api"
 import { EmptyState } from "@/components/states/states"
 import { FlameScore } from "@/components/kit/FlameScore"
-import { PanelFrame } from "@/components/dashboard/PanelFrame"
+import { PanelFrame, PanelRowsSkeleton } from "@/components/dashboard/PanelFrame"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 
 export type HotLeads = FunctionReturnType<
   typeof api.dashboard.panels.latestHotLeads
@@ -28,11 +27,11 @@ export function LatestHotLeads({
       action={
         leads !== undefined && leads.items.length > 0 ? (
           // "View more" has to open the same list this panel shows, so it
-          // carries the score filter the panel is: Contacts filters on one
-          // flame score, and a bare `/contacts` would open every lead.
+          // carries the score filter the panel is: Leads filters on one
+          // flame score, and a bare `/leads` would open every lead.
           <Button
-            render={<Link to="/contacts" search={{ score: 3 }} />}
-            size="sm"
+            render={<Link to="/leads" search={{ score: 3 }} />}
+            size="xs"
             variant="ghost"
           >
             View more
@@ -42,11 +41,7 @@ export function LatestHotLeads({
       }
     >
       {leads === undefined ? (
-        <div className="flex flex-col gap-2 px-5 pb-5">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-        </div>
+        <PanelRowsSkeleton trailing="score" />
       ) : leads.items.length === 0 ? (
         <EmptyState
           variant="plain"
@@ -54,8 +49,8 @@ export function LatestHotLeads({
           title="No hot leads in this window"
           description="Your agent scores every lead it researches out of three. The ones that score three land here."
           action={
-            <Button render={<Link to="/contacts" />} size="sm" variant="outline">
-              Open contacts
+            <Button render={<Link to="/leads" />} variant="outline">
+              Open leads
             </Button>
           }
         />
@@ -64,7 +59,7 @@ export function LatestHotLeads({
           {leads.items.map((lead) => (
             <li
               key={lead.prospectId}
-              className="flex items-center justify-between gap-3 border-t border-border px-5 py-3 first:border-t-0"
+              className="flex items-center justify-between gap-3 border-t border-border px-5 py-2.5 first:border-t-0"
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="truncate text-sm font-medium text-foreground">
