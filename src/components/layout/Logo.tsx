@@ -1,7 +1,5 @@
-import { useId } from "react"
 import { cn } from "@/lib/utils"
 
-/** Each instance needs a unique SVG mask ID; several logos can share a page. */
 export function LogoMark({
   className,
   title,
@@ -9,29 +7,18 @@ export function LogoMark({
   className?: string
   title?: string
 }) {
-  const maskId = `openintent-mark-mask-${useId().replace(/:/g, "")}`
   return (
     <svg
       aria-hidden={title ? undefined : true}
       aria-label={title}
-      className={cn("size-8 shrink-0 text-primary", className)}
+      className={cn("size-8 shrink-0", className)}
       role={title ? "img" : undefined}
-      viewBox="0 0 32 32"
+      viewBox="0 0 256 256"
     >
-      <defs>
-        <mask id={maskId}>
-          <rect fill="white" height="32" rx="10" width="32" />
-          <rect fill="black" height="6" rx="2" width="4.5" x="7" y="18" />
-          <rect fill="black" height="11" rx="2" width="4.5" x="13.75" y="13" />
-          <rect fill="black" height="16" rx="2" width="4.5" x="20.5" y="8" />
-        </mask>
-      </defs>
-      <rect
+      <path
+        d="M198 24H99C53 24 15 58 15 100V162L58 198V232H157C204 232 241 202 241 158V92L198 58ZM182 72V142C182 169 168 184 143 184H72V110C72 86 89 72 112 72Z"
         fill="currentColor"
-        height="32"
-        mask={`url(#${maskId})`}
-        rx="10"
-        width="32"
+        fillRule="evenodd"
       />
     </svg>
   )
@@ -39,7 +26,7 @@ export function LogoMark({
 
 export default function Logo({
   className,
-  markOnly = false,
+  markOnly = true,
   markClassName,
   labelClassName,
 }: {
@@ -63,7 +50,7 @@ export default function Logo({
       {!markOnly && (
         <span
           className={cn(
-            "font-display text-[1.15rem] leading-none font-semibold tracking-[-0.03em]",
+            "font-display text-lg leading-none font-semibold tracking-tight",
             labelClassName,
           )}
         >
