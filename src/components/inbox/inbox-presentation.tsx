@@ -25,7 +25,7 @@ export const PILL_LABEL: Record<InboxPill, string> = {
 }
 
 /** What the reply pipeline made of the latest inbound message. */
-export const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
+const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
   interested: "Interested",
   question: "Question",
   not_now: "Not now",
@@ -36,7 +36,7 @@ export const DISPOSITION_LABEL: Record<ReplyDisposition, string> = {
 }
 
 /** Where the lead stands, in the same words the Contacts table uses. */
-export const STAGE_LABEL: Record<LeadStage, string> = {
+const STAGE_LABEL: Record<LeadStage, string> = {
   found: "Found",
   researched: "Researched",
   queued: "Queued",

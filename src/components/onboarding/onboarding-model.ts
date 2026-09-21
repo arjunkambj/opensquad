@@ -32,7 +32,7 @@ import { StrategiesStep } from "@/components/onboarding/steps/signals/Strategies
 export const ONBOARDING_DOT_COUNT = 4
 
 /** What a step tells `OnboardingShell` about its own position. */
-export type OnboardingProgress = {
+type OnboardingProgress = {
   dot: number
   dotCount: number
   /** Sub-step inside this dot, 1-based. */

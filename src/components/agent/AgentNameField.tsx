@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 
-export const UNNAMED_AGENT_LABEL = "Your agent"
+const UNNAMED_AGENT_LABEL = "Your agent"
 
 export function AgentNameField({
   name,

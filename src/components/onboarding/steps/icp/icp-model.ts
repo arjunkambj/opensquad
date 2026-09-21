@@ -13,7 +13,7 @@ import type {
 } from "../../../../../convex/lib/validators"
 
 /** What a regeneration costs once the free first run is gone. */
-export const ICP_GENERATION_CREDITS = ACTION_PRICES.generate_icp.credits
+const ICP_GENERATION_CREDITS = ACTION_PRICES.generate_icp.credits
 
 /* ------------------------------------------------------------------ */
 /* Where a run stands                                                   */

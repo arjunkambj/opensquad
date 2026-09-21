@@ -4,9 +4,9 @@ import { useCallback, useRef } from "react"
  * Client request ids, one per (subject, action) intent.
  *
  * The rule the backend enforces and this hook has to match: a requestId is a
- * *logical intent*, not a click. `approvals.approve/requestChanges/reject`
- * replay a recorded outcome for a repeated requestId, and raise CONFLICT when
- * one requestId is replayed carrying a different verdict. So:
+ * *logical intent*, not a click. The approval mutations replay a recorded
+ * outcome for a repeated requestId, and raise CONFLICT when one requestId is
+ * replayed carrying a different verdict. So:
  *
  * - The same id must survive a retry of the same intent. A CONFLICT or a
  *   network failure leaves nothing recorded; pressing the button again must

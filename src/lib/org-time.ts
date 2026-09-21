@@ -3,12 +3,6 @@
  * Weekday integers follow the backend contract: 0 = Sunday … 6 = Saturday.
  */
 
-export type SendWindow = {
-  weekdays: number[]
-  startMinute: number
-  endMinute: number
-}
-
 export const WEEKDAYS: readonly { value: number; short: string; long: string }[] =
   [
     { value: 0, short: "Sun", long: "Sunday" },
@@ -19,11 +13,6 @@ export const WEEKDAYS: readonly { value: number; short: string; long: string }[]
     { value: 5, short: "Fri", long: "Friday" },
     { value: 6, short: "Sat", long: "Saturday" },
   ]
-
-/** Short label for a weekday integer, e.g. 1 → "Mon". */
-export function weekdayShort(day: number): string {
-  return WEEKDAYS.find((d) => d.value === day)?.short ?? `Day ${day}`
-}
 
 /** "HH:MM" (24h, input[type=time] value) → minutes after local midnight. */
 export function timeStringToMinutes(value: string): number | undefined {
@@ -45,35 +34,6 @@ export function minutesToTimeString(minutes: number): string {
   const hours = Math.floor(clamped / 60)
   const mins = clamped % 60
   return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`
-}
-
-function summarizeWeekdays(weekdays: readonly number[]): string {
-  const sorted = [...weekdays].sort((a, b) => a - b)
-  if (sorted.length === 7) {
-    return "Every day"
-  }
-  const workweek = [1, 2, 3, 4, 5]
-  if (
-    sorted.length === workweek.length &&
-    sorted.every((day, index) => day === workweek[index])
-  ) {
-    return "Mon–Fri"
-  }
-  const weekend = [0, 6]
-  if (
-    sorted.length === weekend.length &&
-    sorted.every((day, index) => day === weekend[index])
-  ) {
-    return "Sat–Sun"
-  }
-  return sorted.map(weekdayShort).join(", ")
-}
-
-/** Human-readable send window, e.g. "Mon–Fri, 09:00–17:00". */
-export function formatSendWindow(window: SendWindow): string {
-  return `${summarizeWeekdays(window.weekdays)}, ${minutesToTimeString(
-    window.startMinute,
-  )}–${minutesToTimeString(window.endMinute)}`
 }
 
 /** The browser's best guess for the local IANA timezone. */

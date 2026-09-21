@@ -11,15 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/_dashboard'
 import { Route as MarketingRouteImport } from './routes/_marketing'
-import { Route as DecisionsRouteImport } from './routes/decisions'
-import { Route as EmployeesRouteImport } from './routes/employees'
-import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as OverviewRouteImport } from './routes/overview'
-import { Route as ProspectsRouteImport } from './routes/prospects'
 import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as SquadsRouteImport } from './routes/squads'
-import { Route as TourRouteImport } from './routes/tour'
 import { Route as DashboardSplatRouteImport } from './routes/_dashboard/$'
 import { Route as DashboardOrgRouteImport } from './routes/_dashboard/_org'
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
@@ -40,49 +33,14 @@ const MarketingRoute = MarketingRouteImport.update({
   id: '/_marketing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DecisionsRoute = DecisionsRouteImport.update({
-  id: '/decisions',
-  path: '/decisions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmployeesRoute = EmployeesRouteImport.update({
-  id: '/employees',
-  path: '/employees',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeadsRoute = LeadsRouteImport.update({
-  id: '/leads',
-  path: '/leads',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OverviewRoute = OverviewRouteImport.update({
-  id: '/overview',
-  path: '/overview',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProspectsRoute = ProspectsRouteImport.update({
-  id: '/prospects',
-  path: '/prospects',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SquadsRoute = SquadsRouteImport.update({
-  id: '/squads',
-  path: '/squads',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TourRoute = TourRouteImport.update({
-  id: '/tour',
-  path: '/tour',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardSplatRoute = DashboardSplatRouteImport.update({
@@ -143,15 +101,8 @@ const DashboardOrgInboxConversationIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
-  '/decisions': typeof DecisionsRoute
-  '/employees': typeof EmployeesRoute
-  '/leads': typeof LeadsRoute
   '/onboarding': typeof OnboardingRoute
-  '/overview': typeof OverviewRoute
-  '/prospects': typeof ProspectsRoute
   '/sign-in': typeof SignInRoute
-  '/squads': typeof SquadsRoute
-  '/tour': typeof TourRoute
   '/$': typeof DashboardSplatRoute
   '/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
@@ -164,15 +115,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
-  '/decisions': typeof DecisionsRoute
-  '/employees': typeof EmployeesRoute
-  '/leads': typeof LeadsRoute
   '/onboarding': typeof OnboardingRoute
-  '/overview': typeof OverviewRoute
-  '/prospects': typeof ProspectsRoute
   '/sign-in': typeof SignInRoute
-  '/squads': typeof SquadsRoute
-  '/tour': typeof TourRoute
   '/$': typeof DashboardSplatRoute
   '/settings': typeof DashboardSettingsRoute
   '/handler/$': typeof HandlerSplatRoute
@@ -186,15 +130,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_dashboard': typeof DashboardRouteWithChildren
   '/_marketing': typeof MarketingRouteWithChildren
-  '/decisions': typeof DecisionsRoute
-  '/employees': typeof EmployeesRoute
-  '/leads': typeof LeadsRoute
   '/onboarding': typeof OnboardingRoute
-  '/overview': typeof OverviewRoute
-  '/prospects': typeof ProspectsRoute
   '/sign-in': typeof SignInRoute
-  '/squads': typeof SquadsRoute
-  '/tour': typeof TourRoute
   '/_dashboard/$': typeof DashboardSplatRoute
   '/_dashboard/_org': typeof DashboardOrgRouteWithChildren
   '/_dashboard/settings': typeof DashboardSettingsRoute
@@ -211,15 +148,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/decisions'
-    | '/employees'
-    | '/leads'
     | '/onboarding'
-    | '/overview'
-    | '/prospects'
     | '/sign-in'
-    | '/squads'
-    | '/tour'
     | '/$'
     | '/settings'
     | '/handler/$'
@@ -232,15 +162,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/decisions'
-    | '/employees'
-    | '/leads'
     | '/onboarding'
-    | '/overview'
-    | '/prospects'
     | '/sign-in'
-    | '/squads'
-    | '/tour'
     | '/$'
     | '/settings'
     | '/handler/$'
@@ -253,15 +176,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_dashboard'
     | '/_marketing'
-    | '/decisions'
-    | '/employees'
-    | '/leads'
     | '/onboarding'
-    | '/overview'
-    | '/prospects'
     | '/sign-in'
-    | '/squads'
-    | '/tour'
     | '/_dashboard/$'
     | '/_dashboard/_org'
     | '/_dashboard/settings'
@@ -278,15 +194,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   MarketingRoute: typeof MarketingRouteWithChildren
-  DecisionsRoute: typeof DecisionsRoute
-  EmployeesRoute: typeof EmployeesRoute
-  LeadsRoute: typeof LeadsRoute
   OnboardingRoute: typeof OnboardingRoute
-  OverviewRoute: typeof OverviewRoute
-  ProspectsRoute: typeof ProspectsRoute
   SignInRoute: typeof SignInRoute
-  SquadsRoute: typeof SquadsRoute
-  TourRoute: typeof TourRoute
   HandlerSplatRoute: typeof HandlerSplatRoute
 }
 
@@ -306,27 +215,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/decisions': {
-      id: '/decisions'
-      path: '/decisions'
-      fullPath: '/decisions'
-      preLoaderRoute: typeof DecisionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/employees': {
-      id: '/employees'
-      path: '/employees'
-      fullPath: '/employees'
-      preLoaderRoute: typeof EmployeesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leads': {
-      id: '/leads'
-      path: '/leads'
-      fullPath: '/leads'
-      preLoaderRoute: typeof LeadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
@@ -334,39 +222,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/overview': {
-      id: '/overview'
-      path: '/overview'
-      fullPath: '/overview'
-      preLoaderRoute: typeof OverviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/prospects': {
-      id: '/prospects'
-      path: '/prospects'
-      fullPath: '/prospects'
-      preLoaderRoute: typeof ProspectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/sign-in': {
       id: '/sign-in'
       path: '/sign-in'
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/squads': {
-      id: '/squads'
-      path: '/squads'
-      fullPath: '/squads'
-      preLoaderRoute: typeof SquadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tour': {
-      id: '/tour'
-      path: '/tour'
-      fullPath: '/tour'
-      preLoaderRoute: typeof TourRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_dashboard/$': {
@@ -511,15 +371,8 @@ const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   MarketingRoute: MarketingRouteWithChildren,
-  DecisionsRoute: DecisionsRoute,
-  EmployeesRoute: EmployeesRoute,
-  LeadsRoute: LeadsRoute,
   OnboardingRoute: OnboardingRoute,
-  OverviewRoute: OverviewRoute,
-  ProspectsRoute: ProspectsRoute,
   SignInRoute: SignInRoute,
-  SquadsRoute: SquadsRoute,
-  TourRoute: TourRoute,
   HandlerSplatRoute: HandlerSplatRoute,
 }
 export const routeTree = rootRouteImport

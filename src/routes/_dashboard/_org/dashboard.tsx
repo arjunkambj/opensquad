@@ -13,9 +13,9 @@ import {
  * they travel as `custom` plus two absolute instants — the same rule the rest
  * of the app's date ranges follow (`src/lib/date-ranges.ts`).
  */
-export const ACTIVITY_RANGES = ["today", "7d", "30d", "custom"] as const
+const ACTIVITY_RANGES = ["today", "7d", "30d", "custom"] as const
 
-export type ActivityRange = (typeof ACTIVITY_RANGES)[number]
+type ActivityRange = (typeof ACTIVITY_RANGES)[number]
 
 /**
  * Every member is optional, and a value equal to its default is written as

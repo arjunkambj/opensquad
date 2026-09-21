@@ -10,7 +10,7 @@ import type { api } from "../../../../../convex/_generated/api"
 import type { Id } from "../../../../../convex/_generated/dataModel"
 
 /** The org's agent, as `api.agents.queries.get` returns it. */
-export type OnboardingAgent = NonNullable<
+type OnboardingAgent = NonNullable<
   FunctionReturnType<typeof api.agents.queries.get>
 >
 

@@ -73,11 +73,6 @@ export function optionalCursor(value: unknown): string | undefined {
     : undefined
 }
 
-/** A boolean that is false unless the URL says otherwise. */
-export function flag(value: unknown): boolean {
-  return value === true || value === "true"
-}
-
 /** The largest instant a JavaScript `Date` can represent. */
 const MAX_EPOCH_MS = 8_640_000_000_000_000
 

@@ -33,7 +33,7 @@ import type {
   ActivityKindP10,
 } from "../../../convex/lib/validators"
 
-export type ActivityKind = ActivityKindP10 | ActivityKindBell
+type ActivityKind = ActivityKindP10 | ActivityKindBell
 
 export type ActivityPresentation = {
   label: string

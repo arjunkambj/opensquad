@@ -7,7 +7,7 @@ import {
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 
-export type MenuHref =
+type MenuHref =
   | "/dashboard"
   | "/agent"
   | "/contacts"

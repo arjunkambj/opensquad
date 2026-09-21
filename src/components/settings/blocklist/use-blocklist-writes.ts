@@ -13,7 +13,7 @@ import type { Doc, Id } from "../../../../convex/_generated/dataModel"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
 
-export type BlocklistEntry = { kind: "email" | "domain"; value: string }
+type BlocklistEntry = { kind: "email" | "domain"; value: string }
 
 export type BlocklistWrites = {
   /** Which write is in flight, so one button's spinner cannot show on both. */

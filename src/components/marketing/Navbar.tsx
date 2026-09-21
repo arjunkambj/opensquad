@@ -28,7 +28,7 @@ const navVariants = {
  * The landing page's sections. Root-relative so the same bar keeps working
  * from a page other than the landing page.
  */
-export const marketingNavLinks = [
+const marketingNavLinks = [
   { href: "/#how-it-works", name: "How it works" },
   { href: "/#features", name: "Controls" },
   { href: "/#trial", name: "Trial" },

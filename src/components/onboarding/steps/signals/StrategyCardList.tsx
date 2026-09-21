@@ -18,7 +18,7 @@ import {
 } from "@/components/onboarding/steps/signals/signals-model"
 import { Skeleton } from "@/components/ui/skeleton"
 
-export type StrategyCard = FunctionReturnType<
+type StrategyCard = FunctionReturnType<
   typeof api.agents.strategies.overview
 >["strategies"][number]
 

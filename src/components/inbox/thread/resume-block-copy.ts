@@ -6,7 +6,7 @@ import type { ResumeBlockCode } from "../../../../convex/inbox/conversationResum
  * TOTAL over `RESUME_BLOCK_CODES`, so a new refusal added to the backend
  * fails this file's type-check instead of reaching a screen as a bare code.
  */
-export const RESUME_BLOCK_COPY: Record<ResumeBlockCode, string> = {
+const RESUME_BLOCK_COPY: Record<ResumeBlockCode, string> = {
   association_missing:
     "No lead is linked to this thread yet — link one first.",
   agent_mismatch:

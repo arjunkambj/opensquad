@@ -1,4 +1,4 @@
-# OpenIntent
+# opensquad
 
 Vite and React frontend on a Convex backend, built for the Convex All Gas
 Hackathon. TanStack Router file routes, TypeScript, pnpm, Oxlint.
@@ -38,9 +38,8 @@ pnpm build
 
 ## Layout
 
-Both sides are organised by **domain**, not by technical layer (`plan/PLAN.md`
-§10). A contributor looking for "leads" finds one backend folder and one
-frontend folder.
+Both sides are organised by **domain**, not by technical layer. A contributor
+looking for "leads" finds one backend folder and one frontend folder.
 
 ```
 convex/            the backend — see convex/README.md for the domain map
@@ -89,12 +88,4 @@ it is not hand-edited.
 
 Setup is finished when the organization's agent reads `onboardingStep: "done"`;
 until then every guarded path forwards to `/onboarding`, which resumes at the
-saved step. `/leads` and `/prospects` redirect to `/contacts`, `/overview` to
-`/dashboard`, `/employees` and `/squads` to `/agent`, `/decisions` to `/inbox`,
-and `/tour` to `/`.
-
-## Plan
-
-`plan/PLAN.md` is what we are building, `plan/EXECUTION.md` is the task graph
-with file ownership, `plan/MIGRATION.md` is how existing data moves, and
-`AGENTS.md` holds the working rules.
+saved step.

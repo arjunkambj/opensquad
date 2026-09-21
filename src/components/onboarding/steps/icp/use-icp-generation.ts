@@ -29,7 +29,7 @@ export type IcpRunReason = "initial" | "retry" | "regenerate"
 
 /** A refused request, with the run it was refusing — so Try again asks for
  *  the same thing and a refused FREE run is never retried as a paid one. */
-export type IcpStartRefusal = { message: IcpMessage; reason: IcpRunReason }
+type IcpStartRefusal = { message: IcpMessage; reason: IcpRunReason }
 
 export type IcpGenerationHandle = {
   view: IcpGenerationView

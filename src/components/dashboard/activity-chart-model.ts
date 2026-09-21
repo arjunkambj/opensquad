@@ -17,7 +17,7 @@ export type ActivitySeries = FunctionReturnType<
 
 export type ActivityDay = ActivitySeries["days"][number]
 
-export type SeriesKey = "leadsCreated" | "contacted" | "replies"
+type SeriesKey = "leadsCreated" | "contacted" | "replies"
 
 export type SeriesSpec = {
   key: SeriesKey
@@ -34,7 +34,7 @@ export type SeriesSpec = {
  * would be flat lines along the axis, which reads as a measured zero rather
  * than as work that has not started.
  */
-export const ACTIVITY_SERIES: readonly SeriesSpec[] = [
+const ACTIVITY_SERIES: readonly SeriesSpec[] = [
   {
     key: "leadsCreated",
     label: "Leads created",
@@ -71,8 +71,8 @@ export function drawnSeries(days: readonly ActivityDay[]): SeriesSpec[] {
 export const CHART_WIDTH = 720
 export const CHART_HEIGHT = 220
 export const CHART_PADDING = { top: 12, right: 12, bottom: 28, left: 34 }
-export const PLOT_WIDTH = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
-export const PLOT_HEIGHT =
+const PLOT_WIDTH = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
+const PLOT_HEIGHT =
   CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom
 
 /** At most this many date labels, so a ninety-day window stays legible. */

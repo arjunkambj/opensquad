@@ -42,7 +42,7 @@ const LEAD_APPROVALS: readonly LeadApproval[] = [
 
 export type LeadScoreFilter = 1 | 2 | 3
 
-export type ContactsSort = "lowest"
+type ContactsSort = "lowest"
 
 export type ContactsSearch = {
   stage?: LeadStage

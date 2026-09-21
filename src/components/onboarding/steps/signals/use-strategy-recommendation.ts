@@ -30,7 +30,7 @@ export type SignalsRunReason = "initial" | "retry" | "regenerate"
 
 /** A refused request, with the run it was refusing — so Try again asks for
  *  the same thing and a refused FREE run is never retried as a paid one. */
-export type SignalsStartRefusal = {
+type SignalsStartRefusal = {
   message: SignalsMessage
   reason: SignalsRunReason
 }

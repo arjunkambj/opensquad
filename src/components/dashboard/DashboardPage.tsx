@@ -101,7 +101,7 @@ function DashboardBody({
     return {
       bounds: resolved,
       pill: active,
-      hint: windowHint(active, resolved),
+      hint: windowHint(active, resolved, timezone),
     }
   }, [search, timezone])
   const scope = { orgId, from: bounds.from, to: bounds.to }

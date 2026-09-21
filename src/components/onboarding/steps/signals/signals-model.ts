@@ -12,7 +12,7 @@ import type {
 } from "../../../../../convex/lib/validators"
 
 /** What another run of the recommender costs once the free first one is gone. */
-export const SIGNALS_GENERATION_CREDITS =
+const SIGNALS_GENERATION_CREDITS =
   ACTION_PRICES.recommend_signals.credits
 
 /** "Generate more" keywords. Never free — there is no first-run discount on

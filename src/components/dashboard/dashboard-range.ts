@@ -5,8 +5,7 @@
  * Two of them — 7 days and 30 days — are relative labels `?range=` can name,
  * so a pasted link means "the last seven days" for whoever opens it. The
  * other two cannot be named relatively without lying about what they mean, so
- * they travel as absolute `from`/`to` instants, exactly as
- * `calendarRangeToSearch` does for every other preset the URL cannot spell.
+ * they travel as absolute `from`/`to` instants.
  *
  * Every boundary is derived in the ORG's zone, never the browser's: the
  * numbers on this screen are counted in the org's days, so the window
@@ -17,7 +16,7 @@
 import { addDays, startOfMonth, subMonths } from "date-fns"
 import {
   activityRangeToBounds,
-  calendarRangeToSearch,
+  calendarRangeToBounds,
   todayInZone,
   type CalendarDateRange,
 } from "@/lib/date-ranges"
@@ -39,7 +38,7 @@ export const DASHBOARD_RANGE_LABEL: Record<DashboardRangePill, string> = {
 }
 
 /** The same window as the line under a figure reads. */
-export const DASHBOARD_RANGE_HINT: Record<DashboardRangePill, string> = {
+const DASHBOARD_RANGE_HINT: Record<DashboardRangePill, string> = {
   "7d": "Last 7 days",
   "30d": "Last 30 days",
   "3m": "Last 3 months",
@@ -68,7 +67,7 @@ function pillCalendar(
 }
 
 /** What clicking a pill writes into the URL. */
-export function pillSearch(
+function pillSearch(
   pill: DashboardRangePill,
   timezone: string,
   now = new Date(),
@@ -76,12 +75,10 @@ export function pillSearch(
   if (pill === "7d" || pill === "30d") {
     return { range: pill, from: undefined, to: undefined }
   }
-  const chosen = calendarRangeToSearch(
-    pillCalendar(pill, timezone, now),
-    null,
-    timezone,
-  )
-  return { range: chosen.range, from: chosen.from, to: chosen.to }
+  return {
+    range: "custom",
+    ...calendarRangeToBounds(pillCalendar(pill, timezone, now), timezone),
+  }
 }
 
 /**
@@ -103,7 +100,7 @@ export function pillFilters(
 }
 
 /** The instants a pill stands for — the arguments the queries take. */
-export function pillBounds(
+function pillBounds(
   pill: DashboardRangePill,
   timezone: string,
   now = new Date(),
@@ -153,12 +150,6 @@ export function activePill(
   )
 }
 
-const dateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-})
-
 /**
  * The window in words — the pill's own hint when it is one of the four, and
  * the two dates otherwise.
@@ -167,17 +158,22 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
  * every derivation here walks `Intl` several times, and the page needs the
  * same answer in half a dozen places on one render.
  *
- * No `timeZone` option on the formatter, deliberately. The instants were
- * derived from civil days in the org's zone and are read back the same
- * way by `activityRangeToBounds`, so putting them through a zone again would
- * shift the label off the days that were actually counted.
+ * Bounds are UTC instants, so read them back in the org's timezone to name
+ * the same days the queries count.
  */
 export function windowHint(
   pill: DashboardRangePill | null,
   bounds: { from: number; to: number },
+  timezone: string,
 ): string {
   if (pill !== null) {
     return DASHBOARD_RANGE_HINT[pill]
   }
+  const dateFormatter = new Intl.DateTimeFormat("en", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
   return `${dateFormatter.format(new Date(bounds.from))} – ${dateFormatter.format(new Date(bounds.to))}`
 }

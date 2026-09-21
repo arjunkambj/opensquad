@@ -5,8 +5,6 @@
  * Pure and data-free — no JSX, nothing here calls Convex or knows which
  * screen renders it.
  */
-import type { Doc } from "../../convex/_generated/dataModel"
-
 const RELATIVE_TIME = new Intl.RelativeTimeFormat(undefined, {
   numeric: "auto",
 })
@@ -43,33 +41,6 @@ export function formatInstant(at: number, timezone?: string): string {
     timeStyle: "short",
     ...(timezone === undefined ? {} : { timeZone: timezone }),
   }).format(at)
-}
-
-/** A short fingerprint of a payload hash — enough to compare two by eye. */
-export function shortHash(hash: string): string {
-  return hash.length <= 16 ? hash : `${hash.slice(0, 8)}…${hash.slice(-8)}`
-}
-
-/**
- * Attempt states in words. `acknowledged` reads as "Sent" — the provider
- * accepted it — and never as "Delivered", which is a fact no attempt row
- * asserts. Every state is legible without colour (V10).
- */
-export function attemptStateLabel(state: Doc<"sendAttempts">["state"]): string {
-  switch (state) {
-    case "reserved":
-      return "Reserved — waiting for its turn, nothing sent"
-    case "requesting":
-      return "Requesting — handed to the provider, no result yet"
-    case "acknowledged":
-      return "Sent — the provider accepted it"
-    case "uncertain":
-      return "Delivery uncertain — the outcome is unknown"
-    case "definitively_failed":
-      return "Definitely unsent — it never reached the provider"
-    case "cancelled":
-      return "Cancelled before it was sent"
-  }
 }
 
 /**
