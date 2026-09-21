@@ -55,3 +55,19 @@ export type SecretStatus = "unverified" | "valid" | "invalid";
 
 /** Length of the opaque per-org webhook path token. */
 export const WEBHOOK_TOKEN_LENGTH = 32;
+
+/**
+ * Upper bound on the org's default outreach instructions, in characters.
+ *
+ * It bounds a value that is concatenated into every outreach prompt, so it is
+ * a cost and prompt-safety limit as much as a storage one. Long enough for a
+ * few paragraphs of voice and rules; short enough that it cannot become a
+ * pasted-in playbook.
+ *
+ * Lives here rather than beside the functions that enforce it because the
+ * Settings editor needs the same number: importing it from
+ * `orgs/outreachDefaults.ts` evaluated that module in the browser and
+ * registered its query and mutation there, which Convex warns will become an
+ * error. This folder holds no functions, so the client may import it.
+ */
+export const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 2000;

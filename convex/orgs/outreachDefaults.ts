@@ -13,18 +13,13 @@
  */
 import { mutation, query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
-import { boundedString, domainError } from "../lib/validators";
+import {
+  boundedString,
+  DEFAULT_INSTRUCTIONS_MAX_LENGTH,
+  domainError,
+} from "../lib/validators";
 import { v } from "convex/values";
 
-/**
- * Upper bound on the instructions, in characters.
- *
- * It bounds a value that is concatenated into every outreach prompt, so it is
- * a cost and prompt-safety limit as much as a storage one. Long enough for a
- * few paragraphs of voice and rules; short enough that it cannot become a
- * pasted-in playbook.
- */
-export const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 2000;
 
 const vDefaultInstructions = v.object({
   /** `null` — no default set; the agent's own instructions decide alone. */
