@@ -8,6 +8,7 @@
  * exists. `booked` is reached ONLY through `confirm`.
  */
 import { mutation } from "../_generated/server";
+import { recordMeetingBooked } from "../activity/model";
 import { appendLeadEvent, findLeadEventByOperationKey } from "../leads/events";
 import { requireOrgMember } from "../lib/auth";
 import {
@@ -169,6 +170,16 @@ export const confirm = mutation({
         : { fromStage: prospect.stage, toStage: nextStage }),
       actor: { source: "human", identityKey },
       details: { reason: confirmationNote },
+    });
+    // The bell's "meeting booked" event (PLAN §5). Written here because this
+    // mutation is the single writer of a booked meeting — the user's own
+    // click — so the bell can never announce one nobody confirmed.
+    await recordMeetingBooked(ctx, {
+      orgId: args.orgId,
+      bookingId: booking._id,
+      prospectId: prospect._id,
+      startsAt: times.startsAt,
+      timezone: times.timezone,
     });
     const updated = await ctx.db.get("bookings", booking._id);
     if (updated === null) {

@@ -25,6 +25,7 @@ import {
   vOperationErrorCode,
   vSignalKind,
 } from "../lib/validators";
+import { COUNT_SCAN_BOUND } from "../lib/limits";
 import type { LeadStage } from "../lib/validators";
 import { v } from "convex/values";
 
@@ -32,8 +33,13 @@ import { v } from "convex/values";
  * How far any one count reads. A trial org's whole table is smaller
  * than this, so in practice `hasMore` is false everywhere — the bound is what
  * keeps a query honest if that stops being true.
+ *
+ * Shared with the dashboard's own scan bound, so the two screens stop
+ * counting at the same place: two different bounds meant the same leads
+ * produced different totals on Contacts and on the dashboard once either
+ * one was passed.
  */
-export const LEAD_COUNT_BOUND = 100;
+export const LEAD_COUNT_BOUND = COUNT_SCAN_BOUND;
 
 const vCount = v.object({ count: v.number(), hasMore: v.boolean() });
 

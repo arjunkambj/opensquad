@@ -838,52 +838,6 @@ export const fetchInboundMessage = internalAction({
   },
 });
 
-/**
- * DEV-ONLY diagnostic reader for the live P05 probe. Projects the
- * component's inbound-message mirror and inbox cache down to provider IDs so
- * the probe can verify webhook ingest/dedupe without exposing addresses or
- * bodies to logs. Internal-only — unreachable from clients or HTTP routes.
- * **TODO(P16): remove before public release** (same rule as the former
- * diagnosticSendProbe; this is a read-only helper, not a send path).
- */
-export const diagnosticInboundState = internalAction({
-  args: { inboxId: v.optional(v.string()) },
-  returns: v.object({
-    inboundMessages: v.array(
-      v.object({
-        inboxId: v.string(),
-        threadId: v.string(),
-        messageId: v.string(),
-        eventId: v.string(),
-        timestamp: v.optional(v.number()),
-      }),
-    ),
-    cachedInboxes: v.array(v.object({ inboxId: v.string() })),
-  }),
-  handler: async (ctx, args) => {
-    const rows = (await ctx.runQuery(
-      components.agentmail.lib.listInboundMessages,
-      args.inboxId ? { inboxId: args.inboxId } : {},
-    )) as Array<Record<string, unknown>>;
-    const inboxes = (await ctx.runQuery(
-      components.agentmail.lib.listCachedInboxes,
-      {},
-    )) as Array<Record<string, unknown>>;
-    return {
-      inboundMessages: rows.map((row) => ({
-        inboxId: String(row.inboxId),
-        threadId: String(row.threadId),
-        messageId: String(row.messageId),
-        eventId: String(row.eventId),
-        timestamp:
-          typeof row.timestamp === "number" ? row.timestamp : undefined,
-      })),
-      cachedInboxes: inboxes.map((inbox) => ({
-        inboxId: String(inbox.inboxId),
-      })),
-    };
-  },
-});
 
 // ---------------------------------------------------------------------------
 // Inbound: component webhook callbacks (P05 stubs — P11 owns full handling)

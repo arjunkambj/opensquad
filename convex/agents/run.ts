@@ -28,6 +28,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
+import { recordRunFinished } from "../activity/model";
 import { SWEEP_BATCH_SIZE } from "../lib/limits";
 import { planNextStep } from "./runPlan";
 import { v } from "convex/values";
@@ -157,6 +158,13 @@ export async function finishRun(
       ? { nextRunAt: now + AGENT_RUN_INTERVAL_MS }
       : { nextRunAt: undefined }),
     updatedAt: now,
+  });
+  // The bell's "run finished" event (PLAN §5). Behind the lease check above,
+  // so only the run that actually held the lease reports finishing.
+  await recordRunFinished(ctx, {
+    orgId: agent.orgId,
+    agentId: agent._id,
+    finishedAt: now,
   });
 }
 

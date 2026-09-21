@@ -162,11 +162,24 @@ export type AgentFunnel = {
  */
 export function agentFunnel(counts: FunnelCounts): AgentFunnel {
   const { stages } = counts
-  const every = Object.values(stages)
   const sum = (...parts: { count: number }[]) =>
     parts.reduce((total, part) => total + part.count, 0)
   return {
-    total: sum(...every),
+    // The denominator of "contacted out of total", so it counts the leads
+    // the funnel can still act on. Rejected and closed-lost leads have left
+    // it — including them made every rate read lower than it is, and got
+    // worse the longer the agent ran.
+    total: sum(
+      stages.queued,
+      stages.researched,
+      stages.found,
+      stages.needs_attention,
+      stages.contacted,
+      stages.replied,
+      stages.interested,
+      stages.meeting_proposed,
+      stages.meeting_booked,
+    ),
     contacted: sum(
       stages.contacted,
       stages.replied,
@@ -185,7 +198,9 @@ export function agentFunnel(counts: FunnelCounts): AgentFunnel {
       stages.meeting_proposed,
       stages.meeting_booked,
     ),
-    bounded: every.some((part) => part.hasMore),
+    // Every stage, including the two the total leaves out: if any count hit
+    // its bound the card is reading a partial table, whatever the totals say.
+    bounded: Object.values(stages).some((part) => part.hasMore),
   }
 }
 

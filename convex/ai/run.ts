@@ -44,13 +44,9 @@ import type { Id } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import type { PaidCallOutcome, PaidWork } from "../billing/paidCall";
-import {
-  platformBudgetLimit,
-  platformPeriodKey,
-} from "../billing/platformBudgets";
+import { setPlatformBreaker } from "../billing/platformBudgets";
 import { withCredits } from "../billing/withCredits";
-import { PLATFORM_BUDGETS } from "../lib/limits";
-import type { PaidAction, PlatformBudgetPolicy } from "../lib/limits";
+import type { PaidAction } from "../lib/limits";
 import { domainError } from "../lib/validators";
 import { classifyGatewayError } from "./failures";
 import { gatewayModel, gatewayTokenMintable, MODELS, modelForTier } from "./models";
@@ -246,55 +242,16 @@ function truncateInput(input: string): string {
  * trip clears itself with the period — an operator who has topped the
  * platform up sooner clears it by calling this with `tripped: false`.
  *
- * TODO(money): this duplicates `applyMarker` in `billing/platformBalance.ts`,
- * whose `BREAKER_MARKER_UNITS` and marker logic are module-private and
- * hard-wired to the two lead-data metrics. The right shape is one exported
- * `setPlatformBreaker(ctx, metric, tripped)` in `convex/billing/`, with both
- * watchdogs calling it; that file belongs to another owner, so this keeps its
- * own copy of the convention (the same marker size, on a metric the
- * lead-data breaker never touches) until it can be asked for.
+ * The marker convention itself lives in `billing/platformBudgets.ts` and is
+ * shared with the lead-data wallet watchdog, so there is one definition of
+ * what a tripped breaker looks like in the budget row.
  */
-const AI_BREAKER_MARKER_UNITS = 1_000_000_000;
-
 export const setAiGatewayBreaker = internalMutation({
   args: { tripped: v.boolean() },
   returns: v.object({ tripped: v.boolean(), changed: v.boolean() }),
   handler: async (ctx, args): Promise<{ tripped: boolean; changed: boolean }> => {
-    const policy: PlatformBudgetPolicy = PLATFORM_BUDGETS.ai_calls;
-    const periodKey = platformPeriodKey(policy, Date.now());
-    const row = await ctx.db
-      .query("platformBudgets")
-      .withIndex("by_provider_and_periodKey", (q) =>
-        q.eq("provider", policy.provider).eq("periodKey", periodKey),
-      )
-      .unique();
-    const now = Date.now();
-    if (row === null) {
-      if (!args.tripped) {
-        return { tripped: args.tripped, changed: false };
-      }
-      await ctx.db.insert("platformBudgets", {
-        provider: policy.provider,
-        periodKey,
-        limit: platformBudgetLimit(policy),
-        used: AI_BREAKER_MARKER_UNITS,
-        updatedAt: now,
-      });
-      return { tripped: true, changed: true };
-    }
-    // Idempotent in both directions: a second trip adds nothing, and a
-    // release with no marker present changes nothing.
-    const marked = row.used >= AI_BREAKER_MARKER_UNITS;
-    if (marked === args.tripped) {
-      return { tripped: args.tripped, changed: false };
-    }
-    await ctx.db.patch("platformBudgets", row._id, {
-      used: args.tripped
-        ? row.used + AI_BREAKER_MARKER_UNITS
-        : Math.max(0, row.used - AI_BREAKER_MARKER_UNITS),
-      updatedAt: now,
-    });
-    return { tripped: args.tripped, changed: true };
+    const changed = await setPlatformBreaker(ctx, "ai_calls", args.tripped);
+    return { tripped: args.tripped, changed };
   },
 });
 

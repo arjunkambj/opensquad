@@ -13,6 +13,7 @@
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { recordReplyClassified } from "../activity/model";
 import { sha256Hex } from "../lib/validators";
 import type { ReplyDisposition } from "../lib/validators";
 import { recordConversationNote } from "./conversationNotes";
@@ -195,13 +196,26 @@ export async function applyDisposition(
   disposition: ReplyDisposition,
 ): Promise<void> {
   const now = Date.now();
+  const at = Math.max(now, conversation.lastInboundAt ?? 0);
   await ctx.db.patch("conversations", conversation._id, {
     lastDisposition: disposition,
     // The inbound's own arrival time, not `now`: the marker has to sit at or
     // after `lastInboundAt` for the message it describes, and a clock read
     // taken before a late `applyInboundContext` would sit below it.
-    lastDispositionAt: Math.max(now, conversation.lastInboundAt ?? 0),
+    lastDispositionAt: at,
     updatedAt: now,
+  });
+  // The bell's "new reply" event (PLAN §5). Stamped with the SAME instant as
+  // the marker above, so a sweep that re-drives this thread derives the same
+  // dedupe key and writes nothing twice.
+  await recordReplyClassified(ctx, {
+    orgId: conversation.orgId,
+    conversationId: conversation._id,
+    ...(conversation.prospectId !== undefined
+      ? { prospectId: conversation.prospectId }
+      : {}),
+    disposition,
+    at,
   });
 }
 
