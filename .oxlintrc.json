@@ -1,8 +1,25 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
+  "jsPlugins": ["@convex-dev/eslint-plugin"],
+  "ignorePatterns": ["**/dist/**", "**/convex/_generated/**"],
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["convex/**/*.ts"],
+      "rules": {
+        "@convex-dev/no-old-registered-function-syntax": "error",
+        "@convex-dev/require-args-validator": "error",
+        "@convex-dev/explicit-table-ids": "error",
+        "@convex-dev/no-filter-in-query": "warn",
+        "@convex-dev/no-top-of-hour-crons": "warn",
+        "@convex-dev/no-schema-import-cycle": "error",
+        "@convex-dev/no-duplicate-indexes": "error",
+        "@convex-dev/no-process-env": "error"
+      }
+    }
+  ]
 }

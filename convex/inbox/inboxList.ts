@@ -269,6 +269,10 @@ function pillRange(
     return ranged;
   }
   if (pill === "unread") {
+    // Paginated `.filter` keeps the requested page size after the unread
+    // predicate. An extra index on `unreadCount` would rewrite on every
+    // inbound and mark-read. Convex documents this as the exception for
+    // `.filter` on `.paginate()`.
     return ranged.filter((q) => q.gt(q.field("unreadCount"), 0));
   }
   return ranged;
