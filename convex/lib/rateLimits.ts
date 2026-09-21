@@ -45,16 +45,3 @@ export async function requireRateLimit(
     `too many ${name} requests; retry in ${seconds}s`,
   );
 }
-
-/**
- * Would the next token be available? Read-only — for a button that wants to
- * disable itself rather than let the user hit a refusal.
- */
-export async function rateLimitAvailable(
-  ctx: MutationCtx | ActionCtx,
-  name: RateLimitName,
-  key: string,
-): Promise<boolean> {
-  const status = await rateLimiter.check(ctx, name, { key });
-  return status.ok;
-}

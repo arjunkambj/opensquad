@@ -12,7 +12,7 @@
  * would be a number we made up. So every message below ends in the thing the
  * user CAN do — try again, or go back and widen who they are looking for.
  */
-import { ConvexError } from "convex/values"
+import { domainErrorCode } from "@/lib/convex-error"
 import type { OperationErrorCode } from "../../../../../convex/lib/validators"
 
 export type SignalsMessage = {
@@ -103,22 +103,9 @@ const START_FALLBACK: SignalsMessage = {
   description: "Try again in a moment.",
 }
 
-function domainCode(error: unknown): string | undefined {
-  if (error instanceof ConvexError) {
-    const data: unknown = error.data
-    if (typeof data === "object" && data !== null) {
-      const code = (data as { code?: unknown }).code
-      if (typeof code === "string") {
-        return code
-      }
-    }
-  }
-  return undefined
-}
-
 /** A refusal from the mutation itself, before any run began. */
 export function startRecommendationCopy(error: unknown): SignalsMessage {
-  const code = domainCode(error)
+  const code = domainErrorCode(error)
   return code === undefined
     ? START_FALLBACK
     : (START_REFUSALS[code] ?? START_FALLBACK)

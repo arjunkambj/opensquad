@@ -160,10 +160,8 @@ export async function evaluateReplyAutomation(
   if (org.inboxRef === undefined) {
     return blocked("inbox_unassigned");
   }
-  // A legacy platform inbox is RECEIVE-ONLY (PLAN §9.4 "Legacy inboxes"):
-  // its mail is shown in the Inbox and never auto-answered. The same refusal
-  // covers a key the provider rejected — an org that cannot send cannot
-  // usefully start reply work either.
+  // A key the provider rejected cannot send, and an org that cannot send
+  // cannot usefully start reply work either (PLAN §9.4).
   if (org.inboxConnection !== "connected") {
     return blocked("inbox_unassigned");
   }

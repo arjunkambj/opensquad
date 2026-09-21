@@ -11,17 +11,11 @@
 import { query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
 import { boundedInt, boundedLimit } from "../lib/validators";
-import { usageBucketFields, usageReservationFields } from "../schema";
+import { usageReservationFields } from "../schema";
 import { findCreditsBucket } from "./model";
 import { actionOfOperationKey, vPaidAction } from "./paidCall";
 import { trialCapacityOpen } from "./platformBudgets";
 import { v } from "convex/values";
-
-export const vUsageBucketDoc = v.object({
-  _id: v.id("usageBuckets"),
-  _creationTime: v.number(),
-  ...usageBucketFields,
-});
 
 export const vUsageReservationDoc = v.object({
   _id: v.id("usageReservations"),

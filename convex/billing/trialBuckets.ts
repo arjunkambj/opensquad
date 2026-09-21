@@ -20,7 +20,6 @@ import {
 } from "../lib/limits";
 import { USAGE_PERIOD_LIFETIME, USAGE_SCOPE_ORG } from "../lib/validators";
 import type { UsageMetric } from "../lib/validators";
-import { findBucket } from "./model";
 
 /**
  * The one grant this identity has already been given, or `null`.
@@ -58,7 +57,6 @@ export async function claimTrialGrant(
   await ctx.db.insert("trialGrants", {
     identityKey,
     orgId,
-    grantedAt: Date.now(),
   });
 }
 
@@ -77,36 +75,15 @@ export function trialBucketGrants(): TrialBucketGrant[] {
 }
 
 /**
- * Grant the lifetime buckets to one org. Idempotent: a bucket that
- * already exists keeps its counters and only has its limit refreshed, so
- * running this twice — or backfilling an org that was half-granted —
- * can never hand out a second allowance.
- *
- * Returns the number of buckets it had to create, which is what makes a
- * backfill's progress report honest.
+ * Grant lifetime buckets in the transaction that creates the org and claims
+ * its trial. The caller supplies the newly inserted org's id.
  */
 export async function grantTrialBuckets(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
-): Promise<number> {
+): Promise<void> {
   const now = Date.now();
-  let created = 0;
   for (const grant of trialBucketGrants()) {
-    const existing = await findBucket(
-      ctx,
-      orgId,
-      grant.metric,
-      USAGE_PERIOD_LIFETIME,
-    );
-    if (existing !== null) {
-      if (existing.limit !== grant.limit) {
-        await ctx.db.patch("usageBuckets", existing._id, {
-          limit: grant.limit,
-          updatedAt: now,
-        });
-      }
-      continue;
-    }
     await ctx.db.insert("usageBuckets", {
       orgId,
       scopeKey: USAGE_SCOPE_ORG,
@@ -118,9 +95,7 @@ export async function grantTrialBuckets(
       uncertain: 0,
       updatedAt: now,
     });
-    created += 1;
   }
-  return created;
 }
 
 /** The daily cap for a metered metric, for the reserve that creates its

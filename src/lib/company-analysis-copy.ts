@@ -9,8 +9,7 @@
  * Every message ends with something the user can do, because every one of
  * these states also offers Retry and "Fill in manually".
  */
-import { ConvexError } from "convex/values"
-import { DOMAIN_ERROR_CODES } from "../../convex/lib/errors"
+import { domainErrorCode } from "@/lib/convex-error"
 import type { DomainErrorCode } from "../../convex/lib/errors"
 import type { OperationErrorCode } from "../../convex/lib/validators"
 
@@ -167,17 +166,6 @@ const START_FALLBACK: AnalysisMessage = {
 
 /** A refusal from the mutation itself, before any run began. */
 export function startAnalysisCopy(error: unknown): AnalysisMessage {
-  if (error instanceof ConvexError) {
-    const data: unknown = error.data
-    if (typeof data === "object" && data !== null) {
-      const code = (data as { code?: unknown }).code
-      if (
-        typeof code === "string" &&
-        (DOMAIN_ERROR_CODES as readonly string[]).includes(code)
-      ) {
-        return START_REFUSALS[code as DomainErrorCode]
-      }
-    }
-  }
-  return START_FALLBACK
+  const code = domainErrorCode(error)
+  return code === undefined ? START_FALLBACK : START_REFUSALS[code]
 }

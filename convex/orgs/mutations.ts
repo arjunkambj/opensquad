@@ -2,8 +2,7 @@
  * Org provisioning and policy writes.
  *
  * `ensureOrg` is the idempotent entry point that gives the active
- * organization its row (the §5 contract names this operation `bootstrap`; an
- * alias is exported under that name). There is nothing here that manages
+ * organization its row. There is nothing here that manages
  * members: the auth provider owns who belongs to an organization, and every
  * member of the active one may use the whole product (PLAN §4).
  */
@@ -26,21 +25,6 @@ import { v } from "convex/values";
 
 export const ensureOrg = mutation({
   args: {
-    requestId: v.optional(v.string()),
-    name: v.optional(v.string()),
-    timezone: v.optional(v.string()),
-  },
-  returns: v.object({
-    orgId: v.id("orgs"),
-    created: v.boolean(),
-  }),
-  handler: async (ctx, args) => await ensureOrgImpl(ctx, args),
-});
-
-/** §5 contract name for `ensureOrg`; identical behavior. */
-export const bootstrap = mutation({
-  args: {
-    requestId: v.optional(v.string()),
     name: v.optional(v.string()),
     timezone: v.optional(v.string()),
   },

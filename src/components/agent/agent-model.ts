@@ -7,14 +7,13 @@
  * `convex/` fails this build until someone writes copy for it.
  */
 import type { FunctionReturnType } from "convex/server"
-import { ConvexError } from "convex/values"
 import type { api } from "../../../convex/_generated/api"
 import type {
   AgentMode,
   OperationErrorCode,
   SignalKind,
 } from "../../../convex/lib/validators"
-import { errorMessage } from "@/lib/convex-error"
+import { domainErrorCode, errorMessage } from "@/lib/convex-error"
 
 export type AgentDoc = NonNullable<
   FunctionReturnType<typeof api.agents.queries.get>
@@ -109,13 +108,7 @@ export const RUN_NOW_COPY: Record<RunNowReason, string> = {
  * reader, which is still better than a blank line.
  */
 export function agentErrorCopy(error: unknown, fallback: string): string {
-  const code =
-    error instanceof ConvexError &&
-    typeof error.data === "object" &&
-    error.data !== null &&
-    "code" in error.data
-      ? (error.data as { code: unknown }).code
-      : undefined
+  const code = domainErrorCode(error)
   switch (code) {
     case "RATE_LIMITED":
       return "That was a lot of requests in a row. Wait a moment and try again."
@@ -127,8 +120,6 @@ export function agentErrorCopy(error: unknown, fallback: string): string {
       return "That record is no longer here. Reload the page."
     case "CONFLICT":
       return "Something changed while you were working. Reload the page and try again."
-    case "INVALID":
-      return errorMessage(error, fallback)
     default:
       return errorMessage(error, fallback)
   }

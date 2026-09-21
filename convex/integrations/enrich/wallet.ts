@@ -9,16 +9,11 @@
  * asOf } }` — spikes §3 recorded this against the live account and flagged
  * the bare `{ balance }` shape in the local reference as wrong.
  *
- * Exported as a plain function as well as an action: the watchdog calls the
- * function directly (a domain module may call `integrations/`), and the
- * action exists so the balance can be read from the CLI during a live check.
+ * Exported as a plain function: the watchdog calls it directly (a domain
+ * module may call `integrations/`).
  */
-import { internalAction } from "../../_generated/server";
-import { vOperationErrorCode } from "../../lib/validators";
-import type { OperationErrorCode } from "../../lib/validators";
-import { enrichRequest, operationErrorCodeOf } from "./client";
+import { enrichRequest } from "./client";
 import type { EnrichResult } from "./client";
-import { v } from "convex/values";
 
 export type WalletBalance = {
   balance: number;
@@ -69,26 +64,3 @@ export async function fetchWalletBalance(): Promise<
     ...(result.requestId !== undefined ? { requestId: result.requestId } : {}),
   };
 }
-
-/** The same read, callable from the CLI for a live check. */
-export const walletBalance = internalAction({
-  args: {},
-  returns: v.union(
-    v.object({
-      status: v.literal("read"),
-      balance: v.number(),
-      currency: v.string(),
-      asOf: v.string(),
-    }),
-    v.object({ status: v.literal("failed"), code: vOperationErrorCode }),
-  ),
-  handler: async (): Promise<
-    | { status: "read"; balance: number; currency: string; asOf: string }
-    | { status: "failed"; code: OperationErrorCode }
-  > => {
-    const result = await fetchWalletBalance();
-    return result.kind === "ok"
-      ? { status: "read", ...result.data }
-      : { status: "failed", code: operationErrorCodeOf(result.reason) };
-  },
-});

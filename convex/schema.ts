@@ -46,7 +46,6 @@ import {
   vLeadEventKind,
   vLeadFilterOption,
   vLeadFilters,
-  vLeadLegacy,
   vLeadLocation,
   vLeadOrigin,
   vLeadResearch,
@@ -112,12 +111,6 @@ export const orgFields = {
    * resolves an inbound request to an org, so it is a secret.
    */
   webhookToken: v.string(),
-  /**
-   * Whether a verified open event has ever been observed for this org
-   * (PLAN §9.6). Until it flips the Agent card shows no "Opened" column at
-   * all — no zero, no dash.
-   */
-  opensObserved: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
   /** AgentMail inbox reference; unique when present, claimed transactionally. */
@@ -128,8 +121,7 @@ export const orgFields = {
    * fields, so the two are stored separately rather than one being assumed to
    * be the other: this is what "is this message from us?" compares against
    * (`inbox/replyGate.ts`, `leads/mutations.ts`) and what Manage inbox shows.
-   * Absent for a connection made before this field existed — every reader
-   * falls back to `inboxRef`.
+   * Absent until an inbox is connected.
    */
   inboxAddress: v.optional(v.string()),
   /** The webhook this org registered on the user's own account. */
@@ -172,8 +164,6 @@ export const businessProfileFields = {
   firstRunUsed: v.boolean(),
   version: v.number(),
   updatedAt: v.number(),
-  /** identityKey of the last editor. */
-  updatedBy: v.string(),
 };
 
 /**
@@ -233,33 +223,12 @@ export const agentFields = {
   researchDay: v.optional(
     v.object({ periodKey: v.string(), count: v.number() }),
   ),
-  /** Traceability for an agent folded out of a pre-pivot campaign. */
-  legacyCampaignId: v.optional(v.id("legacyCampaigns")),
   // Onboarding generations (absent = never run). The UI renders loading /
   // retry from these; the generated values land on `icp`, `strategies` rows
   // and `suggestedKeywords`.
   icpGeneration: v.optional(vGenerationStatus),
   strategyGeneration: v.optional(vGenerationStatus),
   suggestedKeywords: v.optional(v.array(v.string())),
-};
-
-/**
- * Read-only copies of pre-pivot campaigns folded into an agent
- * (MIGRATION §1). Nothing writes these outside the migration and nothing
- * schedules work from them; they exist so a campaign's brief and identity are
- * not silently discarded. Empty on the clean-slate path.
- */
-export const legacyCampaignFields = {
-  orgId: v.id("orgs"),
-  title: v.string(),
-  brief: v.string(),
-  /** The pre-pivot status as it stood at migration time. */
-  status: v.string(),
-  createdBy: v.string(),
-  createdAt: v.number(),
-  /** The agent this campaign was folded into. */
-  agentId: v.id("agents"),
-  foldedAt: v.number(),
 };
 
 /**
@@ -398,11 +367,11 @@ export const activityEventFields = {
  * picks up whatever is due, and no other field encodes progress.
  *
  * `scoreKey` and `sourceLeadKey` are DENORMALISED INDEX KEYS. Convex indexes
- * top-level fields and cannot reach into a union member, so these two mirror
+ * top-level fields and cannot reach into a nested object, so these two mirror
  * `research.aiScore` and `origin.sourceLeadId`. The invariant — enforced by
- * writing them through `leadScoreKey`/`leadSourceKey` in the same patch as
- * the union they mirror — is that they are never written alone and never read
- * as the value itself.
+ * writing `scoreKey` through `leadScoreKey` in the same patch as the research
+ * value it mirrors — is that neither is ever written alone or read as the
+ * value itself.
  */
 export const prospectFields = {
   orgId: v.id("orgs"),
@@ -466,8 +435,6 @@ export const prospectFields = {
   lastReplyAt: v.optional(v.number()),
   /** Stated basis for the current stage; required for human corrections. */
   stageReason: v.optional(v.string()),
-  /** Migration-only copy of pre-pivot fields (MIGRATION §5). */
-  legacy: v.optional(vLeadLegacy),
 };
 
 /**
@@ -503,11 +470,9 @@ export const leadEventFields = {
  *
  * `meeting_booked` is set ONLY by the user (PLAN §9.5), which is why
  * `startsAt`/`endsAt`/`timezone` are REQUIRED once the state is `confirmed`,
- * `completed` or `no_show`, together with `confirmationSource: manual`, an
- * authenticated `confirmedBy`/`confirmedAt` and a short stated
- * `confirmationNote`. `externalEventRef` is stored only when a real provider
- * event exists — `confirmationSource: provider` stays unavailable until a
- * validated calendar connector verifies one. None of this CRUD sends an
+ * together with `confirmationSource: manual`, an authenticated
+ * `confirmedBy`/`confirmedAt` and a short stated `confirmationNote`.
+ * None of this CRUD sends an
  * invitation or alters a remote calendar.
  */
 export const bookingFields = {
@@ -525,17 +490,14 @@ export const bookingFields = {
   draftId: v.optional(v.id("drafts")),
   startsAt: v.optional(v.number()),
   endsAt: v.optional(v.number()),
-  /** IANA zone of the CONFIRMED meeting — distinct from the zone a `slots`
-   *  proposal offered, which a reschedule does not rewrite. */
+  /** IANA zone of the confirmed meeting, distinct from the proposal's zone. */
   timezone: v.optional(v.string()),
   confirmationSource: v.optional(vConfirmationSource),
   /** identityKey of the authenticated human who asserted the agreed time. */
   confirmedBy: v.optional(v.string()),
   confirmedAt: v.optional(v.number()),
-  externalEventRef: v.optional(v.string()),
   /** Short basis, e.g. "prospect confirmed by reply". */
   confirmationNote: v.optional(v.string()),
-  cancellationReason: v.optional(v.string()),
 };
 
 /**
@@ -599,11 +561,6 @@ export const conversationFields = {
    * which refuses an agent the prospect does not belong to.
    */
   agentId: v.optional(v.id("agents")),
-  /**
-   * Human owner of this thread (identityKey). Must resolve to an ACTIVE
-   * member of the organization before it is stored.
-   */
-  assigneeIdentityKey: v.optional(v.string()),
   /** Why automation is frozen. Present whenever `humanTakeover` is true. */
   takeoverReason: v.optional(vTakeoverReason),
   /** identityKey of the operator who froze it, or `"system"`. */
@@ -779,9 +736,7 @@ export const sendAttemptFields = {
    *  self-describes its wake condition and the stale-attempt sweep can
    *  re-drive one whose scheduled wake was lost. */
   nextPermittedAt: v.optional(v.number()),
-  /** The replacement attempt that covers THIS uncertain attempt (§8.7).
-   *  Coverage is transitive down the chain. */
-  coveredByAttemptId: v.optional(v.id("sendAttempts")),
+
   error: v.optional(
     v.object({
       message: v.string(),
@@ -939,7 +894,6 @@ export const trialGrantFields = {
   identityKey: v.string(),
   /** The org the one grant funded. */
   orgId: v.id("orgs"),
-  grantedAt: v.number(),
 };
 
 /** One debit lifecycle per logical operation/bucket (§4.4). */
@@ -1001,10 +955,6 @@ export default defineSchema({
     // The tenant lookup: one row per Hexclave org, made a constraint by
     // `ensureOrg` reading this range in the same transaction as the insert.
     .index("by_hexclaveOrgId", ["hexclaveOrgId"])
-    // Audit: every org a given identity initialised. The one-trial-per-user
-    // rule is NOT decided here — it reads and writes `trialGrants`, so the
-    // claim is one document rather than an inference over this range.
-    .index("by_createdByIdentityKey", ["createdByIdentityKey"])
     // One org per inbox: a lookup, made a constraint by the claim
     // mutation reading it in the same transaction as the write (PLAN §9.4).
     .index("by_inboxRef", ["inboxRef"])
@@ -1025,10 +975,6 @@ export default defineSchema({
     // leads so draft agents, which have no due time at all, are never paged
     // through (EXECUTION "API hand-offs": T23 writes it, T30 reads it).
     .index("by_status_and_nextRunAt", ["status", "nextRunAt"]),
-
-  legacyCampaigns: defineTable(legacyCampaignFields)
-    .index("by_orgId", ["orgId"])
-    .index("by_agentId", ["agentId"]),
 
   strategies: defineTable(strategyFields)
     // The agent's strategies, and the enabled subset the run iterates.
@@ -1130,11 +1076,6 @@ export default defineSchema({
       "state",
       "lastMessageAt",
     ])
-    .index("by_orgId_and_humanTakeover_and_lastMessageAt", [
-      "orgId",
-      "humanTakeover",
-      "lastMessageAt",
-    ])
     // Unique (inboxRef, providerThreadRef) mapping when the thread ref is
     // assigned — enforced transactionally.
     .index("by_inboxRef_and_providerThreadRef", [
@@ -1164,11 +1105,7 @@ export default defineSchema({
     // The invalidation sweep: every draft still current in a conversation.
     .index("by_conversationId_and_state", ["conversationId", "state"])
     // requestId dedupe for revise/createRevision retries.
-    .index("by_orgId_and_requestId", ["orgId", "requestId"])
-    // Booking-linked drafts: the invalidation path needs every draft still
-    // proposing a booking as one exact range, and a lead can hold several
-    // conversations — no conversation-scoped index can find them all.
-    .index("by_bookingId", ["bookingId"]),
+    .index("by_orgId_and_requestId", ["orgId", "requestId"]),
 
   approvals: defineTable(approvalFields)
     .index("by_draftId", ["draftId"])
@@ -1237,9 +1174,7 @@ export default defineSchema({
     // One row per provider event, enforced transactionally.
     .index("by_providerEventId", ["providerEventId"])
     // The replay range: everything still held for one inbox, oldest first.
-    .index("by_inboxRef_and_state", ["inboxRef", "state"])
-    // Bounded operator listing across inboxes.
-    .index("by_state_and_receivedAt", ["state", "receivedAt"]),
+    .index("by_inboxRef_and_state", ["inboxRef", "state"]),
 
   /* Usage ledger */
 
@@ -1287,17 +1222,6 @@ export default defineSchema({
       "orgId",
       "settlement",
       "operationKey",
-    ])
-    // Callback correlation for a provider that answers asynchronously.
-    .index("by_provider_and_componentRequestRef", [
-      "provider",
-      "componentRequestRef",
-    ])
-    // The per-prospect operation range.
-    .index("by_orgId_and_prospectId_and_state", [
-      "orgId",
-      "prospectId",
-      "state",
     ])
     // The stale-operation sweep: `requested`/`accepted` rows oldest first,
     // which is what decides whether one may be parked at all.

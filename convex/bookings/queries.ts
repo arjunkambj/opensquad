@@ -1,13 +1,14 @@
-/** Member-guarded reads: the org's bookings and one booking's detail. */
+/** Member-guarded, paginated booking lists. */
 import { query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
+import { paged } from "../lib/pagination";
 import {
   boundedLimit,
   domainError,
   invalid,
   vBookingState,
 } from "../lib/validators";
-import { loadBookingForWrite, vBookingDoc, vListPage } from "./model";
+import { vListPage } from "./model";
 import { v } from "convex/values";
 
 /**
@@ -73,11 +74,7 @@ export const list = query({
               )
               .order("desc")
               .paginate(paginate);
-      return {
-        items: result.page,
-        cursor: result.isDone ? null : result.continueCursor,
-        hasMore: !result.isDone,
-      };
+      return paged(result, result.page);
     }
     if (args.state !== undefined && args.owner !== undefined) {
       throw invalid(
@@ -93,13 +90,9 @@ export const list = query({
             .eq("orgId", args.orgId)
             .eq("state", state),
         )
-        .order(state === "confirmed" || state === "proposed" ? "asc" : "desc")
+        .order("asc")
         .paginate(paginate);
-      return {
-        items: result.page,
-        cursor: result.isDone ? null : result.continueCursor,
-        hasMore: !result.isDone,
-      };
+      return paged(result, result.page);
     }
     if (args.owner !== undefined) {
       const owner = args.owner;
@@ -110,27 +103,10 @@ export const list = query({
         )
         .order("asc")
         .paginate(paginate);
-      return {
-        items: result.page,
-        cursor: result.isDone ? null : result.continueCursor,
-        hasMore: !result.isDone,
-      };
+      return paged(result, result.page);
     }
     throw invalid(
       "list requires one of prospectId, state or owner — the schema declares an index per supported slice and no organization-wide range exists",
     );
-  },
-});
-
-/** One booking; a foreign or missing row is NOT_FOUND, never FORBIDDEN. */
-export const get = query({
-  args: {
-    orgId: v.id("orgs"),
-    bookingId: v.id("bookings"),
-  },
-  returns: vBookingDoc,
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    return await loadBookingForWrite(ctx, args.orgId, args.bookingId);
   },
 });

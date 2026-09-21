@@ -24,16 +24,10 @@
  * `identityKey`, and it comes from `ctx.auth` — never from model output or
  * email content.
  */
-import { query } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { v } from "convex/values";
-import { requireOrgMember } from "../lib/auth";
-import {
-  boundedLimit,
-  boundedString,
-  domainError,
-} from "../lib/validators";
+import { boundedString } from "../lib/validators";
 import type {
   LeadEventActor,
   LeadEventDetails,
@@ -46,51 +40,6 @@ export const vLeadEventDoc = v.object({
   _id: v.id("leadEvents"),
   _creationTime: v.number(),
   ...leadEventFields,
-});
-
-/* ------------------------------------------------------------------ */
-/* Reads                                                               */
-/* ------------------------------------------------------------------ */
-
-/**
- * The full history of one lead, newest first, cursor-paginated. A prospect in
- * another org is NOT_FOUND — the same rule `leads.getDetail`
- * applies to the lead itself.
- */
-export const list = query({
-  args: {
-    orgId: v.id("orgs"),
-    prospectId: v.id("prospects"),
-    cursor: v.optional(v.union(v.string(), v.null())),
-    limit: v.optional(v.number()),
-  },
-  returns: v.object({
-    items: v.array(vLeadEventDoc),
-    cursor: v.union(v.string(), v.null()),
-    hasMore: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    const prospect = await ctx.db.get("prospects", args.prospectId);
-    if (prospect === null || prospect.orgId !== args.orgId) {
-      throw domainError("NOT_FOUND", "prospect not found");
-    }
-    const result = await ctx.db
-      .query("leadEvents")
-      .withIndex("by_prospectId_and_createdAt", (q) =>
-        q.eq("prospectId", args.prospectId),
-      )
-      .order("desc")
-      .paginate({
-        numItems: boundedLimit(args.limit),
-        cursor: args.cursor ?? null,
-      });
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
-  },
 });
 
 /* ------------------------------------------------------------------ */

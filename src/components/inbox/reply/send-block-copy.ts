@@ -9,7 +9,7 @@ import type { SendBlockCode } from "../../../../convex/outreach/sendGates"
  * a string, so `sendBlockCopy` still falls back — but the fallback exists for
  * an old client, not for a code we forgot.
  */
-export const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
+const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
   org_paused:
     "Sending is paused for this organization. Resume it in Settings and this can go out.",
   agent_not_sending:
@@ -52,8 +52,6 @@ export const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
     "Today's sending limit is used up. This goes out tomorrow.",
   booking_not_current:
     "The meeting this email offers has changed, so what it proposes is out of date.",
-  missing_opt_out:
-    "Every email has to carry the line that lets someone opt out, and this one does not. Edit it once and the line is added back.",
 }
 
 /** The copy for a code the preflight returned, whatever the client's age. */

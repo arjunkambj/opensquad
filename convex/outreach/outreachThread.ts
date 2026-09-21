@@ -64,22 +64,7 @@ export async function resolveConversation(
   if (open !== undefined) {
     // The thread is frozen to the agent it was associated with, so a lead
     // re-pointed at another agent never silently retargets in-flight work.
-    if (open.agentId !== undefined) {
-      return open.agentId === args.agent._id ? open : null;
-    }
-    // An older thread with no agent on it would leave `evaluateSendGates`
-    // with nothing to fence the mode and the revision against, and would give
-    // the draft `agentRevision: 0`. Bind it before anything is written.
-    return await ctx.runMutation(
-      internal.outreach.conversationStaging.stageConversation,
-      {
-        conversationId: open._id,
-        orgId: args.org._id,
-        inboxRef: open.inboxRef,
-        prospectId: args.lead._id,
-        agentId: args.agent._id,
-      },
-    );
+    return open.agentId === args.agent._id ? open : null;
   }
   if (args.step > 0 || existing.length >= CONVERSATION_SCAN_MAX) {
     // A follow-up needs the thread its first mail went out on, and a lead

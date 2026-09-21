@@ -83,67 +83,6 @@ export const setTakeover = mutation({
   },
 });
 
-/**
- * Assign the HUMAN who owns this thread, or clear the assignment by omitting
- * `assigneeIdentityKey`.
- *
- * The assignee is the CALLER, or nobody. Who else belongs to the
- * organization lives with the auth provider, not in our data, so the caller's
- * own verified identity is the only one this transaction can confirm is a
- * member. Any other identity is a bad argument, not a hidden row, so it is
- * INVALID rather than NOT_FOUND.
- */
-export const assignOwner = mutation({
-  args: {
-    orgId: v.id("orgs"),
-    conversationId: v.id("conversations"),
-    expectedContextVersion: v.number(),
-    assigneeIdentityKey: v.optional(v.string()),
-  },
-  returns: vConversationDoc,
-  handler: async (ctx, args) => {
-    const { identityKey } = await requireOrgMember(
-      ctx,
-      args.orgId,
-    );
-    const conversation = await getConversationInOrg(
-      ctx,
-      args.orgId,
-      args.conversationId,
-    );
-    const next =
-      args.assigneeIdentityKey === undefined
-        ? undefined
-        : boundedString(args.assigneeIdentityKey, "assigneeIdentityKey", {
-            min: 1,
-            max: 300,
-          });
-    if (next !== undefined && next !== identityKey) {
-      throw invalid("a conversation can only be assigned to its caller");
-    }
-    if (conversation.assigneeIdentityKey === next) {
-      return conversation;
-    }
-    assertContextVersion(conversation, args.expectedContextVersion);
-    const updated = await advanceContext(
-      ctx,
-      conversation,
-      { assigneeIdentityKey: next },
-      "the conversation owner changed",
-    );
-    await recordConversationNote(ctx, {
-      conversation,
-      kind: "system",
-      actor: identityKey,
-      body:
-        next === undefined
-          ? "Conversation owner cleared."
-          : "Conversation owner assigned.",
-    });
-    return updated;
-  },
-});
-
 /** Close a thread. Automation refuses a non-open conversation outright. */
 export const close = mutation({
   args: {

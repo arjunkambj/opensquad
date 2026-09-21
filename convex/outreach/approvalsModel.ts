@@ -1,5 +1,5 @@
 /**
- * The shared draft-resolution core behind approve / requestChanges / reject.
+ * The exact-draft checks and approval write behind `approve`.
  *
  * Every resolution (a) dedupes on (orgId, requestId) through the
  * approvals table, (b) binds the exact draft revision — payload hash,
@@ -12,28 +12,20 @@ import type { MutationCtx } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
 import { requireOrgMember } from "../lib/auth";
 import { boundedString, domainError } from "../lib/validators";
-import type { ApprovalVerdict, DraftResolution } from "../lib/validators";
 
-type ResolveInput = {
+type ApproveInput = {
   orgId: Id<"orgs">;
   draftId: Id<"drafts">;
   requestId: string;
-  verdict: ApprovalVerdict;
-  /** The caller-visible distinction between a redraft request and a
-   *  deliberate terminal rejection. */
-  draftResolution: DraftResolution;
-  /** Human-readable comment/reason — required for non-approvals. */
-  body?: string;
 };
 
 /**
- * Shared resolution path for all three operations. The whole flow — dedupe
- * check, draft/context binding checks and the approval insert — runs in ONE
+ * Dedupe, draft/context binding checks and the approval insert run in one
  * transaction.
  */
-export async function resolveDraft(
+export async function approveDraft(
   ctx: MutationCtx,
-  args: ResolveInput,
+  args: ApproveInput,
 ): Promise<{ approval: Doc<"approvals">; replayed: boolean }> {
   const { identityKey } = await requireOrgMember(ctx, args.orgId);
   const requestId = boundedString(args.requestId, "requestId", {
@@ -63,7 +55,7 @@ export async function resolveDraft(
         `requestId ${requestId} was already used to resolve a different draft`,
       );
     }
-    if (prior.decision !== args.verdict) {
+    if (prior.decision !== "approved") {
       throw domainError(
         "CONFLICT",
         `requestId ${requestId} already recorded a "${prior.decision}" verdict`,
@@ -96,7 +88,7 @@ export async function resolveDraft(
   }
   // §4.3: a booking-linked draft is approved ONLY while the proposal it names
   // is still live at the exact version the content was written against. A
-  // confirmed/rescheduled/cancelled booking means the mailed times or link
+  // confirmed booking means the mailed times or link
   // are no longer the offer on the table — approving this revision would
   // authorize content that no longer matches the agreement. The dispatch
   // preflight runs the same check a second time before any wire call.
@@ -128,7 +120,7 @@ export async function resolveDraft(
     payloadHash: draft.payloadHash,
     normalizedRecipient: draft.normalizedRecipient,
     contextVersion: conversation.contextVersion,
-    decision: args.verdict,
+    decision: "approved",
     approverIdentityKey: identityKey,
     createdAt: now,
     requestId,
@@ -138,17 +130,11 @@ export async function resolveDraft(
     throw domainError("NOT_FOUND", "approval not found after insert");
   }
 
-  const verb =
-    args.draftResolution === "approved"
-      ? "approved"
-      : args.draftResolution === "changes_requested"
-        ? "requested changes on"
-        : "rejected";
   await recordActivityEvent(ctx, {
     orgId: args.orgId,
     kind: "approval_recorded",
     summary:
-      `Draft revision ${draft.revision} ${verb} by an authorized ` +
+      `Draft revision ${draft.revision} approved by an authorized ` +
       `reviewer (payload ${draft.payloadHash.slice(0, 12)}…)`,
     actor: identityKey,
     dedupeKey: `approval:${approval._id}:recorded`,

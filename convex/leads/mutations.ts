@@ -1,5 +1,5 @@
 /**
- * Lead writes: approval (PLAN §9.3), notes, and the two provider-fact
+ * Lead writes: approval (PLAN §9.3) and the two provider-fact
  * derivations the send and inbox boundaries call.
  *
  * Three rules govern every write below:
@@ -26,9 +26,7 @@ import { requireOrgMember } from "../lib/auth";
 import {
   advancedLeadStage,
   boundedString,
-  domainError,
   invalid,
-  LEAD_EVENT_NOTE_MAX_LENGTH,
   MAX_LIST_LIMIT,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
   vLeadApproval,
@@ -36,12 +34,7 @@ import {
 } from "../lib/validators";
 import { isOwnMailbox } from "../inbox/mailboxIdentity";
 import { decideOne } from "./approval";
-import {
-  appendLeadEvent,
-  findLeadEventByOperationKey,
-  vLeadEventDoc,
-} from "./events";
-import { loadProspectForWrite } from "./model";
+import { appendLeadEvent, findLeadEventByOperationKey } from "./events";
 import { v } from "convex/values";
 
 /**
@@ -117,67 +110,6 @@ export const setApproval = mutation({
       }
     }
     return { decided, unchanged };
-  },
-});
-
-/**
- * Append a note to the lead's history. A note IS the event — the lead row is
- * untouched (no `updatedAt` move), so annotating a lead can never reorder a
- * Contacts view. `requestId` dedupes the append: a retried note returns the
- * row it already wrote, and the same requestId carrying a different body is a
- * CONFLICT.
- */
-export const addNote = mutation({
-  args: {
-    orgId: v.id("orgs"),
-    prospectId: v.id("prospects"),
-    body: v.string(),
-    requestId: v.string(),
-  },
-  returns: vLeadEventDoc,
-  handler: async (ctx, args) => {
-    const { identityKey } = await requireOrgMember(ctx, args.orgId);
-    const requestId = boundedString(args.requestId, "requestId", {
-      min: 1,
-      max: 100,
-    });
-    const note = boundedString(args.body, "body", {
-      min: 1,
-      max: LEAD_EVENT_NOTE_MAX_LENGTH,
-    });
-    await loadProspectForWrite(ctx, args.orgId, args.prospectId);
-    const operationKey = `lead:${args.prospectId}:note:${requestId}`;
-    const prior = await findLeadEventByOperationKey(
-      ctx,
-      args.orgId,
-      operationKey,
-    );
-    if (prior !== null) {
-      if (prior.details?.note !== note) {
-        throw domainError(
-          "CONFLICT",
-          `requestId ${requestId} already recorded a different note`,
-        );
-      }
-      return prior;
-    }
-    const eventId = await appendLeadEvent(ctx, {
-      orgId: args.orgId,
-      prospectId: args.prospectId,
-      kind: "note_added",
-      summary: "Note added by a team member",
-      operationKey,
-      actor: { source: "human", identityKey },
-      details: { note },
-    });
-    if (eventId === null) {
-      throw domainError("CONFLICT", "note operation key already recorded");
-    }
-    const event = await ctx.db.get("leadEvents", eventId);
-    if (event === null) {
-      throw domainError("NOT_FOUND", "lead event not found after insert");
-    }
-    return event;
   },
 });
 

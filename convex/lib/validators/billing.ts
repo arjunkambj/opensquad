@@ -4,7 +4,6 @@
  * lifecycle that keeps a reservation honest.
  */
 import { v } from "convex/values";
-import type { Infer } from "convex/values";
 
 /**
  * Paid or metered backends the app records `providerOperations` and
@@ -37,8 +36,6 @@ export const vProviderDataRef = v.union(
     digest: v.string(),
   }),
 );
-
-export type ProviderDataRef = Infer<typeof vProviderDataRef>;
 
 /**
  * The metered quantities (PLAN §6 "Ledger"). `credits` is the one number the
@@ -97,9 +94,6 @@ export const vProviderOperationState = v.union(
   v.literal("failed"),
 );
 
-export type ProviderOperationState =
-  (typeof PROVIDER_OPERATION_STATES)[number];
-
 /**
  * How ONE provider operation's reservation was settled — recorded on the
  * operation row itself, because the row's `state` does not imply it.
@@ -116,18 +110,6 @@ export const vProviderOperationSettlement = v.union(
   v.literal("release"),
   v.literal("markUncertain"),
 );
-
-export type ProviderOperationSettlement = Infer<
-  typeof vProviderOperationSettlement
->;
-
-/**
- * Lead research reads the lead's company home page and nothing else
- * (PLAN §4 "Firecrawl change needed": website analysis takes up to four
- * pages, lead research stays at one). Three is the per-lead ceiling on
- * BILLED retrievals, so a retried research step cannot buy a fourth page.
- */
-export const RESEARCH_PAGES_PER_PROSPECT = 3;
 
 export const vUsageReservationState = v.union(
   v.literal("reserved"),

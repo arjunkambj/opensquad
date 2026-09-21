@@ -56,7 +56,6 @@ const vSkipReason = v.union(
   v.literal("no_address_on_file"),
   v.literal("rejected"),
   v.literal("score_below_threshold"),
-  v.literal("not_sourced"),
   v.literal("credits"),
 );
 
@@ -150,10 +149,6 @@ function ineligible(
   lead: Doc<"prospects">,
   explicit: boolean,
 ): typeof vSkipReason.type | null {
-  if (lead.origin.kind !== "sourced") {
-    // Only a sourced lead carries the reference the email finder needs.
-    return "not_sourced";
-  }
   if (lead.emailStatus === "found") {
     return "already_found";
   }

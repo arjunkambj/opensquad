@@ -20,15 +20,18 @@ import type { Id } from "../../../convex/_generated/dataModel"
 import { toast } from "@/components/ui/toast"
 import type { InboxChoice } from "./InboxPicker"
 import type { VerifiedInbox } from "./inbox-connection-model"
-import { connectErrorCopy, requestErrorCopy } from "./inbox-connection-model"
+import {
+  INBOX_CONNECT_ERROR_COPY,
+  requestErrorCopy,
+} from "./inbox-connection-model"
 
 /** What the user is doing, where that is not simply the stored state. */
-export type InboxConnectFlow =
+type InboxConnectFlow =
   | { kind: "idle" }
   | { kind: "picking"; last4: string; inboxes: readonly VerifiedInbox[] }
   | { kind: "rotating" }
 
-export type InboxConnectBusy =
+type InboxConnectBusy =
   | "none"
   | "verifying"
   | "connecting"
@@ -101,7 +104,7 @@ export function useInboxConnectActions(
         async () => {
           const result = await verifyAndStoreKey({ orgId, apiKey })
           if (!result.ok) {
-            setError(connectErrorCopy(result.code))
+            setError(INBOX_CONNECT_ERROR_COPY[result.code])
             return
           }
           setFlow({
@@ -130,7 +133,7 @@ export function useInboxConnectActions(
                 }),
           })
           if (!result.ok) {
-            setError(connectErrorCopy(result.code))
+            setError(INBOX_CONNECT_ERROR_COPY[result.code])
             return
           }
           setFlow({ kind: "idle" })
@@ -150,7 +153,7 @@ export function useInboxConnectActions(
         async () => {
           const result = await rotateKey({ orgId, apiKey })
           if (!result.ok) {
-            setError(connectErrorCopy(result.code))
+            setError(INBOX_CONNECT_ERROR_COPY[result.code])
             return
           }
           setFlow({ kind: "idle" })
@@ -185,7 +188,7 @@ export function useInboxConnectActions(
         try {
           const result = await connectInbox({ orgId, inboxId })
           if (!result.ok) {
-            setError(connectErrorCopy(result.code))
+            setError(INBOX_CONNECT_ERROR_COPY[result.code])
           }
         } catch (cause) {
           setError(requestErrorCopy(cause, "We could not resume the import."))

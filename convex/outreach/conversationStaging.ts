@@ -1,10 +1,8 @@
 /**
- * Conversation staging — a minimal internal seam over `conversations`.
- *
  * The public conversations module lives in `inbox/`. These internal-only
- * mutations exist so preflight facts can be staged, an org inbox bound
- * and inbound-driven invalidation applied from the outreach side without
- * reaching into that domain's public surface.
+ * mutations exist so preflight facts can be staged and inbound-driven
+ * invalidation applied from the outreach side without reaching into that
+ * domain's public surface.
  */
 import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
@@ -247,54 +245,6 @@ export const applyInboundContext = internalMutation({
       throw domainError("NOT_FOUND", "conversation not found");
     }
     return updated;
-  },
-});
-
-/**
- * Assign the org's AgentMail inbox reference (internal only — the real
- * inbox-assignment flow arrives with P11's onboarding/inbox work). Preflight
- * refuses dispatch when the draft's inbox differs from the org's.
- */
-export const assignOrgInbox = internalMutation({
-  args: {
-    orgId: v.id("orgs"),
-    inboxRef: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const org = await ctx.db.get("orgs", args.orgId);
-    if (org === null) {
-      throw domainError("NOT_FOUND", "organization not found");
-    }
-    const inboxRef = boundedString(args.inboxRef, "inboxRef", {
-      min: 1,
-      max: PROVIDER_REF_MAX_LENGTH,
-    });
-    const holder = await ctx.db
-      .query("orgs")
-      .withIndex("by_inboxRef", (q) => q.eq("inboxRef", inboxRef))
-      .unique();
-    if (holder !== null && holder._id !== org._id) {
-      throw domainError(
-        "CONFLICT",
-        "inbox is already assigned to another organization",
-      );
-    }
-    await ctx.db.patch("orgs", org._id, {
-      inboxRef,
-      updatedAt: Date.now(),
-    });
-    // The assignment is what the quarantine was waiting for. An AgentMail
-    // inbox is provisioned before this mutation commits, so a verified event
-    // can arrive in the window between the two and find no org to
-    // belong to; it is held rather than dropped, and this is the moment it
-    // becomes replayable. Scheduled, not inlined: the replay reads the mail
-    // component and re-drives ingest, and none of that may roll back an
-    // assignment an operator asked for.
-    await ctx.scheduler.runAfter(0, internal.inbox.quarantine.replayForInbox, {
-      inboxRef,
-    });
-    return null;
   },
 });
 

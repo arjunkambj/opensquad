@@ -12,7 +12,6 @@ import {
   SENDING_AGENT_MODES,
   UNRESOLVED_ATTEMPT_STATES,
 } from "../lib/validators";
-import { carriesOptOutLine } from "./draftsModel";
 import { matchSuppression } from "./suppressions";
 import { v } from "convex/values";
 
@@ -50,8 +49,6 @@ export const SEND_BLOCK_CODES = [
   /** §4.3 (P19): the draft offers a booking proposal whose linked booking is
    *  no longer `proposed` at the recorded version — the offer changed. */
   "booking_not_current",
-  /** PLAN §12: the stored body carries no opt-out line. */
-  "missing_opt_out",
 ] as const;
 
 export type SendBlockCode = (typeof SEND_BLOCK_CODES)[number];
@@ -310,18 +307,14 @@ export async function evaluateSendGates(
       "organization has no assigned sender inbox",
     );
   }
-  // The inbox must be attached by the org's OWN key (PLAN §9.4).
-  // `legacy_platform_inbox` is receive-only — it still gets mail on the
-  // platform route and cannot send until its owner connects a key — and
-  // `invalid` is a key the provider refused at send time. Reported as
-  // `inbox_unassigned` on purpose: "connect your inbox" is already the UI
-  // meaning of that code, so no new block code has to be mapped.
+  // The inbox must be attached by the org's OWN key (PLAN §9.4); `invalid` is
+  // a key the provider refused at send time. Reported as `inbox_unassigned` on
+  // purpose: "connect your inbox" is already the UI meaning of that code, so
+  // no new block code has to be mapped.
   if (org.inboxConnection !== "connected") {
     return block(
       "inbox_unassigned",
-      org.inboxConnection === "legacy_platform_inbox"
-        ? "this organization receives on a platform inbox and cannot send until its own key is connected"
-        : "the organization's mail key is not connected",
+      "the organization's mail key is not connected",
     );
   }
   if (
@@ -331,20 +324,6 @@ export async function evaluateSendGates(
     return block(
       "inbox_mismatch",
       "draft inbox no longer matches the org/conversation inbox",
-    );
-  }
-
-  // --- the opt-out line (PLAN §12) ---------------------------------------
-  // `installRevision` puts it on every draft row it writes, so this can only
-  // fire for a row written before that was true. It is a gate rather than a
-  // repair because dispatch sends `draft.body` VERBATIM and the approval binds
-  // `payloadHash`: changing the body here would send something nobody approved
-  // and break the hash that proves what they did. Refusing is the honest
-  // answer, and one edit (which re-installs the line) clears it.
-  if (!carriesOptOutLine(draft.body)) {
-    return block(
-      "missing_opt_out",
-      "this draft carries no opt-out line — edit it once and it will be added",
     );
   }
 

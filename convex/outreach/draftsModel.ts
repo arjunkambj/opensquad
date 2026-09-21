@@ -37,17 +37,6 @@ import { v } from "convex/values";
  */
 const OPT_OUT_TAIL_LENGTH = withOptOutLine("").length;
 
-/**
- * Does this body already carry the opt-out line?
- *
- * Asked of `withOptOutLine` rather than by matching the sentence a second
- * time: that function returns its input unchanged (trimmed) exactly when the
- * line is already there, so there is still ONE definition of what the line is.
- */
-export function carriesOptOutLine(body: string): boolean {
-  return withOptOutLine(body) === body.trimEnd();
-}
-
 export const vConversationDoc = v.object({
   _id: v.id("conversations"),
   _creationTime: v.number(),
@@ -120,10 +109,9 @@ export async function installRevision(
   // THE OPT-OUT LINE, AT THE POINT OF EFFECT (PLAN §12: "every outbound email
   // carries an opt-out line").
   //
-  // `withOptOutLine` was applied at GENERATION time only, and two reachable
-  // writers never went through generation: the human edit path
-  // (`drafts.revise`, which can simply delete the line) and the
-  // member-callable `bookings.draftProposal`. `installRevision` is the single
+  // `withOptOutLine` was applied at GENERATION time only, and a reachable
+  // writer never went through generation: the human edit path
+  // (`drafts.revise`, which can simply delete the line). `installRevision` is the single
   // writer of a draft row and the place `payloadHash` is computed, so
   // enforcing it here means the stored body — the exact bytes dispatch sends —
   // always carries the line, whoever wrote it and however they edited it. The

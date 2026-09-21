@@ -15,26 +15,17 @@ import { v } from "convex/values";
  */
 export const vOrgPlan = v.literal("trial");
 
-export type OrgPlan = "trial";
-
 /**
- * How the org's sending inbox is attached (PLAN §4, §9.4).
- * `legacy_platform_inbox` is an org created before the pivot that still
- * receives on the platform account: readable in the Inbox, never
- * auto-answered, and unable to send until its owner connects their own key.
+ * How the org's sending inbox is attached (PLAN §4, §9.4). `invalid` is a key
+ * the provider refused: readable in the Inbox, unable to send.
  */
 export const vInboxConnection = v.union(
   v.literal("none"),
-  v.literal("legacy_platform_inbox"),
   v.literal("connected"),
   v.literal("invalid"),
 );
 
-export type InboxConnection =
-  | "none"
-  | "legacy_platform_inbox"
-  | "connected"
-  | "invalid";
+export type InboxConnection = "none" | "connected" | "invalid";
 
 /** The two secrets a connected org holds (PLAN §4 "Bring-your-own keys"). */
 export const vSecretProvider = v.union(

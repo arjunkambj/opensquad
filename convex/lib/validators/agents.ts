@@ -43,8 +43,6 @@ export const SENDING_AGENT_MODES: readonly AgentMode[] = [
  */
 export const vAgentStatus = v.union(v.literal("draft"), v.literal("live"));
 
-export type AgentStatus = "draft" | "live";
-
 /**
  * Where the onboarding stepper resumes (PLAN §5 "Progress is saved per step",
  * §11 M1). One member per dot **and** per sub-step, because the reference
@@ -161,8 +159,6 @@ export const vAgentRun = v.object({
   startedAt: v.number(),
 });
 
-export type AgentRun = Infer<typeof vAgentRun>;
-
 /**
  * Recorded Autopilot consent (PLAN §9.3). The `revision` is the agent
  * revision the user consented under, so a later instruction change is
@@ -188,8 +184,6 @@ export const AGENT_KEYWORD_MAX_LENGTH = 100;
 export const ICP_LIST_MAX_ITEMS = 50;
 
 export const ICP_VALUE_MAX_LENGTH = 200;
-
-export const AGENT_FOLLOW_UP_DAYS_MAX = 4;
 
 // The agent's cap DEFAULTS are policy numbers, not vocabulary, so they live
 // with the rest of the limits in `lib/limits.ts` (PLAN §10 "No magic
@@ -229,8 +223,6 @@ export const vStrategySource = v.union(
   v.literal("recommended"),
   v.literal("user"),
 );
-
-export type StrategySource = "recommended" | "user";
 
 /**
  * One stored lead-search filter value. The provider's filter set is ~139

@@ -313,9 +313,6 @@ async function nextResearchLead(
 
   const perStrategy = new Map<string, number>();
   for (const lead of researched) {
-    if (lead.origin.kind !== "sourced") {
-      continue;
-    }
     for (const strategyId of lead.origin.strategyIds) {
       perStrategy.set(strategyId, (perStrategy.get(strategyId) ?? 0) + 1);
     }
@@ -349,7 +346,7 @@ function signalDebt(
   lead: Doc<"prospects">,
   perStrategy: Map<string, number>,
 ): number {
-  if (lead.origin.kind !== "sourced" || lead.origin.strategyIds.length === 0) {
+  if (lead.origin.strategyIds.length === 0) {
     return Number.MAX_SAFE_INTEGER;
   }
   return Math.min(

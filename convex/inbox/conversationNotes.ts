@@ -14,6 +14,7 @@ import {
   domainError,
 } from "../lib/validators";
 import type { ConversationNoteKind } from "../lib/validators";
+import { paged } from "../lib/pagination";
 import { getConversationInOrg } from "../outreach/draftsModel";
 import { conversationNoteFields } from "../schema";
 import { v } from "convex/values";
@@ -90,11 +91,7 @@ export const listNotes = query({
       )
       .order("desc")
       .paginate({ numItems: limit, cursor: args.cursor ?? null });
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
+    return paged(result, result.page);
   },
 });
 

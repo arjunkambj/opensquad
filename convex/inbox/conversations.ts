@@ -1,11 +1,11 @@
 /** The inbox list, the per-lead list, one conversation and the tab counts. */
 import { query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
+import { paged } from "../lib/pagination";
 import {
   boundedLimit,
   domainError,
   MAX_LIST_LIMIT,
-  vConversationTab,
 } from "../lib/validators";
 import {
   getConversationInOrg,
@@ -19,71 +19,6 @@ import {
 } from "./conversationsModel";
 import type { ConversationSummary } from "./conversationsModel";
 import { v } from "convex/values";
-
-/**
- * The inbox list, one exact index range per tab (`plan/ux.md` §48/§165).
- *
- * `open`/`unassigned`/`closed` slice
- * `by_orgId_and_state_and_lastMessageAt`; `takeover` slices
- * `by_orgId_and_humanTakeover_and_lastMessageAt`. No tab post-filters a
- * page — a post-filtered truncated page is not a filtered result (§5).
- *
- * The `takeover` tab is every frozen thread — unassigned ones, which are
- * frozen by construction, and closed-but-frozen ones. Both are included
- * because excluding either would mean post-filtering a page, and only
- * `by_orgId_and_humanTakeover_and_lastMessageAt` carries the ordering
- * column this tab pages by. `unassigned` and `closed` are the narrower slices
- * when that is what the operator wants.
- *
- * It is therefore a SUPERSET of `attentionCounts.openTakeover`, which counts
- * open threads under takeover only. That count is named for what it measures
- * precisely so it is not wired up as this tab's badge.
- */
-export const list = query({
-  args: {
-    orgId: v.id("orgs"),
-    tab: v.optional(vConversationTab),
-    cursor: v.optional(v.union(v.string(), v.null())),
-    limit: v.optional(v.number()),
-  },
-  returns: v.object({
-    items: v.array(vConversationSummary),
-    cursor: v.union(v.string(), v.null()),
-    hasMore: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    const limit = boundedLimit(args.limit);
-    const tab = args.tab ?? "open";
-    const result =
-      tab === "takeover"
-        ? await ctx.db
-            .query("conversations")
-            .withIndex(
-              "by_orgId_and_humanTakeover_and_lastMessageAt",
-              (q) =>
-                q.eq("orgId", args.orgId).eq("humanTakeover", true),
-            )
-            .order("desc")
-            .paginate({ numItems: limit, cursor: args.cursor ?? null })
-        : await ctx.db
-            .query("conversations")
-            .withIndex("by_orgId_and_state_and_lastMessageAt", (q) =>
-              q.eq("orgId", args.orgId).eq("state", tab),
-            )
-            .order("desc")
-            .paginate({ numItems: limit, cursor: args.cursor ?? null });
-    const items: ConversationSummary[] = [];
-    for (const conversation of result.page) {
-      items.push(await summarize(ctx, conversation));
-    }
-    return {
-      items,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
-  },
-});
 
 /**
  * A lead's threads, newest first — the lead detail's conversation tab and the
@@ -120,11 +55,7 @@ export const listForProspect = query({
     for (const conversation of result.page) {
       items.push(await summarize(ctx, conversation));
     }
-    return {
-      items,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
+    return paged(result, items);
   },
 });
 
@@ -162,9 +93,10 @@ export const get = query({
       prospectRow === null || prospectRow.orgId !== args.orgId
         ? null
         : prospectRow;
-    const agentId = conversation.agentId ?? prospect?.agentId;
     const agentRow =
-      agentId === undefined ? null : await ctx.db.get("agents", agentId);
+      conversation.agentId === undefined
+        ? null
+        : await ctx.db.get("agents", conversation.agentId);
     const agent =
       agentRow === null || agentRow.orgId !== args.orgId
         ? null
@@ -190,35 +122,17 @@ export const get = query({
 });
 
 /**
- * The bounded attention counts the sidebar Inbox badge and the `/overview`
- * attention block both read.
+ * The bounded attention counts the sidebar Inbox badge reads.
  *
- * Unassigned mail is its own count here rather than being folded into any
- * other. ONE call serves both surfaces; two numbers for one thing would be a
- * defect.
- *
- * Both buckets are exact ranges on
- * `by_orgId_and_state_and_humanTakeover`, and they are disjoint by
- * construction: every unassigned thread is also under takeover, so summing
- * the plain takeover index would double-count. Scoping the second bucket to
- * `state: "open"` removes the overlap and also drops closed-but-frozen
- * threads, which are not attention. Neither range post-filters a truncated
- * page — that is the whole reason the third index exists.
- *
- * THE SECOND BUCKET IS NOT THE `takeover` TAB, AND IT IS NAMED SO IT CANNOT
- * BE MISTAKEN FOR IT. `list({tab: "takeover"})` ranges over
- * `by_orgId_and_humanTakeover_and_lastMessageAt` and returns EVERY
- * frozen thread — unassigned ones, which are frozen by construction, and
- * closed-but-frozen ones — because that index carries `lastMessageAt` and the
- * tab must page in inbox order without post-filtering. This count is
- * `openTakeover`: open threads under takeover, which is the attention
- * definition and a strict subset of the tab. A UI that renders `openTakeover`
- * as the tab's badge would show a smaller number above a longer list, so the
- * field says which of the two it is. (Two numbers for one thing is a defect
- * — these are two different things.)
+ * Unassigned mail is its own count rather than folded into takeover: every
+ * unassigned thread is also under takeover, so summing one plain takeover
+ * range would double-count. Scoping the second bucket to `state: "open"`
+ * removes the overlap and drops closed-but-frozen threads, which are not
+ * attention. `openTakeover` is therefore a strict subset of the takeover
+ * pill's rows, and is named so it cannot be mistaken for that count.
  *
  * Counts are capped at `MAX_LIST_LIMIT` and paired with `hasMore` so the UI
- * renders "50+". Architecture §5 forbids an exact unlimited counter.
+ * renders "50+".
  */
 export const attentionCounts = query({
   args: { orgId: v.id("orgs") },

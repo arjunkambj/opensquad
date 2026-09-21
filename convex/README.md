@@ -1,8 +1,7 @@
 # Convex backend
 
 Organised by **domain**, not by technical layer: everything about leads is in
-`leads/`, everything about sending is in `outreach/`. `plan/PLAN.md` §10 is the
-contract this directory keeps.
+`leads/`, everything about sending is in `outreach/`.
 
 ## Layout
 
@@ -87,8 +86,7 @@ operation up. The sweep may only commit it.
 
 ## The send boundary
 
-`outreach/` splits the send lifecycle across one file per step, in the order
-architecture §8 runs them:
+`outreach/` splits the send lifecycle across one file per step:
 
 | file | step |
 |---|---|
@@ -102,7 +100,7 @@ architecture §8 runs them:
 | `sendSweeps.ts` | the belts that re-drive a lost recovery path |
 | `sendControls.ts` | the public triggers |
 | `sendPreflight.ts` | the honest "why is this blocked" preview |
-| `sendAttempts.ts`, `sendReceipts.ts` | the attempt read surface and the provider-event ledger |
+| `sendAttempts.ts`, `sendReceipts.ts` | the attempt doc validator and the provider-event ledger |
 
 ## Running it
 

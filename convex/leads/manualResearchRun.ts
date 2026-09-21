@@ -117,8 +117,7 @@ export const manualResearchContext = internalQuery({
       status: "ready" as const,
       agentId: agent._id,
       revision: agent.revision,
-      signalCount:
-        lead.origin.kind === "sourced" ? lead.origin.strategyIds.length : 1,
+      signalCount: lead.origin.strategyIds.length,
       ...(lead.canonicalDomain !== undefined
         ? { canonicalDomain: lead.canonicalDomain }
         : {}),

@@ -45,7 +45,7 @@ export const THREAD_MESSAGE_PAGE_LIMIT = 100;
  * Convex validates inserts, so a `message.opened` or any `message.received.*`
  * variant makes `handleEvent` throw, the HTTP action 500s, and the provider
  * retries the event forever. Open tracking is out of this build for that
- * reason, and nothing sets `orgs.opensObserved`.
+ * reason.
  */
 export const AGENTMAIL_COMPONENT_EVENT_TYPES = [
   "message.received",
@@ -82,9 +82,6 @@ export const AGENTMAIL_WEBHOOK_EVENT_TYPES = [
   ...AGENTMAIL_COMPONENT_EVENT_TYPES,
   ...AGENTMAIL_ROUTED_RECEIVED_EVENT_TYPES,
 ] as const;
-
-export type AgentMailWebhookEventType =
-  (typeof AGENTMAIL_WEBHOOK_EVENT_TYPES)[number];
 
 export type AgentMailRoutedReceivedEventType =
   (typeof AGENTMAIL_ROUTED_RECEIVED_EVENT_TYPES)[number];
@@ -438,58 +435,6 @@ export async function createWebhook(
       inbox_ids: args.inboxIds,
       client_id: args.clientId,
     },
-  });
-  if (!result.ok) {
-    return result;
-  }
-  const webhook = parseWebhook(result.value);
-  return webhook === null
-    ? { ok: false, code: "invalid_response" }
-    : { ok: true, value: webhook };
-}
-
-/** `GET /v0/webhooks` — every row carries `secret`, so it is recoverable. */
-export async function listWebhooks(
-  apiKey: string,
-  args: { limit?: number; pageToken?: string } = {},
-): Promise<
-  AgentMailResult<{ webhooks: AgentMailWebhook[]; nextPageToken?: string }>
-> {
-  const query: Array<[string, string]> = [];
-  if (args.limit !== undefined) query.push(["limit", String(args.limit)]);
-  if (args.pageToken !== undefined)
-    query.push(["page_token", args.pageToken]);
-  const result = await agentmailRequest({
-    apiKey,
-    method: "GET",
-    path: "/webhooks",
-    query,
-  });
-  if (!result.ok) {
-    return result;
-  }
-  const record = asRecord(result.value);
-  const rows = Array.isArray(record?.webhooks) ? record.webhooks : [];
-  const nextPageToken = readString(record, "next_page_token");
-  return {
-    ok: true,
-    value: {
-      webhooks: rows
-        .map(parseWebhook)
-        .filter((hook): hook is AgentMailWebhook => hook !== null),
-      ...(nextPageToken !== undefined ? { nextPageToken } : {}),
-    },
-  };
-}
-
-export async function getWebhook(
-  apiKey: string,
-  webhookId: string,
-): Promise<AgentMailResult<AgentMailWebhook>> {
-  const result = await agentmailRequest({
-    apiKey,
-    method: "GET",
-    path: `/webhooks/${encodeURIComponent(webhookId)}`,
   });
   if (!result.ok) {
     return result;

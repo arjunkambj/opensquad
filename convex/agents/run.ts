@@ -68,20 +68,6 @@ export function holdsRunLease(agent: Doc<"agents">, leaseId: string): boolean {
   return agent.run !== undefined && agent.run.leaseId === leaseId;
 }
 
-/**
- * Revision fencing (PLAN §9.1). Work is queued under the revision it was
- * planned at; when the agent's instructions, tone, goal, ICP or mode change,
- * `revision` moves and everything still queued under the old one is stale.
- *
- * Exported for the outreach loop, which fences drafts the same way.
- */
-export function revisionIsCurrent(
-  agent: Doc<"agents">,
-  revision: number,
-): boolean {
-  return agent.revision === revision;
-}
-
 /** The lease a step is running under, or `null` when it no longer holds it. */
 export async function leasedAgent(
   ctx: MutationCtx,

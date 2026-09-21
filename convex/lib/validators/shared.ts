@@ -9,7 +9,6 @@
  * handlers before trusting or storing a value.
  */
 import { v } from "convex/values";
-import type { Infer } from "convex/values";
 import { domainError, invalid } from "../errors";
 
 // The error vocabulary itself lives in `lib/errors.ts` (PLAN §10): one typed
@@ -127,27 +126,6 @@ export function balancedObjectEnd(text: string, start: number): number {
     }
   }
   return -1;
-}
-
-/**
- * The one-line, storable reason inside a thrown error's serialized text.
- *
- * Workflow/runner failures arrive as `message\n<stack>` — the stack names
- * internal file layout and library versions, so it is not a reason and does
- * not belong in a user-facing `failure`, `outcomeReason` or activity summary.
- * A rethrown `ConvexError` envelope is unwrapped to its message first; the
- * surviving first line, minus its `Error:`/`Uncaught` prefix, is bounded to
- * `max` characters. An empty or stack-only input becomes "unknown error"
- * rather than storing whitespace.
- */
-export function errorReason(raw: string, max: number): string {
-  const unwrapped = unwrapConvexErrorText(raw);
-  const firstLine = (unwrapped.split("\n", 1)[0] ?? "").trim();
-  const reason = firstLine
-    .replace(/^uncaught\s+/i, "")
-    .replace(/^[\w$]*Error:\s*/i, "");
-  const bounded = (reason.length > 0 ? reason : "unknown error").slice(0, max);
-  return bounded;
 }
 
 /**
@@ -537,8 +515,6 @@ export const vOperationError = v.object({
   at: v.number(),
   attempts: v.number(),
 });
-
-export type OperationError = Infer<typeof vOperationError>;
 
 /**
  * Optimistic-concurrency check for a versioned row. Takes the numbers rather

@@ -14,7 +14,6 @@ import {
   boundedString,
   domainError,
   leadScoreKey,
-  leadSourceKey,
   PROSPECT_STAGE_REASON_MAX_LENGTH,
 } from "../lib/validators";
 import type {
@@ -156,7 +155,6 @@ export async function upsertSourcedLead(
 
   if (existing === null) {
     const origin: LeadOrigin = {
-      kind: "sourced",
       sourceLeadId: args.lead.sourceLeadId,
       strategyIds: [args.strategyId],
     };
@@ -182,7 +180,7 @@ export async function upsertSourcedLead(
       agentId: args.agentId,
       origin,
       // Written in the SAME insert as `origin`, never alone (PLAN §7).
-      sourceLeadKey: leadSourceKey(origin),
+      sourceLeadKey: origin.sourceLeadId,
       research: { status: "not_researched" },
       stage: "found",
       approval: "pending",
@@ -228,10 +226,7 @@ export async function upsertSourcedLead(
     return "inserted";
   }
 
-  if (
-    existing.origin.kind !== "sourced" ||
-    existing.origin.strategyIds.includes(args.strategyId)
-  ) {
+  if (existing.origin.strategyIds.includes(args.strategyId)) {
     return "unchanged";
   }
 
@@ -256,21 +251,9 @@ export async function upsertSourcedLead(
   });
   await ctx.db.patch("prospects", existing._id, {
     origin,
-    sourceLeadKey: leadSourceKey(origin),
+    sourceLeadKey: origin.sourceLeadId,
     preRank: Math.max(existing.preRank, preRank),
     updatedAt: args.now,
   });
   return "merged";
-}
-
-/** Re-read a patched lead; absence inside the writing transaction is a defect. */
-export async function reread(
-  ctx: MutationCtx,
-  prospectId: Id<"prospects">,
-): Promise<Doc<"prospects">> {
-  const row = await ctx.db.get("prospects", prospectId);
-  if (row === null) {
-    throw domainError("NOT_FOUND", "prospect not found after write");
-  }
-  return row;
 }

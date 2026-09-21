@@ -58,8 +58,6 @@ export const vInboundOutcome = v.union(
   v.literal("failed"),
 );
 
-export type InboundOutcome = typeof vInboundOutcome.type;
-
 export const vApplyInboundMessageResult = v.object({
   outcome: vInboundOutcome,
   conversationId: v.optional(v.id("conversations")),
@@ -174,7 +172,7 @@ export const applyInboundMessage = internalMutation({
     // same clamp for everything the late message would otherwise carry.
     // Settled `handled`, not `failed`: nothing went wrong — the message is
     // real, it simply arrived after the thread had moved past it, and the
-    // reason makes that readable in `sendAttempts.listReceipts`.
+    // reason makes that readable on the receipt.
     const lastInboundAt = target.lastInboundAt;
     if (lastInboundAt !== undefined && receipt.receivedAt < lastInboundAt) {
       await settleReceipt(ctx, receipt, "handled", "late_inbound_superseded");

@@ -123,27 +123,8 @@ export const vConversationNoteKind = v.union(
 export type ConversationNoteKind = (typeof CONVERSATION_NOTE_KINDS)[number];
 
 /**
- * The inbox tabs `plan/ux.md` §48 puts in the URL. Each one is a single exact
- * index range on `conversations`; there is no post-filtered tab, because a
- * post-filtered truncated page is not a filtered result (architecture §5).
+ * Bound on one `conversationNotes.body`.
  */
-export const CONVERSATION_TABS = [
-  "open",
-  "unassigned",
-  "takeover",
-  "closed",
-] as const;
-
-export const vConversationTab = v.union(
-  v.literal("open"),
-  v.literal("unassigned"),
-  v.literal("takeover"),
-  v.literal("closed"),
-);
-
-export type ConversationTab = (typeof CONVERSATION_TABS)[number];
-
-/** Bound on one `conversationNotes.body`. */
 export const CONVERSATION_NOTE_BODY_MAX_LENGTH = 4_000;
 
 /**
@@ -426,8 +407,6 @@ export const vEmailEventHandlingState = v.union(
   v.literal("failed"),
 );
 
-export type EmailEventHandlingState = "pending" | "handled" | "failed";
-
 /**
  * Which half of the mail path a receipt belongs to.
  *
@@ -545,5 +524,3 @@ export const vQuarantineState = v.union(
   v.literal("released"),
   v.literal("discarded"),
 );
-
-export type QuarantineState = "quarantined" | "released" | "discarded";

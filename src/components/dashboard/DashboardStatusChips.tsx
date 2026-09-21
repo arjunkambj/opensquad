@@ -17,12 +17,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 /**
  * The connection states in words, as a total map over the union — a state
  * added to `vInboxConnection` fails this build until it has a line.
- * `legacy_platform_inbox` receives but cannot send, and says so rather than
- * reading as "connected".
  */
 const INBOX_LABEL: Record<InboxConnection, string> = {
   none: "Connect your inbox",
-  legacy_platform_inbox: "Inbox receives only",
   connected: "Inbox connected",
   invalid: "Inbox needs attention",
 }

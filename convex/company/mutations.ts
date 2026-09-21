@@ -2,8 +2,7 @@
  * Business profile edits (PLAN §7).
  *
  * Writes are guarded by the active organization and use `expectedVersion`
- * optimistic concurrency. Meaningful edits increment `version`; `updatedBy` always
- * records the authenticated actor.
+ * optimistic concurrency. Meaningful edits increment `version`.
  *
  * `analysisStatus` is owned by the analysis flow, not by this editor: a user
  * correcting their industry must not overwrite "analyzing" with "idle". T20
@@ -79,7 +78,7 @@ export const update = mutation({
   },
   returns: vBusinessProfileDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireOrgMember(ctx, args.orgId);
+    await requireOrgMember(ctx, args.orgId);
 
     // The SAME policy the fetch uses, at the point of STORAGE. An ABSENT
     // address is not a rejected one: "I don't have a website" is a supported
@@ -134,7 +133,6 @@ export const update = mutation({
         firstRunUsed: false,
         version: 1,
         updatedAt: now,
-        updatedBy: identityKey,
       });
       const created = await ctx.db.get("businessProfiles", id);
       if (created === null) {
@@ -172,7 +170,6 @@ export const update = mutation({
       painPoints,
       version: changed ? existing.version + 1 : existing.version,
       updatedAt: now,
-      updatedBy: identityKey,
     });
     const updated = await ctx.db.get("businessProfiles", existing._id);
     if (updated === null) {
@@ -256,7 +253,6 @@ export const startAnalysis = mutation({
         firstRunUsed: false,
         version: 1,
         updatedAt: now,
-        updatedBy: identityKey,
       });
     } else {
       profileId = existing._id;
@@ -274,7 +270,6 @@ export const startAnalysis = mutation({
       startedAt: now,
       scrapeOperationKey: keys.scrape,
       aiOperationKey: keys.ai,
-      updatedBy: identityKey,
     });
 
     return { startedAt: now };

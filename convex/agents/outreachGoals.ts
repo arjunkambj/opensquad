@@ -45,7 +45,7 @@ export const save = mutation({
   },
   returns: vAgentDoc,
   handler: async (ctx, args) => {
-    const { identityKey } = await requireOrgMember(ctx, args.orgId);
+    await requireOrgMember(ctx, args.orgId);
 
     const painPoints = boundedString(args.painPoints, "painPoints", {
       max: COMPANY_PAIN_POINTS_MAX_LENGTH,
@@ -82,7 +82,6 @@ export const save = mutation({
         painPoints,
         version: profile.version + 1,
         updatedAt: now,
-        updatedBy: identityKey,
       });
     }
 

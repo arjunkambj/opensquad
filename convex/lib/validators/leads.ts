@@ -125,33 +125,18 @@ export const vApprovalActor = v.union(
   v.literal("autopilot"),
 );
 
-export type ApprovalActor = "user" | "autopilot";
-
 /**
- * Where the lead came from (PLAN §7, MIGRATION "Final-schema variants").
- *
- * A discriminated union rather than optional columns: a provider id exists
- * only on a sourced lead, and a folded-in pre-pivot campaign only on a
- * migrated one, so "found by a strategy" and "inherited from a campaign" are
- * different documents rather than the same document with different holes.
- * Dedupe on `sourceLeadId` therefore applies to `kind: "sourced"` alone.
+ * Where the lead came from (PLAN §7): one provider search, named by the
+ * provider's own row id plus every strategy that matched the person.
  */
-export const vLeadOrigin = v.union(
-  v.object({
-    kind: v.literal("sourced"),
-    /** The lead-data provider's own row id. Neutral name by the white-label
-     *  rule — no query that feeds the client returns it. */
-    sourceLeadId: v.string(),
-    /** Every strategy that matched this person; the "+n signals" badge and
-     *  the multi-signal score boost both read it (PLAN §3). */
-    strategyIds: v.array(v.id("strategies")),
-  }),
-  v.object({
-    kind: v.literal("legacy"),
-    legacyCampaignId: v.id("legacyCampaigns"),
-  }),
-  v.object({ kind: v.literal("manual") }),
-);
+export const vLeadOrigin = v.object({
+  /** The lead-data provider's own row id. Neutral name by the white-label
+   *  rule — no query that feeds the client returns it. */
+  sourceLeadId: v.string(),
+  /** Every strategy that matched this person; the "+n signals" badge and
+   *  the multi-signal score boost both read it (PLAN §3). */
+  strategyIds: v.array(v.id("strategies")),
+});
 
 export type LeadOrigin = Infer<typeof vLeadOrigin>;
 
@@ -196,16 +181,6 @@ export function leadScoreKey(research: LeadResearch): number | undefined {
 }
 
 /**
- * The denormalised value behind `prospects.by_agentId_and_sourceLeadKey`,
- * under the same rule as `leadScoreKey`: written in the same patch as
- * `origin`, by nothing else, and read only as a dedupe lookup key. The
- * sourcing upsert reads this index to decide insert-or-merge (PLAN §3 step 5).
- */
-export function leadSourceKey(origin: LeadOrigin): string | undefined {
-  return origin.kind === "sourced" ? origin.sourceLeadId : undefined;
-}
-
-/**
  * A lead's company, as the free search preview describes it (spikes §3).
  * Stored under our own names — never the provider's — and every member is
  * optional because the preview row nulls all of them.
@@ -233,34 +208,12 @@ export const vLeadCompany = v.object({
   ),
 });
 
-export type LeadCompany = Infer<typeof vLeadCompany>;
-
 /** Where the person is, as the preview row states it. */
 export const vLeadLocation = v.object({
   city: v.optional(v.string()),
   state: v.optional(v.string()),
   country: v.optional(v.string()),
 });
-
-export type LeadLocation = Infer<typeof vLeadLocation>;
-
-/**
- * What a migration copied off a lead before the final schema dropped it
- * (MIGRATION §5: a forward step keeps a `legacy` copy until the rollback
- * window closes). Closed shape — never an open bag of pre-pivot keys — and
- * absent on every lead this application creates.
- */
-export const vLeadLegacy = v.object({
-  migratedAt: v.number(),
-  salesStage: v.optional(v.string()),
-  qualification: v.optional(v.string()),
-  fitReason: v.optional(v.string()),
-  ownerIdentityKey: v.optional(v.string()),
-  contactEmail: v.optional(v.string()),
-  sourceRefCount: v.optional(v.number()),
-});
-
-export type LeadLegacy = Infer<typeof vLeadLegacy>;
 
 export const PROSPECT_COMPANY_NAME_MAX_LENGTH = 200;
 
@@ -342,9 +295,6 @@ export const LEAD_EVENT_KINDS = [
   "reply_received",
   "booking_proposed",
   "booking_confirmed",
-  "booking_rescheduled",
-  "booking_cancelled",
-  "booking_outcome_recorded",
 ] as const;
 
 export const vLeadEventKind = v.union(
@@ -357,9 +307,6 @@ export const vLeadEventKind = v.union(
   v.literal("reply_received"),
   v.literal("booking_proposed"),
   v.literal("booking_confirmed"),
-  v.literal("booking_rescheduled"),
-  v.literal("booking_cancelled"),
-  v.literal("booking_outcome_recorded"),
 );
 
 export type LeadEventKind = (typeof LEAD_EVENT_KINDS)[number];
@@ -379,12 +326,6 @@ export const vLeadEventActor = v.union(
 
 export type LeadEventActor = Infer<typeof vLeadEventActor>;
 
-export const LEAD_EVENT_SUMMARY_MAX_LENGTH = 500;
-
-export const LEAD_EVENT_NOTE_MAX_LENGTH = 4_000;
-
-export const LEAD_EVENT_REASON_MAX_LENGTH = 1_000;
-
 /**
  * Structured previous/new values an event preserves. Every member is
  * optional because one event kind uses a few of them, but the shape is
@@ -400,10 +341,7 @@ export const vLeadEventDetails = v.object({
   toEmailStatus: v.optional(vLeadEmailStatus),
   /** The 1-3 score a `research_applied` event concluded. */
   aiScore: v.optional(v.number()),
-  previousStartsAt: v.optional(v.number()),
-  previousEndsAt: v.optional(v.number()),
-  previousTimezone: v.optional(v.string()),
-  /** Stated basis for a human correction, a cancellation or a rejection. */
+  /** Stated basis for a human correction or a rejection. */
   reason: v.optional(v.string()),
   /** Body of a `note_added` event — a note, never a synthesized message. */
   note: v.optional(v.string()),
@@ -422,8 +360,6 @@ export const vEvidenceConfidence = v.union(
   v.literal("unknown"),
 );
 
-export type EvidenceConfidence = "supported" | "hypothesis" | "unknown";
-
 /** §4.5 research caps. */
 export const EVIDENCE_EXCERPT_MAX_LENGTH = 2_000;
 
@@ -441,29 +377,6 @@ export const RESEARCH_OBSERVATIONS_MAX = 12;
  * model's wording contributes to `confidence` — see `leads/evidence.ts`.
  */
 export const EVIDENCE_HYPOTHESIS_MARKER = "hypothesis:";
-
-/**
- * How many observations one research result may hand the synthesis site
- * before the payload itself is refused. Distinct from
- * `RESEARCH_OBSERVATIONS_MAX`, which bounds how many become evidence ROWS:
- * a chatty model must not fail the whole research result, so the overflow is
- * reported as rejected rather than thrown, and only a payload past this bound
- * (which would buy unbounded work inside the caller's transaction) is refused.
- */
-export const RESEARCH_OBSERVATION_INPUT_MAX = 50;
-
-/**
- * One reported observation. `sourceUrl` stays optional: an observation
- * without one is not evidence (§4.5), which is a rule about what gets STORED,
- * not about what may be reported.
- */
-export const vResearchObservation = v.object({
-  topic: v.string(),
-  finding: v.string(),
-  sourceUrl: v.optional(v.string()),
-});
-
-export type ResearchObservation = Infer<typeof vResearchObservation>;
 
 export const EVIDENCE_TOPIC_MAX_LENGTH = 200;
 

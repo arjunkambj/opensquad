@@ -19,11 +19,7 @@ import {
 } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import { fetchFilterCatalogue } from "../integrations/enrich/catalog";
-import {
-  buildLeadQuery,
-  supportedExcludeFilterKeys,
-  supportedFilterKeys,
-} from "../integrations/enrich/filters";
+import { buildLeadQuery } from "../integrations/enrich/filters";
 import { operationErrorCodeOf } from "../integrations/enrich/client";
 import {
   unwrapConvexErrorText,
@@ -216,26 +212,6 @@ export const validateFilters = internalQuery({
       return { ok: false, reason: refusalText(error) };
     }
   },
-});
-
-/**
- * The filter names a strategy may use at all, and the five an exclusion list
- * may use — the vocabulary T23 hands the model, so it cannot propose a filter
- * this product has no code path for.
- */
-export const supportedFilters = internalQuery({
-  args: {},
-  returns: v.object({
-    filters: v.array(v.string()),
-    excludeFilters: v.array(v.string()),
-  }),
-  handler: async (): Promise<{
-    filters: string[];
-    excludeFilters: string[];
-  }> => ({
-    filters: supportedFilterKeys(),
-    excludeFilters: supportedExcludeFilterKeys(),
-  }),
 });
 
 /** The stated reason a filter set was refused, without the error envelope. */

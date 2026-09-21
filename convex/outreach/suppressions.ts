@@ -105,71 +105,6 @@ export async function matchSuppression(
 }
 
 /* ------------------------------------------------------------------ */
-/* Public reads                                                        */
-/* ------------------------------------------------------------------ */
-
-/** All suppression rows for the org (bounded). */
-export const list = query({
-  args: {
-    orgId: v.id("orgs"),
-    kind: v.optional(vSuppressionKind),
-    limit: v.optional(v.number()),
-  },
-  returns: v.array(vSuppressionDoc),
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    const limit = boundedLimit(args.limit);
-    const kind = args.kind;
-    if (kind !== undefined) {
-      // Narrow scan: range over the kind prefix of the unique index.
-      const rows = await ctx.db
-        .query("suppressions")
-        .withIndex("by_orgId_and_kind_and_normalizedValue", (q) =>
-          q.eq("orgId", args.orgId).eq("kind", kind),
-        )
-        .take(limit);
-      return rows;
-    }
-    return await ctx.db
-      .query("suppressions")
-      .withIndex("by_orgId_and_kind_and_normalizedValue", (q) =>
-        q.eq("orgId", args.orgId),
-      )
-      .take(limit);
-  },
-});
-
-/** Would this recipient be blocked right now? Member-readable. */
-export const check = query({
-  args: {
-    orgId: v.id("orgs"),
-    email: v.string(),
-  },
-  returns: v.object({
-    suppressed: v.boolean(),
-    matchedBy: v.union(
-      v.literal("email"),
-      v.literal("domain"),
-      v.null(),
-    ),
-    suppression: v.union(vSuppressionDoc, v.null()),
-  }),
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    const normalized = normalizeEmailAddress(args.email, "email");
-    const match = await matchSuppression(ctx, args.orgId, normalized);
-    if (match === null) {
-      return { suppressed: false, matchedBy: null, suppression: null };
-    }
-    return {
-      suppressed: true,
-      matchedBy: match.matchedBy,
-      suppression: match.suppression,
-    };
-  },
-});
-
-/* ------------------------------------------------------------------ */
 /* The Blocklist tab's read                                            */
 /* ------------------------------------------------------------------ */
 
@@ -225,9 +160,8 @@ function isAfterCursor(
  * One page of the Blocklist tab: newest first, optionally narrowed to a kind
  * and to rows whose normalized value contains `search`.
  *
- * `list` stays the flat read the rest of the backend uses; this exists
- * because the tab needs ordering, a filter and a page boundary, and folding
- * those into `list` would change what every other caller receives.
+ * This exists because the tab needs ordering, a filter and a page boundary,
+ * which a single flat read cannot express.
  */
 export const page = query({
   args: {

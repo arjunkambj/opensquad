@@ -1,6 +1,7 @@
 /** Member-guarded, indexed, cursor-paginated reads over the activity feed. */
 import { query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
+import { paged } from "../lib/pagination";
 import { boundedLimit } from "../lib/validators";
 import { activityEventFields } from "../schema";
 import { v } from "convex/values";
@@ -48,10 +49,6 @@ export const list = query({
       })
       .order("desc")
       .paginate({ numItems: limit, cursor: args.cursor ?? null });
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
+    return paged(result, result.page);
   },
 });

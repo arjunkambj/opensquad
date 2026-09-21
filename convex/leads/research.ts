@@ -138,8 +138,7 @@ export const researchContext = internalQuery({
       // last failure whatever produced it: the number is this step's ladder
       // position and part of the key the generation is asked under.
       attempts: lead.stepAttempts?.research ?? 0,
-      signalCount:
-        lead.origin.kind === "sourced" ? lead.origin.strategyIds.length : 1,
+      signalCount: lead.origin.strategyIds.length,
       ...(lead.canonicalDomain !== undefined
         ? { canonicalDomain: lead.canonicalDomain }
         : {}),

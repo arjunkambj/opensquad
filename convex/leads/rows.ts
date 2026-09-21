@@ -130,13 +130,10 @@ export function toLeadRow(
   lead: Doc<"prospects">,
   titles: Map<string, string>,
 ): LeadRow {
-  const signals =
-    lead.origin.kind === "sourced"
-      ? lead.origin.strategyIds.flatMap((strategyId) => {
-          const title = titles.get(strategyId);
-          return title === undefined ? [] : [{ strategyId, title }];
-        })
-      : [];
+  const signals = lead.origin.strategyIds.flatMap((strategyId) => {
+    const title = titles.get(strategyId);
+    return title === undefined ? [] : [{ strategyId, title }];
+  });
   return {
     _id: lead._id,
     agentId: lead.agentId,

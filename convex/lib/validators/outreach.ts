@@ -20,8 +20,6 @@ export const vDraftState = v.union(
   v.literal("superseded"),
 );
 
-export type DraftState = "current" | "superseded";
-
 /** Provider endpoint an attempt targets (integrations.md §G3 step 5). */
 export const vEndpointOperation = v.union(
   v.literal("send"),
@@ -67,21 +65,6 @@ export const vApprovalVerdict = v.union(
   v.literal("approved"),
   v.literal("rejected"),
 );
-
-export type ApprovalVerdict = "approved" | "rejected";
-
-/**
- * How a draft approval was resolved, so a caller can tell a redraft request
- * from a deliberate rejection. `approved` is the only value that produces an
- * `approved` approvals row.
- */
-export const DRAFT_RESOLUTIONS = [
-  "approved",
-  "changes_requested",
-  "rejected",
-] as const;
-
-export type DraftResolution = (typeof DRAFT_RESOLUTIONS)[number];
 
 export const vSuppressionKind = v.union(
   v.literal("email"),

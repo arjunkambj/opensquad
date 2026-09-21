@@ -20,7 +20,7 @@ import { v } from "convex/values";
  * The inbox is already known to belong to this org — the callback
  * resolved it from the saved assignment, never from a body or a display
  * address — so the row has a legitimate owner. What it does NOT have is a
- * lead: no prospect is guessed, no campaign is guessed, and nothing about the
+ * lead: no prospect is guessed, and nothing about the
  * sender selects one. `associateProspect` is the only way a lead is attached,
  * and it is human-only.
  *
@@ -121,7 +121,7 @@ export const ensureUnassignedConversation = internalMutation({
       conversation,
       kind: "system",
       actor: "system",
-      body: "Unmatched reply held for review. Link a lead and campaign to work it; automation stays frozen until an explicit resume.",
+      body: "Unmatched reply held for review. Link a lead to work it; automation stays frozen until an explicit resume.",
     });
     return { ok: true as const, created: true, conversation };
   },

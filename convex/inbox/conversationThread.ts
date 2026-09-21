@@ -38,8 +38,7 @@ import { v } from "convex/values";
  * by-messageId accessor to page it with, so a pathologically long thread can
  * approach the Convex read limit before this query sees the rows. The merged
  * timeline therefore returns no cursor — two heterogeneous sources cannot
- * honestly share one opaque cursor — and `drafts.listForConversation` remains
- * the real cursor for the outbound half.
+ * honestly share one opaque cursor.
  */
 export const thread = query({
   args: {

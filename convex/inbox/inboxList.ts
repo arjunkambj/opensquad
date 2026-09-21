@@ -3,10 +3,10 @@
  * (Received / Interested / Unread / All), the count above them and the
  * company search beside them.
  *
- * It is separate from `inbox/conversations.list`, which serves the operator
- * queue by lifecycle state (open / unassigned / takeover / closed). This one
- * slices the same rows the way the product screen speaks: by what happened on
- * the thread, not by who owns it.
+ * It is separate from the operator queue, which serves the same rows by
+ * lifecycle state (open / unassigned / takeover / closed). This one slices
+ * the rows the way the product screen speaks: by what happened on the thread,
+ * not by who owns it.
  *
  * EVERY PILL IS ONE RANGE ON `by_orgId_and_lastInboundAt`:
  *
@@ -46,6 +46,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
+import { paged } from "../lib/pagination";
 import {
   boundedLimit,
   boundedString,
@@ -412,9 +413,7 @@ export const list = query({
       }
     }
     return {
-      items,
-      cursor: page.isDone ? null : page.continueCursor,
-      hasMore: !page.isDone,
+      ...paged(page, items),
       count: {
         value: Math.min(countValue, MAX_LIST_LIMIT),
         hasMore: countValue > MAX_LIST_LIMIT,

@@ -184,7 +184,7 @@ export const vInboxConnectionView = v.object({
   lastEventAt: v.optional(v.number()),
   sync: vInboxSync,
   connectedAt: v.optional(v.number()),
-  /** Whether this org may send at all (legacy inboxes may not). */
+  /** Whether this org may send at all. */
   canSend: v.boolean(),
   webhook: v.object({ registered: v.boolean(), secret: vSecretSummary }),
 });
@@ -203,15 +203,15 @@ export const getInboxConnection = query({
     );
     const summary = summariseSecret(key);
     const eventAt = await lastInboundAt(ctx, org._id);
-    const inboxAddress = org.inboxAddress ?? org.inboxRef;
     return {
       connection: org.inboxConnection,
       status: summary.status,
       ...(summary.last4 !== undefined ? { last4: summary.last4 } : {}),
       // The provider reports the inbox id and the mailbox address as separate
-      // fields, so the address is what connect stored — falling back to the
-      // reference only for a connection made before that was persisted.
-      ...(inboxAddress !== undefined ? { inboxAddress } : {}),
+      // fields; connect stores the address it reported.
+      ...(org.inboxAddress !== undefined
+        ? { inboxAddress: org.inboxAddress }
+        : {}),
       ...(eventAt !== undefined ? { lastEventAt: eventAt } : {}),
       sync: await readInboxSync(ctx, org._id, org.connectedAt),
       ...(org.connectedAt !== undefined

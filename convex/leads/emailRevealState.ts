@@ -18,9 +18,6 @@ import { v } from "convex/values";
  * How long a lead may sit in `revealing` before the recovery sweep calls its
  * job lost. A Convex action cannot outlive ~10 minutes, so past this nothing
  * is still working on it.
- *
- * Belongs in `convex/lib/limits.ts` with the other recovery windows; local
- * only because that file is integrator-only (EXECUTION §0).
  */
 export const REVEAL_STALL_MS = 15 * 60 * 1000;
 
@@ -50,8 +47,7 @@ export const revealTargets = internalQuery({
       if (
         lead === null ||
         lead.orgId !== args.orgId ||
-        lead.emailStatus !== "revealing" ||
-        lead.origin.kind !== "sourced"
+        lead.emailStatus !== "revealing"
       ) {
         continue;
       }

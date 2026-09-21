@@ -87,8 +87,8 @@ const RECEIPT_ERROR_MAX_LENGTH = 500;
  *
  * A throw would roll back the transaction, leave the row `pending`, and hand
  * the drain something it will retry on every sweep for as long as the row
- * lives. `failed` is terminal, visible in `sendAttempts.listReceipts`, and
- * still replayable by hand.
+ * lives. `failed` is terminal, visible on the receipt, and still replayable
+ * by hand.
  */
 export async function fail(
   ctx: MutationCtx,

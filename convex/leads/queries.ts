@@ -27,6 +27,7 @@ import {
   vLeadStage,
 } from "../lib/validators";
 import type { LeadApproval, LeadStage } from "../lib/validators";
+import { paged } from "../lib/pagination";
 import { vLeadEventDoc } from "./events";
 import { vEvidenceDoc } from "./evidence";
 import {
@@ -78,11 +79,9 @@ type ListArgs = {
 };
 
 function modeOf(args: ListArgs): ListMode {
-  const narrowed = [
-    args.stage !== undefined,
-    args.approval !== undefined,
-    args.score !== undefined,
-  ].filter(Boolean).length;
+  const narrowed = [args.stage, args.approval, args.score].filter(
+    (value) => value !== undefined,
+  ).length;
   if (narrowed > 1) {
     throw invalid(
       "stage, approval and score are separate list modes — no index supports combining them",
@@ -199,9 +198,7 @@ export const list = query({
     );
     const titles = await signalTitles(ctx, args.orgId);
     return {
-      items: result.page.map((lead) => toLeadRow(lead, titles)),
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
+      ...paged(result, result.page.map((lead) => toLeadRow(lead, titles))),
       total: {
         count: Math.min(counted.length, CONTACTS_TOTAL_BOUND),
         hasMore: counted.length > CONTACTS_TOTAL_BOUND,

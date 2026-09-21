@@ -31,7 +31,6 @@ type Env = {
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
   readonly AGENTMAIL_BASE_URL: string | undefined;
-  readonly AGENTMAIL_WEBHOOK_SECRET: string | undefined;
   readonly AI_DAILY_CALL_BUDGET: string | undefined;
   readonly ENRICH_API_KEY: string | undefined;
   readonly ENRICH_BALANCE_FLOOR: string | undefined;

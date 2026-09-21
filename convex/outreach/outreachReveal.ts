@@ -218,7 +218,6 @@ async function selectRevealTargets(
     if (
       lead.agentId === agent._id &&
       lead.emailStatus === "locked" &&
-      lead.origin.kind === "sourced" &&
       lead.research.status === "researched" &&
       lead.research.aiScore >= AUTO_REVEAL_MIN_SCORE &&
       lead.stage !== "rejected" &&

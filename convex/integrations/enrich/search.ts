@@ -19,16 +19,11 @@
  * unknown outcome THROWS so the hold parks as `uncertain`.
  */
 import { internal } from "../../_generated/api";
-import { internalAction, internalQuery } from "../../_generated/server";
+import { internalAction } from "../../_generated/server";
 import type { ActionCtx } from "../../_generated/server";
 import { withCredits } from "../../billing/withCredits";
 import { composeOperationKey, vRefundReason } from "../../billing/paidCall";
 import type { RefundReason } from "../../billing/paidCall";
-import {
-  platformBudgetLimit,
-  platformPeriodKey,
-} from "../../billing/platformBudgets";
-import { PLATFORM_BUDGETS } from "../../lib/limits";
 import type { LeadFilterOption, OperationErrorCode } from "../../lib/validators";
 import {
   domainError,
@@ -52,21 +47,6 @@ const SEARCH_PAGE_SIZE = 25;
 
 /** The last page the free tier covers. Page 4 would be 1 credit per row. */
 const MAX_SEARCH_PAGE = 3;
-
-/**
- * Free unique searches the provider account gets per calendar month — a
- * search being one unique FILTER COMBINATION, with paging and re-running the
- * same filters consuming none (the provider's free-tier rule). Past it, the
- * pages this build treats as free start costing a credit per row, which is
- * the one way our ledger could record zero while the account is charged.
- *
- * Nothing in a response reports the pool, so the only tracker is our own
- * monthly `enrich_searches` budget: it counts one unit per PAGE, which is at
- * least one per unique search, so reading it against this number can only
- * warn early — never late. `ENRICH_MONTHLY_SEARCH_BUDGET` is the ceiling that
- * actually enforces it and must stay at or below this figure.
- */
-export const FREE_UNIQUE_SEARCHES_PER_MONTH = 50;
 
 const vCountResult = v.union(
   v.object({
@@ -322,8 +302,8 @@ export const findLeads = internalAction({
               // combination spend none. The refund below releases the
               // reserved search unit along with the credits — a refunded
               // settlement cannot keep a provider unit — so this line is the
-              // only record that the shared pool moved. See
-              // `FREE_UNIQUE_SEARCHES_PER_MONTH`.
+              // only record that the shared pool moved — the monthly ceiling
+              // `enrich_searches` enforces is documented in `lib/limits.ts`.
               console.warn(
                 "lead search: an empty first page spent one of the month's free searches",
               );
@@ -439,90 +419,6 @@ type FindLeadsResult =
   | { status: "replayed"; operationKey: string }
   | { status: "uncertain"; operationKey: string; code: OperationErrorCode }
   | { status: "failed"; code: OperationErrorCode };
-
-const vSearchPool = v.object({
-  /** The month this reading is for, as the budget row keys it. */
-  periodKey: v.string(),
-  /** Search units committed or held this month — pages, so never fewer than
-   *  the unique searches they came from. A tripped platform breaker marks
-   *  this same counter far above any real usage, so a reading taken during a
-   *  trip reads as exhausted; paid searches are stopped then anyway, and the
-   *  figure itself says which case it is. */
-  used: v.number(),
-  /** Our own enforcing ceiling for the month. */
-  budgetLimit: v.number(),
-  /** What the provider gives away before it starts charging. */
-  freePerMonth: v.number(),
-  /** Free searches still unaccounted for, floored at zero. */
-  remainingFree: v.number(),
-  /** The month's free pool may be spent: pages 1–3 can no longer be assumed
-   *  free, so every settlement recording zero provider credits is suspect. */
-  exhausted: v.boolean(),
-});
-
-type SearchPool = {
-  periodKey: string;
-  used: number;
-  budgetLimit: number;
-  freePerMonth: number;
-  remainingFree: number;
-  exhausted: boolean;
-};
-
-/**
- * Where this month's search consumption stands against the account's free
- * unique-search pool — the counted signal PLAN §6's layer 3 reads.
- *
- * `at` is an argument rather than a clock read because a query must not
- * depend on the wall clock; `searchPoolStatus` is the door that supplies it.
- */
-export const monthlySearchPool = internalQuery({
-  args: { at: v.number() },
-  returns: vSearchPool,
-  handler: async (ctx, args): Promise<SearchPool> => {
-    const policy = PLATFORM_BUDGETS.enrich_searches;
-    const periodKey = platformPeriodKey(policy, args.at);
-    const row = await ctx.db
-      .query("platformBudgets")
-      .withIndex("by_provider_and_periodKey", (q) =>
-        q.eq("provider", policy.provider).eq("periodKey", periodKey),
-      )
-      .unique();
-    const used = row?.used ?? 0;
-    return {
-      periodKey,
-      used,
-      budgetLimit: platformBudgetLimit(policy),
-      freePerMonth: FREE_UNIQUE_SEARCHES_PER_MONTH,
-      remainingFree: Math.max(0, FREE_UNIQUE_SEARCHES_PER_MONTH - used),
-      exhausted: used >= FREE_UNIQUE_SEARCHES_PER_MONTH,
-    };
-  },
-});
-
-/**
- * The same reading, with the clock — for the platform watchdog and for a live
- * check from the CLI, and the one place the pool's exhaustion is said out
- * loud. It is logged rather than acted on because the ceiling that stops the
- * spending is the monthly budget the reserve already checks.
- */
-export const searchPoolStatus = internalAction({
-  args: {},
-  returns: vSearchPool,
-  handler: async (ctx): Promise<SearchPool> => {
-    const pool: SearchPool = await ctx.runQuery(
-      internal.integrations.enrich.search.monthlySearchPool,
-      { at: Date.now() },
-    );
-    if (pool.exhausted) {
-      console.error(
-        "lead search: the account's free monthly searches are used up; pages are no longer free",
-        { periodKey: pool.periodKey, used: pool.used },
-      );
-    }
-    return pool;
-  },
-});
 
 /**
  * The cached filter catalogue every value is checked against.

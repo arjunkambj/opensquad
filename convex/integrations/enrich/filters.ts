@@ -354,19 +354,3 @@ function checkList(
     return trimmed;
   });
 }
-
-/** Whether this filter is one the catalogue must list values for. */
-export function isCatalogueFilter(key: string): boolean {
-  return FILTER_SPECS[key]?.kind === "enum_list";
-}
-
-/** The filter names this product may send — the strategy recommender's
- *  vocabulary (T23) and nothing wider. */
-export function supportedFilterKeys(): string[] {
-  return Object.keys(FILTER_SPECS);
-}
-
-/** The five keys an exclusion list may use. */
-export function supportedExcludeFilterKeys(): string[] {
-  return Object.keys(EXCLUDE_FILTER_SPECS);
-}

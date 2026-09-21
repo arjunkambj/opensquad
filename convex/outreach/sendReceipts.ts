@@ -11,7 +11,6 @@
  */
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import {
   boundedString,
@@ -19,50 +18,12 @@ import {
   domainError,
   invalid,
   PROVIDER_REF_MAX_LENGTH,
-  vMessageSource,
 } from "../lib/validators";
 import type { MessageSource } from "../lib/validators";
-import { vEmailEventReceiptDoc } from "./sendAttempts";
-import { v } from "convex/values";
 
 export const PROVIDER_FACTS_MAX_BYTES = 4096;
 
 export const RECEIPT_EVENT_IDS_MAX = 10;
-
-const vRecordReceiptResult = v.object({
-  receipt: vEmailEventReceiptDoc,
-  /** `true` when this providerEventId was already recorded. */
-  duplicate: v.boolean(),
-  /** `true` when the applicationKey was already claimed — the receipt is
-   *  recorded as `handled` and must never start business handling. */
-  duplicateApplicationKey: v.boolean(),
-});
-
-/**
- * Record one verified provider event. Dedupes transactionally on
- * `providerEventId` (delivery) and `(orgId, applicationKey)` (business
- * effect). `providerFacts` must be a bounded projection of verified fields —
- * never a message body — capped at PROVIDER_FACTS_MAX_BYTES.
- */
-export const recordProviderEvent = internalMutation({
-  args: {
-    orgId: v.id("orgs"),
-    inboxRef: v.string(),
-    providerEventId: v.string(),
-    applicationKey: v.string(),
-    providerMessageRef: v.string(),
-    eventType: v.string(),
-    /** Live webhook unless the connect-time backfill says otherwise. */
-    source: v.optional(vMessageSource),
-    providerFacts: v.optional(v.record(v.string(), v.any())),
-    providerThreadRef: v.optional(v.string()),
-    receivedAt: v.optional(v.number()),
-  },
-  returns: vRecordReceiptResult,
-  handler: async (ctx, args) => {
-    return await recordReceipt(ctx, args);
-  },
-});
 
 export async function recordReceipt(
   ctx: MutationCtx,

@@ -11,8 +11,8 @@
  * Data-free: no Convex calls, no React.
  */
 import type { FunctionReturnType } from "convex/server"
-import { ConvexError } from "convex/values"
 import type { api } from "../../../convex/_generated/api"
+import { domainErrorCode } from "@/lib/convex-error"
 
 /** The whole Manage-inbox read surface (PLAN §4 "Manage inbox"). */
 export type InboxConnectionView = FunctionReturnType<
@@ -58,23 +58,13 @@ export const INBOX_CONNECT_ERROR_COPY: Record<InboxConnectErrorCode, string> = {
   not_connected: "Connect an inbox before replacing its key.",
 }
 
-export function connectErrorCopy(code: InboxConnectErrorCode): string {
-  return INBOX_CONNECT_ERROR_COPY[code]
-}
-
 /**
  * Copy for a THROWN refusal — the guards and the per-user rate limit, which
  * are `ConvexError`s rather than a returned failure. The backend's own
  * message is for logs, so it is never rendered.
  */
 export function requestErrorCopy(error: unknown, fallback: string): string {
-  const code =
-    error instanceof ConvexError &&
-    typeof error.data === "object" &&
-    error.data !== null &&
-    "code" in error.data
-      ? (error.data as { code: unknown }).code
-      : undefined
+  const code = domainErrorCode(error)
   switch (code) {
     case "RATE_LIMITED":
       return "Too many attempts in a row. Wait a moment and try again."
@@ -101,8 +91,6 @@ export function connectionStatusLabel(view: InboxConnectionView): string {
       return view.status === "invalid" ? "Key invalid" : "Connected"
     case "invalid":
       return "Key invalid"
-    case "legacy_platform_inbox":
-      return "Receive only"
     case "none":
       return "Not connected"
   }

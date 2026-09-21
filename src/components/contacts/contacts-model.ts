@@ -13,11 +13,10 @@
  *   code is the contract (`convex/lib/errors.ts`); the message beside it is
  *   for operators and logs, and never reaches a user.
  */
-import { ConvexError } from "convex/values"
 import type { FunctionReturnType } from "convex/server"
 import type { ContactsSearch } from "@/routes/_dashboard/_org/contacts"
 import type { api } from "../../../convex/_generated/api"
-import { DOMAIN_ERROR_CODES } from "../../../convex/lib/errors"
+import { domainErrorCode } from "@/lib/convex-error"
 import type { DomainErrorCode } from "../../../convex/lib/errors"
 import type {
   LeadApproval,
@@ -98,33 +97,17 @@ const REFUSAL_COPY: Record<DomainErrorCode, string> = {
 
 /** The one mapping from a backend refusal to what the screen says. */
 export function refusalCopy(error: unknown, fallback: string): string {
-  const code = domainCode(error)
+  const code = domainErrorCode(error)
   return code === undefined ? fallback : REFUSAL_COPY[code]
 }
 
-function domainCode(error: unknown): DomainErrorCode | undefined {
-  if (!(error instanceof ConvexError)) {
-    return undefined
-  }
-  const data: unknown = error.data
-  if (typeof data !== "object" || data === null) {
-    return undefined
-  }
-  const code = (data as { code?: unknown }).code
-  return typeof code === "string" &&
-    (DOMAIN_ERROR_CODES as readonly string[]).includes(code)
-    ? (code as DomainErrorCode)
-    : undefined
-}
-
 /** Why a lead in a selection was left out of a paid action. */
-export const SKIP_REASON_COPY: Record<string, string> = {
+const SKIP_REASON_COPY: Record<string, string> = {
   already_found: "already has an address",
   in_flight: "already being looked up",
   no_address_on_file: "has no address on file",
   rejected: "was rejected",
   score_below_threshold: "scores below 2 — open the lead to ask for it anyway",
-  not_sourced: "was not found by a signal",
   credits: "is beyond what your credits cover",
   already_researched: "was already researched",
   provider_limit: "is beyond today's research allowance — try again tomorrow",

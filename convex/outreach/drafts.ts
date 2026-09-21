@@ -12,7 +12,6 @@ import { mutation, query } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
 import { requireOrgMember } from "../lib/auth";
 import {
-  boundedLimit,
   boundedString,
   domainError,
   invalid,
@@ -36,45 +35,6 @@ export const get = query({
   handler: async (ctx, args) => {
     await requireOrgMember(ctx, args.orgId);
     return await getDraftInOrg(ctx, args.orgId, args.draftId);
-  },
-});
-
-/**
- * Revision history for one conversation, newest first, cursor-paginated.
- * Immutable rows are the audit trail — superseded revisions stay readable.
- */
-export const listForConversation = query({
-  args: {
-    orgId: v.id("orgs"),
-    conversationId: v.id("conversations"),
-    cursor: v.optional(v.union(v.string(), v.null())),
-    limit: v.optional(v.number()),
-  },
-  returns: v.object({
-    items: v.array(vDraftDoc),
-    cursor: v.union(v.string(), v.null()),
-    hasMore: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    await requireOrgMember(ctx, args.orgId);
-    await getConversationInOrg(
-      ctx,
-      args.orgId,
-      args.conversationId,
-    );
-    const limit = boundedLimit(args.limit);
-    const result = await ctx.db
-      .query("drafts")
-      .withIndex("by_conversationId_and_revision", (q) =>
-        q.eq("conversationId", args.conversationId),
-      )
-      .order("desc")
-      .paginate({ numItems: limit, cursor: args.cursor ?? null });
-    return {
-      items: result.page,
-      cursor: result.isDone ? null : result.continueCursor,
-      hasMore: !result.isDone,
-    };
   },
 });
 
@@ -173,7 +133,7 @@ export const revise = mutation({
 
     // The booking link survives a content edit ONLY while it still names a
     // live proposal at the version the draft was written against. A
-    // confirmed/rescheduled/cancelled booking drops the link instead of
+    // confirmed booking drops the link instead of
     // stranding the thread — the new revision is a plain message that can
     // never advance the lead to booking_proposed.
     let bookingLink:

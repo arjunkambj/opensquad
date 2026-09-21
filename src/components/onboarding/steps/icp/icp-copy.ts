@@ -9,7 +9,7 @@
  * Every message ends with something the user can do, because every one of
  * these states also offers Try again and "Fill it in myself".
  */
-import { ConvexError } from "convex/values"
+import { domainErrorCode } from "@/lib/convex-error"
 import type { OperationErrorCode } from "../../../../../convex/lib/validators"
 
 export type IcpMessage = {
@@ -106,14 +106,8 @@ const START_FALLBACK: IcpMessage = {
 
 /** A refusal from the mutation itself, before any run began. */
 export function startGenerationCopy(error: unknown): IcpMessage {
-  if (error instanceof ConvexError) {
-    const data: unknown = error.data
-    if (typeof data === "object" && data !== null) {
-      const code = (data as { code?: unknown }).code
-      if (typeof code === "string") {
-        return START_REFUSALS[code] ?? START_FALLBACK
-      }
-    }
-  }
-  return START_FALLBACK
+  const code = domainErrorCode(error)
+  return code === undefined
+    ? START_FALLBACK
+    : (START_REFUSALS[code] ?? START_FALLBACK)
 }

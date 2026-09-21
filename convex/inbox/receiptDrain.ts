@@ -107,7 +107,7 @@ export const drainPendingInboundReceipts = internalMutation({
  * The claim is PROVED, not assumed: the same `by_providerMessageRef` lookup
  * the fold uses runs first, and a receipt whose attempt turns up is left
  * alone for the fold to handle. `failed` with a stated reason keeps the row
- * auditable in `sendAttempts.listReceipts` and replayable by hand.
+ * auditable on the receipt and replayable by hand.
  */
 async function reapUnmatchedOutboundReceipts(
   ctx: MutationCtx,

@@ -48,9 +48,9 @@ const app = defineApp({
     SECRETS_ENCRYPTION_KEY: v.optional(v.string()),
     // Lead-data provider credentials (`integrations/enrich/client.ts`).
     ENRICH_API_KEY: v.optional(v.string()),
-    // Mail provider: the Svix secret on `/agentmail/webhook`, and the base
-    // URL override the adapter uses for staging/mock runs.
-    AGENTMAIL_WEBHOOK_SECRET: v.optional(v.string()),
+    // Mail provider: the base URL override the adapter uses for
+    // staging/mock runs. Per-org webhook secrets are stored encrypted per
+    // org, not here.
     AGENTMAIL_BASE_URL: v.optional(v.string()),
 
     // --- PLAN §6 money settings, read through `lib/limits.ts` ----------
@@ -109,7 +109,7 @@ app.use(rateLimiter);
 // integrations.md §G4. Deliberately NO `httpPrefix`: the component must not
 // own the root URL space (the default setup would also move app routes under
 // `/api`, silently breaking every webhook URL). The app's convex/http.ts
-// keeps `/agentmail/webhook` and `/firecrawl/*` and registers the static GET
+// keeps `/agentmail/webhook/<token>` and `/firecrawl/*` and registers the static GET
 // catch-all LAST via `registerStaticRoutes`; uploads, manifest and file
 // storage stay inside the component.
 app.use(staticHosting);

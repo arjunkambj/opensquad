@@ -1,23 +1,10 @@
 import { ConvexError } from "convex/values"
+import { DOMAIN_ERROR_CODES } from "../../convex/lib/errors"
+import type { DomainErrorCode } from "../../convex/lib/errors"
 
-/**
- * Domain error codes thrown by the OpenIntent backend via
- * `domainError`/`invalid` in `convex/lib/validators/shared.ts`.
- */
-export type DomainErrorCode =
-  | "UNAUTHENTICATED"
-  | "FORBIDDEN"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "INVALID"
+export type { DomainErrorCode }
 
-const DOMAIN_ERROR_CODES: readonly DomainErrorCode[] = [
-  "UNAUTHENTICATED",
-  "FORBIDDEN",
-  "NOT_FOUND",
-  "CONFLICT",
-  "INVALID",
-]
+const DOMAIN_ERROR_CODE_SET: ReadonlySet<string> = new Set(DOMAIN_ERROR_CODES)
 
 type DomainErrorData = {
   code?: unknown
@@ -37,13 +24,9 @@ function domainErrorData(error: unknown): DomainErrorData | undefined {
 /** The backend domain code, when the error is one of ours. */
 export function domainErrorCode(error: unknown): DomainErrorCode | undefined {
   const code = domainErrorData(error)?.code
-  if (
-    typeof code === "string" &&
-    DOMAIN_ERROR_CODES.includes(code as DomainErrorCode)
-  ) {
-    return code as DomainErrorCode
-  }
-  return undefined
+  return typeof code === "string" && DOMAIN_ERROR_CODE_SET.has(code)
+    ? (code as DomainErrorCode)
+    : undefined
 }
 
 /** True when the mutation failed because the expected version was stale. */

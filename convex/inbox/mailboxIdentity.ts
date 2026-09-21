@@ -24,8 +24,7 @@ import { parseInboundSender, sameInboxRef } from "../lib/validators";
  * stored address, and the normalized form of each (a display-name wrapper
  * like `Sales <sales@acme.com>` normalizes to the bare address).
  *
- * An org connected before `inboxAddress` existed simply contributes one
- * fewer candidate — the fallback is the previous behaviour exactly.
+ * An absent provider-reported address contributes no additional candidate.
  */
 export function ownMailboxIdentifiers(
   org: Pick<Doc<"orgs">, "inboxRef" | "inboxAddress"> | null | undefined,

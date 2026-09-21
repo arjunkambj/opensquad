@@ -3,8 +3,7 @@
  *
  * `bookings.confirmations.confirm` records an agreement, so it asks for the
  * agreement: the time the two of them settled on, the zone that time was
- * stated in, and a one-line basis for it. It refuses a past meeting — that is
- * an outcome to record, not a confirmation.
+ * stated in, and a one-line basis for it. The meeting must be upcoming.
  *
  * `confirm` can only advance a live proposal, so a lead that holds none gets
  * one for exactly the agreed slot first. Both calls carry a stable request id,
@@ -72,11 +71,11 @@ export function MarkAsBookedDialog({
     if (!complete || busy) {
       return
     }
-    // Read the clock at the click, not during render. `confirm` refuses a
-    // meeting that has already finished — saying so here beats a round trip.
+    // Read the clock at the click, not during render, so the selected start
+    // time is still in the future when the person submits.
     if (startsAt <= Date.now()) {
       setError(
-        "A booked meeting is one still to come. For a meeting that already happened, record its outcome on the lead instead.",
+        "The meeting must be upcoming. Choose a start time in the future.",
       )
       return
     }

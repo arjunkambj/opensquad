@@ -153,12 +153,6 @@ export function InboxConnection({
 
   return (
     <div className="flex flex-col gap-4">
-      {view.connection === "legacy_platform_inbox" ? (
-        <InfoBanner title="This organization is on a shared inbox.">
-          It can receive and read mail, but it cannot send. Connect your own
-          AgentMail key to send from an address you control.
-        </InfoBanner>
-      ) : null}
       <InboxKeyForm
         id="inbox-connect-key"
         label="AgentMail API key"

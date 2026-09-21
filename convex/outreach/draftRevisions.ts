@@ -31,8 +31,8 @@ export const createRevision = internalMutation({
     createdBy: v.optional(v.string()),
     /** Booking-proposal link (§4.3, P19): the proposal this content offers
      *  and the booking version it was written against. Validated against
-     *  live state here, then AGAIN at approval and dispatch — a rescheduled
-     *  or cancelled booking can never go out under the old content. */
+     *  live state here, then AGAIN at approval and dispatch — a confirmed
+     *  booking can never go out as an open proposal. */
     bookingId: v.optional(v.id("bookings")),
     bookingVersion: v.optional(v.number()),
   },

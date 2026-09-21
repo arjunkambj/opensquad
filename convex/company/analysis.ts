@@ -29,8 +29,6 @@ export const finishAnalysis = internalMutation({
     profileId: v.id("businessProfiles"),
     /** The run this report belongs to. */
     startedAt: v.number(),
-    /** identityKey of the member who asked for the analysis. */
-    updatedBy: v.string(),
     outcome: v.union(
       v.object({
         state: v.literal("ready"),
@@ -79,7 +77,6 @@ export const finishAnalysis = internalMutation({
       // its version check and reloads instead of silently reverting it.
       version: profile.version + 1,
       updatedAt: now,
-      updatedBy: args.updatedBy,
     });
     return { applied: true };
   },

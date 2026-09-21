@@ -53,11 +53,7 @@ export function InboxConnectionBanner({
   return (
     <ConnectInboxBanner
       title="Connect inbox to start sending"
-      description={
-        view.connection === "legacy_platform_inbox"
-          ? "This organization can read mail but cannot send. Connect your own inbox to start outreach."
-          : "The agent finds and researches leads now, and contacts nobody until an inbox is connected."
-      }
+      description="The agent finds and researches leads now, and contacts nobody until an inbox is connected."
       action={settingsLink("Connect inbox")}
       {...(className !== undefined ? { className } : {})}
     />

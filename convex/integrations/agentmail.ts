@@ -5,8 +5,8 @@
  *
  * 1. INBOUND — the registered `@agentmail/convex` component owns verified,
  *    `event_id`-deduplicated webhook ingestion and inbound message storage.
- *    `agentmail` below is its configured client handle; `convex/http.ts`
- *    mounts `handleWebhook` at POST /agentmail/webhook. `onEvent` and
+ *    `agentmailForWebhookSecret` creates a client for the per-org route at
+ *    POST /agentmail/webhook/<token>. `onEvent` and
  *    `onMessageReceived` are the app-side internal mutations the component
  *    dispatches through its callback pool.
  *
@@ -42,7 +42,6 @@ import {
   agentmailBaseUrl,
   extractEventIds,
   getMessage,
-  getThread as getThreadRest,
 } from "./agentmailApi";
 import { decryptSecret } from "../lib/secrets";
 import {
@@ -76,15 +75,6 @@ const COMPONENT_CALLBACKS = {
     >["onMessageReceived"],
   onEvent: internal.integrations.agentmail.onEvent,
 } as const;
-
-/**
- * Shared component client handle, for the LEGACY platform-inbox route only
- * (`/agentmail/webhook`, PLAN §9.4 "Legacy inboxes"). It reads
- * `AGENTMAIL_WEBHOOK_SECRET` from deployment env; that variable is no longer
- * set on dev, and `convex/http.ts` answers 401 rather than 500 when it is
- * absent. Per-org inbound goes through `agentmailForWebhookSecret`.
- */
-export const agentmail = new AgentMail(components.agentmail, COMPONENT_CALLBACKS);
 
 /**
  * A per-request component handle bound to ONE org's webhook secret
@@ -696,74 +686,6 @@ export const reconcileReplyAttempt = internalAction({
 });
 
 /**
- * P10: read-only provider evidence lookup for uncertain-attempt
- * reconciliation (G3 step 8 — "use provider read APIs and webhook
- * evidence"). Direct REST reads with the ORG's own key — the component's
- * equivalents read `AGENTMAIL_API_KEY` from env, which no longer exists.
- * Never mutates provider state. Returns a bounded, sanitized projection:
- * provider IDs and existence only, no addresses or bodies.
- */
-export const lookupProviderMessage = internalAction({
-  args: {
-    orgId: v.id("orgs"),
-    inboxId: v.string(),
-    messageId: v.optional(v.string()),
-    threadId: v.optional(v.string()),
-  },
-  returns: v.object({
-    message: v.union(
-      v.object({
-        messageId: v.string(),
-        threadId: v.string(),
-      }),
-      v.null(),
-    ),
-    thread: v.union(
-      v.object({
-        threadId: v.string(),
-        messageCount: v.optional(v.number()),
-      }),
-      v.null(),
-    ),
-    error: v.optional(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    const result: {
-      message: { messageId: string; threadId: string } | null;
-      thread: { threadId: string; messageCount?: number } | null;
-      error?: string;
-    } = { message: null, thread: null };
-    const apiKey = await orgApiKey(ctx, args.orgId);
-    if (args.messageId !== undefined) {
-      const message = await getMessage(apiKey, args.inboxId, args.messageId);
-      if (message.ok) {
-        result.message = {
-          messageId: message.value.messageId,
-          threadId: message.value.threadId,
-        };
-      } else if (message.code !== "not_found") {
-        // A 404 means the provider holds no such message — meaningful
-        // evidence, not an error. Anything else is a failed read, and the
-        // mapped code is what travels (never provider wording).
-        result.error = `getMessage: ${message.code}`;
-      }
-    }
-    if (args.threadId !== undefined) {
-      const thread = await getThreadRest(apiKey, args.inboxId, args.threadId);
-      if (thread.ok) {
-        result.thread = {
-          threadId: args.threadId,
-          messageCount: thread.value.messages.length,
-        };
-      } else if (thread.code !== "not_found") {
-        result.error = `getThread: ${thread.code}`;
-      }
-    }
-    return result;
-  },
-});
-
-/**
  * The full inbound message, fetched from the provider with the ORG's own key.
  *
  * WHY THE WEBHOOK PAYLOAD IS NOT ENOUGH. The provider documents that a payload
@@ -837,28 +759,6 @@ export const fetchInboundMessage = internalAction({
     };
   },
 });
-
-
-// ---------------------------------------------------------------------------
-// Inbound: component webhook callbacks (P05 stubs — P11 owns full handling)
-// ---------------------------------------------------------------------------
-
-/**
- * Pull inbox/thread/message identifiers out of any AgentMail event payload,
- * whichever sub-object carries them (message/send/delivery/bounce/complaint/
- * reject). Mirrors the component's eventLogic.extractIndexFields, which is
- * not part of the package's public exports.
- */
-function extractEventIndexFields(event: unknown): {
-  inboxId?: string;
-  threadId?: string;
-  messageId?: string;
-} {
-  // ONE definition of the per-event-type id mapping, shared with the inbound
-  // route's org binding: the route must not accept an event this
-  // callback would then file under a different inbox.
-  return extractEventIds(event);
-}
 
 /**
  * The provider's own timestamp for an event, read from the sub-object that
@@ -1133,7 +1033,7 @@ export const onEvent = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const event = asRecord(args.event);
-    const rawIds = extractEventIndexFields(args.event);
+    const rawIds = extractEventIds(args.event);
     const eventId = providerRef(stringField(event, "event_id"), 200);
     const eventType = providerRef(stringField(event, "event_type"), 100);
     const inboxRef = providerRef(rawIds.inboxId);

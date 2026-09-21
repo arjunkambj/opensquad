@@ -6,7 +6,7 @@
  * deliberately — we cannot prove we were not billed.
  */
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import { recordActivityEvent } from "../activity/model";
@@ -83,41 +83,6 @@ export const sweepStaleRequesting = internalMutation({
       return { swept: false };
     }
     return { swept: await markLostAcknowledgement(ctx, attempt) };
-  },
-});
-
-/**
- * Org-wide sweep — the ops/probe entry point. `staleAfterMs` defaults
- * to the lost-acknowledgement margin; tests pass 0 to force-sweep.
- */
-export const sweepStaleAttempts = internalMutation({
-  args: {
-    orgId: v.id("orgs"),
-    staleAfterMs: v.optional(v.number()),
-  },
-  returns: v.object({
-    swept: v.number(),
-    sendAttemptIds: v.array(v.id("sendAttempts")),
-  }),
-  handler: async (ctx, args) => {
-    const cutoff =
-      Date.now() - (args.staleAfterMs ?? REQUEST_STALE_SWEEP_MS);
-    const stale = await ctx.db
-      .query("sendAttempts")
-      .withIndex("by_orgId_and_state_and_updatedAt", (q) =>
-        q
-          .eq("orgId", args.orgId)
-          .eq("state", "requesting")
-          .lt("updatedAt", cutoff),
-      )
-      .collect();
-    const sendAttemptIds: Id<"sendAttempts">[] = [];
-    for (const attempt of stale) {
-      if (await markLostAcknowledgement(ctx, attempt)) {
-        sendAttemptIds.push(attempt._id);
-      }
-    }
-    return { swept: sendAttemptIds.length, sendAttemptIds };
   },
 });
 

@@ -23,7 +23,7 @@ import {
   WEBSITE_ANALYSIS_SYSTEM,
 } from "../ai/analyzeWebsite";
 import { runStructured } from "../ai/run";
-import type { RefundReason } from "../billing/paidCall";
+import { CODE_FOR_UNCERTAIN, codeForRefund } from "../billing/paidCall";
 import { scrapeSite } from "../integrations/firecrawl";
 import type { OperationErrorCode } from "../lib/validators";
 import { v } from "convex/values";
@@ -34,46 +34,6 @@ import { v } from "convex/values";
  */
 const ANALYSIS_PAGES = 4;
 
-/**
- * A refusal from either paid call, as one of our own codes.
- *
- * Money and capacity keep their own code because the screen offers a different
- * next step for them; everything else that ends with "we could not read this
- * site" collapses into `unreadable_source`, which is the sentence the user
- * actually needs.
- */
-function codeForRefund(reason: RefundReason): OperationErrorCode {
-  switch (reason) {
-    case "kill_switch":
-      return "platform_paused";
-    case "no_credit_grant":
-    case "insufficient_credits":
-    case "trial_limit_reached":
-      return "insufficient_credits";
-    case "rate_limited":
-    case "throttled":
-      return "rate_limited";
-    case "platform_capacity":
-    case "unauthorized":
-      return "provider_unavailable";
-    case "validation":
-    case "provider_charged_nothing":
-      return "unreadable_source";
-    case "unknown":
-      return "unknown";
-  }
-}
-
-/**
- * A THROWN failure from either paid call.
- *
- * Both wrappers throw for exactly one situation: the request may have left us
- * and nobody knows what it did, so the hold is parked `uncertain` and a sweep
- * owns it (PLAN §6). From the user's side that is always the same fact — this
- * run did not finish, and it was not their doing.
- */
-const CODE_FOR_UNCERTAIN: OperationErrorCode = "provider_unavailable";
-
 export const analyze = internalAction({
   args: {
     orgId: v.id("orgs"),
@@ -83,7 +43,6 @@ export const analyze = internalAction({
     startedAt: v.number(),
     scrapeOperationKey: v.string(),
     aiOperationKey: v.string(),
-    updatedBy: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -91,7 +50,6 @@ export const analyze = internalAction({
       await ctx.runMutation(internal.company.analysis.finishAnalysis, {
         profileId: args.profileId,
         startedAt: args.startedAt,
-        updatedBy: args.updatedBy,
         outcome: { state: "failed", code },
       });
       return null;
@@ -112,7 +70,7 @@ export const analyze = internalAction({
       return await fail(CODE_FOR_UNCERTAIN);
     }
     if (scrape.kind === "refused") {
-      return await fail(codeForRefund(scrape.reason));
+      return await fail(codeForRefund(scrape.reason, "unreadable_source"));
     }
     if (scrape.kind === "not_found") {
       // The address does not resolve at all. A typo is far more likely than a
@@ -144,7 +102,7 @@ export const analyze = internalAction({
       return await fail(CODE_FOR_UNCERTAIN);
     }
     if (ai.kind === "refunded") {
-      return await fail(codeForRefund(ai.reason));
+      return await fail(codeForRefund(ai.reason, "unreadable_source"));
     }
     if (ai.kind === "uncertain") {
       return await fail(CODE_FOR_UNCERTAIN);
@@ -161,7 +119,6 @@ export const analyze = internalAction({
     await ctx.runMutation(internal.company.analysis.finishAnalysis, {
       profileId: args.profileId,
       startedAt: args.startedAt,
-      updatedBy: args.updatedBy,
       outcome: { state: "ready", analysis: ai.result.object },
     });
     return null;

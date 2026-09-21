@@ -31,12 +31,6 @@ import { orgFields } from "../schema";
 import type { UserIdentity } from "convex/server";
 import { v } from "convex/values";
 
-export const vOrgDoc = v.object({
-  _id: v.id("orgs"),
-  _creationTime: v.number(),
-  ...orgFields,
-});
-
 /**
  * What a member's browser may see of an org. `webhookToken` is the only
  * thing that resolves an inbound mail request to this org (PLAN §9.4),
@@ -89,7 +83,6 @@ function defaultOrgName(identity: UserIdentity): string {
 }
 
 type EnsureOrgArgs = {
-  requestId?: string;
   name?: string;
   timezone?: string;
 };
@@ -104,9 +97,8 @@ type EnsureOrgArgs = {
  * EXACTLY ONE ROW PER HEXCLAVE ORG. The `by_hexclaveOrgId` range is read in
  * the same transaction as the insert, so however many members of one
  * organization race into the app, the losing transaction is retried by Convex
- * and then observes the committed row. `requestId` is accepted for
- * forward-compatible retries; the org-keyed dedup already subsumes it, so it
- * is intentionally not persisted.
+ * and then observes the committed row. The organization key also makes
+ * retries idempotent.
  *
  * Three rules from PLAN §6 "Closing the ways in" meet here:
  *   UNRESTRICTED ACCOUNT. `requireUnrestrictedUser`, only on this path; every
@@ -211,9 +203,6 @@ export async function ensureOrgImpl(
     // generated once, here, from the runtime CSPRNG — never derived from the
     // org id, which is not secret.
     webhookToken: generateWebhookToken(),
-    // No verified open event has been seen, so the Agent card shows no
-    // "Opened" column at all (PLAN §9.6).
-    opensObserved: false,
     createdAt: now,
     updatedAt: now,
   });

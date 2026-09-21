@@ -297,43 +297,6 @@ export const putSecret = internalMutation({
   },
 });
 
-export async function setOrgSecretStatus(
-  ctx: MutationCtx,
-  orgId: Id<"orgs">,
-  provider: SecretProvider,
-  status: SecretStatus,
-): Promise<void> {
-  const row = await readOrgSecret(ctx, orgId, provider);
-  if (row === null || row.status === status) {
-    return;
-  }
-  const now = Date.now();
-  await ctx.db.patch("orgSecrets", row._id, {
-    status,
-    updatedAt: now,
-    checkedAt: now,
-  });
-}
-
-/** Record what the last verification of a stored key concluded. */
-export const setStatus = internalMutation({
-  args: {
-    orgId: v.id("orgs"),
-    provider: vSecretProvider,
-    status: vSecretStatus,
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await setOrgSecretStatus(
-      ctx,
-      args.orgId,
-      args.provider,
-      args.status,
-    );
-    return null;
-  },
-});
-
 /**
  * Wipe every AgentMail secret an org holds — the disconnect path
  * (PLAN §4 step 7). Deleting the rows rather than blanking them means a
@@ -350,15 +313,6 @@ export async function clearOrgSecrets(
     }
   }
 }
-
-export const clearSecrets = internalMutation({
-  args: { orgId: v.id("orgs") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await clearOrgSecrets(ctx, args.orgId);
-    return null;
-  },
-});
 
 /**
  * Close an open rotation overlap early. Called once the new webhook secret has

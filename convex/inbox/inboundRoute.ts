@@ -234,8 +234,8 @@ export const ingestRoutedInboundMessage = internalMutation({
 });
 
 /**
- * The route itself. Mounted by `convex/http.ts` as a POST prefix route, so the
- * legacy exact path `/agentmail/webhook` keeps its own handler.
+ * The route itself. Mounted by `convex/http.ts` as a POST prefix route at
+ * `/agentmail/webhook/`.
  */
 export const inboundWebhook = httpAction(async (ctx, request) => {
   const path = new URL(request.url).pathname;

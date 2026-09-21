@@ -4,7 +4,6 @@
  */
 import { vOperationErrorCode } from "./shared";
 import { v } from "convex/values";
-import type { Infer } from "convex/values";
 
 /**
  * Website analysis state (PLAN §5 "Onboarding edge cases"). The failure
@@ -22,8 +21,6 @@ export const vAnalysisStatus = v.union(
     at: v.number(),
   }),
 );
-
-export type AnalysisStatus = Infer<typeof vAnalysisStatus>;
 
 export const COMPANY_NAME_MAX_LENGTH = 200;
 

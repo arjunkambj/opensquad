@@ -167,8 +167,7 @@ export const applyResearch = internalMutation({
       return { applied: true };
     }
 
-    const signalCount =
-      lead.origin.kind === "sourced" ? lead.origin.strategyIds.length : 1;
+    const signalCount = lead.origin.strategyIds.length;
     const aiScore = boostedScore(args.aiScore, signalCount);
     const aiScoreReason = boundedString(
       aiScore === args.aiScore

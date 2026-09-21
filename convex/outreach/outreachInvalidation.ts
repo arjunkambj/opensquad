@@ -18,7 +18,7 @@
  *   unsubscribe / blocklist — a suppression row, re-read at send time.
  */
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import { internalMutation } from "../_generated/server";
 import type { MutationCtx } from "../_generated/server";
 import { boundedString, domainError } from "../lib/validators";
@@ -223,15 +223,4 @@ async function hasStaleCurrentDraft(
     }
   }
   return false;
-}
-
-/** The conversations one lead holds, for callers that need them all. */
-export async function conversationsOfLead(
-  ctx: MutationCtx,
-  prospectId: Id<"prospects">,
-): Promise<Doc<"conversations">[]> {
-  return await ctx.db
-    .query("conversations")
-    .withIndex("by_prospectId", (q) => q.eq("prospectId", prospectId))
-    .take(CONVERSATION_SCAN_MAX);
 }

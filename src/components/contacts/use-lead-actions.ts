@@ -124,5 +124,3 @@ export function useLeadActions(orgId: Id<"orgs">) {
 
   return { pending, notice, dismiss, decide, getEmails, research }
 }
-
-export type LeadActions = ReturnType<typeof useLeadActions>

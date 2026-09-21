@@ -15,7 +15,7 @@
  * reply vanished with one log line and no artefact anyone could replay.
  *
  * Both causes are ordinary and resolvable, not corruption: the AgentMail inbox
- * is provisioned before `conversationStaging.assignOrgInbox` commits, so there is a
+ * is provisioned before `connectionState.claimInbox` commits, so there is a
  * real window during onboarding and during any re-provision; and two
  * orgs can transiently claim one `inboxRef` because that uniqueness is a
  * transactional convention, not a database constraint.
@@ -30,7 +30,7 @@
  * replayed message is judged by today's rules rather than by a snapshot of the
  * rules in force when it was dropped.
  *
- * HOW IT GETS OUT. `conversationStaging.assignOrgInbox` schedules `replayForInbox`
+ * HOW IT GETS OUT. `connectionState.claimInbox` schedules `replayForInbox`
  * for the inbox it just assigned, so the onboarding window closes itself.
  * An operator can also drive it by hand for an inbox whose ambiguity they have
  * resolved. Replay goes through `sendReceipts.recordReceipt` and the ordinary
@@ -217,7 +217,7 @@ export type QuarantineReplayResult = typeof vReplayResult.type;
 /**
  * Replay everything held for one inbox, now that it has exactly one claimant.
  *
- * Scheduled by `conversationStaging.assignOrgInbox` the moment an assignment commits,
+ * Scheduled by `connectionState.claimInbox` the moment an inbox is claimed,
  * and callable by hand once an operator has resolved a double claim. It
  * re-resolves the org itself rather than trusting a caller's — the
  * quarantine exists precisely because that resolution can fail, and a replay
