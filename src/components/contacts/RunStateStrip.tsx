@@ -69,8 +69,7 @@ export function RunStateStrip({
               leads need you
             </p>
             <p className="text-xs text-muted-foreground">
-              A step failed three times for these. Open one to see why and retry
-              it.
+              A step kept failing for these. Open one to see why and retry it.
               {run.lastRunAt === undefined
                 ? ""
                 : ` Last run ${formatWaited(run.lastRunAt)}.`}

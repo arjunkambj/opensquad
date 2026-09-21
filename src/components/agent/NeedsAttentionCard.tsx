@@ -97,8 +97,8 @@ export function NeedsAttentionCard({
       <CardHeader>
         <CardTitle>Needs you</CardTitle>
         <CardDescription>
-          The agent tried these three times and stopped. Retry puts one back in
-          the queue for the next run.
+          The agent retried these and stopped. Retry puts one back in the queue
+          and wakes the agent.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

@@ -16,6 +16,7 @@ import {
   emailDisabledReason,
   LEAD_ERROR_COPY,
   researchDisabledReason,
+  retryAction,
   type ContactDetailData,
   type SpendContext,
 } from "../contacts-model"
@@ -44,6 +45,7 @@ export function LeadDrawerActions({
   const approveReason = decisionDisabledReason(lead, "approved")
   const rejectReason = decisionDisabledReason(lead, "rejected")
   const parked = lead.stage === "needs_attention"
+  const retry = retryAction(lead, prices.research, spend)
 
   return (
     <div className="flex flex-col gap-3">
@@ -51,19 +53,24 @@ export function LeadDrawerActions({
         <div className="rounded-2xl border border-destructive/40 px-4 py-3">
           <p className="text-sm text-destructive">
             {lead.lastErrorCode === undefined
-              ? (lead.stageReason ?? "A step failed three times for this lead.")
+              ? (lead.stageReason ?? "A step kept failing for this lead.")
               : LEAD_ERROR_COPY[lead.lastErrorCode]}
           </p>
           <Button
             size="sm"
             variant="outline"
             className="mt-2"
-            disabled={busy || researchReason !== null}
-            title={researchReason ?? `Costs ${prices.research} credits`}
+            disabled={busy || retry.disabled !== null}
+            title={
+              retry.disabled ??
+              (retry.price === 0
+                ? "Puts this lead back in the queue at no cost"
+                : `Costs ${retry.price} credits`)
+            }
             onClick={onResearch}
           >
             <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            Retry · {prices.research} credits
+            {retry.label}
           </Button>
         </div>
       ) : null}

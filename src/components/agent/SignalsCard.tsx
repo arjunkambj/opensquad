@@ -108,6 +108,16 @@ export function SignalsCard({
                           Every page of this search has been read.
                         </span>
                       ) : null}
+                      {/* A parked signal is skipped by the run until it is
+                          switched off and on again — so the row has to say
+                          so, or the agent silently sources less than the
+                          list on screen implies. */}
+                      {row.parkedReason === undefined ? null : (
+                        <span className="text-xs text-destructive">
+                          Paused: this search stopped working. Switch it off
+                          and on again to retry it.
+                        </span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

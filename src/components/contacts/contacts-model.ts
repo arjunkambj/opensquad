@@ -127,6 +127,7 @@ export const SKIP_REASON_COPY: Record<string, string> = {
   not_sourced: "was not found by a signal",
   credits: "is beyond what your credits cover",
   already_researched: "was already researched",
+  provider_limit: "is beyond today's research allowance — try again tomorrow",
 }
 
 /**
@@ -139,6 +140,12 @@ export function outcomeSummary(
   result: {
     started: number
     skipped: readonly { reason: string }[]
+    /**
+     * Leads that were only un-parked — already researched, so they cost
+     * nothing and start no new work. Counted separately because "started for
+     * 0 leads" would read as a no-op on a button that did something.
+     */
+    unparked?: number
   },
 ): string {
   const counts = new Map<string, number>()
@@ -149,10 +156,17 @@ export function outcomeSummary(
     ([reason, count]) =>
       `${count} ${SKIP_REASON_COPY[reason] ?? "could not be included"}`,
   )
+  const unparked = result.unparked ?? 0
+  const queued =
+    unparked === 0
+      ? ""
+      : ` ${unparked} ${unparked === 1 ? "lead was" : "leads were"} put back in the queue at no cost.`
   const head =
     result.started === 0
-      ? `Nothing to ${verb}.`
-      : `${verb} started for ${result.started} ${result.started === 1 ? "lead" : "leads"}.`
+      ? unparked === 0
+        ? `Nothing to ${verb}.`
+        : `Nothing to ${verb}.${queued}`
+      : `${verb} started for ${result.started} ${result.started === 1 ? "lead" : "leads"}.${queued}`
   return reasons.length === 0 ? head : `${head} Skipped: ${reasons.join(", ")}.`
 }
 
@@ -218,6 +232,45 @@ export function researchDisabledReason(
     return `Not enough credits — researching a lead costs ${price}.`
   }
   return null
+}
+
+/**
+ * What Retry costs for a parked lead, and why it cannot run.
+ *
+ * Retry on a parked lead means two different things depending on whether the
+ * research it is retrying already happened. A lead that was scored and then
+ * parked by a LATER step only needs un-parking — the server does that for
+ * free — so charging for it, or greying the button out because
+ * `researchDisabledReason` says it is "already researched", both lie about
+ * what the button does. A parked lead with no research yet is the paid case.
+ */
+export function retryAction(
+  lead: ResearchState & Pick<ContactRowData, "approval">,
+  price: number,
+  spend: SpendContext,
+): { price: number; disabled: string | null; label: string } {
+  const free = lead.research.status === "researched"
+  if (lead.approval === "rejected") {
+    return { price: 0, disabled: "This lead was rejected.", label: "Retry" }
+  }
+  if (lead.research.status === "researching") {
+    return {
+      price: 0,
+      disabled: "Research is running for this lead.",
+      label: "Retry",
+    }
+  }
+  if (free) {
+    return { price: 0, disabled: null, label: "Put back in the queue" }
+  }
+  return {
+    price,
+    disabled:
+      spend.remaining !== null && spend.remaining < price
+        ? `Not enough credits — researching a lead costs ${price}.`
+        : null,
+    label: `Retry · ${price} credits`,
+  }
 }
 
 /** Why a decision cannot be recorded for this lead, or `null` when it can. */
