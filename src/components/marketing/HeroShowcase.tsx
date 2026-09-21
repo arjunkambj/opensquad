@@ -1,253 +1,262 @@
-import { ArrowUp02Icon, PlusSignIcon } from "@hugeicons/core-free-icons"
+import {
+  ArrowRight01Icon,
+  AudioLinesIcon,
+  Calendar03Icon,
+  ChartLineData01Icon,
+  InboxIcon,
+  MailSend01Icon,
+  StarIcon,
+  UserGroupIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Link } from "@tanstack/react-router"
-import { useReducedMotion } from "motion/react"
-import { useEffect, useState } from "react"
+import { Chip, type ChipVariant } from "@/components/kit/Chip"
 import { FlameScore } from "@/components/kit/FlameScore"
-import { Badge } from "@/components/ui/badge"
+import { FramedPanel } from "@/components/kit/FramedPanel"
+import { StatCard } from "@/components/kit/StatCard"
+import {
+  AppPreview,
+  PreviewMat,
+  PreviewRow,
+  PreviewShell,
+  ScaledFrame,
+} from "@/components/marketing/preview/AppPreview"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const examplePrompts = [
-  "Which companies hiring marketers match my profile?",
-  "Find recently funded SaaS companies hiring for sales.",
-  "Show me this week's replies and what needs my approval.",
+const stats = [
+  { label: "Hot leads", icon: StarIcon, value: "12", sublabel: "Researched and scored 3 of 3" },
+  { label: "Contacted", icon: MailSend01Icon, value: "48", sublabel: "61 emails accepted for delivery" },
+  { label: "Conversations", icon: InboxIcon, value: "9", sublabel: "Threads someone replied in" },
+  { label: "Meetings", icon: Calendar03Icon, value: "3", sublabel: "Confirmed by you · 2 proposed" },
 ] as const
 
-function ChatPreview() {
-  const [promptIndex, setPromptIndex] = useState(0)
-  const [prompt, setPrompt] = useState("")
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [isFocused, setIsFocused] = useState(false)
-  const [hasEdited, setHasEdited] = useState(false)
-  const reduceMotion = useReducedMotion()
+const hotLeads = [
+  { title: "VP Marketing", detail: "SaaS company, 200 people" },
+  { title: "Head of Sales", detail: "Fintech startup, 50 people" },
+  { title: "Founder", detail: "Software company, 30 people" },
+] as const
 
-  useEffect(() => {
-    if (reduceMotion || isFocused || hasEdited) return
-    const fullPrompt = examplePrompts[promptIndex]
-    if (!fullPrompt) return
+const replies: { title: string; detail: string; label: string; variant: ChipVariant }[] = [
+  { title: "Head of Growth", detail: "Analytics company · 2h ago", label: "Interested", variant: "accent" },
+  { title: "COO", detail: "Logistics startup · 5h ago", label: "Question", variant: "accent" },
+  { title: "VP Sales", detail: "HR software · Yesterday", label: "Not now", variant: "muted" },
+]
 
-    const isComplete = prompt === fullPrompt
-    const delay = isComplete && !isDeleting ? 2400 : isDeleting ? 24 : 55
-    const timeout = window.setTimeout(() => {
-      if (isDeleting && prompt.length === 0) {
-        setIsDeleting(false)
-        setPromptIndex((promptIndex + 1) % examplePrompts.length)
-      } else if (isDeleting) {
-        setPrompt(prompt.slice(0, -1))
-      } else if (isComplete) {
-        setIsDeleting(true)
-      } else {
-        setPrompt(fullPrompt.slice(0, prompt.length + 1))
-      }
-    }, delay)
+/** Fourteen days of made-up activity, one point per day. */
+const activity = {
+  days: ["8 Sep", "", "", "", "", "", "", "15 Sep", "", "", "", "", "", "21 Sep"],
+  series: [
+    { label: "Leads created", line: "stroke-chart-1", area: "fill-chart-1/10", dot: "bg-chart-1", values: [4, 6, 5, 9, 8, 12, 10, 14, 13, 17, 15, 19, 18, 22] },
+    { label: "Contacted", line: "stroke-chart-2", area: "fill-chart-2/10", dot: "bg-chart-2", values: [1, 2, 3, 3, 5, 4, 6, 7, 6, 9, 8, 10, 11, 12] },
+    { label: "Replies", line: "stroke-chart-4", area: "fill-chart-4/10", dot: "bg-chart-4", values: [0, 0, 1, 0, 1, 2, 1, 1, 2, 3, 2, 3, 4, 4] },
+  ],
+} as const
 
-    return () => window.clearTimeout(timeout)
-  }, [hasEdited, isDeleting, isFocused, prompt, promptIndex, reduceMotion])
+const PLOT = { width: 600, height: 150, max: 24 }
 
-  function showNextPrompt() {
-    setPromptIndex((promptIndex + 1) % examplePrompts.length)
-    setPrompt("")
-    setIsDeleting(false)
-    setHasEdited(false)
-  }
+function ActivityPreview() {
+  const x = (index: number) =>
+    (index / (activity.days.length - 1)) * PLOT.width
+  const y = (value: number) => PLOT.height - (value / PLOT.max) * PLOT.height
 
   return (
-    <div className="relative flex h-[480px] flex-col justify-end overflow-hidden rounded-2xl p-5 pb-12 sm:p-8 sm:pb-15">
-      <img
-        alt=""
-        className="absolute inset-0 size-full object-cover object-bottom"
-        decoding="async"
-        loading="eager"
-        src="/marketing/backgrounds/forest-peach.webp"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute inset-3 rounded-xl border border-background/40"
-      />
-      <div className="relative flex flex-col gap-3">
-        <div className="relative rounded-marketing-panel bg-popover p-2 text-popover-foreground panel-shadow">
-          <Textarea
-            aria-label="Example sales prompt"
-            onBlur={() => setIsFocused(false)}
-            onChange={(event) => {
-              setPrompt(event.target.value)
-              setHasEdited(true)
-            }}
-            onFocus={() => setIsFocused(true)}
-            placeholder="Ask about your leads…"
-            rows={2}
-            value={reduceMotion && !hasEdited ? examplePrompts[promptIndex] : prompt}
-          />
-          <div className="flex items-center gap-2 px-1 pt-1 pb-1">
-            <Button
-              aria-label="Show another example prompt"
-              onClick={showNextPrompt}
-              size="icon-sm"
-              variant="ghost"
+    <FramedPanel
+      icon={ChartLineData01Icon}
+      title="Activity"
+      action={
+        <div className="flex items-center gap-4">
+          {activity.series.map((series) => (
+            <span
+              key={series.label}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
             >
-              <HugeiconsIcon icon={PlusSignIcon} />
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              Nothing sends without your approval
+              <span className={`size-2 rounded-full ${series.dot}`} />
+              {series.label}
             </span>
-            <Button
-              aria-label="Get started"
-              className="ml-auto"
-              nativeButton={false}
-              render={<Link to="/sign-in" />}
-              size="icon-sm"
-            >
-              <HugeiconsIcon icon={ArrowUp02Icon} />
-            </Button>
-          </div>
+          ))}
         </div>
+      }
+      bodyClassName="gap-2"
+    >
+      <svg
+        className="block h-48 w-full"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${PLOT.width} ${PLOT.height}`}
+      >
+        {[0, 8, 16, 24].map((tick) => (
+          <line
+            key={tick}
+            className="stroke-border"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+            x1={0}
+            x2={PLOT.width}
+            y1={y(tick)}
+            y2={y(tick)}
+          />
+        ))}
+        {activity.series.map((series) => {
+          const points = series.values.map((value, index) => `${x(index)},${y(value)}`)
+          return (
+            <g key={series.label}>
+              <polygon
+                className={series.area}
+                points={`0,${PLOT.height} ${points.join(" ")} ${PLOT.width},${PLOT.height}`}
+              />
+              <polyline
+                className={series.line}
+                fill="none"
+                points={points.join(" ")}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          )
+        })}
+      </svg>
+      <div className="flex justify-between text-2xs text-muted-foreground">
+        {activity.days
+          .filter((day) => day !== "")
+          .map((day) => (
+            <span key={day}>{day}</span>
+          ))}
       </div>
-    </div>
+    </FramedPanel>
   )
 }
 
-const stats: { highlight?: boolean; label: string; value: string }[] = [
-  { label: "Found", value: "25" },
-  { label: "Researched", value: "8" },
-  { highlight: true, label: "Replies", value: "3" },
-]
-
-const leads = [
-  {
-    company: "at a 200-person SaaS company",
-    role: "VP Marketing",
-    score: 3,
-    signal: "Hiring marketers",
-    status: "Review",
-  },
-  {
-    company: "at a 50-person SaaS company",
-    role: "Head of Sales",
-    score: 2,
-    signal: "Recently funded",
-    status: "Approved",
-  },
-  {
-    company: "at a 30-person software company",
-    role: "Founder",
-    score: 2,
-    signal: "Hiring marketers",
-    status: "Review",
-  },
-] as const
-
 export function HeroDashboardPreview() {
   return (
-    <div className="w-full overflow-hidden rounded-2xl bg-background text-foreground shadow-xl shadow-foreground/10">
-      <div className="flex flex-col gap-5 p-4 sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="font-semibold text-2xl tracking-tight">
-            Leads this week
-          </h3>
-          <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-            Schematic
-          </span>
+    <AppPreview className="overflow-hidden rounded-2xl">
+      <ScaledFrame height={900} width={1440}>
+      <PreviewShell
+        active="/overview"
+        badges={{ "/inbox": "4", "/billing": "240" }}
+      >
+        <header className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="font-heading text-2xl font-semibold text-foreground">
+              Welcome back, Maya
+            </p>
+            <p className="text-sm text-muted-foreground">
+              What your agent has been doing, in the window you pick.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline">
+              <HugeiconsIcon
+                className="text-primary"
+                data-icon="inline-start"
+                icon={AudioLinesIcon}
+              />
+              3 active signals
+            </Button>
+            <Button size="sm" variant="outline">
+              <HugeiconsIcon
+                className="text-primary"
+                data-icon="inline-start"
+                icon={InboxIcon}
+              />
+              Inbox connected
+            </Button>
+          </div>
+        </header>
+
+        <div className="flex justify-end">
+          <Tabs defaultValue="14d">
+            <TabsList>
+              <TabsTrigger value="7d">7 days</TabsTrigger>
+              <TabsTrigger value="14d">14 days</TabsTrigger>
+              <TabsTrigger value="30d">30 days</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+
+        <div className="grid grid-cols-4 gap-4">
           {stats.map((stat) => (
-            <Card key={stat.label} size="sm">
-              <CardHeader>
-                <CardTitle>{stat.label}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <span
-                  className={cn(
-                    "font-semibold text-2xl leading-none sm:text-3xl",
-                    stat.highlight && "text-illustration-positive",
-                  )}
-                >
-                  {stat.value}
-                </span>
-              </CardContent>
-            </Card>
+            <StatCard
+              key={stat.label}
+              icon={stat.icon}
+              label={stat.label}
+              sublabel={stat.sublabel}
+              value={stat.value}
+            />
           ))}
         </div>
-        <Table aria-label="Schematic pipeline: anonymous example leads">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Lead</TableHead>
-              <TableHead className="hidden sm:table-cell">Signal</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {leads.map((lead) => (
-              <TableRow key={lead.role}>
-                <TableCell>
-                  <p className="font-medium">{lead.role}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {lead.company}
-                  </p>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  <Badge variant="secondary">{lead.signal}</Badge>
-                </TableCell>
-                <TableCell>
-                  <FlameScore status="researched" score={lead.score} />
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      lead.status === "Approved" ? "default" : "secondary"
-                    }
-                  >
-                    {lead.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <p className="text-xs text-muted-foreground">
-          Illustrative figures, not results.
-        </p>
-      </div>
-    </div>
+
+        <ActivityPreview />
+
+        <div className="grid grid-cols-2 gap-4">
+          <FramedPanel
+            icon={UserGroupIcon}
+            title="Latest hot leads"
+            action={
+              <Button size="xs" variant="ghost">
+                View more
+                <HugeiconsIcon data-icon="inline-end" icon={ArrowRight01Icon} />
+              </Button>
+            }
+            bodyClassName="p-0 py-1"
+          >
+            <ul className="flex flex-col">
+              {hotLeads.map((lead) => (
+                <PreviewRow
+                  key={lead.title}
+                  detail={lead.detail}
+                  end={<FlameScore score={3} status="researched" />}
+                  title={lead.title}
+                />
+              ))}
+            </ul>
+          </FramedPanel>
+          <FramedPanel
+            icon={InboxIcon}
+            title="Latest replies"
+            action={
+              <Button size="xs" variant="ghost">
+                Open inbox
+              </Button>
+            }
+            bodyClassName="p-0 py-1"
+          >
+            <ul className="flex flex-col">
+              {replies.map((reply) => (
+                <PreviewRow
+                  key={reply.title}
+                  detail={reply.detail}
+                  end={<Chip variant={reply.variant}>{reply.label}</Chip>}
+                  title={reply.title}
+                />
+              ))}
+            </ul>
+          </FramedPanel>
+        </div>
+      </PreviewShell>
+      </ScaledFrame>
+    </AppPreview>
   )
 }
 
 export function HeroShowcase() {
   return (
-    <div className="grid gap-5 lg:grid-cols-[0.9fr_1.7fr]">
-      <div className="flex min-w-0 flex-col gap-4">
-        <ChatPreview />
+    <figure className="flex flex-col gap-3">
+      <div className="relative overflow-hidden rounded-2xl bg-accent p-3 sm:p-8 lg:p-12">
+        <img
+          alt=""
+          className="absolute inset-0 size-full object-cover object-bottom"
+          decoding="async"
+          loading="eager"
+          src="/marketing/backgrounds/forest-peach.webp"
+        />
+        <PreviewMat className="relative">
+          <HeroDashboardPreview />
+        </PreviewMat>
       </div>
-      <div className="flex min-w-0 flex-col gap-4">
-        <div className="relative overflow-hidden rounded-2xl bg-accent p-5 pt-12 sm:h-[480px] sm:pt-15 sm:pl-12">
-          <img
-            alt=""
-            className="absolute inset-0 size-full object-cover object-bottom"
-            decoding="async"
-            loading="eager"
-            src="/marketing/backgrounds/forest-peach.webp"
-          />
-          <div className="relative rounded-t-marketing-preview bg-background/40 p-3 backdrop-blur-md sm:translate-x-3 lg:w-[calc(100%+5rem)]">
-            <HeroDashboardPreview />
-          </div>
-        </div>
-      </div>
-    </div>
+      <figcaption className="text-xs text-muted-foreground">
+        The OpenIntent overview. Illustrative figures, not results.
+      </figcaption>
+    </figure>
   )
 }

@@ -1,6 +1,12 @@
-import { Layers01Icon } from "@hugeicons/core-free-icons"
+import {
+  FilterHorizontalIcon,
+  MailOpen01Icon,
+  StarIcon,
+} from "@hugeicons/core-free-icons"
 import { motion } from "motion/react"
-import { LogoMark } from "@/components/layout/Logo"
+import { DetailRow } from "@/components/kit/DetailRow"
+import { FlameScore } from "@/components/kit/FlameScore"
+import { FramedPanel } from "@/components/kit/FramedPanel"
 import {
   MarketingSection,
   MarketingSectionIntro,
@@ -10,158 +16,97 @@ import {
   revealItemVariants,
   useRevealViewport,
 } from "@/components/marketing/motion-variants"
+import {
+  AppPreview,
+  PreviewMat,
+  PreviewRow,
+} from "@/components/marketing/preview/AppPreview"
 import { cn } from "@/lib/utils"
 
-function Prompt({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="ml-auto max-w-[85%] rounded-xl rounded-br-sm bg-foreground px-3.5 py-2.5 text-sm leading-snug text-background">
-      {children}
-    </p>
-  )
-}
+const funnel = [
+  { label: "Showed a buying signal", value: 180, bar: "w-full bg-chart-3" },
+  { label: "Fit who you sell to", value: 25, bar: "w-[14%] bg-chart-1" },
+] as const
 
-function Answer({
-  lead,
-  rows,
-  footer,
-}: {
-  lead: string
-  rows: readonly {
-    name: string
-    detail: string
-    value: string
-    tone?: "good" | "bad"
-  }[]
-  footer: React.ReactNode
-}) {
-  return (
-    <div className="rounded-xl bg-illustration p-4 text-foreground">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <LogoMark className="size-4" />
-        {lead}
-      </div>
-      <ul className="mt-3 flex flex-col gap-1">
-        {rows.map((row) => (
-          <li
-            className="flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2"
-            key={row.name}
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{row.name}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {row.detail}
-              </p>
-            </div>
-            <p
-              className={cn(
-                "shrink-0 text-sm font-medium tabular-nums",
-                row.tone === "bad" && "text-destructive",
-                row.tone === "good" && "text-illustration-positive",
-              )}
-            >
-              {row.value}
-            </p>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-3 text-sm leading-snug">{footer}</p>
-    </div>
-  )
-}
-
+/** The copy says it keeps only the fits; this shows how few that is. */
 function FindingMockup() {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Prompt>Which hiring companies match my profile?</Prompt>
-      <Answer
-        footer={
-          <>
-            <span className="font-medium">25 people</span> across three
-            signals. Match counts are free — a search costs 2 credits a page.
-          </>
-        }
-        lead="Signals · live match counts"
-        rows={[
-          {
-            name: "Hiring marketers",
-            detail: "180 people match",
-            value: "3",
-            tone: "good",
-          },
-          {
-            name: "Recently funded",
-            detail: "96 people match",
-            value: "2",
-          },
-          {
-            name: "Growing headcount",
-            detail: "240 people match",
-            value: "1",
-          },
-        ]}
-      />
-    </div>
+    <FramedPanel
+      as="div"
+      icon={FilterHorizontalIcon}
+      title="This week's search"
+      bodyClassName="gap-4"
+    >
+      {funnel.map((step) => (
+        <div key={step.label} className="flex flex-col gap-1.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm text-muted-foreground">{step.label}</span>
+            <span className="font-display text-2xl font-semibold tabular-nums">
+              {step.value}
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-muted">
+            <div className={cn("h-full rounded-full", step.bar)} />
+          </div>
+        </div>
+      ))}
+      <p className="text-xs text-muted-foreground">
+        155 skipped: wrong size, industry or country.
+      </p>
+    </FramedPanel>
   )
 }
 
+const sources = [
+  { title: "Careers page", detail: "Three open marketing roles" },
+  { title: "Press release", detail: "Series A, announced in June" },
+  { title: "Pricing page", detail: "Sells to mid-size teams" },
+] as const
+
+/** The copy says it writes a note; this shows what the note stands on. */
 function ResearchMockup() {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Prompt>Why is this lead worth an email?</Prompt>
-      <Answer
-        footer="Funded last quarter, three marketing roles open. Approve the lead and it finds the address."
-        lead="VP Marketing · at a 200-person SaaS company"
-        rows={[
-          {
-            name: "Funded last quarter",
-            detail: "Buying signal",
-            value: "3",
-            tone: "good",
-          },
-          {
-            name: "Hiring marketers",
-            detail: "Three roles open",
-            value: "3",
-            tone: "good",
-          },
-          {
-            name: "Uses a competitor tool",
-            detail: "From their hiring post",
-            value: "2",
-          },
-        ]}
-      />
-    </div>
+    <FramedPanel
+      as="div"
+      icon={StarIcon}
+      title="Why VP Marketing"
+      action={<FlameScore score={3} status="researched" />}
+      bodyClassName="p-0 py-1"
+    >
+      <ul className="flex flex-col">
+        {sources.map((source) => (
+          <PreviewRow
+            key={source.title}
+            detail={source.detail}
+            title={source.title}
+          />
+        ))}
+      </ul>
+    </FramedPanel>
   )
 }
 
+/** The copy says "from your inbox"; this is the email as they receive it. */
 function SendingMockup() {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Prompt>What goes out this week?</Prompt>
-      <Answer
-        footer="Nothing sends until you approve the exact text. Every email carries an opt-out line."
-        lead="Review mode · waiting on you"
-        rows={[
-          {
-            name: "First email",
-            detail: "VP Marketing · written for them",
-            value: "1",
-          },
-          {
-            name: "Follow-up one",
-            detail: "Goes out only if nobody replies",
-            value: "1",
-          },
-          {
-            name: "Follow-up two",
-            detail: "Last touch, then it stops",
-            value: "1",
-            tone: "bad",
-          },
-        ]}
-      />
-    </div>
+    <FramedPanel
+      as="div"
+      icon={MailOpen01Icon}
+      title="Congrats on the Series A"
+      bodyClassName="gap-3"
+    >
+      <div className="flex flex-col gap-1">
+        <DetailRow label="From" value="you@yourcompany.com" />
+        <DetailRow label="To" value="VP Marketing" />
+      </div>
+      <p className="text-sm leading-relaxed">
+        Saw you are hiring three marketers after the raise. Teams at that
+        stage usually…
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Don't want these emails? <span className="underline">Unsubscribe</span>
+      </p>
+    </FramedPanel>
   )
 }
 
@@ -170,7 +115,7 @@ const features = [
     eyebrow: "Finding",
     title: "Find leads on buying signals, not lists",
     description:
-      "Each search is one signal crossed with your own fit: funded, hiring, growing, or a keyword you care about.",
+      "It looks for companies that just raised, are hiring, or are growing, and keeps only the ones that fit who you sell to.",
     background: "/marketing/backgrounds/forest-peach-ridge.webp",
     backgroundPosition: "object-[50%_70%]",
     tags: ["Funded", "Hiring", "Headcount", "Keywords"],
@@ -180,7 +125,7 @@ const features = [
     eyebrow: "Research",
     title: "Know why each lead is worth an email",
     description:
-      "The agent reads the company's own site and writes a short note on why this lead is worth contacting, then scores them 1 to 3.",
+      "It reads each company's website, writes a short note on why they might buy, and scores them from 1 to 3.",
     background: "/marketing/backgrounds/forest-peach-stream.webp",
     backgroundPosition: "object-[40%_65%]",
     tags: ["Notes", "Scores", "Signals"],
@@ -190,10 +135,10 @@ const features = [
     eyebrow: "Sending",
     title: "Emails from your inbox, with your approval",
     description:
-      "One email written for that one person, then two follow-ups if they stay quiet. Review keeps every send waiting on you.",
+      "Every email is written for one person. If they don't reply, it nudges them twice, then stops.",
     background: "/marketing/backgrounds/forest-peach-clearing.webp",
     backgroundPosition: "object-[65%_70%]",
-    tags: ["Your inbox", "Two approvals", "Follow-ups", "Opt-out"],
+    tags: ["Your inbox", "Your approval", "Two nudges", "Unsubscribe"],
     Illustration: SendingMockup,
   },
 ] as const
@@ -205,11 +150,9 @@ export function Features() {
     <MarketingSection id="features">
       <MarketingSectionIntro
         align="center"
-        description="Finding, research and sending — each one paired with the control that keeps it safe."
         eyebrow="Features"
-        icon={Layers01Icon}
         revealViewport={revealViewport}
-        title="What it can do for you"
+        title="What you can do with OpenIntent"
       />
       <div className="flex flex-col gap-20 lg:gap-32">
         {features.map(
@@ -229,7 +172,7 @@ export function Features() {
 
             return (
               <motion.div
-                className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16"
+                className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16"
                 initial="initial"
                 key={title}
                 variants={revealContainerVariants}
@@ -251,9 +194,11 @@ export function Features() {
                     loading="lazy"
                     src={background}
                   />
-                  <div className="w-full max-w-sm rounded-2xl bg-illustration/40 p-1.5 shadow-xl shadow-foreground/10 backdrop-blur-sm">
-                    <Illustration />
-                  </div>
+                  <PreviewMat className="w-full max-w-sm">
+                    <AppPreview>
+                      <Illustration />
+                    </AppPreview>
+                  </PreviewMat>
                 </motion.div>
                 <motion.div
                   className="flex flex-col items-start"

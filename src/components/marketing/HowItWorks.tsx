@@ -1,115 +1,112 @@
-import { Route01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import {
+  AudioLinesIcon,
+  InboxIcon,
+  Target02Icon,
+} from "@hugeicons/core-free-icons"
 import { motion } from "motion/react"
+import { Chip } from "@/components/kit/Chip"
+import { DetailRow } from "@/components/kit/DetailRow"
+import { FramedPanel } from "@/components/kit/FramedPanel"
 import {
   MarketingSection,
   MarketingSectionIntro,
 } from "@/components/marketing/MarketingSection"
 import {
+  AppPreview,
+  PreviewMat,
+  PreviewRow,
+} from "@/components/marketing/preview/AppPreview"
+import {
   revealContainerVariants,
   revealItemVariants,
   useRevealViewport,
 } from "@/components/marketing/motion-variants"
-import { cn } from "@/lib/utils"
+import { Switch } from "@/components/ui/switch"
 
+/** The copy says it learns who buys; this shows the buyer it drew up. */
 function ProfileIllustration() {
   return (
-    <div className="w-full rounded-xl bg-illustration px-5 pt-4 pb-3.5 shadow-xl shadow-foreground/10">
-      <p className="text-xs tracking-widest text-muted-foreground uppercase">
-        Company profile
-      </p>
-      <div className="mt-3.5 flex flex-col gap-2">
-        {[
-          { label: "Sells to", value: "Mid-size SaaS teams" },
-          { label: "Solves", value: "Hiring without buying lists" },
-          { label: "Sounds like", value: "Plain, short emails" },
-        ].map(({ label, value }) => (
-          <div className="flex items-center gap-3" key={label}>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{value}</p>
-              <p className="truncate text-xs text-muted-foreground">{label}</p>
-            </div>
-            <HugeiconsIcon
-              className="ml-auto size-4 shrink-0"
-              icon={Tick02Icon}
-            />
-          </div>
-        ))}
+    <FramedPanel
+      as="div"
+      icon={Target02Icon}
+      title="Who to reach"
+      action={<Chip>yourcompany.com</Chip>}
+      bodyClassName="gap-3"
+    >
+      <div className="flex flex-wrap gap-1.5">
+        <Chip variant="accent">VP Marketing</Chip>
+        <Chip variant="accent">Head of Growth</Chip>
+        <Chip variant="accent">Founder</Chip>
       </div>
-      <p className="mt-4 text-xs text-muted-foreground">
-        Fix what it misread, then continue.
-      </p>
-    </div>
+      <DetailRow label="Company" value="SaaS, 50 to 500 people" />
+      <DetailRow label="Where" value="US, UK, Canada" />
+    </FramedPanel>
   )
 }
 
+const signals = [
+  { title: "Hiring marketers", why: "Teams you sell to are growing", on: true },
+  { title: "Recently funded", why: "New budget to spend", on: true },
+  { title: "Growing headcount", why: "Hiring fast, no new roles yet", on: false },
+] as const
+
+/** The copy says pick; this shows it proposes them, each with a reason. */
 function SignalsIllustration() {
   return (
-    <div className="w-full rounded-xl bg-illustration px-5 pt-4 pb-3.5 shadow-xl shadow-foreground/5">
-      <p className="text-xs tracking-widest text-muted-foreground uppercase">
-        Pick the signals
-      </p>
-      <p className="mt-3.5 rounded-lg bg-card px-3 py-2.5 text-xs">
-        Which teams are hiring marketers right now?
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {["Hiring · 180", "Funded · 96", "Headcount · 240"].map(
-          (pill, index) => (
-            <span
-              className={cn(
-                "rounded-lg px-2.5 py-2 text-xs",
-                index === 0
-                  ? "bg-foreground text-background"
-                  : "bg-card text-foreground",
-              )}
-              key={pill}
-            >
-              {pill}
-            </span>
-          ),
-        )}
-      </div>
-      <p className="mt-4 text-xs text-muted-foreground">
-        Counts are free. A search costs 2 credits a page.
-      </p>
-    </div>
+    <FramedPanel
+      as="div"
+      icon={AudioLinesIcon}
+      title="Suggested for you"
+      bodyClassName="p-0 py-1"
+    >
+      <ul className="flex flex-col">
+        {signals.map((signal) => (
+          <PreviewRow
+            key={signal.title}
+            detail={signal.why}
+            end={<Switch defaultChecked={signal.on} />}
+            title={signal.title}
+          />
+        ))}
+      </ul>
+    </FramedPanel>
   )
 }
 
+const thread = [
+  { title: "First email", detail: "Mon · from you@yourcompany.com", label: "Sent", variant: "muted" },
+  { title: "Nudge", detail: "Thu · no reply yet", label: "Sent", variant: "muted" },
+  { title: "Reply", detail: "Fri · lands in your inbox", label: "Interested", variant: "accent" },
+] as const
+
+/** The copy stops at "until they reply"; this shows the reply arriving. */
 function ApproveIllustration() {
   return (
-    <div className="w-full rounded-xl bg-illustration px-5 pt-4 pb-3.5 shadow-xl shadow-foreground/20">
-      <p className="text-xs tracking-widest text-muted-foreground uppercase">
-        Approve, then it sends
-      </p>
-      <div className="mt-3.5 flex flex-col gap-2">
-        {[
-          { label: "A lead worth an email", action: "Approve" },
-          { label: "First email draft", action: "Send" },
-        ].map(({ label, action }) => (
-          <div
-            className="flex items-center gap-3 rounded-lg bg-card px-3 py-2.5"
-            key={label}
-          >
-            <p className="min-w-0 truncate text-xs">{label}</p>
-            <span className="ml-auto shrink-0 rounded-full bg-foreground px-3 py-1 text-xs text-background">
-              {action}
-            </span>
-          </div>
+    <FramedPanel
+      as="div"
+      icon={InboxIcon}
+      title="VP Marketing"
+      bodyClassName="p-0 py-1"
+    >
+      <ul className="flex flex-col">
+        {thread.map((item) => (
+          <PreviewRow
+            key={item.title}
+            detail={item.detail}
+            end={<Chip variant={item.variant}>{item.label}</Chip>}
+            title={item.title}
+          />
         ))}
-      </div>
-      <p className="mt-4 text-xs text-muted-foreground">
-        It follows up until someone replies.
-      </p>
-    </div>
+      </ul>
+    </FramedPanel>
   )
 }
 
 const steps = [
   {
-    title: "Paste your website",
+    title: "Add your website",
     description:
-      "It reads your site and drafts who you sell to. You fix what it misread.",
+      "It learns what you sell and who buys it. Fix anything it got wrong.",
     background: "/marketing/backgrounds/forest-peach-lake.webp",
     backgroundPosition: "object-center",
     Illustration: ProfileIllustration,
@@ -117,15 +114,15 @@ const steps = [
   {
     title: "Pick the signals",
     description:
-      "Choose the buying signals worth watching. Match counts are free.",
+      "Choose what makes someone worth contacting. See how many match before you spend a credit.",
     background: "/marketing/backgrounds/forest-peach-path.webp",
     backgroundPosition: "object-center",
     Illustration: SignalsIllustration,
   },
   {
-    title: "Approve, then it sends",
+    title: "Approve and send",
     description:
-      "Say yes to the lead and the email. It follows up until someone replies.",
+      "Approve the lead, then the email. It follows up until they reply.",
     background: "/marketing/backgrounds/forest-peach-overlook.webp",
     backgroundPosition: "object-center",
     Illustration: ApproveIllustration,
@@ -138,9 +135,7 @@ export function HowItWorks() {
   return (
     <MarketingSection id="how-it-works">
       <MarketingSectionIntro
-        description="Paste your site, pick your signals, approve the sends — three steps and it's working."
         eyebrow="How it works"
-        icon={Route01Icon}
         revealViewport={revealViewport}
         title="Get started in three steps"
       />
@@ -157,7 +152,7 @@ export function HowItWorks() {
             index,
           ) => (
             <motion.div
-              className="flex min-w-0 flex-col gap-5"
+              className="flex min-w-0 flex-col gap-6"
               key={title}
               variants={revealItemVariants}
             >
@@ -172,9 +167,11 @@ export function HowItWorks() {
                   loading="lazy"
                   src={background}
                 />
-                <div className="w-full max-w-80 rounded-2xl bg-illustration/40 p-1.5 shadow-xl shadow-foreground/10 backdrop-blur-sm">
-                  <Illustration />
-                </div>
+                <PreviewMat className="w-full max-w-80">
+                  <AppPreview>
+                    <Illustration />
+                  </AppPreview>
+                </PreviewMat>
               </div>
               <div className="flex flex-col gap-3">
                 <h3 className="text-2xl tracking-tight">

@@ -1,78 +1,98 @@
-import { ArrowUpRight01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
+import {
+  ArrowUpRight01Icon,
+  CoinsDollarIcon,
+  StarIcon,
+  UserMultipleIcon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion } from "motion/react"
-import { LogoMark } from "@/components/layout/Logo"
+import { Chip } from "@/components/kit/Chip"
+import { FlameScore } from "@/components/kit/FlameScore"
+import { StatCard } from "@/components/kit/StatCard"
 import {
   revealContainerVariants,
   revealItemVariants,
   useRevealViewport,
 } from "@/components/marketing/motion-variants"
+import {
+  AppPreview,
+  ScaledFrame,
+} from "@/components/marketing/preview/AppPreview"
 import { Button } from "@/components/ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
-const waitingEmails = [
-  {
-    subject: "Worth fifteen minutes next week?",
-    to: "VP Marketing · recently funded",
-  },
-  {
-    subject: "Following up on your hiring post",
-    to: "Head of Sales · hiring SDRs",
-  },
+const found = [
+  { title: "VP Marketing", detail: "SaaS company, 200 people", score: 3, signal: "Hiring" },
+  { title: "Head of Growth", detail: "Analytics company, 80 people", score: 3, signal: "Funded" },
+  { title: "Founder", detail: "Software company, 30 people", score: 2, signal: "Headcount" },
+  { title: "Head of Sales", detail: "Fintech startup, 50 people", score: 2, signal: "Hiring" },
+  { title: "COO", detail: "Logistics startup, 120 people", score: 2, signal: "Funded" },
 ] as const
 
-function ApprovalPreview() {
+/**
+ * The copy promises "see who it finds"; this is the first run's page, drawn
+ * at full size and scaled so it bleeds off the frame like a real screen.
+ */
+function FoundPreview() {
   return (
-    <div className="w-full overflow-hidden rounded-2xl bg-background text-foreground shadow-xl shadow-foreground/10 sm:min-h-[520px]">
-      <div className="flex flex-col gap-4 p-3 sm:p-5">
-        <div className="flex justify-end">
-          <p className="max-w-xs rounded-2xl rounded-br-md bg-foreground px-4 py-2.5 text-sm leading-relaxed text-background">
-            What goes out today?
-          </p>
-        </div>
-
-        <div className="flex items-start gap-3">
-          <LogoMark className="mt-0.5 size-6" />
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm leading-relaxed">
-              Two emails are written and waiting. Nothing sends until you
-              approve the exact text.
+    <AppPreview className="overflow-hidden rounded-2xl shadow-xl shadow-foreground/10">
+      <ScaledFrame height={820} width={900}>
+        <div className="flex size-full flex-col gap-6 bg-panel p-8 text-foreground">
+          <div className="flex flex-col gap-1">
+            <p className="font-heading text-2xl font-semibold">
+              Found for yourcompany.com
             </p>
-            <div className="flex flex-col gap-2">
-              {waitingEmails.map((email) => (
-                <div
-                  className="flex flex-col gap-0.5 rounded-xl bg-card px-3 py-2.5"
-                  key={email.subject}
-                >
-                  <p className="truncate text-sm font-medium">
-                    {email.subject}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {email.to}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground">
-                <HugeiconsIcon
-                  aria-hidden="true"
-                  className="size-3.5"
-                  icon={Tick02Icon}
-                />
-                Approve and send
-              </span>
-              <span className="inline-flex h-7 items-center rounded-lg bg-secondary px-3 text-xs font-medium text-secondary-foreground">
-                Not now
-              </span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                Awaiting your approval
-              </span>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Your first run, researched and scored.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <StatCard icon={UserMultipleIcon} label="Leads found" value="25" />
+            <StatCard icon={StarIcon} label="Hot leads" value="6" />
+            <StatCard icon={CoinsDollarIcon} label="Credits left" value="260" />
+          </div>
+          <div className="overflow-hidden rounded-2xl bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lead</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Signal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {found.map((lead) => (
+                  <TableRow key={lead.title}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{lead.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {lead.detail}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <FlameScore score={lead.score} status="researched" />
+                    </TableCell>
+                    <TableCell>
+                      <Chip variant="accent">{lead.signal}</Chip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </div>
-      </div>
-    </div>
+      </ScaledFrame>
+    </AppPreview>
   )
 }
 
@@ -88,9 +108,9 @@ export function CTA() {
         viewport={revealViewport}
         whileInView="animate"
       >
-        <div className="flex flex-col items-start justify-center gap-5 p-8 sm:p-10 lg:p-14">
+        <div className="flex flex-col items-start justify-center gap-4 p-8 sm:p-10 lg:p-12">
           <motion.p
-            className="-mb-4 text-sm text-muted-foreground"
+            className="text-sm text-muted-foreground"
             variants={revealItemVariants}
           >
             Get started
@@ -105,11 +125,7 @@ export function CTA() {
             className="max-w-md text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg"
             variants={revealItemVariants}
           >
-            Setup takes one URL. You start with 300 credits and no card, and
-            the first leads — each with the reason it matched — cost you
-            nothing but a few of them. It starts in Sourcing only, so nothing
-            is sent until you connect your own inbox and pick how it sends.
-            Every email carries an opt-out line.
+            300 free credits, no card. Nothing sends until you say so.
           </motion.p>
           <motion.div className="mt-2" variants={revealItemVariants}>
             <Button
@@ -139,7 +155,7 @@ export function CTA() {
             src="/marketing/backgrounds/forest-peach.webp"
           />
           <div className="absolute top-10 left-10 w-[calc(100%+6rem)] rounded-t-marketing-preview bg-background/40 p-3 backdrop-blur-md sm:top-12 sm:left-14">
-            <ApprovalPreview />
+            <FoundPreview />
           </div>
         </motion.div>
       </motion.section>

@@ -2,6 +2,7 @@ import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { motion } from "motion/react"
+import { LogoMark } from "@/components/layout/Logo"
 import { HeroShowcase } from "@/components/marketing/HeroShowcase"
 import { MarketingChip } from "@/components/marketing/MarketingChip"
 import {
@@ -15,15 +16,15 @@ export function Hero() {
   return (
     <motion.section
       animate="animate"
-      className="mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pt-14 sm:gap-12 sm:px-6 sm:pt-18 lg:px-8 lg:pt-20"
+      className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-4 pt-12 sm:px-6 sm:pt-16 lg:px-8 lg:pt-20"
       id="hero"
       initial="initial"
       variants={revealContainerVariants}
     >
-      <div className="flex w-full flex-col gap-3.5">
-        <motion.div className="mb-3.5 w-fit" variants={revealItemVariants}>
+      <div className="flex w-full flex-col gap-4">
+        <motion.div className="mb-4 w-fit" variants={revealItemVariants}>
           <MarketingChip
-            icon="logo"
+            icon={<LogoMark className="size-4" />}
             label="Outbound that runs while you work"
           />
         </motion.div>
@@ -38,10 +39,10 @@ export function Hero() {
           className="flex flex-col items-start gap-6"
           variants={revealItemVariants}
         >
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-            Point it at your website. It finds people showing real buying
-            signals and emails them from your own inbox — nothing goes out
-            without your say-so. Email only.
+          <p className="max-w-md leading-relaxed text-muted-foreground">
+            Add your website. It finds people who are ready to buy, writes
+            each one a personal email, and sends it from your inbox once you
+            approve.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button

@@ -2,6 +2,7 @@ import { Mail01Icon, NewTwitterIcon, Tick02Icon } from "@hugeicons/core-free-ico
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Link } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
+import { Hint } from "@/components/kit/Hint"
 import Logo from "@/components/layout/Logo"
 
 const SUPPORT_EMAIL = "support@openintent.ai"
@@ -9,13 +10,13 @@ const SUPPORT_EMAIL = "support@openintent.ai"
 const productLinks = [
   { href: "/#how-it-works", name: "How it works" },
   { href: "/#features", name: "Features" },
-  { href: "/#trial", name: "Trial" },
+  { href: "/#pricing", name: "Pricing" },
   { href: "/#faq", name: "FAQ" },
 ] as const
 
 const accountLinks = [
   { to: "/sign-in", name: "Sign in" },
-  { to: "/dashboard", name: "Dashboard" },
+  { to: "/overview", name: "Overview" },
 ] as const
 
 const socialButtonClassName =
@@ -37,31 +38,32 @@ function CopyEmailButton({ email }: { email: string }) {
       await navigator.clipboard.writeText(email)
       setCopied(true)
     } catch {
-      // The title attribute still carries the address.
+      // The hint still carries the address, so it stays readable and copyable by hand.
     }
   }
 
   return (
-    <button
-      aria-label={copied ? "Email copied" : `Copy email ${email}`}
-      className={socialButtonClassName}
-      onClick={copyEmail}
-      title={copied ? "Copied" : email}
-      type="button"
-    >
-      <HugeiconsIcon
-        aria-hidden="true"
-        className="size-4"
-        icon={copied ? Tick02Icon : Mail01Icon}
-      />
-    </button>
+    <Hint content={copied ? "Copied" : email}>
+      <button
+        aria-label={copied ? "Email copied" : `Copy email ${email}`}
+        className={socialButtonClassName}
+        onClick={() => void copyEmail()}
+        type="button"
+      >
+        <HugeiconsIcon
+          aria-hidden="true"
+          className="size-4"
+          icon={copied ? Tick02Icon : Mail01Icon}
+        />
+      </button>
+    </Hint>
   )
 }
 
 export function Footer() {
   return (
     <footer className="relative isolate mt-24 w-full overflow-hidden bg-card text-card-foreground sm:mt-32">
-      <div className="@container mx-auto flex w-full max-w-7xl flex-col px-4 pt-12 pb-6 sm:px-6 sm:pt-14 lg:px-8 lg:pb-8">
+      <div className="@container mx-auto flex w-full max-w-7xl flex-col px-4 pt-12 pb-6 sm:px-6 sm:pt-16 lg:px-8 lg:pb-8">
         <p
           aria-hidden="true"
           className="footer-wordmark pointer-events-none absolute inset-x-0 -bottom-[0.22em] -z-10 leading-none font-bold font-display tracking-tighter text-center text-foreground/[0.04] select-none"
@@ -94,7 +96,7 @@ export function Footer() {
               <CopyEmailButton email={SUPPORT_EMAIL} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-12 gap-y-10 lg:gap-x-16">
+          <div className="grid grid-cols-2 gap-12 lg:gap-x-16">
             <div className="flex flex-col">
               <h4 className="flex items-center gap-2 text-sm font-medium">
                 <span
@@ -103,7 +105,7 @@ export function Footer() {
                 />
                 Product
               </h4>
-              <ul className="mt-2.5 flex flex-col gap-2 pl-3.5">
+              <ul className="mt-3 flex flex-col gap-2 pl-3.5">
                 {productLinks.map((link) => (
                   <li key={link.name}>
                     <a
@@ -124,7 +126,7 @@ export function Footer() {
                 />
                 Account
               </h4>
-              <ul className="mt-2.5 flex flex-col gap-2 pl-3.5">
+              <ul className="mt-3 flex flex-col gap-2 pl-3.5">
                 {accountLinks.map((link) => (
                   <li key={link.name}>
                     <Link

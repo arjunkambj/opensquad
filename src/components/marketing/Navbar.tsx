@@ -27,7 +27,7 @@ const navVariants = {
 const marketingNavLinks = [
   { href: "/#how-it-works", name: "How it works" },
   { href: "/#features", name: "Features" },
-  { href: "/#trial", name: "Trial" },
+  { href: "/#pricing", name: "Pricing" },
   { href: "/#faq", name: "FAQ" },
 ] as const
 
@@ -50,7 +50,7 @@ function SignedOutActions() {
         nativeButton={false}
         render={<Link to="/sign-in" />}
         size="nav"
-        variant="outline"
+        variant="inverse"
       >
         Get started
       </Button>
@@ -65,9 +65,9 @@ function AccountActions() {
     return (
       <Button
         nativeButton={false}
-        render={<Link to="/dashboard" />}
+        render={<Link to="/overview" />}
         size="nav"
-        variant="outline"
+        variant="inverse"
       >
         Dashboard
       </Button>
@@ -81,7 +81,7 @@ function SheetAccountLink({ onNavigate }: { onNavigate: () => void }) {
   const user = useUser()
 
   return user ? (
-    <Link className={sheetLinkClassName} onClick={onNavigate} to="/dashboard">
+    <Link className={sheetLinkClassName} onClick={onNavigate} to="/overview">
       Dashboard
     </Link>
   ) : (
@@ -139,14 +139,16 @@ export function Navbar() {
                 <HugeiconsIcon icon={Menu02Icon} size={20} strokeWidth={2} />
               </SheetTrigger>
               <SheetContent className="w-[min(20rem,88vw)]" side="right">
-                <SheetHeader className="border-b">
-                  <SheetTitle>
-                    <Logo />
-                  </SheetTitle>
-                  <SheetDescription className="sr-only">
-                    Site navigation
-                  </SheetDescription>
-                </SheetHeader>
+                <div className="border-b">
+                  <SheetHeader>
+                    <SheetTitle>
+                      <Logo />
+                    </SheetTitle>
+                    <SheetDescription className="sr-only">
+                      Site navigation
+                    </SheetDescription>
+                  </SheetHeader>
+                </div>
 
                 <nav className="flex flex-col gap-1 px-3 py-4">
                   {marketingNavLinks.map((link) => (
