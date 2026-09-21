@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 
 export function OrgSwitcherMenu({ user }: { user: CurrentUser }) {
@@ -31,7 +32,7 @@ export function OrgSwitcherMenu({ user }: { user: CurrentUser }) {
       // Convex authorises by the token's active-organization claim, so the
       // switch only reaches the data once a new token is installed.
       refreshConvexIdentity()
-      await navigate({ to: "/dashboard" })
+      await navigate({ to: "/overview" })
     } finally {
       setSwitchingTo(null)
     }
@@ -48,6 +49,7 @@ export function OrgSwitcherMenu({ user }: { user: CurrentUser }) {
           onClick={() => void pick(team)}
         >
           <span className="min-w-0 flex-1 truncate">{team.displayName}</span>
+          {/* The switch is an action the click started, so it keeps a spinner. */}
           {switchingTo === team.id ? (
             <Spinner />
           ) : team.id === selectedId ? (
@@ -59,6 +61,21 @@ export function OrgSwitcherMenu({ user }: { user: CurrentUser }) {
           ) : null}
         </DropdownMenuItem>
       ))}
+    </DropdownMenuGroup>
+  )
+}
+
+/** Mirrors the menu while the organization list loads: its label over item-height rows. */
+export function OrgSwitcherMenuSkeleton() {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Organization</DropdownMenuLabel>
+      <div aria-hidden="true" className="flex min-h-7.5 items-center px-2.5 py-1">
+        <Skeleton shape="full" className="h-3.5 w-32" />
+      </div>
+      <div aria-hidden="true" className="flex min-h-7.5 items-center px-2.5 py-1">
+        <Skeleton shape="full" className="h-3.5 w-24" />
+      </div>
     </DropdownMenuGroup>
   )
 }

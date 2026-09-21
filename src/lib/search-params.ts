@@ -64,6 +64,17 @@ export function pageSize(value: unknown): PageSize | undefined {
     : undefined
 }
 
+/** Page 1 is the default, so links omit it. */
+export function optionalPageNumber(value: unknown): number | undefined {
+  const parsed = typeof value === "string" ? Number(value) : value
+  return typeof parsed === "number" &&
+    Number.isInteger(parsed) &&
+    parsed > 1 &&
+    parsed <= 1000
+    ? parsed
+    : undefined
+}
+
 /** Reset the cursor with filters; a cursor from the previous query points at the wrong page. */
 export function withFilters<T extends { cursor?: string }>(
   previous: T,

@@ -5,8 +5,8 @@ export const hexclaveClientApp = new HexclaveClientApp({
   urls: {
     handler: "/handler",
     signIn: "/sign-in",
-    afterSignIn: "/dashboard",
-    afterSignUp: "/dashboard",
+    afterSignIn: "/overview",
+    afterSignUp: "/overview",
     afterSignOut: "/",
   },
 });

@@ -16,7 +16,7 @@ export function DashboardNotFound() {
       <EmptyState
         title={attempted ?? "Page not found"}
         description="Check the address, or pick a page from the sidebar."
-        action={<Button render={<Link to="/dashboard" />}>Go to Dashboard</Button>}
+        action={<Button render={<Link to="/overview" />}>Go to Overview</Button>}
       />
     </>
   )

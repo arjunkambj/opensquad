@@ -1,18 +1,28 @@
 import {
-  DashboardSquare01Icon,
+  AudioLinesIcon,
+  ContactBookIcon,
+  CreditCardIcon,
+  Home02Icon,
   InboxIcon,
+  PlugSocketIcon,
   Robot01Icon,
   Settings02Icon,
+  UserGroupIcon,
   UserMultipleIcon,
 } from "@hugeicons/core-free-icons"
 import type { IconSvgElement } from "@hugeicons/react"
 
 type MenuHref =
-  | "/dashboard"
-  | "/agent"
+  | "/overview"
+  | "/signals"
+  | "/autopilot"
+  | "/leads"
   | "/contacts"
   | "/inbox"
   | "/settings"
+  | "/billing"
+  | "/team"
+  | "/integrations"
 
 export type MenuItem = {
   name: string
@@ -20,26 +30,71 @@ export type MenuItem = {
   icon: IconSvgElement
 }
 
-export const sidebarMainItems: MenuItem[] = [
+/** Sits above every section, unlabelled: the overview belongs to no category. */
+export const sidebarOverviewItem: MenuItem = {
+  name: "Overview",
+  href: "/overview",
+  icon: Home02Icon,
+}
+
+export type MenuSection = {
+  label: string
+  items: MenuItem[]
+}
+
+export const sidebarSections: MenuSection[] = [
   {
-    name: "Dashboard",
-    href: "/dashboard",
-    icon: DashboardSquare01Icon,
+    label: "Agent",
+    items: [
+      {
+        name: "Signals",
+        href: "/signals",
+        icon: AudioLinesIcon,
+      },
+      {
+        name: "Autopilot",
+        href: "/autopilot",
+        icon: Robot01Icon,
+      },
+    ],
   },
   {
-    name: "Agent",
-    href: "/agent",
-    icon: Robot01Icon,
+    label: "Pipeline",
+    items: [
+      {
+        name: "Leads",
+        href: "/leads",
+        icon: UserMultipleIcon,
+      },
+      {
+        name: "Contacts",
+        href: "/contacts",
+        icon: ContactBookIcon,
+      },
+      {
+        name: "Inbox",
+        href: "/inbox",
+        icon: InboxIcon,
+      },
+    ],
+  },
+]
+
+export const sidebarFooterItems: MenuItem[] = [
+  {
+    name: "Team",
+    href: "/team",
+    icon: UserGroupIcon,
   },
   {
-    name: "Contacts",
-    href: "/contacts",
-    icon: UserMultipleIcon,
+    name: "Integrations",
+    href: "/integrations",
+    icon: PlugSocketIcon,
   },
   {
-    name: "Inbox",
-    href: "/inbox",
-    icon: InboxIcon,
+    name: "Billing",
+    href: "/billing",
+    icon: CreditCardIcon,
   },
   {
     name: "Settings",

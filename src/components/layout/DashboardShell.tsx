@@ -2,7 +2,6 @@ import type { ReactNode } from "react"
 import { useCallback, useState } from "react"
 import { AppSidebar } from "@/components/layout/AppSidebar"
 import { DashboardHeader } from "@/components/layout/DashboardHeader"
-import type { ProfileUser } from "@/components/layout/SidebarUser"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -18,13 +17,7 @@ function readStoredSidebarOpen(): boolean {
   }
 }
 
-export function DashboardShell({
-  children,
-  user,
-}: {
-  children: ReactNode
-  user: ProfileUser
-}) {
+export function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(readStoredSidebarOpen)
 
   const changeSidebarOpen = useCallback((open: boolean) => {
@@ -40,15 +33,16 @@ export function DashboardShell({
   return (
     <TooltipProvider>
       <SidebarProvider
-        className="bg-background"
         open={sidebarOpen}
         onOpenChange={changeSidebarOpen}
       >
-        <AppSidebar user={user} />
-        <SidebarInset className="min-w-0 bg-background">
-          <DashboardHeader />
-          <div className="flex min-w-0 flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-            {children}
+        <AppSidebar />
+        <SidebarInset className="min-w-0">
+          <div className="flex min-w-0 flex-1 flex-col bg-panel md:rounded-2xl md:ring-1 md:ring-sidebar-border/60">
+            <DashboardHeader />
+            <div className="flex min-w-0 flex-1 flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
+              {children}
+            </div>
           </div>
         </SidebarInset>
       </SidebarProvider>

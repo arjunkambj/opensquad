@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { AgentPage } from "@/components/agent/AgentPage"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
+/** The old single agent page was split into Signals and Autopilot; keep old links working. */
 export const Route = createFileRoute("/_dashboard/_org/agent")({
-  component: AgentPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/autopilot", replace: true })
+  },
 })

@@ -21,10 +21,10 @@ export type DashboardSearch = {
 }
 
 export const DASHBOARD_DEFAULTS = {
-  range: "30d",
+  range: "today",
 } as const satisfies Required<Pick<DashboardSearch, "range">>
 
-export const Route = createFileRoute("/_dashboard/_org/dashboard")({
+export const Route = createFileRoute("/_dashboard/_org/overview")({
   validateSearch: (search): DashboardSearch => ({
     range: optionalOneOf(ACTIVITY_RANGES, search.range),
     from: optionalEpochMs(search.from),

@@ -15,13 +15,20 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as DashboardSplatRouteImport } from './routes/_dashboard/$'
 import { Route as DashboardOrgRouteImport } from './routes/_dashboard/_org'
+import { Route as DashboardDashboardRouteImport } from './routes/_dashboard/dashboard'
 import { Route as DashboardSettingsRouteImport } from './routes/_dashboard/settings'
+import { Route as DashboardTeamRouteImport } from './routes/_dashboard/team'
 import { Route as MarketingIndexRouteImport } from './routes/_marketing/index'
 import { Route as HandlerSplatRouteImport } from './routes/handler.$'
 import { Route as DashboardOrgAgentRouteImport } from './routes/_dashboard/_org/agent'
+import { Route as DashboardOrgAutopilotRouteImport } from './routes/_dashboard/_org/autopilot'
+import { Route as DashboardOrgBillingRouteImport } from './routes/_dashboard/_org/billing'
 import { Route as DashboardOrgContactsRouteImport } from './routes/_dashboard/_org/contacts'
-import { Route as DashboardOrgDashboardRouteImport } from './routes/_dashboard/_org/dashboard'
 import { Route as DashboardOrgInboxRouteImport } from './routes/_dashboard/_org/inbox'
+import { Route as DashboardOrgIntegrationsRouteImport } from './routes/_dashboard/_org/integrations'
+import { Route as DashboardOrgLeadsRouteImport } from './routes/_dashboard/_org/leads'
+import { Route as DashboardOrgOverviewRouteImport } from './routes/_dashboard/_org/overview'
+import { Route as DashboardOrgSignalsRouteImport } from './routes/_dashboard/_org/signals'
 import { Route as DashboardOrgInboxIndexRouteImport } from './routes/_dashboard/_org/inbox/index'
 import { Route as DashboardOrgInboxConversationIdRouteImport } from './routes/_dashboard/_org/inbox/$conversationId'
 
@@ -52,9 +59,19 @@ const DashboardOrgRoute = DashboardOrgRouteImport.update({
   id: '/_org',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardDashboardRoute = DashboardDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardTeamRoute = DashboardTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
   getParentRoute: () => DashboardRoute,
 } as any)
 const MarketingIndexRoute = MarketingIndexRouteImport.update({
@@ -72,19 +89,45 @@ const DashboardOrgAgentRoute = DashboardOrgAgentRouteImport.update({
   path: '/agent',
   getParentRoute: () => DashboardOrgRoute,
 } as any)
+const DashboardOrgAutopilotRoute = DashboardOrgAutopilotRouteImport.update({
+  id: '/autopilot',
+  path: '/autopilot',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
+const DashboardOrgBillingRoute = DashboardOrgBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
 const DashboardOrgContactsRoute = DashboardOrgContactsRouteImport.update({
   id: '/contacts',
   path: '/contacts',
   getParentRoute: () => DashboardOrgRoute,
 } as any)
-const DashboardOrgDashboardRoute = DashboardOrgDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => DashboardOrgRoute,
-} as any)
 const DashboardOrgInboxRoute = DashboardOrgInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
+const DashboardOrgIntegrationsRoute =
+  DashboardOrgIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => DashboardOrgRoute,
+  } as any)
+const DashboardOrgLeadsRoute = DashboardOrgLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
+const DashboardOrgOverviewRoute = DashboardOrgOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => DashboardOrgRoute,
+} as any)
+const DashboardOrgSignalsRoute = DashboardOrgSignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
   getParentRoute: () => DashboardOrgRoute,
 } as any)
 const DashboardOrgInboxIndexRoute = DashboardOrgInboxIndexRouteImport.update({
@@ -104,12 +147,19 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/$': typeof DashboardSplatRoute
+  '/dashboard': typeof DashboardDashboardRoute
   '/settings': typeof DashboardSettingsRoute
+  '/team': typeof DashboardTeamRoute
   '/handler/$': typeof HandlerSplatRoute
   '/agent': typeof DashboardOrgAgentRoute
+  '/autopilot': typeof DashboardOrgAutopilotRoute
+  '/billing': typeof DashboardOrgBillingRoute
   '/contacts': typeof DashboardOrgContactsRoute
-  '/dashboard': typeof DashboardOrgDashboardRoute
   '/inbox': typeof DashboardOrgInboxRouteWithChildren
+  '/integrations': typeof DashboardOrgIntegrationsRoute
+  '/leads': typeof DashboardOrgLeadsRoute
+  '/overview': typeof DashboardOrgOverviewRoute
+  '/signals': typeof DashboardOrgSignalsRoute
   '/inbox/$conversationId': typeof DashboardOrgInboxConversationIdRoute
   '/inbox/': typeof DashboardOrgInboxIndexRoute
 }
@@ -118,11 +168,18 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/$': typeof DashboardSplatRoute
+  '/dashboard': typeof DashboardDashboardRoute
   '/settings': typeof DashboardSettingsRoute
+  '/team': typeof DashboardTeamRoute
   '/handler/$': typeof HandlerSplatRoute
   '/agent': typeof DashboardOrgAgentRoute
+  '/autopilot': typeof DashboardOrgAutopilotRoute
+  '/billing': typeof DashboardOrgBillingRoute
   '/contacts': typeof DashboardOrgContactsRoute
-  '/dashboard': typeof DashboardOrgDashboardRoute
+  '/integrations': typeof DashboardOrgIntegrationsRoute
+  '/leads': typeof DashboardOrgLeadsRoute
+  '/overview': typeof DashboardOrgOverviewRoute
+  '/signals': typeof DashboardOrgSignalsRoute
   '/inbox/$conversationId': typeof DashboardOrgInboxConversationIdRoute
   '/inbox': typeof DashboardOrgInboxIndexRoute
 }
@@ -134,13 +191,20 @@ export interface FileRoutesById {
   '/sign-in': typeof SignInRoute
   '/_dashboard/$': typeof DashboardSplatRoute
   '/_dashboard/_org': typeof DashboardOrgRouteWithChildren
+  '/_dashboard/dashboard': typeof DashboardDashboardRoute
   '/_dashboard/settings': typeof DashboardSettingsRoute
+  '/_dashboard/team': typeof DashboardTeamRoute
   '/handler/$': typeof HandlerSplatRoute
   '/_marketing/': typeof MarketingIndexRoute
   '/_dashboard/_org/agent': typeof DashboardOrgAgentRoute
+  '/_dashboard/_org/autopilot': typeof DashboardOrgAutopilotRoute
+  '/_dashboard/_org/billing': typeof DashboardOrgBillingRoute
   '/_dashboard/_org/contacts': typeof DashboardOrgContactsRoute
-  '/_dashboard/_org/dashboard': typeof DashboardOrgDashboardRoute
   '/_dashboard/_org/inbox': typeof DashboardOrgInboxRouteWithChildren
+  '/_dashboard/_org/integrations': typeof DashboardOrgIntegrationsRoute
+  '/_dashboard/_org/leads': typeof DashboardOrgLeadsRoute
+  '/_dashboard/_org/overview': typeof DashboardOrgOverviewRoute
+  '/_dashboard/_org/signals': typeof DashboardOrgSignalsRoute
   '/_dashboard/_org/inbox/$conversationId': typeof DashboardOrgInboxConversationIdRoute
   '/_dashboard/_org/inbox/': typeof DashboardOrgInboxIndexRoute
 }
@@ -151,12 +215,19 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/$'
+    | '/dashboard'
     | '/settings'
+    | '/team'
     | '/handler/$'
     | '/agent'
+    | '/autopilot'
+    | '/billing'
     | '/contacts'
-    | '/dashboard'
     | '/inbox'
+    | '/integrations'
+    | '/leads'
+    | '/overview'
+    | '/signals'
     | '/inbox/$conversationId'
     | '/inbox/'
   fileRoutesByTo: FileRoutesByTo
@@ -165,11 +236,18 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/$'
+    | '/dashboard'
     | '/settings'
+    | '/team'
     | '/handler/$'
     | '/agent'
+    | '/autopilot'
+    | '/billing'
     | '/contacts'
-    | '/dashboard'
+    | '/integrations'
+    | '/leads'
+    | '/overview'
+    | '/signals'
     | '/inbox/$conversationId'
     | '/inbox'
   id:
@@ -180,13 +258,20 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/_dashboard/$'
     | '/_dashboard/_org'
+    | '/_dashboard/dashboard'
     | '/_dashboard/settings'
+    | '/_dashboard/team'
     | '/handler/$'
     | '/_marketing/'
     | '/_dashboard/_org/agent'
+    | '/_dashboard/_org/autopilot'
+    | '/_dashboard/_org/billing'
     | '/_dashboard/_org/contacts'
-    | '/_dashboard/_org/dashboard'
     | '/_dashboard/_org/inbox'
+    | '/_dashboard/_org/integrations'
+    | '/_dashboard/_org/leads'
+    | '/_dashboard/_org/overview'
+    | '/_dashboard/_org/signals'
     | '/_dashboard/_org/inbox/$conversationId'
     | '/_dashboard/_org/inbox/'
   fileRoutesById: FileRoutesById
@@ -243,11 +328,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardOrgRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/_dashboard/dashboard': {
+      id: '/_dashboard/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardDashboardRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/_dashboard/settings': {
       id: '/_dashboard/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof DashboardSettingsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/_dashboard/team': {
+      id: '/_dashboard/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof DashboardTeamRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/_marketing/': {
@@ -271,6 +370,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardOrgAgentRouteImport
       parentRoute: typeof DashboardOrgRoute
     }
+    '/_dashboard/_org/autopilot': {
+      id: '/_dashboard/_org/autopilot'
+      path: '/autopilot'
+      fullPath: '/autopilot'
+      preLoaderRoute: typeof DashboardOrgAutopilotRouteImport
+      parentRoute: typeof DashboardOrgRoute
+    }
+    '/_dashboard/_org/billing': {
+      id: '/_dashboard/_org/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof DashboardOrgBillingRouteImport
+      parentRoute: typeof DashboardOrgRoute
+    }
     '/_dashboard/_org/contacts': {
       id: '/_dashboard/_org/contacts'
       path: '/contacts'
@@ -278,18 +391,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardOrgContactsRouteImport
       parentRoute: typeof DashboardOrgRoute
     }
-    '/_dashboard/_org/dashboard': {
-      id: '/_dashboard/_org/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardOrgDashboardRouteImport
-      parentRoute: typeof DashboardOrgRoute
-    }
     '/_dashboard/_org/inbox': {
       id: '/_dashboard/_org/inbox'
       path: '/inbox'
       fullPath: '/inbox'
       preLoaderRoute: typeof DashboardOrgInboxRouteImport
+      parentRoute: typeof DashboardOrgRoute
+    }
+    '/_dashboard/_org/integrations': {
+      id: '/_dashboard/_org/integrations'
+      path: '/integrations'
+      fullPath: '/integrations'
+      preLoaderRoute: typeof DashboardOrgIntegrationsRouteImport
+      parentRoute: typeof DashboardOrgRoute
+    }
+    '/_dashboard/_org/leads': {
+      id: '/_dashboard/_org/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof DashboardOrgLeadsRouteImport
+      parentRoute: typeof DashboardOrgRoute
+    }
+    '/_dashboard/_org/overview': {
+      id: '/_dashboard/_org/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof DashboardOrgOverviewRouteImport
+      parentRoute: typeof DashboardOrgRoute
+    }
+    '/_dashboard/_org/signals': {
+      id: '/_dashboard/_org/signals'
+      path: '/signals'
+      fullPath: '/signals'
+      preLoaderRoute: typeof DashboardOrgSignalsRouteImport
       parentRoute: typeof DashboardOrgRoute
     }
     '/_dashboard/_org/inbox/': {
@@ -324,16 +458,26 @@ const DashboardOrgInboxRouteWithChildren =
 
 interface DashboardOrgRouteChildren {
   DashboardOrgAgentRoute: typeof DashboardOrgAgentRoute
+  DashboardOrgAutopilotRoute: typeof DashboardOrgAutopilotRoute
+  DashboardOrgBillingRoute: typeof DashboardOrgBillingRoute
   DashboardOrgContactsRoute: typeof DashboardOrgContactsRoute
-  DashboardOrgDashboardRoute: typeof DashboardOrgDashboardRoute
   DashboardOrgInboxRoute: typeof DashboardOrgInboxRouteWithChildren
+  DashboardOrgIntegrationsRoute: typeof DashboardOrgIntegrationsRoute
+  DashboardOrgLeadsRoute: typeof DashboardOrgLeadsRoute
+  DashboardOrgOverviewRoute: typeof DashboardOrgOverviewRoute
+  DashboardOrgSignalsRoute: typeof DashboardOrgSignalsRoute
 }
 
 const DashboardOrgRouteChildren: DashboardOrgRouteChildren = {
   DashboardOrgAgentRoute: DashboardOrgAgentRoute,
+  DashboardOrgAutopilotRoute: DashboardOrgAutopilotRoute,
+  DashboardOrgBillingRoute: DashboardOrgBillingRoute,
   DashboardOrgContactsRoute: DashboardOrgContactsRoute,
-  DashboardOrgDashboardRoute: DashboardOrgDashboardRoute,
   DashboardOrgInboxRoute: DashboardOrgInboxRouteWithChildren,
+  DashboardOrgIntegrationsRoute: DashboardOrgIntegrationsRoute,
+  DashboardOrgLeadsRoute: DashboardOrgLeadsRoute,
+  DashboardOrgOverviewRoute: DashboardOrgOverviewRoute,
+  DashboardOrgSignalsRoute: DashboardOrgSignalsRoute,
 }
 
 const DashboardOrgRouteWithChildren = DashboardOrgRoute._addFileChildren(
@@ -343,13 +487,17 @@ const DashboardOrgRouteWithChildren = DashboardOrgRoute._addFileChildren(
 interface DashboardRouteChildren {
   DashboardSplatRoute: typeof DashboardSplatRoute
   DashboardOrgRoute: typeof DashboardOrgRouteWithChildren
+  DashboardDashboardRoute: typeof DashboardDashboardRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardTeamRoute: typeof DashboardTeamRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardSplatRoute: DashboardSplatRoute,
   DashboardOrgRoute: DashboardOrgRouteWithChildren,
+  DashboardDashboardRoute: DashboardDashboardRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardTeamRoute: DashboardTeamRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(

@@ -4,8 +4,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 /**
  * The phone-width header, and only that.
  *
- * On desktop the reference has no top bar: navigation, notifications, credits
- * and the account all live in the sidebar, and a second empty strip above the
+ * On desktop the reference has no top bar: navigation, credits and the
+ * account all live in the sidebar, and a second empty strip above the
  * page would just steal 56px from every screen. Below `md` the sidebar is a
  * sheet, so something has to open it — that is this row's whole job.
  */

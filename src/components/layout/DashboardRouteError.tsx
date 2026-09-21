@@ -26,7 +26,7 @@ export function DashboardRouteError({ error, reset }: ErrorComponentProps) {
             : "Sign in again to continue."
         }
         action={
-          <Button render={<Link to="/dashboard" />}>Back to the dashboard</Button>
+          <Button render={<Link to="/overview" />}>Back to Overview</Button>
         }
       />
     )
@@ -46,7 +46,7 @@ export function DashboardRouteError({ error, reset }: ErrorComponentProps) {
             : "That link doesn't name a record in this organization. It may have been edited, truncated or copied from somewhere else."
         }
         action={
-          <Button render={<Link to="/dashboard" />}>Back to the dashboard</Button>
+          <Button render={<Link to="/overview" />}>Back to Overview</Button>
         }
       />
     )

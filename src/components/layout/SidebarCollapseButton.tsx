@@ -27,9 +27,8 @@ export function SidebarCollapseButton() {
         render={
           <Button
             aria-label={label}
-            className="text-muted-foreground"
             size="icon"
-            variant="ghost"
+            variant="muted"
             onClick={toggleSidebar}
           />
         }

@@ -33,7 +33,7 @@ export function NotificationsBell({
     <Popover>
       <PopoverTrigger
         aria-label="Notifications"
-        render={<Button className="text-muted-foreground" size="icon" variant="ghost" />}
+        render={<Button size="icon" variant="muted" />}
       >
         <HugeiconsIcon icon={Notification03Icon} />
       </PopoverTrigger>
@@ -42,7 +42,7 @@ export function NotificationsBell({
           <p className="text-sm font-semibold text-foreground">Notifications</p>
           <Link
             className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-            to="/dashboard"
+            to="/overview"
             onClick={() => setOpenMobile(false)}
           >
             See all activity
@@ -56,20 +56,35 @@ export function NotificationsBell({
 
 type Feed = FunctionReturnType<typeof api.activity.queries.list> | undefined
 
+const FEED_SKELETON_ROWS = [0, 1, 2] as const
+
 function NotificationsFeed({ feed }: { feed: Feed }) {
   if (feed === undefined) {
     return (
-      <div className="flex flex-col gap-2 px-1">
-        <Skeleton className="h-10 w-full rounded-xl" />
-        <Skeleton className="h-10 w-full rounded-xl" />
-        <Skeleton className="h-10 w-full rounded-xl" />
-      </div>
+      <ul aria-hidden="true" className="flex flex-col gap-0.5">
+        {FEED_SKELETON_ROWS.map((row) => (
+          <li key={row} className="flex items-start gap-2.5 px-1 py-2">
+            <Skeleton shape="full" className="mt-0.5 size-4 shrink-0" />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex h-5 items-center">
+                <Skeleton shape="full" className="h-3.5 w-28" />
+              </div>
+              <div className="flex h-4 items-center">
+                <Skeleton shape="full" className="h-3 w-48" />
+              </div>
+              <div className="flex h-4 items-center">
+                <Skeleton shape="full" className="h-2.5 w-20" />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
     )
   }
 
   if (feed.items.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-1 rounded-2xl border border-dashed border-border px-4 py-6 text-center">
+      <div className="flex flex-col items-center gap-1 rounded-2xl border border-border px-4 py-6 text-center">
         <HugeiconsIcon
           icon={Notification03Icon}
           className="size-5 text-muted-foreground"
@@ -104,7 +119,7 @@ function NotificationsFeed({ feed }: { feed: Feed }) {
               <p className="text-xs break-words text-muted-foreground">
                 {event.summary}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {formatInstant(event.createdAt)}
               </p>
             </div>
