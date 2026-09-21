@@ -1204,7 +1204,9 @@ export default defineSchema({
       "operationKey",
       "bucketId",
     ])
-    .index("by_bucketId_and_state", ["bucketId", "state"]),
+    // Usage tab: one credits bucket, newest first. `createdAt` is the
+    // keyset the page walks, so the query never collects the whole ledger.
+    .index("by_bucketId_and_createdAt", ["bucketId", "createdAt"]),
 
   providerOperations: defineTable(providerOperationFields)
     // The dedupe lookup: one operation per (org, provider, key),

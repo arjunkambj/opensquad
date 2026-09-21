@@ -1,7 +1,7 @@
 /**
  * The credit history from the real ledger, newest first.
  *
- * Keyset pagination on the entry's own timestamp: the query hands back where
+ * Cursor pagination: the query hands back where
  * the next page starts, and the cursors already walked are kept here so Back
  * is a pop. Numbered pages would be a lie — a settling reservation changes
  * what lies between two of them.
@@ -55,11 +55,11 @@ export function UsageHistory({
 }: {
   orgId: Id<"orgs">
 }) {
-  const [trail, setTrail] = useState<number[]>([])
-  const before = trail.at(-1)
+  const [trail, setTrail] = useState<string[]>([])
+  const cursor = trail.at(-1)
   const result = useQuery(api.billing.queries.history, {
     orgId,
-    ...(before === undefined ? {} : { before }),
+    ...(cursor === undefined ? {} : { cursor }),
   })
 
   return (
@@ -100,7 +100,7 @@ export function UsageHistory({
             </TableHeader>
             <TableBody>
               {result.entries.map((entry) => (
-                <TableRow key={`${entry.at}-${entry.action}-${entry.credits}`}>
+                <TableRow key={entry.id}>
                   <TableCell className="text-foreground">
                     {USAGE_ACTION_LABEL[entry.action]}
                   </TableCell>
@@ -122,7 +122,7 @@ export function UsageHistory({
         )}
       </CardContent>
       {result === undefined ||
-      (result.nextBefore === null && trail.length === 0) ? null : (
+      (result.nextCursor === null && trail.length === 0) ? null : (
         <CardFooter className="flex justify-end gap-2 border-t pt-4">
           <Button
             disabled={trail.length === 0}
@@ -134,10 +134,10 @@ export function UsageHistory({
             Back
           </Button>
           <Button
-            disabled={result.nextBefore === null}
+            disabled={result.nextCursor === null}
             onClick={() => {
-              if (result.nextBefore !== null) {
-                setTrail([...trail, result.nextBefore])
+              if (result.nextCursor !== null) {
+                setTrail([...trail, result.nextCursor])
               }
             }}
             size="sm"

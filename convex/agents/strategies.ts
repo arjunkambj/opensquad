@@ -29,6 +29,7 @@
 import { internal } from "../_generated/api";
 import { action, mutation, query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
+import { COUNT_SCAN_BOUND } from "../lib/limits";
 import { requireRateLimit } from "../lib/rateLimits";
 import {
   domainError,
@@ -99,7 +100,7 @@ export const overview = query({
     const rows = await ctx.db
       .query("strategies")
       .withIndex("by_agentId_and_enabled", (q) => q.eq("agentId", agent._id))
-      .collect();
+      .take(COUNT_SCAN_BOUND);
     // The index orders by `enabled` before creation, which would shuffle the
     // cards every time one is ticked. The order the user sees is the order
     // they were written in, with the ideal-customer card first.

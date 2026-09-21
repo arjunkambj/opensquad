@@ -10,7 +10,7 @@
  */
 import { query } from "../_generated/server";
 import { requireOrgMember } from "../lib/auth";
-import { boundedInt, boundedLimit } from "../lib/validators";
+import { boundedLimit } from "../lib/validators";
 import { usageReservationFields } from "../schema";
 import { findCreditsBucket } from "./model";
 import { actionOfOperationKey, vPaidAction } from "./paidCall";
@@ -25,6 +25,7 @@ export const vUsageReservationDoc = v.object({
 
 /** One line of the Usage tab. */
 export const vUsageEntry = v.object({
+  id: v.id("usageReservations"),
   /** The action the member took. A label KEY: the client owns the wording. */
   action: v.union(vPaidAction, v.literal("other")),
   /** Credits this line moved. Zero for a first-run-free step. */
@@ -47,47 +48,32 @@ const USAGE_PAGE_MAX = 50;
 /**
  * The org's credit history, newest first.
  *
- * Paginated by a keyset on the entry's own timestamp: pass the last `at` of a
- * page back as `before` to get the next one. It reads only the reservations
- * of the lifetime `credits` bucket, which the trial grant itself bounds — the
- * entire history of a 300-credit org is a few hundred rows.
+ * Opaque cursors preserve entries that share a timestamp at page boundaries.
  */
 export const history = query({
   args: {
     orgId: v.id("orgs"),
     limit: v.optional(v.number()),
-    before: v.optional(v.number()),
+    cursor: v.optional(v.string()),
   },
   returns: v.object({
     entries: v.array(vUsageEntry),
-    /** Pass back as `before` for the next page; `null` at the end. */
-    nextBefore: v.union(v.number(), v.null()),
+    nextCursor: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
     await requireOrgMember(ctx, args.orgId);
     const limit = Math.min(boundedLimit(args.limit), USAGE_PAGE_MAX);
-    const before =
-      args.before === undefined
-        ? undefined
-        : boundedInt(args.before, "before", {
-            min: 0,
-            max: Number.MAX_SAFE_INTEGER,
-          });
-
     const bucket = await findCreditsBucket(ctx, args.orgId);
     if (bucket === null) {
-      return { entries: [], nextBefore: null };
+      return { entries: [], nextCursor: null };
     }
     const rows = await ctx.db
       .query("usageReservations")
-      .withIndex("by_bucketId_and_state", (q) => q.eq("bucketId", bucket._id))
-      .collect();
-
-    const ordered = rows
-      .filter((row) => before === undefined || row.createdAt < before)
-      .sort((left, right) => right.createdAt - left.createdAt);
-    const page = ordered.slice(0, limit);
-    const entries = page.map((row) => ({
+      .withIndex("by_bucketId_and_createdAt", (q) => q.eq("bucketId", bucket._id))
+      .order("desc")
+      .paginate({ numItems: limit, cursor: args.cursor ?? null });
+    const entries = rows.page.map((row) => ({
+      id: row._id,
       action: actionOfOperationKey(row.operationKey) ?? ("other" as const),
       credits: row.quantity,
       outcome:
@@ -98,13 +84,9 @@ export const history = query({
             : ("pending" as const),
       at: row.createdAt,
     }));
-    const last = page.at(-1);
     return {
       entries,
-      nextBefore:
-        ordered.length > page.length && last !== undefined
-          ? last.createdAt
-          : null,
+      nextCursor: rows.isDone ? null : rows.continueCursor,
     };
   },
 });
