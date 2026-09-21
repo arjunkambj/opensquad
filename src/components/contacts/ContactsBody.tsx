@@ -13,6 +13,7 @@ import type { Id } from "../../../convex/_generated/dataModel"
 import { ACTION_PRICES } from "../../../convex/lib/prices"
 import { InboxConnectionBanner } from "@/components/inbox-connection/InboxConnectionBanner"
 import { LoadingState } from "@/components/states/states"
+import { useMinuteClock } from "@/hooks/use-minute-clock"
 import { ActionNotice } from "./ActionNotice"
 import { ContactsResults } from "./ContactsResults"
 import { LeadDrawer } from "./drawer/LeadDrawer"
@@ -35,6 +36,7 @@ export function ContactsBody({ orgId }: { orgId: Id<"orgs"> }) {
   const selection = useLeadSelection()
 
   const { search, limit } = url
+  const now = useMinuteClock()
   const page = useQuery(api.leads.queries.list, {
     orgId,
     ...(search.q !== undefined ? { text: search.q } : {}),
@@ -45,7 +47,7 @@ export function ContactsBody({ orgId }: { orgId: Id<"orgs"> }) {
     ...(search.cursor !== undefined ? { cursor: search.cursor } : {}),
     limit,
   })
-  const run = useQuery(api.leads.counts.runState, { orgId })
+  const run = useQuery(api.leads.counts.runState, { orgId, now })
   const signals = useQuery(api.leads.counts.byStrategy, { orgId })
   const credits = useQuery(api.billing.credits.balance, { orgId })
 

@@ -9,7 +9,6 @@
  * withdraws the approval ask rather than changing an approved email.
  */
 import { useQuery } from "convex/react"
-import { useEffect, useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../../convex/_generated/api"
 import type { Doc, Id } from "../../../../convex/_generated/dataModel"
@@ -17,6 +16,7 @@ import { DraftPreview } from "@/components/inbox/reply/DraftPreview"
 import { ReplyActions } from "@/components/inbox/reply/ReplyActions"
 import { SendStatus } from "@/components/inbox/reply/SendStatus"
 import { sendBlockCopy } from "@/components/inbox/reply/send-block-copy"
+import { useMinuteClock } from "@/hooks/use-minute-clock"
 import {
   Card,
   CardContent,
@@ -146,20 +146,4 @@ function LoadedReply({
       </CardContent>
     </Card>
   )
-}
-
-/** The current minute, as an epoch millisecond value that changes once a
- *  minute — a stable query argument rather than a per-render one. */
-function useMinuteClock(): number {
-  const minute = (): number => Math.floor(Date.now() / 60_000) * 60_000
-  const [now, setNow] = useState(minute)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(minute())
-    }, 15_000)
-    return () => {
-      clearInterval(timer)
-    }
-  }, [])
-  return now
 }

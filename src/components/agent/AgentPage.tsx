@@ -23,6 +23,7 @@ import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
 import { EmptyState, LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentOrg } from "@/hooks/use-current-org"
+import { useMinuteClock } from "@/hooks/use-minute-clock"
 import { AgentCard } from "./AgentCard"
 import { AgentRunPanel } from "./AgentRunPanel"
 import { InstructionsCard } from "./InstructionsCard"
@@ -35,10 +36,14 @@ export function AgentPage() {
   const current = useCurrentOrg()
   const org = current.status === "ready" ? current.org : undefined
   const orgId = org?._id
+  const now = useMinuteClock()
   const skip = orgId === undefined ? "skip" : { orgId }
 
   const agent = useQuery(api.agents.queries.get, skip)
-  const runState = useQuery(api.leads.counts.runState, skip)
+  const runState = useQuery(
+    api.leads.counts.runState,
+    orgId === undefined ? "skip" : { orgId, now },
+  )
   const strategies = useQuery(api.leads.counts.byStrategy, skip)
   const counts = useQuery(api.leads.counts.funnel, skip)
 
