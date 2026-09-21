@@ -184,8 +184,8 @@ export const update = mutation({
  * Regenerate all arrive here (PLAN §3 step 1, §5).
  *
  * The mutation is the only authenticated part of the flow. It checks
- * organization, spends one rate-limit token, admits the URL under the SAME
- * policy the fetch will use, records `analyzing` so the form can show live
+ * organization, admits the URL under the SAME policy the fetch will use,
+ * spends one rate-limit token, records `analyzing` so the form can show live
  * status from its own reactive query, and schedules the internal action that
  * is allowed to spend money. No provider is contacted from here, and the URL
  * the action is given is the NORMALISED one this mutation stored — never the
@@ -204,12 +204,15 @@ export const startAnalysis = mutation({
   returns: v.object({ startedAt: v.number() }),
   handler: async (ctx, args) => {
     const { identityKey } = await requireOrgMember(ctx, args.orgId);
-    // Before the reserve, so a refused caller leaves nothing behind.
-    await requireRateLimit(ctx, "analyzeWebsite", identityKey);
 
     // The same admission `update` stores through, so the two doors into
-    // `businessProfiles.websiteUrl` cannot drift apart.
+    // `businessProfiles.websiteUrl` cannot drift apart. First of all, so a
+    // blank or unusable address costs no rate-limit token, stores nothing and
+    // schedules nothing — no website means no scrape.
     const websiteUrl = admitWebsiteUrl(args.websiteUrl);
+
+    // Before the reserve, so a refused caller leaves nothing behind.
+    await requireRateLimit(ctx, "analyzeWebsite", identityKey);
 
     const existing = await getOrgProfile(ctx, args.orgId);
     const now = Date.now();
