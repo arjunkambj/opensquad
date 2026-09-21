@@ -21,7 +21,9 @@ import {
   windowHint,
 } from "@/components/dashboard/dashboard-range"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
+import { isLeadDiscoveryPending, LeadDiscoveryProgress } from "@/components/leads/LeadDiscoveryProgress"
 import { useCurrentOrg } from "@/hooks/use-current-org"
+import { useMinuteClock } from "@/hooks/use-minute-clock"
 import type { OrgView } from "@/lib/org-view"
 import { withFilters } from "@/lib/search-params"
 
@@ -93,6 +95,8 @@ function DashboardBody({
   const next = useQuery(api.dashboard.queries.nextStep, { orgId })
   const agent = useQuery(api.agents.queries.get, { orgId })
   const strategies = useQuery(api.leads.counts.byStrategy, { orgId })
+  const now = useMinuteClock()
+  const run = useQuery(api.leads.counts.runState, { orgId, now })
   const updateAgent = useMutation(api.agents.settings.setDealSize)
 
   const agentId = agent?._id
@@ -112,6 +116,11 @@ function DashboardBody({
           />
         }
       />
+
+      {isLeadDiscoveryPending(run, strategies) &&
+      strategies?.every((strategy) => strategy.leadsFound === 0) ? (
+        <LeadDiscoveryProgress running={run?.running === true} showLink />
+      ) : null}
 
       <div className="flex justify-end">
         <DashboardRangePills

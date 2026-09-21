@@ -1,4 +1,4 @@
-/** Navigate to Leads only when the subscribed agent reads done.
+/** Navigate to Overview only when the subscribed agent reads done.
  * Navigating on the action result can race the route guard and bounce back to setup. */
 import { Navigate } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
@@ -49,10 +49,7 @@ export function AgentSetupFlow({ orgId }: { orgId: Id<"orgs"> }) {
   }
 
   if (agent.onboardingStep === "done") {
-    // Leads shows the agent's own run state, so landing there is what
-    // "finding your first leads" looks like. `replace`, because setup is over
-    // and there is nothing behind it worth going back to.
-    return <Navigate replace to="/leads" />
+    return <Navigate replace to="/overview" />
   }
 
   // Every step but `done` has a screen, and the registry's type says so — a

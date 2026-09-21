@@ -7,7 +7,8 @@ import type { OperationErrorCode } from "../../../convex/lib/validators"
 import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
+import { isLeadDiscoveryPending, LeadDiscoveryProgress } from "./LeadDiscoveryProgress"
+import { LeadsResultsSkeleton } from "./LeadsPageSkeleton"
 import type { RunState } from "./RunStateStrip"
 
 type Signals = FunctionReturnType<typeof api.leads.counts.byStrategy>
@@ -63,25 +64,14 @@ export function NoLeadsState({
   const enabled = signals.filter((signal) => signal.enabled)
   const empty = enabled.filter((signal) => signal.leadsFound === 0)
   const searched = enabled.some((signal) => signal.lastRunAt !== undefined)
-  // A live agent with healthy signals that have never run is about to search:
-  // that wait reads as progress, not as a dead end.
-  const queued =
-    enabled.length > 0 &&
-    !searched &&
-    enabled.every((signal) => signal.parkedReason === undefined)
-
-  if (run.running || queued) {
+  if (isLeadDiscoveryPending(run, signals)) {
     return (
-      <EmptyState
-        variant="plain"
-        illustration={<Spinner className="size-8 text-muted-foreground" />}
-        title="Finding your first leads…"
-        description={
-          run.running
-            ? "The agent is searching your signals right now. Rows appear here as they land — nothing to do but wait."
-            : "The agent is about to search your signals. Rows appear here as they land — nothing to do but wait."
-        }
-      />
+      <div className="flex flex-col gap-4" aria-busy="true">
+        <LeadDiscoveryProgress running={run.running} />
+        <div aria-hidden="true">
+          <LeadsResultsSkeleton />
+        </div>
+      </div>
     )
   }
 
