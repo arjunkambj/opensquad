@@ -17,7 +17,7 @@ import { useHexclaveApp } from "@hexclave/react"
 import { Link } from "@tanstack/react-router"
 import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
 import type { ProfileUser } from "@/components/layout/SidebarUser"
-import { DetailRow } from "@/components/shared/presentation"
+import { DetailRow } from "@/components/kit/DetailRow"
 import { Button } from "@/components/ui/button"
 import {
   Card,

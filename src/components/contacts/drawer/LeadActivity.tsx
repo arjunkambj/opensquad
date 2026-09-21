@@ -8,7 +8,7 @@
  */
 import type { FunctionReturnType } from "convex/server"
 import type { api } from "../../../../convex/_generated/api"
-import { formatWaited } from "@/components/shared/presentation"
+import { formatWaited } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
 import type { ContactDetailData } from "../contacts-model"
 

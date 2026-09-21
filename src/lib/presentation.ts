@@ -1,12 +1,11 @@
 /**
- * Shared presentational pieces used by more than one component domain:
- * chips, relative times and the small typed projections around them.
+ * Presentation helpers used by more than one component domain: relative and
+ * absolute times and the small typed projections around them.
  *
- * Data-free — nothing here calls Convex or knows which screen renders it.
+ * Pure and data-free — no JSX, nothing here calls Convex or knows which
+ * screen renders it.
  */
-import type { ReactNode } from "react"
-import type { Doc } from "../../../convex/_generated/dataModel"
-import { cn } from "@/lib/utils"
+import type { Doc } from "../../convex/_generated/dataModel"
 
 const RELATIVE_TIME = new Intl.RelativeTimeFormat(undefined, {
   numeric: "auto",
@@ -49,48 +48,6 @@ export function formatInstant(at: number, timezone?: string): string {
 /** A short fingerprint of a payload hash — enough to compare two by eye. */
 export function shortHash(hash: string): string {
   return hash.length <= 16 ? hash : `${hash.slice(0, 8)}…${hash.slice(-8)}`
-}
-
-/**
- * Pills are hand-rolled spans throughout this codebase (there is no Badge
- * primitive); this one keeps every surface consistent rather than introducing
- * a second style.
- */
-export function Chip({
-  children,
-  className,
-}: {
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground",
-        className,
-      )}
-    >
-      {children}
-    </span>
-  )
-}
-
-/** A label/value line used throughout the detail surfaces. */
-export function DetailRow({
-  label,
-  value,
-}: {
-  label: string
-  value: ReactNode
-}) {
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="min-w-0 break-words text-sm text-foreground">
-        {value}
-      </span>
-    </div>
-  )
 }
 
 /**

@@ -8,7 +8,8 @@
  */
 import type { MessageSource } from "../../../../convex/lib/validators"
 import type { ThreadEntry } from "@/components/inbox/inbox-presentation"
-import { Chip, formatInstant } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { formatInstant } from "@/lib/presentation"
 
 export function InboundMessage({
   entry,

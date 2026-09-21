@@ -9,7 +9,8 @@ import {
   DispositionChip,
   sourceNote,
 } from "@/components/inbox/inbox-presentation"
-import { Chip, formatInstant } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { formatInstant } from "@/lib/presentation"
 
 type Detail = FunctionReturnType<typeof api.inbox.conversations.get>
 

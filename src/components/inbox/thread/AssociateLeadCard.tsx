@@ -11,7 +11,7 @@ import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
 import type { Doc, Id } from "../../../../convex/_generated/dataModel"
 import { leadDisplayName } from "@/components/inbox/inbox-presentation"
-import { DetailRow } from "@/components/shared/presentation"
+import { DetailRow } from "@/components/kit/DetailRow"
 import {
   FormError,
   LoadingState,

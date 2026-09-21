@@ -8,7 +8,9 @@
  *
  * Presentational: the caller owns every action.
  */
-import { Chip, DetailRow, formatInstant, formatWaited } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { DetailRow } from "@/components/kit/DetailRow"
+import { formatInstant, formatWaited } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { InboxConnectionView } from "./inbox-connection-model"

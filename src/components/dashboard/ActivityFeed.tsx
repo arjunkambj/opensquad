@@ -9,7 +9,7 @@ import type { ErrorComponentProps } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { actorLabel, formatInstant } from "@/components/shared/presentation"
+import { actorLabel, formatInstant } from "@/lib/presentation"
 import {
   EmptyState,
   ErrorState,

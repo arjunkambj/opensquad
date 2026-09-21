@@ -5,7 +5,7 @@ import type {
   MessageSource,
   ReplyDisposition,
 } from "../../../convex/lib/validators"
-import { Chip } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
 
 /**
  * The inbox's shared vocabulary: every state is a word, never a colour alone.

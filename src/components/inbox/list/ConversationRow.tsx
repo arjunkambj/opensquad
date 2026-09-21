@@ -14,7 +14,7 @@ import {
   leadDisplayName,
   type InboxRowData,
 } from "@/components/inbox/inbox-presentation"
-import { formatWaited } from "@/components/shared/presentation"
+import { formatWaited } from "@/lib/presentation"
 import { cn } from "@/lib/utils"
 import type { InboxSearch } from "@/routes/_dashboard/_org/inbox"
 

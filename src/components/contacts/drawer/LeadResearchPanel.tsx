@@ -13,7 +13,7 @@ import { LinkSquare02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import type { LeadResearch } from "../../../../convex/lib/validators"
 import { FlameScore } from "@/components/kit/FlameScore"
-import { formatWaited } from "@/components/shared/presentation"
+import { formatWaited } from "@/lib/presentation"
 import type { ContactDetailData } from "../contacts-model"
 import { LEAD_ERROR_COPY } from "../contacts-model"
 

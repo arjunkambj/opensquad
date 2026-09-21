@@ -60,7 +60,6 @@ src/
     drafts/        editing one outgoing message
     settings/      company, inbox, outreach, blocklist, sending, usage, account
     states/        shared loading / empty / error renderings
-    shared/        presentational pieces used by more than one domain
   hooks/           cross-domain hooks only
   lib/             cross-domain pure helpers only
   constants/

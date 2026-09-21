@@ -20,7 +20,8 @@ import {
   USAGE_OUTCOME_LABEL,
 } from "@/components/settings/usage/usage-labels"
 import type { UsageOutcome } from "@/components/settings/usage/usage-labels"
-import { Chip, formatInstant } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { formatInstant } from "@/lib/presentation"
 import { LoadingState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {

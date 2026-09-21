@@ -6,7 +6,7 @@ import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { activityPresentation } from "@/components/layout/activity-presentation"
-import { formatInstant } from "@/components/shared/presentation"
+import { formatInstant } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
 import {
   Popover,

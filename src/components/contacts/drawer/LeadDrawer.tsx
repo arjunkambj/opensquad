@@ -13,7 +13,8 @@ import { useNavigate } from "@tanstack/react-router"
 import { useQuery } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
 import type { Id } from "../../../../convex/_generated/dataModel"
-import { Chip, formatWaited } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { formatWaited } from "@/lib/presentation"
 import { LoadingState } from "@/components/states/states"
 import {
   Sheet,

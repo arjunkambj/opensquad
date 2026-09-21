@@ -9,7 +9,8 @@ import {
   outboundStateLabel,
   type ThreadEntry,
 } from "@/components/inbox/inbox-presentation"
-import { Chip, formatInstant } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { formatInstant } from "@/lib/presentation"
 import { cn } from "@/lib/utils"
 
 export function OutboundMessage({

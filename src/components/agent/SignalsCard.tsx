@@ -12,7 +12,7 @@ import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { Chip } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
 import { EmptyState, FormError, LoadingState } from "@/components/states/states"
 import {
   Card,

@@ -15,7 +15,7 @@ import { useState } from "react"
 import type { FunctionReturnType } from "convex/server"
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
-import { formatWaited } from "@/components/shared/presentation"
+import { formatWaited } from "@/lib/presentation"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import {

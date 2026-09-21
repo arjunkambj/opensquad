@@ -13,7 +13,8 @@ import {
   BLOCK_KIND_LABEL,
   BLOCK_REASON_LABEL,
 } from "@/components/settings/blocklist/blocklist-copy"
-import { Chip, formatInstant } from "@/components/shared/presentation"
+import { Chip } from "@/components/kit/Chip"
+import { formatInstant } from "@/lib/presentation"
 import { Button } from "@/components/ui/button"
 import {
   Table,
