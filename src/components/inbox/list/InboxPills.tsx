@@ -1,26 +1,21 @@
-import {
-  ClockIcon,
-  InboxIcon,
-  Mail01Icon,
-  MenuCircleIcon,
-} from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import type { IconSvgElement } from "@hugeicons/react"
-import { Link } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import {
   INBOX_PILLS,
   PILL_LABEL,
   type InboxPill,
 } from "@/components/inbox/inbox-presentation"
+import { Hint } from "@/components/kit/Hint"
 import { withFilters } from "@/lib/search-params"
-import { cn } from "@/lib/utils"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { InboxSearch } from "@/routes/_dashboard/_org/inbox"
 
-const PILL_ICON: Record<InboxPill, IconSvgElement | undefined> = {
-  received: InboxIcon,
-  interested: ClockIcon,
-  unread: Mail01Icon,
-  all: MenuCircleIcon,
+/** The pills nest rather than partition: Interested and Unread are slices of
+ *  Received, and All adds threads nobody has answered yet. */
+const PILL_HINT: Record<InboxPill, string> = {
+  received: "Every thread someone has replied to",
+  interested: "Replies that read as interest, or leads with a meeting",
+  unread: "Replies you have not opened yet",
+  all: "Every thread, including ones still waiting for a first reply",
 }
 
 export function InboxPills({
@@ -30,38 +25,26 @@ export function InboxPills({
   active: InboxPill
   search: InboxSearch
 }) {
+  const navigate = useNavigate()
   return (
-    <nav aria-label="Filter conversations" className="flex flex-wrap gap-1.5">
-      {INBOX_PILLS.map((pill) => {
-        const selected = pill === active
-        const icon = PILL_ICON[pill]
-        return (
-          <Link
-            key={pill}
-            to="/inbox"
-            search={withFilters(search, {
-              pill: pill === "received" ? undefined : pill,
-            })}
-            aria-current={selected ? "page" : undefined}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
-              selected
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-card text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {icon === undefined ? null : (
-              <HugeiconsIcon
-                icon={icon}
-                strokeWidth={2}
-                className="size-3.5"
-                aria-hidden="true"
-              />
-            )}
-            {PILL_LABEL[pill]}
-          </Link>
-        )
-      })}
-    </nav>
+    <Tabs
+      value={active}
+      onValueChange={(pill: InboxPill) =>
+        void navigate({
+          to: "/inbox",
+          search: withFilters(search, {
+            pill: pill === "received" ? undefined : pill,
+          }),
+        })
+      }
+    >
+      <TabsList aria-label="Filter conversations" className="grid w-full grid-cols-4 sm:max-w-sm xl:max-w-none">
+        {INBOX_PILLS.map((pill) => (
+          <TabsTrigger key={pill} value={pill}>
+            <Hint content={PILL_HINT[pill]}>{PILL_LABEL[pill]}</Hint>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }

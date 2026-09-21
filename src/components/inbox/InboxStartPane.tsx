@@ -1,33 +1,51 @@
-import { Message01Icon } from "@hugeicons/core-free-icons"
-import { InboxConnection } from "@/components/inbox-connection/InboxConnection"
-import { EmptyState, LoadingState } from "@/components/states/states"
+import {
+  MailAdd01Icon,
+  MailOpen01Icon,
+  MailRemove01Icon,
+} from "@hugeicons/core-free-icons"
+import { useState } from "react"
+import { ConnectInboxDialog } from "@/components/inbox-connection/ConnectInboxDialog"
+import { InboxStartPaneSkeleton } from "@/components/inbox/InboxPageSkeleton"
+import { EmptyState } from "@/components/states/states"
+import { Button } from "@/components/ui/button"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 
 export function InboxStartPane() {
   const current = useCurrentOrg()
+  const [connecting, setConnecting] = useState(false)
 
   if (current.status !== "ready") {
-    return <LoadingState title="Loading your inbox" />
+    return <InboxStartPaneSkeleton />
   }
 
   const connection = current.org.inboxConnection
   if (connection === "none" || connection === "invalid") {
+    const reconnect = connection === "invalid"
     return (
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="font-heading text-xl font-semibold text-foreground">
-            {connection === "none"
-              ? "Connect your sending inbox"
-              : "Reconnect your sending inbox"}
-          </h2>
-          <p className="max-w-xl text-sm text-muted-foreground">
-            {connection === "none"
-              ? "Conversations appear here once the agent can send from your own inbox. Replies sync in the background."
-              : "The stored key was refused, so sending and replies are paused. Reconnect to start them again."}
-          </p>
-        </div>
-        <InboxConnection orgId={current.org._id} />
-      </div>
+      <EmptyState
+        variant="plain"
+        className="h-full rounded-card border border-border xl:rounded-none xl:border-0"
+        icon={reconnect ? MailRemove01Icon : MailAdd01Icon}
+        title={reconnect ? "Your inbox needs reconnecting" : "Connect your inbox"}
+        description={
+          reconnect
+            ? "Sending and replies are paused until you do."
+            : "Your agent sends from it, and replies land here."
+        }
+        action={
+          <>
+            <Button onClick={() => setConnecting(true)}>
+              {reconnect ? "Reconnect inbox" : "Connect inbox"}
+            </Button>
+            <ConnectInboxDialog
+              orgId={current.org._id}
+              reconnect={reconnect}
+              open={connecting}
+              onOpenChange={setConnecting}
+            />
+          </>
+        }
+      />
     )
   }
 
@@ -35,10 +53,33 @@ export function InboxStartPane() {
   // prompt would be a second empty state under it.
   return (
     <EmptyState
-      className="hidden xl:flex"
-      icon={Message01Icon}
-      title="Pick a conversation"
-      description="Choose a thread on the left to read it, approve the reply waiting on it, or mark the meeting it produced."
+      variant="plain"
+      className="hidden h-full xl:flex"
+      icon={MailOpen01Icon}
+      title="Select a conversation"
+      description={
+        <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
+          <Shortcut keys={["J", "K"]} label="Move" />
+          <Shortcut keys={["Enter"]} label="Open" />
+          <Shortcut keys={["Esc"]} label="Back" />
+        </ul>
+      }
     />
+  )
+}
+
+function Shortcut({ keys, label }: { keys: string[]; label: string }) {
+  return (
+    <li className="flex items-center gap-1.5">
+      {keys.map((key) => (
+        <kbd
+          key={key}
+          className="inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-border bg-muted px-1.5 font-sans text-2xs font-medium text-foreground"
+        >
+          {key}
+        </kbd>
+      ))}
+      <span>{label}</span>
+    </li>
   )
 }

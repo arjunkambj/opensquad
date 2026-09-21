@@ -1,5 +1,6 @@
 /** Reverse the newest-first bounded page for chronological reading.
  * Render bodies as plain text to exclude HTML injection and tracking pixels. */
+import { MailOpen01Icon } from "@hugeicons/core-free-icons"
 import type { Id } from "../../../../convex/_generated/dataModel"
 import type { MessageSource } from "../../../../convex/lib/validators"
 import type { ThreadEntry } from "@/components/inbox/inbox-presentation"
@@ -12,35 +13,48 @@ export function ThreadTimeline({
   hasMore,
   source,
   currentDraftId,
+  agentName,
+  recipient,
 }: {
   entries: ThreadEntry[]
   hasMore: boolean
   source: MessageSource
-  /** The draft the reply card owns; the thread annotates it, never duplicates
-   *  its buttons. */
+  /** The draft the reply card owns. It is shown there, with its actions, and
+   *  left out here so it never appears twice. */
   currentDraftId: Id<"drafts"> | undefined
+  agentName: string
+  recipient: string | undefined
 }) {
-  if (entries.length === 0) {
+  const oldestFirst = [...entries]
+    .reverse()
+    .filter(
+      (entry) =>
+        !(
+          entry.kind === "outbound" &&
+          entry.state === "draft" &&
+          entry.draftId === currentDraftId
+        ),
+    )
+
+  if (oldestFirst.length === 0) {
     return (
       <EmptyState
-        title="No messages on this thread yet"
+        icon={MailOpen01Icon}
+        title="No messages yet"
         description={
           source === "backfill"
-            ? "This thread was imported when the inbox was connected. Its messages' text was not copied across, so there is nothing to read here — new mail on it will appear in full."
-            : "The emails sent on this thread and the replies to them appear here."
+            ? "Imported without its text. New mail will appear in full."
+            : undefined
         }
       />
     )
   }
 
-  const oldestFirst = [...entries].reverse()
-
   return (
     <div className="flex flex-col gap-3">
       {hasMore ? (
-        <p className="text-xs text-muted-foreground">
-          This thread is longer than one page — these are its most recent
-          messages.
+        <p className="text-center text-xs text-muted-foreground">
+          Showing the most recent messages on this thread.
         </p>
       ) : null}
       <ol className="flex flex-col gap-3">
@@ -55,7 +69,8 @@ export function ThreadTimeline({
             <OutboundMessage
               key={`out-${entry.draftId}`}
               entry={entry}
-              pending={entry.draftId === currentDraftId}
+              sender={agentName}
+              recipient={recipient}
             />
           ),
         )}

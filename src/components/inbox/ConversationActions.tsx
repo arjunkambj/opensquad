@@ -1,11 +1,17 @@
 /**
- * What a person can decide about a thread: record the meeting it produced,
- * stop or restart the agent on it, and close or reopen it.
+ * The thread's toolbar: record the meeting it produced, stop or restart the
+ * agent on it, and close or reopen it. Refusals surface as toasts.
  *
  * Nothing here is inferred from message content. In particular, a meeting is
  * booked only by the click below (PLAN §9.5) — a model may point out that the
  * lead confirmed a time, and it still takes a person to say so.
  */
+import {
+  ArrowUpRight01Icon,
+  MoreHorizontalIcon,
+} from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { useNavigate } from "@tanstack/react-router"
 import { useMutation, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { useState } from "react"
@@ -14,15 +20,16 @@ import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { MARK_INTERESTED_COPY } from "@/components/inbox/inbox-presentation"
 import { MarkAsBookedDialog } from "@/components/inbox/MarkAsBookedDialog"
 import { resumeBlockCopy } from "@/components/inbox/thread/resume-block-copy"
-import { FormError } from "@/components/states/states"
+import { AssociateLeadButton } from "@/components/inbox/thread/AssociateLeadButton"
+import { Hint } from "@/components/kit/Hint"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
@@ -47,6 +54,7 @@ export function ConversationActions({
   const close = useMutation(api.inbox.conversationLifecycle.close)
   const reopen = useMutation(api.inbox.conversationLifecycle.reopen)
   const intentId = useRequestIntents()
+  const navigate = useNavigate()
 
   // The live proposal this thread's lead holds, if any — `confirm` needs one,
   // and the dialog opens a proposal for the agreed time when there is none.
@@ -64,156 +72,157 @@ export function ConversationActions({
 
   const [booking, setBooking] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const closed = conversation.state === "closed"
-  // The tag is the thread's own fact, written by the classifier or by this
-  // button. Once it is there the button would change nothing, so it is
-  // replaced by the sentence that says what to do next.
+  const base = { orgId, conversationId: conversation._id, expectedContextVersion }
+  // Once the thread carries the tag the button would change nothing.
   const alreadyInterested = conversation.lastDisposition === "interested"
 
   const run = (work: Promise<unknown>, title: string, failure: string) => {
     setBusy(true)
-    setError(null)
     void work
       .then(() => toast.add({ title, type: "success" }))
-      .catch((cause) => setError(errorMessage(cause, failure)))
+      .catch((cause) =>
+        toast.add({ title: errorMessage(cause, failure), type: "error" }),
+      )
       .finally(() => setBusy(false))
   }
 
+  const resumeAgent = () => {
+    setBusy(true)
+    void resume({ ...base, requestId: intentId(conversation._id, "resume") })
+      .then((result) =>
+        result.blockedBy === undefined
+          ? toast.add({
+              title: "Your agent is working this thread again",
+              type: "success",
+            })
+          : toast.add({ title: resumeBlockCopy(result.blockedBy), type: "error" }),
+      )
+      .catch((cause) =>
+        toast.add({
+          title: errorMessage(cause, "Could not resume this thread."),
+          type: "error",
+        }),
+      )
+      .finally(() => setBusy(false))
+  }
+
+  const pauseAgent = () =>
+    run(
+      setTakeover({ ...base, enabled: true }),
+      "The agent will not answer this thread",
+      "Could not pause the agent on this thread.",
+    )
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>This conversation</CardTitle>
-        <CardDescription>
-          A meeting counts when you say it does — nothing your agent reads in a
-          reply books one.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-                  <div className="flex flex-wrap gap-2">
-            {prospect === null ? null : (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || proposals === undefined}
-                onClick={() => setBooking(true)}
-              >
-                Mark as booked
-              </Button>
-            )}
-            {prospect === null || alreadyInterested ? null : (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || closed}
-                onClick={() =>
-                  run(
-                    markInterested({
-                      orgId,
-                      conversationId: conversation._id,
-                      expectedContextVersion,
-                      requestId: intentId(conversation._id, "mark-interested"),
-                    }),
-                    MARK_INTERESTED_COPY.success,
-                    MARK_INTERESTED_COPY.failure,
-                  )
-                }
-              >
-                {busy ? <Spinner data-icon="inline-start" /> : null}
-                {busy
-                  ? MARK_INTERESTED_COPY.pending
-                  : MARK_INTERESTED_COPY.label}
-              </Button>
-            )}
-            {conversation.humanTakeover ? (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || closed}
-                onClick={() => {
-                  setBusy(true)
-                  setError(null)
-                  void resume({
-                    orgId,
-                    conversationId: conversation._id,
-                    expectedContextVersion,
-                    requestId: intentId(conversation._id, "resume"),
-                  })
-                    .then((result) =>
-                      result.blockedBy === undefined
-                        ? toast.add({
-                            title: "Your agent is working this thread again",
-                            type: "success",
-                          })
-                        : setError(resumeBlockCopy(result.blockedBy)),
-                    )
-                    .catch((cause) =>
-                      setError(
-                        errorMessage(cause, "Could not resume this thread."),
-                      ),
-                    )
-                    .finally(() => setBusy(false))
-                }}
-              >
-                {busy ? <Spinner data-icon="inline-start" /> : null}
-                Let the agent answer again
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || closed}
-                onClick={() =>
-                  run(
-                    setTakeover({
-                      orgId,
-                      conversationId: conversation._id,
-                      expectedContextVersion,
-                      enabled: true,
-                    }),
-                    "The agent will not answer this thread",
-                    "Could not pause the agent on this thread.",
-                  )
-                }
-              >
-                Answer this one myself
-              </Button>
-            )}
+    <div className="flex flex-wrap items-center gap-2">
+      {prospect === null ? (
+        <AssociateLeadButton
+          orgId={orgId}
+          conversation={conversation}
+          expectedContextVersion={expectedContextVersion}
+        />
+      ) : (
+        <Hint content="A meeting counts only when you mark it — nothing the agent reads in a reply books one.">
+          <Button
+            disabled={busy || proposals === undefined}
+            onClick={() => setBooking(true)}
+          >
+            Mark as booked
+          </Button>
+        </Hint>
+      )}
+
+      {conversation.humanTakeover ? (
+        <Hint
+          content={
+            closed
+              ? "Reopen the thread first."
+              : "Your agent drafts replies on this thread again."
+          }
+        >
+          <Button variant="outline" disabled={busy || closed} onClick={resumeAgent}>
+            {busy ? <Spinner data-icon="inline-start" /> : null}
+            Resume agent
+          </Button>
+        </Hint>
+      ) : (
+        <Hint
+          content={
+            closed
+              ? "Reopen the thread first."
+              : "Your agent stops answering this thread so you can reply yourself."
+          }
+        >
+          <Button variant="outline" disabled={busy || closed} onClick={pauseAgent}>
+            Answer myself
+          </Button>
+        </Hint>
+      )}
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
             <Button
-              size="sm"
-              variant="ghost"
+              aria-label="More thread actions"
+              size="icon"
+              variant="muted"
               disabled={busy}
-              onClick={() =>
-                run(
-                  closed
-                    ? reopen({
-                        orgId,
-                        conversationId: conversation._id,
-                        expectedContextVersion,
-                      })
-                    : close({
-                        orgId,
-                        conversationId: conversation._id,
-                        expectedContextVersion,
+            />
+          }
+        >
+          <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {prospect === null ? null : (
+            <>
+              <DropdownMenuItem
+                onClick={() =>
+                  void navigate({
+                    to: "/leads",
+                    search: { lead: prospect.prospectId },
+                  })
+                }
+              >
+                <HugeiconsIcon icon={ArrowUpRight01Icon} strokeWidth={2} />
+                Open the lead
+              </DropdownMenuItem>
+              {alreadyInterested ? null : (
+                <DropdownMenuItem
+                  disabled={closed}
+                  onClick={() =>
+                    run(
+                      markInterested({
+                        ...base,
+                        requestId: intentId(conversation._id, "mark-interested"),
                       }),
-                  closed ? "Conversation reopened" : "Conversation closed",
-                  closed
-                    ? "Could not reopen this conversation."
-                    : "Could not close this conversation.",
-                )
-              }
-            >
-              {closed ? "Reopen" : "Close"}
-            </Button>
-          </div>
-        {prospect !== null && alreadyInterested ? (
-          <p className="text-muted-foreground text-sm">
-            {MARK_INTERESTED_COPY.already}
-          </p>
-        ) : null}
-        <FormError message={error} />
-      </CardContent>
+                      MARK_INTERESTED_COPY.success,
+                      MARK_INTERESTED_COPY.failure,
+                    )
+                  }
+                >
+                  {MARK_INTERESTED_COPY.label}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuItem
+            onClick={() =>
+              run(
+                closed ? reopen(base) : close(base),
+                closed ? "Conversation reopened" : "Conversation closed",
+                closed
+                  ? "Could not reopen this conversation."
+                  : "Could not close this conversation.",
+              )
+            }
+          >
+            {closed ? "Reopen conversation" : "Close conversation"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {booking && prospect !== null ? (
         <MarkAsBookedDialog
@@ -225,6 +234,6 @@ export function ConversationActions({
           onOpenChange={setBooking}
         />
       ) : null}
-    </Card>
+    </div>
   )
 }

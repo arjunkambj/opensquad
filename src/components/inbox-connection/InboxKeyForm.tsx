@@ -38,7 +38,7 @@ export function InboxKeyForm({
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
         const node = field.current
@@ -72,15 +72,14 @@ export function InboxKeyForm({
       </Field>
       <FormError message={error} />
       <div className="flex items-center gap-2">
-        <Button type="submit" size="cta" disabled={disabled || busy || !filled}>
+        <Button type="submit" disabled={disabled || busy || !filled}>
+          {busy ? <Spinner data-icon="inline-start" /> : null}
           {submitLabel}
-          {busy ? <Spinner className="size-4" /> : null}
         </Button>
         {onCancel ? (
           <Button
             type="button"
             variant="ghost"
-            size="cta"
             disabled={busy}
             onClick={onCancel}
           >

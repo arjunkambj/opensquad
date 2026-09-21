@@ -13,7 +13,7 @@ const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
   org_paused:
     "Sending is paused for this organization. Resume it in Settings and this can go out.",
   agent_not_sending:
-    "Your agent is not in a sending mode. Switch it to Review or Autopilot on the Agent page.",
+    "Your agent is not in a sending mode. Switch it to Review or Autopilot on the Autopilot page.",
   conversation_not_open:
     "This conversation is closed. Reopen it to send on it.",
   human_takeover:
@@ -28,7 +28,7 @@ const SEND_BLOCK_COPY: Record<SendBlockCode, string> = {
   agent_revision_changed:
     "Your agent's instructions changed after this reply was written, so it needs rewriting.",
   inbox_unassigned:
-    "No sending inbox is connected, so nothing can go out yet. Connect one in Settings.",
+    "No sending inbox is connected, so nothing can go out yet. Connect one on the Integrations page.",
   inbox_mismatch:
     "This reply was written for a different inbox than the one connected now.",
   lead_rejected:

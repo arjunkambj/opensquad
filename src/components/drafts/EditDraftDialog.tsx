@@ -36,16 +36,22 @@ export function EditDraftDialog({
   const revise = useMutation(api.outreach.drafts.revise)
   const intentId = useRequestIntents()
 
-  const [recipient, setRecipient] = useState(draft.recipient)
-  const [subject, setSubject] = useState(draft.subject)
-  const [body, setBody] = useState(draft.body)
+  // The revision the editor opened. `revise` inserts a new row and moves
+  // `currentDraftId`, so a rewrite arriving underneath would otherwise
+  // redirect this edit at content the writer never read — and pass the
+  // optimistic-concurrency guard while doing it.
+  const [opened] = useState(draft)
+
+  const [recipient, setRecipient] = useState(opened.recipient)
+  const [subject, setSubject] = useState(opened.subject)
+  const [body, setBody] = useState(opened.body)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const changed =
-    recipient.trim() !== draft.recipient ||
-    subject !== draft.subject ||
-    body !== draft.body
+    recipient.trim() !== opened.recipient ||
+    subject !== opened.subject ||
+    body !== opened.body
 
   const submit = () => {
     if (!changed || busy) {
@@ -55,16 +61,16 @@ export function EditDraftDialog({
     setError(null)
     void revise({
       orgId,
-      draftId: draft._id,
-      expectedRevision: draft.revision,
+      draftId: opened._id,
+      expectedRevision: opened.revision,
       // Only the fields that changed — revise requires at least one, and
       // sending an unchanged field would only blur what the edit was.
-      ...(recipient.trim() !== draft.recipient
+      ...(recipient.trim() !== opened.recipient
         ? { recipient: recipient.trim() }
         : {}),
-      ...(subject !== draft.subject ? { subject } : {}),
-      ...(body !== draft.body ? { body } : {}),
-      requestId: intentId(draft._id, "revise"),
+      ...(subject !== opened.subject ? { subject } : {}),
+      ...(body !== opened.body ? { body } : {}),
+      requestId: intentId(opened._id, "revise"),
     })
       .then(() => {
         onOpenChange(false)
@@ -99,7 +105,7 @@ export function EditDraftDialog({
           <DialogTitle>Edit this email</DialogTitle>
           <DialogDescription>
             Saving writes a new revision — the approval ask on revision{" "}
-            {draft.revision} is withdrawn and a fresh ask opens on the new
+            {opened.revision} is withdrawn and a fresh ask opens on the new
             content. Approval can never carry over to different bytes.
           </DialogDescription>
         </DialogHeader>
@@ -122,13 +128,14 @@ export function EditDraftDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="edit-draft-body">Body</Label>
-            <Textarea
-              id="edit-draft-body"
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              rows={12}
-              className="font-mono"
-            />
+            <div className="font-mono">
+              <Textarea
+                id="edit-draft-body"
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                rows={12}
+              />
+            </div>
           </div>
         </div>
         <FormError message={error} />

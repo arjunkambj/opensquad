@@ -44,15 +44,17 @@ export function DisconnectInboxDialog({
               : `${inboxAddress} will stop serving this organization.`}
           </DialogDescription>
         </DialogHeader>
-        <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
-          <li>Inbound mail stops: the webhook on your account is removed.</li>
-          <li>Your stored key and its webhook secret are wiped.</li>
-          <li>
-            The agent is paused, so nothing is sent until an inbox is connected
-            again. Leads, drafts and past conversations are kept.
-          </li>
-        </ul>
-        <FormError message={error} />
+        <div className="flex flex-col gap-4">
+          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
+            <li>Inbound mail stops: the webhook on your account is removed.</li>
+            <li>Your stored key and its webhook secret are wiped.</li>
+            <li>
+              The agent is paused, so nothing is sent until an inbox is connected
+              again. Leads, drafts and past conversations are kept.
+            </li>
+          </ul>
+          <FormError message={error} />
+        </div>
         <DialogFooter>
           <Button
             type="button"
@@ -70,8 +72,8 @@ export function DisconnectInboxDialog({
             disabled={busy}
             onClick={onConfirm}
           >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
             Disconnect
-            {busy ? <Spinner className="size-4" /> : null}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -20,10 +20,10 @@ export function InboxConnectionBanner({
   }
   const view = access.view
 
-  const settingsLink = (label: string) => (
+  const integrationsLink = (label: string) => (
     <Button
       size="sm"
-      render={<Link to="/settings" search={{ tab: "inbox" }} />}
+      render={<Link to="/integrations" />}
     >
       {label}
     </Button>
@@ -34,8 +34,8 @@ export function InboxConnectionBanner({
       <ConnectInboxBanner
         tone="attention"
         title="Reconnect your sending inbox"
-        description="The stored key was refused, so sending and replies are paused. Leads are still being found."
-        action={settingsLink("Reconnect")}
+        description="Sending is paused. Reconnect to resume."
+        action={integrationsLink("Reconnect")}
         {...(className !== undefined ? { className } : {})}
       />
     )
@@ -44,8 +44,8 @@ export function InboxConnectionBanner({
   return (
     <ConnectInboxBanner
       title="Connect inbox to start sending"
-      description="The agent finds and researches leads now, and contacts nobody until an inbox is connected."
-      action={settingsLink("Connect inbox")}
+      description="Leads are found now. Nobody is contacted until you connect."
+      action={integrationsLink("Connect inbox")}
       {...(className !== undefined ? { className } : {})}
     />
   )

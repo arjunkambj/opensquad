@@ -70,22 +70,23 @@ export function connectionStatusLabel(view: InboxConnectionView): string {
   }
 }
 
+/** Terse value for the "Imported" row of the connected inbox. */
 export function syncLabel(sync: InboxSyncView): string {
   switch (sync.state) {
     case "idle":
-      return "Preparing to import your recent threads…"
+      return "Preparing…"
     case "importing":
       return sync.threads === 1
         ? "Syncing 1 thread…"
         : `Syncing ${sync.threads} threads…`
     case "imported":
       return sync.threads === 0
-        ? "Synced — no threads in the last 30 days"
+        ? "None in the last 30 days"
         : sync.threads === 1
-          ? "Synced 1 thread from the last 30 days"
-          : `Synced ${sync.threads} threads from the last 30 days`
+          ? "1 thread, last 30 days"
+          : `${sync.threads} threads, last 30 days`
     case "failed":
-      return "The 30-day import did not finish"
+      return "Did not finish"
   }
 }
 

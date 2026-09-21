@@ -47,7 +47,7 @@ export function InboxSearchField({
         value={text}
         aria-label="Search conversations by company"
         placeholder="Company name"
-        className="h-8 w-36 text-sm"
+        className="h-8 w-36"
         onChange={(event) => setText(event.target.value)}
       />
       <Button

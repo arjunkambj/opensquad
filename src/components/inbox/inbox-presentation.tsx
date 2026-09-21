@@ -5,7 +5,8 @@ import type {
   MessageSource,
   ReplyDisposition,
 } from "../../../convex/lib/validators"
-import { Chip } from "@/components/kit/Chip"
+import { Chip, type ChipVariant } from "@/components/kit/Chip"
+import { cn } from "@/lib/utils"
 
 export const INBOX_PILLS = ["received", "interested", "unread", "all"] as const
 
@@ -42,21 +43,38 @@ const STAGE_LABEL: Record<LeadStage, string> = {
   needs_attention: "Needs attention",
 }
 
+export const DISPOSITION_VARIANT: Record<ReplyDisposition, ChipVariant> = {
+  interested: "accent",
+  question: "accent",
+  not_now: "muted",
+  not_interested: "destructive",
+  unsubscribe: "destructive",
+  automated: "muted",
+  needs_review: "accent",
+}
+
+/** Shared with Leads, so a stage reads the same colour on every screen. */
+export function stageChipVariant(stage: LeadStage): ChipVariant {
+  switch (stage) {
+    case "interested":
+    case "meeting_proposed":
+      return "accent"
+    case "meeting_booked":
+      return "success"
+    case "needs_attention":
+      return "destructive"
+    default:
+      return "muted"
+  }
+}
+
 export function DispositionChip({
   disposition,
 }: {
   disposition: ReplyDisposition
 }) {
   return (
-    <Chip
-      className={
-        disposition === "interested"
-          ? "bg-chart-2/15 text-chart-2"
-          : disposition === "unsubscribe" || disposition === "not_interested"
-            ? "bg-destructive/10 text-destructive"
-            : undefined
-      }
-    >
+    <Chip variant={DISPOSITION_VARIANT[disposition]}>
       {DISPOSITION_LABEL[disposition]}
     </Chip>
   )
@@ -64,13 +82,7 @@ export function DispositionChip({
 
 export function StageChip({ stage }: { stage: LeadStage }) {
   return (
-    <Chip
-      className={
-        stage === "meeting_booked" || stage === "interested"
-          ? "bg-chart-2/15 text-chart-2"
-          : undefined
-      }
-    >
+    <Chip variant={stageChipVariant(stage)}>
       {STAGE_LABEL[stage]}
     </Chip>
   )
@@ -81,7 +93,7 @@ export function StageChip({ stage }: { stage: LeadStage }) {
  * vocabulary rather than inline in the button.
  *
  * It says what the click does and, just as importantly, what it does not:
- * marking a reply interested tags the thread and moves the lead in Contacts.
+ * marking a reply interested tags the thread and moves the lead in Leads.
  * A meeting is still only a meeting when a person records one (PLAN §9.5).
  */
 export const MARK_INTERESTED_COPY = {
@@ -93,7 +105,7 @@ export const MARK_INTERESTED_COPY = {
 } as const
 
 export function NeedsApprovalChip() {
-  return <Chip className="bg-primary/10 text-primary">Needs your approval</Chip>
+  return <Chip variant="accent">Draft ready</Chip>
 }
 
 /**
@@ -153,4 +165,65 @@ export function leadDisplayName(lead: {
     return name
   }
   return lead.companyName ?? "Unnamed lead"
+}
+
+/** "Jane Doe <jane@acme.com>" → { name: "Jane Doe", address: "jane@acme.com" }. */
+export function parseSender(from: string): { name: string; address?: string } {
+  const match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from)
+  if (match === null) {
+    return { name: from.trim() }
+  }
+  const name = match[1]?.trim() ?? ""
+  const address = match[2]?.trim()
+  return { name: name.length > 0 ? name : (address ?? from), address }
+}
+
+export function initialsOf(name: string): string {
+  const words = name
+    .replace(/<[^>]*>|@.*$/g, "")
+    .split(/[\s._-]+/)
+    .filter((word) => /[\p{L}\p{N}]/u.test(word))
+  const letters =
+    words.length >= 2
+      ? `${words[0]?.[0] ?? ""}${words[words.length - 1]?.[0] ?? ""}`
+      : (words[0]?.slice(0, 2) ?? "")
+  return letters.length > 0 ? letters.toUpperCase() : "?"
+}
+
+const AVATAR_TONES = [
+  "bg-chart-1/15 text-chart-1",
+  "bg-chart-2/15 text-chart-2",
+  "bg-chart-3/15 text-chart-3",
+  "bg-chart-4/15 text-chart-4",
+  "bg-chart-5/15 text-chart-5",
+] as const
+
+/** A stable tone per person, so the same sender keeps one colour everywhere. */
+export function avatarTone(seed: string): string {
+  let hash = 0
+  for (const char of seed) {
+    hash = (hash * 31 + char.charCodeAt(0)) | 0
+  }
+  return AVATAR_TONES[Math.abs(hash) % AVATAR_TONES.length] ?? AVATAR_TONES[0]
+}
+
+export function PersonAvatar({
+  name,
+  className,
+}: {
+  name: string
+  className?: string
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        avatarTone(name),
+        className,
+      )}
+    >
+      {initialsOf(name)}
+    </span>
+  )
 }

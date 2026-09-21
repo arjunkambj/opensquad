@@ -1,3 +1,5 @@
+import { Tick02Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
@@ -27,18 +29,9 @@ export function ReplyActions({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => setEditing(true)}
-        >
-          Edit
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
         {approved ? null : (
           <Button
-            size="sm"
             disabled={busy}
             onClick={() => {
               setBusy(true)
@@ -62,11 +55,32 @@ export function ReplyActions({
                 .finally(() => setBusy(false))
             }}
           >
-            {busy ? <Spinner data-icon="inline-start" /> : null}
+            {busy ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <HugeiconsIcon
+                icon={Tick02Icon}
+                strokeWidth={2.5}
+                data-icon="inline-start"
+                aria-hidden="true"
+              />
+            )}
             Approve &amp; send
           </Button>
         )}
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => setEditing(true)}
+        >
+          Edit draft
+        </Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {approved
+          ? "Approved. It sends within your sending hours once every check passes."
+          : "Sends from your connected inbox after the send checks pass."}
+      </p>
       <FormError message={error} />
       {editing ? (
         <EditDraftDialog

@@ -68,8 +68,8 @@ export function InboxPicker({
         </p>
         <p className="text-sm text-muted-foreground">
           {inboxes.length === 0
-            ? `The account behind the key ending ${last4} has no inboxes yet — we will create one for you.`
-            : `Inboxes on the account behind the key ending ${last4}. Replies to this address come back into OpenIntent.`}
+            ? "No inboxes yet. Create one below."
+            : `Key ending ${last4}.`}
         </p>
       </div>
 
@@ -96,13 +96,13 @@ export function InboxPicker({
             onSelect={setSelected}
             disabled={busy}
             title="Create a new inbox"
-            description="A fresh address on your AgentMail account, used only for this outreach."
+            description="A new address for outreach."
           />
         </div>
       ) : null}
 
       {creating ? (
-        <div className="flex flex-col gap-4 rounded-2xl border border-border p-4">
+        <div className="flex flex-col gap-4 rounded-2xl bg-card p-4">
           <Field>
             <FieldLabel htmlFor="inbox-username">Username</FieldLabel>
             <Input
@@ -116,7 +116,7 @@ export function InboxPicker({
               }}
             />
             <FieldDescription>
-              The part before the @. AgentMail supplies the domain.
+              The part before the @.
             </FieldDescription>
           </Field>
           <Field>
@@ -134,7 +134,7 @@ export function InboxPicker({
               }}
             />
             <FieldDescription>
-              What recipients see as the sender name.
+              Shown as the sender.
             </FieldDescription>
           </Field>
         </div>
@@ -143,14 +143,13 @@ export function InboxPicker({
       <FormError message={error} />
 
       <div className="flex items-center gap-2">
-        <Button type="submit" size="cta" disabled={busy || !canSubmit}>
+        <Button type="submit" disabled={busy || !canSubmit}>
+          {busy ? <Spinner data-icon="inline-start" /> : null}
           {creating ? "Create and connect" : "Connect inbox"}
-          {busy ? <Spinner className="size-4" /> : null}
         </Button>
         <Button
           type="button"
           variant="ghost"
-          size="cta"
           disabled={busy}
           onClick={onBack}
         >

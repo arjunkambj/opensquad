@@ -7,8 +7,11 @@
  * body is never filled in with a summary or a guess.
  */
 import type { MessageSource } from "../../../../convex/lib/validators"
-import type { ThreadEntry } from "@/components/inbox/inbox-presentation"
-import { Chip } from "@/components/kit/Chip"
+import {
+  parseSender,
+  type ThreadEntry,
+} from "@/components/inbox/inbox-presentation"
+import { MessageBody, MessageCard } from "@/components/inbox/thread/MessageCard"
 import { formatInstant } from "@/lib/presentation"
 
 export function InboundMessage({
@@ -18,35 +21,25 @@ export function InboundMessage({
   entry: Extract<ThreadEntry, { kind: "inbound" }>
   source: MessageSource
 }) {
+  const sender =
+    entry.fromDisplay === undefined
+      ? { name: "Unknown sender" }
+      : parseSender(entry.fromDisplay)
   return (
-    <li className="flex flex-col gap-2 rounded-[min(var(--radius-4xl),24px)] border border-border bg-card px-4 py-3">
-      <header className="flex flex-wrap items-center gap-2">
-        <Chip>Reply</Chip>
-        {entry.fromDisplay === undefined ? null : (
-          <span className="min-w-0 truncate text-xs font-medium text-foreground">
-            {entry.fromDisplay}
-          </span>
-        )}
-        {entry.at > 0 ? (
-          <span className="text-xs text-muted-foreground">
-            {formatInstant(entry.at)}
-          </span>
-        ) : null}
-      </header>
-      {entry.subject === undefined ? null : (
-        <p className="text-sm font-medium text-foreground">{entry.subject}</p>
-      )}
+    <MessageCard
+      sender={sender.name}
+      meta={sender.address}
+      time={entry.at > 0 ? formatInstant(entry.at) : undefined}
+    >
       {entry.body.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground italic">
           {source === "backfill"
-            ? "The text of this message was not imported — only who sent it and when."
+            ? "The text of this message was not imported, only who sent it and when."
             : "This message arrived without readable text."}
         </p>
       ) : (
-        <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
-          {entry.body}
-        </p>
+        <MessageBody>{entry.body}</MessageBody>
       )}
-    </li>
+    </MessageCard>
   )
 }

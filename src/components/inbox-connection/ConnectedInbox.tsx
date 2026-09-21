@@ -1,8 +1,10 @@
+import type { ReactNode } from "react"
 import { Chip } from "@/components/kit/Chip"
-import { DetailRow } from "@/components/kit/DetailRow"
-import { formatInstant, formatWaited } from "@/lib/presentation"
+import { Hint } from "@/components/kit/Hint"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { DialogFooter } from "@/components/ui/dialog"
+import { formatInstant, formatWaited } from "@/lib/presentation"
 import type { InboxConnectionView } from "./inbox-connection-model"
 import { connectionStatusLabel } from "./inbox-connection-model"
 import { InboxSyncStatus } from "./InboxSyncStatus"
@@ -10,6 +12,7 @@ import { InboxSyncStatus } from "./InboxSyncStatus"
 export function ConnectedInbox({
   view,
   busy,
+  error,
   onReplaceKey,
   onDisconnect,
   onRetrySync,
@@ -17,6 +20,7 @@ export function ConnectedInbox({
 }: {
   view: InboxConnectionView
   busy: boolean
+  error: string | null
   onReplaceKey: () => void
   onDisconnect: () => void
   onRetrySync?: () => void
@@ -24,73 +28,59 @@ export function ConnectedInbox({
 }) {
   const keyValid = view.status === "valid"
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <p className="text-sm font-medium text-foreground">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-sm font-medium text-foreground">
             {view.inboxAddress ?? "Sending inbox"}
           </p>
-          <p className="text-xs text-muted-foreground">
-            Outreach goes out from here, and replies come back to it.
-          </p>
+          <Chip
+            variant={keyValid ? "success" : "destructive"}
+            className="shrink-0"
+          >
+            {connectionStatusLabel(view)}
+          </Chip>
         </div>
-        <Chip
-          className={cn(
-            keyValid
-              ? "bg-primary/10 text-primary"
-              : "bg-destructive/10 text-destructive",
-          )}
-        >
-          {connectionStatusLabel(view)}
-        </Chip>
+
+        <dl className="flex flex-col gap-2.5 text-sm">
+          <Fact label="API key">
+            {view.last4 === undefined ? (
+              "Not stored"
+            ) : keyValid ? (
+              `•••• ${view.last4}`
+            ) : (
+              <Hint content="AgentMail refused this key. Replace it to resume sending.">
+                <span className="text-destructive">
+                  •••• {view.last4} · refused
+                </span>
+              </Hint>
+            )}
+          </Fact>
+          <Fact label="Inbound mail">
+            {view.webhook.registered ? "Webhook registered" : "No webhook"}
+          </Fact>
+          <Fact label="Last mail">
+            <Moment at={view.lastEventAt} empty="Nothing yet" />
+          </Fact>
+          <Fact label="Connected">
+            <Moment at={view.connectedAt} empty="Not recorded" />
+          </Fact>
+          <Fact label="Imported">
+            <InboxSyncStatus
+              sync={view.sync}
+              {...(onRetrySync !== undefined ? { onRetry: onRetrySync } : {})}
+              retrying={retryingSync}
+            />
+          </Fact>
+        </dl>
+
+        <FormError message={error} />
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <DetailRow
-          label="API key"
-          value={
-            view.last4 === undefined
-              ? "Not stored"
-              : `•••• ${view.last4} · ${keyValid ? "verified" : "refused by AgentMail"}`
-          }
-        />
-        <DetailRow
-          label="Inbound mail"
-          value={
-            view.webhook.registered
-              ? "Webhook registered on your account"
-              : "No webhook registered"
-          }
-        />
-        <DetailRow
-          label="Last mail received"
-          value={
-            view.lastEventAt === undefined
-              ? "Nothing yet"
-              : `${formatWaited(view.lastEventAt)} · ${formatInstant(view.lastEventAt)}`
-          }
-        />
-        <DetailRow
-          label="Connected"
-          value={
-            view.connectedAt === undefined
-              ? "Not recorded"
-              : formatInstant(view.connectedAt)
-          }
-        />
-      </div>
-
-      <InboxSyncStatus
-        sync={view.sync}
-        {...(onRetrySync !== undefined ? { onRetry: onRetrySync } : {})}
-        retrying={retryingSync}
-      />
-
-      <div className="flex flex-wrap items-center gap-2">
+      <DialogFooter>
         <Button
           type="button"
           variant="outline"
-          size="sm"
           disabled={busy}
           onClick={onReplaceKey}
         >
@@ -99,13 +89,33 @@ export function ConnectedInbox({
         <Button
           type="button"
           variant="destructive"
-          size="sm"
           disabled={busy}
           onClick={onDisconnect}
         >
           Disconnect
         </Button>
-      </div>
+      </DialogFooter>
     </div>
+  )
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-5 items-center gap-3">
+      <dt className="w-32 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+/** Relative time, with the exact instant on hover. */
+function Moment({ at, empty }: { at: number | undefined; empty: string }) {
+  if (at === undefined) {
+    return empty
+  }
+  return (
+    <Hint content={formatInstant(at)}>
+      <span>{formatWaited(at)}</span>
+    </Hint>
   )
 }

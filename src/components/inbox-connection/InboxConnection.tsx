@@ -1,11 +1,12 @@
 import { useState } from "react"
 import type { Id } from "../../../convex/_generated/dataModel"
 import { InfoBanner } from "@/components/kit/InfoBanner"
-import { LoadingState } from "@/components/states/states"
 import { ConnectedInbox } from "./ConnectedInbox"
 import { DisconnectInboxDialog } from "./DisconnectInboxDialog"
+import { InboxConnectionSkeleton } from "./InboxConnectionSkeleton"
 import { InboxKeyForm } from "./InboxKeyForm"
 import { InboxPicker } from "./InboxPicker"
+import { ReplaceKeyDialog } from "./ReplaceKeyDialog"
 import { useInboxConnectActions } from "./use-inbox-connect-actions"
 import { useInboxConnection } from "./use-inbox-connection"
 
@@ -19,19 +20,13 @@ export function InboxConnection({
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
 
   if (access.state === "loading") {
-    return (
-      <LoadingState
-        title="Reading your inbox connection"
-        description="Checking the stored key, the inbound webhook and the import."
-      />
-    )
+    return <InboxConnectionSkeleton />
   }
 
   if (access.state === "no_org") {
     return (
       <p className="text-sm text-muted-foreground">
-        We could not read your organization just now. Refresh the page and try
-        again.
+        Couldn't load your organization. Refresh to try again.
       </p>
     )
   }
@@ -53,28 +48,15 @@ export function InboxConnection({
     )
   }
 
-  if (flow.kind === "rotating") {
-    return (
-      <InboxKeyForm
-        id="inbox-rotate-key"
-        label="New AgentMail API key"
-        description="The new key must belong to the same AgentMail account as the connected inbox. Mail keeps arriving during the swap."
-        submitLabel="Replace key"
-        busy={busy === "rotating"}
-        error={error}
-        onSubmit={actions.rotate}
-        onCancel={actions.reset}
-      />
-    )
-  }
-
   if (view.connection === "connected") {
     const inboxAddress = view.inboxAddress
+    const rotating = flow.kind === "rotating"
     return (
       <>
         <ConnectedInbox
           view={view}
           busy={busy !== "none"}
+          error={!confirmingDisconnect && !rotating ? error : null}
           onReplaceKey={actions.startRotation}
           onDisconnect={() => {
             setConfirmingDisconnect(true)
@@ -88,11 +70,13 @@ export function InboxConnection({
             : {})}
           retryingSync={actions.resyncing}
         />
-        {error !== null && !confirmingDisconnect ? (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+        <ReplaceKeyDialog
+          open={rotating}
+          busy={busy === "rotating"}
+          error={rotating ? error : null}
+          onSubmit={actions.rotate}
+          onCancel={actions.reset}
+        />
         <DisconnectInboxDialog
           open={confirmingDisconnect}
           onOpenChange={setConfirmingDisconnect}
@@ -116,17 +100,15 @@ export function InboxConnection({
           title="AgentMail refused this organization's key."
           className="border-destructive/30 bg-destructive/5"
         >
-          Sending is paused and replies are not being read. Paste a new key
-          from the same account to pick up where you left off — nothing is
-          lost.
+          Sending is paused. Paste a new key to resume.
         </InfoBanner>
         <InboxKeyForm
           id="inbox-reconnect-key"
           label="AgentMail API key"
           description={
             view.last4 === undefined
-              ? "Paste a key from the account that owns this organization's inbox."
-              : `The stored key ending ${view.last4} no longer works. Paste a current one from the same account.`
+              ? "Use a key from the same account."
+              : `Key ending ${view.last4} stopped working.`
           }
           submitLabel="Reconnect"
           busy={busy === "rotating"}
@@ -138,20 +120,18 @@ export function InboxConnection({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <InboxKeyForm
-        id="inbox-connect-key"
-        label="AgentMail API key"
-        description={
-          view.last4 === undefined
-            ? "From your AgentMail dashboard. It is encrypted before it is stored and never shown again."
-            : `A key ending ${view.last4} is stored but no inbox is attached yet. Paste it again to choose one.`
-        }
-        submitLabel="Verify key"
-        busy={busy === "verifying"}
-        error={error}
-        onSubmit={actions.verify}
-      />
-    </div>
+    <InboxKeyForm
+      id="inbox-connect-key"
+      label="AgentMail API key"
+      description={
+        view.last4 === undefined
+          ? "Stored encrypted, never shown again."
+          : `Key ending ${view.last4} saved. Paste it again to pick an inbox.`
+      }
+      submitLabel="Verify key"
+      busy={busy === "verifying"}
+      error={error}
+      onSubmit={actions.verify}
+    />
   )
 }

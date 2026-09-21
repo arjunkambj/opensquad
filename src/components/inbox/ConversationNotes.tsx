@@ -3,16 +3,10 @@ import { useState } from "react"
 import { api } from "../../../convex/_generated/api"
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { formatInstant } from "@/lib/presentation"
-import { FormError, LoadingState } from "@/components/states/states"
+import { NotesSkeleton } from "@/components/inbox/InboxPageSkeleton"
+import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
+import { PageSection } from "@/components/kit/PageSection"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
@@ -64,31 +58,22 @@ export function ConversationNotes({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Notes</CardTitle>
-        <CardDescription>
-          Private to this organization. A note records context — it can never
-          approve, resume or send anything.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <PageSection
+      title="Notes"
+      description="Private to your team. Notes never approve or send anything."
+    >
         {page === undefined ? (
-          <LoadingState title="Loading notes" />
+          <NotesSkeleton />
         ) : page.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No notes yet. System events on the thread are recorded here too.
+            No notes yet.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
             {page.items.map((note) => (
               <li
                 key={note._id}
-                className={
-                  note.kind === "system"
-                    ? "rounded-2xl bg-muted/50 px-3 py-2"
-                    : "rounded-2xl border border-border px-3 py-2"
-                }
+                className="rounded-lg bg-muted/60 px-3 py-2"
               >
                 <p className="text-sm whitespace-pre-wrap break-words text-foreground">
                   {note.body}
@@ -107,7 +92,6 @@ export function ConversationNotes({
             {cursor !== undefined ? (
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => setCursor(undefined)}
               >
                 First page
@@ -116,7 +100,6 @@ export function ConversationNotes({
             {page.hasMore && page.cursor !== null ? (
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => setCursor(page.cursor ?? undefined)}
               >
                 Older notes
@@ -131,9 +114,9 @@ export function ConversationNotes({
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            <Label htmlFor="conversation-note">Add a note</Label>
             <Textarea
               id="conversation-note"
+              aria-label="Add a note"
               value={body}
               onChange={(event) => setBody(event.target.value)}
               placeholder="Context the next person working this thread needs"
@@ -141,8 +124,6 @@ export function ConversationNotes({
             />
             <div>
               <Button
-                size="sm"
-                variant="secondary"
                 disabled={pending || body.trim().length === 0}
                 onClick={submit}
               >
@@ -153,7 +134,6 @@ export function ConversationNotes({
           </div>
         )}
         <FormError message={error} />
-      </CardContent>
-    </Card>
+    </PageSection>
   )
 }
