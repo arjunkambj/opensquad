@@ -149,10 +149,6 @@ import type * as lib_validators_leads from "../lib/validators/leads.js";
 import type * as lib_validators_orgs from "../lib/validators/orgs.js";
 import type * as lib_validators_outreach from "../lib/validators/outreach.js";
 import type * as lib_validators_shared from "../lib/validators/shared.js";
-import type * as migrations_clear from "../migrations/clear.js";
-import type * as migrations_shape from "../migrations/shape.js";
-import type * as migrations_tables from "../migrations/tables.js";
-import type * as migrations_verify from "../migrations/verify.js";
 import type * as orgs_model from "../orgs/model.js";
 import type * as orgs_mutations from "../orgs/mutations.js";
 import type * as orgs_outreachDefaults from "../orgs/outreachDefaults.js";
@@ -338,10 +334,6 @@ declare const fullApi: ApiFromModules<{
   "lib/validators/orgs": typeof lib_validators_orgs;
   "lib/validators/outreach": typeof lib_validators_outreach;
   "lib/validators/shared": typeof lib_validators_shared;
-  "migrations/clear": typeof migrations_clear;
-  "migrations/shape": typeof migrations_shape;
-  "migrations/tables": typeof migrations_tables;
-  "migrations/verify": typeof migrations_verify;
   "orgs/model": typeof orgs_model;
   "orgs/mutations": typeof orgs_mutations;
   "orgs/outreachDefaults": typeof orgs_outreachDefaults;
@@ -409,7 +401,6 @@ export declare const internal: FilterApi<
 export declare const components: {
   agentmail: import("@agentmail/convex/_generated/component.js").ComponentApi<"agentmail">;
   firecrawl: import("@firecrawl/firecrawl-convex/_generated/component.js").ComponentApi<"firecrawl">;
-  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
 };

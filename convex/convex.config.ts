@@ -2,7 +2,6 @@ import { defineApp } from "convex/server";
 import { v } from "convex/values";
 import agentmail from "@agentmail/convex/convex.config";
 import firecrawl from "@firecrawl/firecrawl-convex/convex.config";
-import migrations from "@convex-dev/migrations/convex.config";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config";
 import staticHosting from "@convex-dev/static-hosting/convex.config";
 
@@ -53,11 +52,6 @@ app.use(firecrawl, {
     FIRECRAWL_WEBHOOK_SECRET: app.env.FIRECRAWL_WEBHOOK_SECRET,
   },
 });
-
-// T06: Migrations — batched, cursor-resumable, dry-runnable data migrations
-// with their own state table (MIGRATION.md §2, §6.4). Only `convex/migrations/**`
-// uses it, and only during a cutover; nothing in the request path touches it.
-app.use(migrations);
 
 // T02: Rate limiter — per-user token buckets on every credit-spending entry
 // point (PLAN §6 "Closing the ways in"). The buckets are evaluated inside the
