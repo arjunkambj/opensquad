@@ -4,21 +4,13 @@
  * Availability and the action both enforce the demo deployment and the
  * organization creator on the server.
  */
-import { Delete02Icon } from "@hugeicons/core-free-icons"
 import { useNavigate } from "@tanstack/react-router"
 import { useAction, useQuery } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
-import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
+import { PageSection } from "@/components/kit/PageSection"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -27,8 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import type { OrgView } from "@/lib/org-view"
@@ -80,23 +72,11 @@ function OrgResetForm({ org }: { org: OrgView }) {
 
   return (
     <>
-      <SectionHeaderCard
-        icon={Delete02Icon}
+      <PageSection
         title="Reset organization"
-        description="Clear this demo organization’s app data and repeat onboarding."
-      />
-      <Card>
-        <CardHeader>
-          <CardTitle>Start over</CardTitle>
-          <CardDescription>
-            Company profile, website scrapes, onboarding, the agent, leads,
-            inbox, credits and usage for {org.name} are removed. Your sign-in
-            and the Hexclave organization stay. Your provider mailbox and
-            provider caches are kept. Available only to this organization’s
-            creator on the demo deployment.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        description="Clears this demo organization's data and restarts setup."
+      >
+        <div>
           <Button
             type="button"
             variant="destructive"
@@ -108,8 +88,8 @@ function OrgResetForm({ org }: { org: OrgView }) {
           >
             Reset this organization
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </PageSection>
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -132,26 +112,28 @@ function OrgResetForm({ org }: { org: OrgView }) {
               to providers cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
-            <li>Company profile, website scrape and onboarding answers.</li>
-            <li>The agent, leads, inbox, drafts and sending connection.</li>
-            <li>Credits, usage and billing records for this organization.</li>
-          </ul>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="org-reset-confirm">
-              Type {CONFIRM_WORD} to confirm
-            </Label>
-            <Input
-              id="org-reset-confirm"
-              autoComplete="off"
-              disabled={busy}
-              value={confirm}
-              onChange={(event) => {
-                setConfirm(event.target.value)
-              }}
-            />
+          <div className="flex flex-col gap-4">
+            <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
+              <li>Company profile, website scrape and onboarding answers.</li>
+              <li>The agent, leads, inbox, drafts and sending connection.</li>
+              <li>Credits, usage and billing records for this organization.</li>
+            </ul>
+            <Field>
+              <FieldLabel htmlFor="org-reset-confirm">
+                Type {CONFIRM_WORD} to confirm
+              </FieldLabel>
+              <Input
+                id="org-reset-confirm"
+                autoComplete="off"
+                disabled={busy}
+                value={confirm}
+                onChange={(event) => {
+                  setConfirm(event.target.value)
+                }}
+              />
+            </Field>
+            <FormError message={error} />
           </div>
-          <FormError message={error} />
           <DialogFooter>
             <Button
               type="button"
@@ -171,8 +153,8 @@ function OrgResetForm({ org }: { org: OrgView }) {
                 void runReset()
               }}
             >
+              {busy ? <Spinner data-icon="inline-start" /> : null}
               Reset organization
-              {busy ? <Spinner className="size-4" /> : null}
             </Button>
           </DialogFooter>
         </DialogContent>

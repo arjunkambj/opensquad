@@ -5,7 +5,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export type BlocklistKindFilter = "all" | "email" | "domain"
 
@@ -24,7 +24,7 @@ export function BlocklistFilters({
 }: BlocklistFiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <InputGroup className="h-9 min-w-56 flex-1">
+      <InputGroup className="min-w-56 flex-1">
         <InputGroupAddon align="inline-start">
           <HugeiconsIcon
             aria-hidden="true"
@@ -40,24 +40,16 @@ export function BlocklistFilters({
           onChange={(event) => onSearchChange(event.target.value)}
         />
       </InputGroup>
-      <ToggleGroup
-        aria-label="Filter by scope"
-        size="sm"
-        value={[kind]}
-        variant="outline"
-        onValueChange={(next) => {
-          const picked = next.at(-1)
-          // An empty array is the user pressing the active item again. The
-          // list is always scoped to something, so that is a no-op.
-          if (picked === "all" || picked === "email" || picked === "domain") {
-            onKindChange(picked)
-          }
-        }}
+      <Tabs
+        value={kind}
+        onValueChange={(picked: typeof kind) => onKindChange(picked)}
       >
-        <ToggleGroupItem value="all">All</ToggleGroupItem>
-        <ToggleGroupItem value="email">Addresses</ToggleGroupItem>
-        <ToggleGroupItem value="domain">Domains</ToggleGroupItem>
-      </ToggleGroup>
+        <TabsList aria-label="Filter by scope">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="email">Addresses</TabsTrigger>
+          <TabsTrigger value="domain">Domains</TabsTrigger>
+        </TabsList>
+      </Tabs>
     </div>
   )
 }

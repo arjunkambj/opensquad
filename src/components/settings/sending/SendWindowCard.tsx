@@ -8,13 +8,7 @@ import { SendWindowFields } from "@/components/settings/sending/SendWindowFields
 import type { SendWindowValues } from "@/components/settings/sending/SendWindowFields"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { PageSection } from "@/components/kit/PageSection"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { errorMessage, isConflictError } from "@/lib/convex-error"
@@ -143,35 +137,29 @@ export function SendWindowCard({ org }: { org: OrgView }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sending window</CardTitle>
-        <CardDescription>
-          Saving this invalidates approvals written against the old policy, so
-          a draft waiting to go out needs approving again.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <SendWindowFields
-          disabled={saving}
-          values={form}
-          onChange={(next) => {
-            setDirty(true)
-            setForm(next)
-          }}
-        />
-        <FormError message={error} />
-        <div className="flex justify-end">
-          <Button
-            disabled={!dirty || saving}
-            onClick={() => void save()}
-            type="button"
-          >
-            {saving ? <Spinner data-icon="inline-start" /> : null}
-            Save sending policy
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <PageSection>
+      <SendWindowFields
+        disabled={saving}
+        values={form}
+        onChange={(next) => {
+          setDirty(true)
+          setForm(next)
+        }}
+      />
+      <FormError message={error} />
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <p className="mr-auto text-sm text-muted-foreground">
+          Saving asks you to re-approve queued drafts.
+        </p>
+        <Button
+          disabled={!dirty || saving}
+          onClick={() => void save()}
+          type="button"
+        >
+          {saving ? <Spinner data-icon="inline-start" /> : null}
+          Save sending policy
+        </Button>
+      </div>
+    </PageSection>
   )
 }

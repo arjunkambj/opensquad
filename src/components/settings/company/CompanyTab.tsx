@@ -5,7 +5,8 @@ import type { Id } from "../../../../convex/_generated/dataModel"
 import { ACTION_PRICES } from "../../../../convex/lib/prices"
 import { CompanyProfileCard } from "@/components/settings/company/CompanyProfileCard"
 import { CompanyWebsiteCard } from "@/components/settings/company/CompanyWebsiteCard"
-import { LoadingState } from "@/components/states/states"
+import { CompanyTabSkeleton } from "@/components/settings/SettingsTabSkeletons"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { toast } from "@/components/ui/toast"
 import {
   analysisFailureCopy,
@@ -60,10 +61,9 @@ export function CompanyTab({ orgId }: { orgId: Id<"orgs"> }) {
 
   if (profile === undefined) {
     return (
-      <LoadingState
-        title="Loading your company profile"
-        description="Reading what your agent currently sells from."
-      />
+      <SkeletonRegion label="Loading your company profile">
+        <CompanyTabSkeleton />
+      </SkeletonRegion>
     )
   }
 
@@ -83,6 +83,11 @@ export function CompanyTab({ orgId }: { orgId: Id<"orgs"> }) {
           : null
 
   const runAnalysis = () => {
+    // No address, no analysis: Retry reaches here too, and the field may have
+    // been cleared since the run it is retrying.
+    if (website.trim() === "") {
+      return
+    }
     setStartError(null)
     setWebsiteTyped(false)
     void startAnalysis({ orgId, websiteUrl: website }).catch((cause) => {
@@ -131,7 +136,7 @@ export function CompanyTab({ orgId }: { orgId: Id<"orgs"> }) {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <CompanyWebsiteCard
         analyzing={analyzing}
         blockedReason={blockedReason}
@@ -145,6 +150,13 @@ export function CompanyTab({ orgId }: { orgId: Id<"orgs"> }) {
             : "analyze"
         }
         onAnalyze={runAnalysis}
+        retryBlocked={
+          website.trim() === "" ||
+          (startError === null &&
+            status.state === "failed" &&
+            status.code === "not_found" &&
+            sameWebsite(website, profile?.websiteUrl))
+        }
         onWebsiteChange={(next) => {
           setWebsiteTyped(true)
           setWebsite(next)

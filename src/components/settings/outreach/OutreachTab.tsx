@@ -5,11 +5,11 @@ import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
 import type { Id } from "../../../../convex/_generated/dataModel"
 import { EmptyState } from "@/components/states/states"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { InstructionsEditorCard } from "@/components/settings/outreach/InstructionsEditorCard"
-import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
-import { LoadingState } from "@/components/states/states"
+import { PageSection } from "@/components/kit/PageSection"
+import { OutreachTabSkeleton } from "@/components/settings/SettingsTabSkeletons"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "@/components/ui/toast"
 import { errorMessage } from "@/lib/convex-error"
 
@@ -32,10 +32,9 @@ export function OutreachTab({ orgId }: { orgId: Id<"orgs"> }) {
 
   if (stored === undefined) {
     return (
-      <LoadingState
-        title="Loading your outreach instructions"
-        description="Reading the default your agent writes from."
-      />
+      <SkeletonRegion label="Loading your outreach instructions">
+        <OutreachTabSkeleton />
+      </SkeletonRegion>
     )
   }
 
@@ -66,24 +65,15 @@ export function OutreachTab({ orgId }: { orgId: Id<"orgs"> }) {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <SectionHeaderCard
-        icon={MagicWand01Icon}
-        title="Outreach instructions"
-        description="How your agent writes when it has no instructions of its own. An agent with its own takes precedence."
-        action={
-          !editing && stored.instructions !== null ? (
-            <Button
-              onClick={() => setEditing(true)}
-              type="button"
-              variant="outline"
-            >
-              Edit instructions
-            </Button>
-          ) : undefined
-        }
-      />
-
+    <PageSection
+      action={
+        !editing && stored.instructions !== null ? (
+          <Button onClick={() => setEditing(true)} type="button" variant="outline">
+            Edit
+          </Button>
+        ) : undefined
+      }
+    >
       {editing ? (
         <InstructionsEditorCard
           dirty={draft.trim() !== (stored.instructions ?? "")}
@@ -99,36 +89,28 @@ export function OutreachTab({ orgId }: { orgId: Id<"orgs"> }) {
           value={draft}
         />
       ) : stored.instructions === null ? (
-        <Card>
-          <CardContent>
-            <EmptyState
-              variant="plain"
-              icon={Note01Icon}
-              title="No default instructions yet"
-              description="Without them your agent writes from your company profile and what it researched about the lead: the problem it thinks they have, one relevant thing you do, and a short ask. Add instructions to set the voice, the length and what it must never claim."
-              action={
-                <Button onClick={() => setEditing(true)} type="button">
-                  <HugeiconsIcon
-                    aria-hidden="true"
-                    data-icon="inline-start"
-                    icon={MagicWand01Icon}
-                    strokeWidth={2}
-                  />
-                  Write default instructions
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          variant="plain"
+          icon={Note01Icon}
+          title="No default instructions yet"
+          description="Set the voice, the length and what your agent must never claim."
+          action={
+            <Button onClick={() => setEditing(true)} type="button">
+              <HugeiconsIcon
+                aria-hidden="true"
+                data-icon="inline-start"
+                icon={MagicWand01Icon}
+                strokeWidth={2}
+              />
+              Write instructions
+            </Button>
+          }
+        />
       ) : (
-        <Card>
-          <CardContent className="flex flex-col gap-3">
-            <p className="text-sm whitespace-pre-wrap text-foreground">
-              {stored.instructions}
-            </p>
-          </CardContent>
-        </Card>
+        <p className="text-sm whitespace-pre-wrap text-foreground">
+          {stored.instructions}
+        </p>
       )}
-    </div>
+    </PageSection>
   )
 }

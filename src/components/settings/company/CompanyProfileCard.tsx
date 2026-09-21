@@ -1,13 +1,7 @@
 import { CompanyProfileForm } from "@/components/kit/CompanyProfileForm"
+import { PageSection } from "@/components/kit/PageSection"
 import { FormError } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import type { CompanyForm } from "@/lib/company-form"
 
@@ -33,38 +27,24 @@ export function CompanyProfileCard({
   error,
 }: CompanyProfileCardProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Company profile</CardTitle>
-        <CardDescription>
-          Every email your agent writes is built from these lines, so they are
-          worth keeping current.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <CompanyProfileForm
-          disabled={analyzing}
-          onChange={onChange}
-          value={value}
-        />
-        <FormError message={error} />
-                  <div className="flex flex-wrap items-center justify-end gap-3">
-            {complete ? null : (
-              <p className="mr-auto text-sm text-muted-foreground">
-                A company name, an industry, a description and at least one key
-                feature are needed before this can be saved.
-              </p>
-            )}
-            <Button
-              disabled={!dirty || !complete || analyzing || saving}
-              onClick={onSave}
-              type="button"
-            >
-              {saving ? <Spinner data-icon="inline-start" /> : null}
-              Save profile
-            </Button>
-          </div>
-      </CardContent>
-    </Card>
+    <PageSection title="Company profile">
+      <CompanyProfileForm disabled={analyzing} onChange={onChange} value={value} />
+      <FormError message={error} />
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {complete ? null : (
+          <p className="mr-auto text-sm text-muted-foreground">
+            Fill in the required fields to save.
+          </p>
+        )}
+        <Button
+          disabled={!dirty || !complete || analyzing || saving}
+          onClick={onSave}
+          type="button"
+        >
+          {saving ? <Spinner data-icon="inline-start" /> : null}
+          Save profile
+        </Button>
+      </div>
+    </PageSection>
   )
 }

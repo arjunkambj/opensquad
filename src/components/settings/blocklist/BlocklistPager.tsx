@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button"
-import { CardFooter } from "@/components/ui/card"
 
 export type BlocklistPagerProps = {
   matched: number
@@ -19,8 +18,8 @@ export function BlocklistPager({
   onNext,
 }: BlocklistPagerProps) {
   return (
-    <CardFooter className="flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm text-muted-foreground">
-      <span>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span className="text-sm text-muted-foreground">
         {matched} {matched === 1 ? "entry" : "entries"}
         {filtered ? " match this filter" : " blocked"}
       </span>
@@ -44,6 +43,6 @@ export function BlocklistPager({
           Next
         </Button>
       </span>
-    </CardFooter>
+    </div>
   )
 }

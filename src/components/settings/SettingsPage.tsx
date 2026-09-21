@@ -6,18 +6,20 @@ import { api } from "../../../convex/_generated/api"
 import { AccountTab } from "@/components/settings/account/AccountTab"
 import { BlocklistTab } from "@/components/settings/blocklist/BlocklistTab"
 import { CompanyTab } from "@/components/settings/company/CompanyTab"
-import { InboxTab } from "@/components/settings/InboxTab"
 import { OutreachTab } from "@/components/settings/outreach/OutreachTab"
 import { SendingTab } from "@/components/settings/sending/SendingTab"
 import { SettingsTabBar } from "@/components/settings/SettingsTabBar"
 import {
   DEFAULT_SETTINGS_TAB,
   SETTINGS_TAB_DESCRIPTION,
+  SETTINGS_TAB_LABEL,
 } from "@/components/settings/settings-model"
 import type { SettingsTab } from "@/components/settings/settings-model"
-import { UsageTab } from "@/components/settings/usage/UsageTab"
 import { DashboardPageTitle } from "@/components/layout/DashboardPageTitle"
-import { EmptyState, LoadingState } from "@/components/states/states"
+import { SettingsPageSkeleton } from "@/components/settings/SettingsPageSkeleton"
+import { SettingsTabSkeleton } from "@/components/settings/SettingsTabSkeletons"
+import { SkeletonRegion } from "@/components/states/skeletons"
+import { EmptyState } from "@/components/states/states"
 import { Button } from "@/components/ui/button"
 import { useCurrentOrg } from "@/hooks/use-current-org"
 import type { OrgView } from "@/lib/org-view"
@@ -31,17 +33,25 @@ export function SettingsPage() {
   // session the shell is still checking or redirecting — loading is the
   // honest render, never a blank.
   if (!user) {
-    return <LoadingState title="Loading settings" />
+    return <SettingsPageSkeleton tab={tab} />
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <DashboardPageTitle
-        title="Settings"
-        description={SETTINGS_TAB_DESCRIPTION[tab]}
-      />
-      <SettingsTabBar current={tab} />
-      {tab === "account" ? <AccountTab user={user} /> : <OrgSection tab={tab} />}
+    <div className="flex flex-col gap-6 md:flex-row md:gap-12">
+      <aside className="md:sticky md:top-6 md:w-52 md:shrink-0 md:self-start">
+        <SettingsTabBar current={tab} />
+      </aside>
+      <div className="flex max-w-3xl min-w-0 flex-1 flex-col gap-6">
+        <DashboardPageTitle
+          title={SETTINGS_TAB_LABEL[tab]}
+          description={SETTINGS_TAB_DESCRIPTION[tab]}
+        />
+        {tab === "account" ? (
+          <AccountTab user={user} />
+        ) : (
+          <OrgSection tab={tab} />
+        )}
+      </div>
     </div>
   )
 }
@@ -64,12 +74,7 @@ function OrgSection({ tab }: { tab: SettingsTab }) {
   )
 
   if (current.status === "loading") {
-    return (
-      <LoadingState
-        title="Loading your organization"
-        description="Reading your company profile, sending policy and blocklist."
-      />
-    )
+    return <OrgTabSkeleton tab={tab} />
   }
 
   if (current.status !== "ready") {
@@ -82,12 +87,7 @@ function OrgSection({ tab }: { tab: SettingsTab }) {
   }
 
   if (agent === undefined) {
-    return (
-      <LoadingState
-        title="Loading your organization"
-        description="Checking how far setup got."
-      />
-    )
+    return <OrgTabSkeleton tab={tab} />
   }
 
   if (agent === null || agent.onboardingStep !== "done") {
@@ -103,22 +103,24 @@ function OrgSection({ tab }: { tab: SettingsTab }) {
   return <OrgTab tab={tab} org={current.org} />
 }
 
+function OrgTabSkeleton({ tab }: { tab: SettingsTab }) {
+  return (
+    <SkeletonRegion label="Loading your organization">
+      <SettingsTabSkeleton tab={tab} />
+    </SkeletonRegion>
+  )
+}
+
 function OrgTab({ tab, org }: { tab: SettingsTab; org: OrgView }) {
   switch (tab) {
     case "company":
       return <CompanyTab orgId={org._id} />
-    case "inbox":
-      // The connect / verify / sync flow of PLAN §4, shared with onboarding
-      // dot 3; it resolves the active organization itself before reading.
-      return <InboxTab orgId={org._id} />
     case "outreach":
       return <OutreachTab orgId={org._id} />
     case "blocklist":
       return <BlocklistTab orgId={org._id} />
     case "sending":
       return <SendingTab org={org} />
-    case "usage":
-      return <UsageTab orgId={org._id} />
     case "account":
       return null
   }

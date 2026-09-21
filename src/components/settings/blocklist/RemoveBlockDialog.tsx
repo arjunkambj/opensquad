@@ -46,34 +46,36 @@ export function RemoveBlockDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {entry === null ? null : (
-          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
-            <li>
-              This entry is here because:{" "}
-              <span className="text-foreground">
-                {BLOCK_REASON_LABEL[entry.reason]}
-              </span>
-              .
-            </li>
-            {entry.reason === "unsubscribe" ? (
+        <div className="flex flex-col gap-4">
+          {entry === null ? null : (
+            <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
               <li>
-                Someone asked to stop hearing from you. Removing this lets your
-                agent write to them again.
+                This entry is here because:{" "}
+                <span className="text-foreground">
+                  {BLOCK_REASON_LABEL[entry.reason]}
+                </span>
+                .
               </li>
-            ) : null}
-            {entry.reason === "bounce" || entry.reason === "provider" ? (
-              <li>
-                The mail provider reported this, so sending here is likely to
-                fail again and to cost you sending reputation.
-              </li>
-            ) : null}
-            {entry.kind === "domain" ? (
-              <li>Every address on this domain becomes contactable again.</li>
-            ) : null}
-          </ul>
-        )}
+              {entry.reason === "unsubscribe" ? (
+                <li>
+                  Someone asked to stop hearing from you. Removing this lets your
+                  agent write to them again.
+                </li>
+              ) : null}
+              {entry.reason === "bounce" || entry.reason === "provider" ? (
+                <li>
+                  The mail provider reported this, so sending here is likely to
+                  fail again and to cost you sending reputation.
+                </li>
+              ) : null}
+              {entry.kind === "domain" ? (
+                <li>Every address on this domain becomes contactable again.</li>
+              ) : null}
+            </ul>
+          )}
 
-        <FormError message={error} />
+          <FormError message={error} />
+        </div>
 
         <DialogFooter>
           <Button

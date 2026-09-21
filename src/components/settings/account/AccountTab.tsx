@@ -1,29 +1,19 @@
-import { Logout03Icon, UserCircleIcon } from "@hugeicons/core-free-icons"
+import { Logout03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useHexclaveApp } from "@hexclave/react"
 import { Link } from "@tanstack/react-router"
 import { OrgResetCard } from "@/components/settings/account/OrgResetCard"
-import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
 import type { ProfileUser } from "@/components/layout/SidebarUser"
 import { DetailRow } from "@/components/kit/DetailRow"
+import { PageSection } from "@/components/kit/PageSection"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 
 export function AccountTab({ user }: { user: ProfileUser }) {
   const app = useHexclaveApp()
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <SectionHeaderCard
-        icon={UserCircleIcon}
-        title="Account"
-        description="Who you are signed in as. Your name and email are changed with your sign-in provider, not here."
+    <div className="flex flex-col gap-6">
+      <PageSection
         action={
           <Button
             render={
@@ -34,10 +24,8 @@ export function AccountTab({ user }: { user: ProfileUser }) {
             Manage account
           </Button>
         }
-      />
-
-      <Card>
-        <CardContent className="flex flex-col gap-3">
+      >
+        <div className="flex flex-col gap-3">
           <DetailRow
             label="Email"
             value={user.primaryEmail ?? "No email on this account"}
@@ -46,18 +34,14 @@ export function AccountTab({ user }: { user: ProfileUser }) {
             label="Name"
             value={user.displayName ?? "No display name set"}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </PageSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sign out</CardTitle>
-          <CardDescription>
-            Ends this session in this browser. Your agent keeps running on its
-            own schedule — pause it in Sending if you want it to stop.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <PageSection
+        title="Sign out"
+        description="Your agent keeps running after you sign out."
+      >
+        <div>
           <Button
             onClick={() => void app.signOut()}
             type="button"
@@ -71,8 +55,8 @@ export function AccountTab({ user }: { user: ProfileUser }) {
             />
             Sign out
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </PageSection>
 
       <OrgResetCard />
     </div>

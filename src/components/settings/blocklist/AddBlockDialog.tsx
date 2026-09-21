@@ -10,7 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -61,57 +66,57 @@ export function AddBlockDialog({
         <DialogHeader>
           <DialogTitle>Add to the blocklist</DialogTitle>
           <DialogDescription>
-            Nothing is ever sent to an entry on this list. The check runs
-            before every send and before a paused conversation resumes.
+            Nothing is ever sent to anything on this list.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <Field>
-            <FieldLabel>What to block</FieldLabel>
-            <ToggleGroup
-              disabled={busy}
-              size="sm"
-              value={[kind]}
-              variant="outline"
-              onValueChange={(next) => {
-                const picked = next.at(-1)
-                if (picked === "email" || picked === "domain") {
-                  setKind(picked)
-                }
-              }}
-            >
-              <ToggleGroupItem value="email">One address</ToggleGroupItem>
-              <ToggleGroupItem value="domain">Whole domain</ToggleGroupItem>
-            </ToggleGroup>
-          </Field>
+          <FieldGroup>
+            <Field>
+              <FieldLabel>What to block</FieldLabel>
+              <ToggleGroup
+                disabled={busy}
+                value={[kind]}
+                variant="pill"
+                onValueChange={(next) => {
+                  const picked = next.at(-1)
+                  if (picked === "email" || picked === "domain") {
+                    setKind(picked)
+                  }
+                }}
+              >
+                <ToggleGroupItem value="email">One address</ToggleGroupItem>
+                <ToggleGroupItem value="domain">Whole domain</ToggleGroupItem>
+              </ToggleGroup>
+            </Field>
 
-          <Field>
-            <FieldLabel htmlFor="blocklist-value">
-              {kind === "email" ? "Email address" : "Domain"}
-            </FieldLabel>
-            <Input
-              autoFocus
-              disabled={busy}
-              id="blocklist-value"
-              placeholder={
-                kind === "email" ? "name@example.com" : "example.com"
-              }
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault()
-                  submit()
+            <Field>
+              <FieldLabel htmlFor="blocklist-value">
+                {kind === "email" ? "Email address" : "Domain"}
+              </FieldLabel>
+              <Input
+                autoFocus
+                disabled={busy}
+                id="blocklist-value"
+                placeholder={
+                  kind === "email" ? "name@example.com" : "example.com"
                 }
-              }}
-            />
-            <FieldDescription>
-              {kind === "email"
-                ? "Case and dots are normalised, so adding the same address twice changes nothing."
-                : "A domain blocks every address on it — use it only when no mail to that company should ever go out."}
-            </FieldDescription>
-          </Field>
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
+                    submit()
+                  }
+                }}
+              />
+              <FieldDescription>
+                {kind === "email"
+                  ? "Blocks this one address."
+                  : "Blocks every address on this domain."}
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
 
           <FormError message={error} />
         </div>

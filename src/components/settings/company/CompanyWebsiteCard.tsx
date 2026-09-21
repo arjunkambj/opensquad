@@ -1,8 +1,6 @@
-import { GlobeIcon } from "@hugeicons/core-free-icons"
 import { AnalysisFailurePanel } from "@/components/kit/AnalysisFailurePanel"
+import { PageSection } from "@/components/kit/PageSection"
 import { WebsiteAnalyzeField } from "@/components/kit/WebsiteAnalyzeField"
-import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
-import { Card, CardContent } from "@/components/ui/card"
 import type { AnalysisMessage } from "@/lib/company-analysis-copy"
 
 export type CompanyWebsiteCardProps = {
@@ -15,6 +13,8 @@ export type CompanyWebsiteCardProps = {
   price: number
   blockedReason: string | null
   failure: AnalysisMessage | null
+  /** Retry has nothing it could read: no address, or one that answered nowhere. */
+  retryBlocked: boolean
 }
 
 export function CompanyWebsiteCard({
@@ -26,34 +26,26 @@ export function CompanyWebsiteCard({
   price,
   blockedReason,
   failure,
+  retryBlocked,
 }: CompanyWebsiteCardProps) {
   return (
-    <>
-      <SectionHeaderCard
-        icon={GlobeIcon}
-        title="Website"
-        description="Reading your site again rewrites the profile below. Everything it writes stays yours to edit."
+    <PageSection>
+      <WebsiteAnalyzeField
+        analyzing={analyzing}
+        blockedReason={blockedReason}
+        intent={intent}
+        onAnalyze={onAnalyze}
+        onChange={onWebsiteChange}
+        price={price}
+        value={website}
       />
-      <Card>
-        <CardContent className="flex flex-col gap-4">
-          <WebsiteAnalyzeField
-            analyzing={analyzing}
-            blockedReason={blockedReason}
-            intent={intent}
-            onAnalyze={onAnalyze}
-            onChange={onWebsiteChange}
-            price={price}
-            value={website}
-          />
-          {failure === null ? null : (
-            <AnalysisFailurePanel
-              message={failure}
-              onRetry={onAnalyze}
-              retryDisabled={analyzing || blockedReason !== null}
-            />
-          )}
-        </CardContent>
-      </Card>
-    </>
+      {failure === null ? null : (
+        <AnalysisFailurePanel
+          message={failure}
+          onRetry={onAnalyze}
+          retryDisabled={analyzing || blockedReason !== null || retryBlocked}
+        />
+      )}
+    </PageSection>
   )
 }

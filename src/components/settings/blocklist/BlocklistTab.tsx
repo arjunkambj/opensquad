@@ -1,4 +1,4 @@
-import { Add01Icon, ShieldBanIcon } from "@hugeicons/core-free-icons"
+import { Add01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { useQuery } from "convex/react"
 import { useState } from "react"
@@ -10,13 +10,14 @@ import { BlocklistEmpty } from "@/components/settings/blocklist/BlocklistEmpty"
 import { BlocklistFilters } from "@/components/settings/blocklist/BlocklistFilters"
 import type { BlocklistKindFilter } from "@/components/settings/blocklist/BlocklistFilters"
 import { BlocklistPager } from "@/components/settings/blocklist/BlocklistPager"
-import { BlocklistTable } from "@/components/settings/blocklist/BlocklistTable"
+import {
+  BlocklistTable,
+  BlocklistTableSkeleton,
+} from "@/components/settings/blocklist/BlocklistTable"
 import { RemoveBlockDialog } from "@/components/settings/blocklist/RemoveBlockDialog"
 import { useBlocklistWrites } from "@/components/settings/blocklist/use-blocklist-writes"
-import { SectionHeaderCard } from "@/components/settings/SectionHeaderCard"
-import { LoadingState } from "@/components/states/states"
+import { SkeletonRegion } from "@/components/states/skeletons"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 
 type Cursor = { at: number; id: Id<"suppressions"> }
 
@@ -53,26 +54,9 @@ export function BlocklistTab({ orgId }: { orgId: Id<"orgs"> }) {
   const filtered = kind !== "all" || search.trim() !== ""
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <SectionHeaderCard
-        icon={ShieldBanIcon}
-        title="Blocklist"
-        description="Addresses and domains your agent may never contact. Unsubscribes and bounces land here on their own."
-        action={
-          <Button onClick={() => setAdding(true)} type="button">
-            <HugeiconsIcon
-              aria-hidden="true"
-              data-icon="inline-start"
-              icon={Add01Icon}
-              strokeWidth={2}
-            />
-            Add to blocklist
-          </Button>
-        }
-      />
-
-      <Card>
-        <CardContent className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
           <BlocklistFilters
             kind={kind}
             search={search}
@@ -86,51 +70,60 @@ export function BlocklistTab({ orgId }: { orgId: Id<"orgs"> }) {
               setTrail([])
             }}
           />
-
-          {result === undefined ? (
-            <LoadingState title="Loading the blocklist" />
-          ) : result.entries.length === 0 ? (
-            <BlocklistEmpty
-              filtered={filtered}
-              onAdd={() => setAdding(true)}
-              onClearFilters={() => {
-                setSearch("")
-                setKind("all")
-                setTrail([])
-              }}
-            />
-          ) : (
-            <BlocklistTable
-              entries={result.entries}
-              onRemove={setPendingRemove}
-              removing={writes.busy === "remove"}
-            />
-          )}
-
-          {result?.truncated === true ? (
-            <InfoBanner title="Showing the most recent entries.">
-              This organization holds more blocked entries than one page request
-              reads. Search for an address or a domain to find a specific one.
-            </InfoBanner>
-          ) : null}
-
-        </CardContent>
-
-        {result === undefined || result.matched === 0 ? null : (
-          <BlocklistPager
-            canGoBack={trail.length > 0}
-            canGoNext={result.nextCursor !== null}
-            filtered={filtered}
-            matched={result.matched}
-            onBack={() => setTrail(trail.slice(0, -1))}
-            onNext={() => {
-              if (result.nextCursor !== null) {
-                setTrail([...trail, result.nextCursor])
-              }
-            }}
+        </div>
+        <Button onClick={() => setAdding(true)} type="button">
+          <HugeiconsIcon
+            aria-hidden="true"
+            data-icon="inline-start"
+            icon={Add01Icon}
+            strokeWidth={2}
           />
-        )}
-      </Card>
+          Add
+        </Button>
+      </div>
+
+      {result === undefined ? (
+        <SkeletonRegion label="Loading the blocklist">
+          <BlocklistTableSkeleton />
+        </SkeletonRegion>
+      ) : result.entries.length === 0 ? (
+        <BlocklistEmpty
+          filtered={filtered}
+          onAdd={() => setAdding(true)}
+          onClearFilters={() => {
+            setSearch("")
+            setKind("all")
+            setTrail([])
+          }}
+        />
+      ) : (
+        <BlocklistTable
+          entries={result.entries}
+          onRemove={setPendingRemove}
+          removing={writes.busy === "remove"}
+        />
+      )}
+
+      {result?.truncated === true ? (
+        <InfoBanner title="Showing the most recent entries.">
+          Search for an address or a domain to find a specific one.
+        </InfoBanner>
+      ) : null}
+
+      {result === undefined || result.matched === 0 ? null : (
+        <BlocklistPager
+          canGoBack={trail.length > 0}
+          canGoNext={result.nextCursor !== null}
+          filtered={filtered}
+          matched={result.matched}
+          onBack={() => setTrail(trail.slice(0, -1))}
+          onNext={() => {
+            if (result.nextCursor !== null) {
+              setTrail([...trail, result.nextCursor])
+            }
+          }}
+        />
+      )}
 
       <AddBlockDialog
         busy={writes.busy === "add"}

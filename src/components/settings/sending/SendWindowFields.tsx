@@ -1,5 +1,5 @@
 import { TRIAL_DAILY_SEND_LIMIT_MAX } from "../../../../convex/lib/prices"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -26,7 +26,7 @@ export function SendWindowFields({
   disabled?: boolean
 }) {
   return (
-    <div className="flex flex-col gap-5">
+    <FieldGroup>
       <Field>
         <FieldLabel htmlFor="sending-timezone">Timezone</FieldLabel>
         <NativeSelect
@@ -43,9 +43,7 @@ export function SendWindowFields({
             </option>
           ))}
         </NativeSelect>
-        <FieldDescription>
-          Every day, hour and daily total below is read in this zone.
-        </FieldDescription>
+        <FieldDescription>Days and hours below use this zone.</FieldDescription>
       </Field>
 
       <Field>
@@ -53,9 +51,8 @@ export function SendWindowFields({
         <ToggleGroup
           disabled={disabled}
           multiple
-          size="sm"
           value={values.weekdays.map(String)}
-          variant="outline"
+          variant="pill"
           onValueChange={(next) =>
             onChange({
               ...values,
@@ -73,12 +70,9 @@ export function SendWindowFields({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <FieldDescription>
-          Days your agent may send. Replies are received every day regardless.
-        </FieldDescription>
       </Field>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="send-window-start">Window opens</FieldLabel>
           <Input
@@ -120,11 +114,9 @@ export function SendWindowFields({
           }
         />
         <FieldDescription>
-          Sends per local day, at most {TRIAL_DAILY_SEND_LIMIT_MAX}. That
-          ceiling is the trial&rsquo;s, not a preference — a higher number is
-          refused rather than quietly reduced.
+          At most {TRIAL_DAILY_SEND_LIMIT_MAX} during the trial.
         </FieldDescription>
       </Field>
-    </div>
+    </FieldGroup>
   )
 }

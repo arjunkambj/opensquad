@@ -19,7 +19,7 @@ export function BlocklistEmpty({
         variant="plain"
         icon={ShieldBanIcon}
         title="Nothing matches that"
-        description="No entry matches this search and scope. Clear them to see the whole list."
+        description="Clear the filters to see the whole list."
         action={
           <Button onClick={onClearFilters} type="button" variant="outline">
             Clear filters
@@ -34,7 +34,7 @@ export function BlocklistEmpty({
       variant="plain"
       icon={ShieldBanIcon}
       title="Nothing is blocked yet"
-      description="An unsubscribe or a bounce adds itself here. Add an address by hand when someone asks to be left alone off-channel, or a domain when no mail to that company should ever go out."
+      description="Unsubscribes and bounces are added automatically."
       action={
         <Button onClick={onAdd} type="button">
           Add the first entry
