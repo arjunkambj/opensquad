@@ -7,12 +7,12 @@
 - **Repo:** https://github.com/arjunkambj/opensquad
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://proficient-porcupine-63.convex.cloud
-- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/migrations, @convex-dev/rate-limiter, @convex-dev/static-hosting
+- **Components:** @agentmail/convex, @firecrawl/firecrawl-convex, @convex-dev/rate-limiter, @convex-dev/static-hosting
 - **Convex features:** schema, indexes, search index, queries, mutations, HTTP actions, internal mutations/actions, crons, scheduled functions, components, AI gateway
 - **Auth:** Other
 - **AI models:** openai/gpt-5.6-sol (Convex AI Gateway)
 - **Started:** 2026-09-13T12:00:25Z
-- **Last updated:** 2026-09-21T01:10:00Z
+- **Last updated:** 2026-09-21T17:48:17Z
 
 ## Log
 
@@ -814,3 +814,18 @@ pricing page removed (`src/components/marketing/`).
 
 Not yet verified: no real email has been sent or answered yet; that needs the
 owner's verified account and sending-inbox key. See `plan/followups.md`.
+
+### 2026-09-21 - 174b0db
+
+Refreshed onboarding, branding and navigation around Overview, Signals and
+Autopilot; separated the email-reveal queue from leads and added Integrations,
+Team invitations/removals, and Billing with real credit usage. Paid plans remain
+coming soon (`src/components/`, `src/routes/`, `src/constants/sidebar-menu.ts`).
+Hardened credit settlement, inbound reply routing and opt-outs, isolated failed
+signals, bounded query reads, and removed legacy schema and migration machinery
+(`convex/billing/`, `convex/inbox/`, `convex/agents/`, `convex/schema.ts`).
+
+Verified lint, frontend and Convex typechecks, and the production build; deployed
+both backend and frontend to the production URLs above. Production schema
+validation passed, and the live HTML matched the build with all 26 entry assets
+returning HTTP 200. Signed-in outreach was not exercised in this update.
