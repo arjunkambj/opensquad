@@ -1,7 +1,6 @@
-/** onboarding_pending requires finishing setup, not manually resuming automation. */
+/** SettingsPage only mounts this card after the agent has finished onboarding. */
 import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Link } from "@tanstack/react-router"
 import { useMutation } from "convex/react"
 import { useState } from "react"
 import { api } from "../../../../convex/_generated/api"
@@ -22,8 +21,6 @@ export function AutomationCard({ org }: { org: OrgView }) {
   const [error, setError] = useState<string | null>(null)
 
   const paused = org.automationState === "paused"
-  const onboardingPending =
-    paused && org.pauseReason === "onboarding_pending"
 
   const setState = (state: "active" | "paused") => {
     setSaving(true)
@@ -63,44 +60,28 @@ export function AutomationCard({ org }: { org: OrgView }) {
         </span>
       </div>
 
-      {onboardingPending ? (
-        <p className="text-sm text-muted-foreground">
-          Starts on its own once setup is finished.
-        </p>
-      ) : null}
-
       <FormError message={error} />
 
       <div>
-        {onboardingPending ? (
-          <Button
-            render={<Link to="/onboarding" />}
-            size="sm"
-            variant="secondary"
-          >
-            Finish setup
-          </Button>
-        ) : (
-          <Button
-            disabled={saving}
-            onClick={() => setState(paused ? "active" : "paused")}
-            size="sm"
-            type="button"
-            variant={paused ? "default" : "secondary"}
-          >
-            {saving ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <HugeiconsIcon
-                aria-hidden="true"
-                data-icon="inline-start"
-                icon={paused ? PlayIcon : PauseIcon}
-                strokeWidth={2}
-              />
-            )}
-            {paused ? "Resume automation" : "Pause automation"}
-          </Button>
-        )}
+        <Button
+          disabled={saving}
+          onClick={() => setState(paused ? "active" : "paused")}
+          size="sm"
+          type="button"
+          variant={paused ? "default" : "secondary"}
+        >
+          {saving ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <HugeiconsIcon
+              aria-hidden="true"
+              data-icon="inline-start"
+              icon={paused ? PlayIcon : PauseIcon}
+              strokeWidth={2}
+            />
+          )}
+          {paused ? "Resume automation" : "Pause automation"}
+        </Button>
       </div>
     </PageSection>
   )
